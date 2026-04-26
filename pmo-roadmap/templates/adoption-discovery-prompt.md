@@ -11,11 +11,23 @@ commit. Do not run destructive commands.
 - **Story prefix:** {{PROJECT_PREFIX}}
 - **Target repo:** {{TARGET_DIR}}
 - **Discovery output requested:** {{OUTPUT_PATH}}
+- **Session intake path:** {{INTAKE_PATH}}
 
 ## Mission
 
 Inspect the repository and produce a practical adoption report that can become
 the seed for `pm/roadmap/{{PROJECT_SLUG}}/`.
+
+Before proposing phases or stories, read the session intake at:
+
+```text
+{{INTAKE_PATH}}
+```
+
+If that file is missing or incomplete, say so in the report and treat user
+intent as unresolved. Do not let repository discovery turn into generic
+reconnaissance; anchor every recommendation to what the user wants to accomplish
+and what handoff they asked for.
 
 The report must help a future agent answer:
 
@@ -25,6 +37,7 @@ The report must help a future agent answer:
 4. What commands prove health?
 5. What roadmap phases and first stories should be created?
 6. What PMO contract extensions, if any, are needed for this project?
+7. Given the user's session goal, what should happen next?
 
 ## Required inspection
 
@@ -57,6 +70,10 @@ Write concise markdown with these sections:
 ## Executive Summary
 {5-10 bullets: what exists, what matters, recommended adoption posture.}
 
+## User Intent And Handoff
+{Summarize the session intake: goal, desired direction, success evidence,
+handoff expectations, constraints, and unresolved questions.}
+
 ## Source Canon
 | Path | Why it matters | Confidence |
 |---|---|---|
@@ -76,6 +93,7 @@ Write concise markdown with these sections:
 - **Recommended current phase:** ...
 - **Roadmap root:** `pm/roadmap/{{PROJECT_SLUG}}/`
 - **First adoption commit should include:** ...
+- **How this serves the user's session goal:** ...
 
 ## Proposed Phase Index
 | Phase | Goal | Why now |
@@ -84,6 +102,10 @@ Write concise markdown with these sections:
 ## Proposed First Stories
 | ID | Title | Acceptance evidence | Notes |
 |---|---|---|---|
+
+## Proposed Immediate Session Plan
+| Step | Action | Evidence / handoff artifact |
+|---|---|---|
 
 ## Contract Extensions
 {Project-specific rules to add, or "none". Include possible mechanical checks.}
@@ -99,7 +121,7 @@ Write concise markdown with these sections:
 - ...
 
 ## Recommended Next Action
-{One concrete next move.}
+{One concrete next move that advances the user's requested session outcome.}
 ```
 
 ## Standards

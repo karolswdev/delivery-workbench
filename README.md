@@ -28,7 +28,8 @@ trail.
 flowchart TD
   A[New or existing Git project] --> B[Install Delivery Workbench]
   B --> C{Project already in motion?}
-  C -->|Yes| D[Run adoption discovery with Codex or Claude]
+  C -->|Yes| U[Capture session intake]
+  U --> D[Run adoption discovery with Codex or Claude]
   C -->|No| E[Bootstrap roadmap skeleton]
   D --> F[Write adoption report]
   F --> G[Create roadmap phases and first stories]
@@ -69,10 +70,16 @@ cd pmo-roadmap
 Run adoption discovery for an existing project:
 
 ```bash
-./bootstrap/adopt-project.sh /path/to/project \
+./bootstrap/session-intake.sh /path/to/project \
   --project-name "My Project" \
   --project-slug myproject \
   --project-prefix MP
+
+./bootstrap/adopt-project.sh /path/to/project \
+  --project-name "My Project" \
+  --project-slug myproject \
+  --project-prefix MP \
+  --require-intake
 ```
 
 Bootstrap a new roadmap:
@@ -143,6 +150,7 @@ bash -n pmo-roadmap/bin/work-log-read \
   pmo-roadmap/bin/work-log-summarize \
   pmo-roadmap/bootstrap/adopt-project.sh \
   pmo-roadmap/bootstrap/new-project.sh \
+  pmo-roadmap/bootstrap/session-intake.sh \
   pmo-roadmap/hooks/pre-commit \
   pmo-roadmap/hooks/post-commit \
   pmo-roadmap/install.sh \

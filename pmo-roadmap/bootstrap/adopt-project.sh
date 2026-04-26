@@ -17,6 +17,9 @@ Options:
   --project-prefix PFX        Story-ID prefix
   --agent none|codex|claude   Agent to run (default: none)
   --model MODEL               Agent model override
+  --with-intake               Run session-intake.sh before rendering discovery
+  --intake-file FILE          Override session intake path
+  --require-intake            Refuse discovery if intake file is missing
   --dangerous                 Give the chosen agent full local repo access
   --output FILE               Override report output path
   --force                     Overwrite existing prompt/report
@@ -42,6 +45,9 @@ AGENT="none"
 MODEL=""
 DANGEROUS=0
 OUTPUT=""
+INTAKE_FILE=""
+WITH_INTAKE=0
+REQUIRE_INTAKE=0
 FORCE=0
 
 while [ $# -gt 0 ]; do
@@ -52,6 +58,9 @@ while [ $# -gt 0 ]; do
     --project-prefix) PROJECT_PREFIX="$2"; shift 2 ;;
     --agent) AGENT="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
+    --with-intake) WITH_INTAKE=1; shift ;;
+    --intake-file) INTAKE_FILE="$2"; shift 2 ;;
+    --require-intake) REQUIRE_INTAKE=1; shift ;;
     --dangerous) DANGEROUS=1; shift ;;
     --output) OUTPUT="$2"; shift 2 ;;
     --force) FORCE=1; shift ;;
@@ -89,8 +98,33 @@ PROMPT_FILE="$DISCOVERY_DIR/adoption-discovery-prompt.md"
 if [ -z "$OUTPUT" ]; then
   OUTPUT="$DISCOVERY_DIR/adoption-discovery.md"
 fi
+if [ -z "$INTAKE_FILE" ]; then
+  INTAKE_FILE="$DISCOVERY_DIR/session-intake.md"
+fi
 
 mkdir -p "$DISCOVERY_DIR"
+
+if [ "$WITH_INTAKE" -eq 1 ]; then
+  intake_args=(
+    "$TARGET"
+    --project-name "$PROJECT_NAME"
+    --project-slug "$PROJECT_SLUG"
+    --project-prefix "$PROJECT_PREFIX"
+    --output "$INTAKE_FILE"
+  )
+  if [ "$FORCE" -eq 1 ]; then
+    intake_args+=(--force)
+  fi
+  "$SOURCE_DIR/bootstrap/session-intake.sh" "${intake_args[@]}"
+fi
+
+if [ ! -f "$INTAKE_FILE" ]; then
+  if [ "$REQUIRE_INTAKE" -eq 1 ]; then
+    die "session intake missing, run bootstrap/session-intake.sh first: $INTAKE_FILE"
+  fi
+  echo "  ! session intake missing: ${INTAKE_FILE#$TARGET/}" >&2
+  echo "    Discovery prompt will require the agent to flag unresolved user intent." >&2
+fi
 
 render_prompt() {
   sed \
@@ -99,6 +133,7 @@ render_prompt() {
     -e "s|{{PROJECT_PREFIX}}|$PROJECT_PREFIX|g" \
     -e "s|{{TARGET_DIR}}|$TARGET|g" \
     -e "s|{{OUTPUT_PATH}}|$OUTPUT|g" \
+    -e "s|{{INTAKE_PATH}}|$INTAKE_FILE|g" \
     "$TEMPLATE"
 }
 
@@ -112,6 +147,7 @@ fi
 if [ "$AGENT" = "none" ]; then
   echo "✓ Adoption prompt ready."
   echo "  Prompt: ${PROMPT_FILE#$TARGET/}"
+  echo "  Intake: ${INTAKE_FILE#$TARGET/}"
   echo "  Report target: ${OUTPUT#$TARGET/}"
   exit 0
 fi

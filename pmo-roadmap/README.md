@@ -100,7 +100,8 @@ flowchart TD
   B -->|New / greenfield| C[install.sh with project slug]
   C --> D[new-project.sh creates README, phase status, bootstrap story]
   B -->|Existing / mid-project| E[install.sh --skip-bootstrap]
-  E --> F[adopt-project.sh renders discovery prompt]
+  E --> U[session-intake.sh captures user goal + handoff]
+  U --> F[adopt-project.sh renders discovery prompt]
   F --> G{Run agent discovery?}
   G -->|No| H[Human fills adoption report]
   G -->|Codex or Claude| I[Agent writes adoption-discovery.md]
@@ -234,20 +235,31 @@ Creates `target/pm/roadmap/myproject/` with the project README and
 
 ## Adopt an existing project
 
-For a running project, install the mechanics first, then run adoption
-discovery before writing stories:
+For a running project, install the mechanics first, then run session intake and
+adoption discovery before writing stories:
 
 ```bash
 ./install.sh /path/to/target-project --skip-bootstrap
-./bootstrap/adopt-project.sh /path/to/target-project \
+./bootstrap/session-intake.sh /path/to/target-project \
   --project-name "My Project" \
   --project-slug myproject \
   --project-prefix MP
+./bootstrap/adopt-project.sh /path/to/target-project \
+  --project-name "My Project" \
+  --project-slug myproject \
+  --project-prefix MP \
+  --require-intake
 ```
+
+The intake asks what the user wants to accomplish in the session, desired
+direction, success evidence, constraints, and handoff expectations. The
+discovery step then anchors repository research to that intent instead of
+producing generic reconnaissance.
 
 That creates:
 
 ```text
+pm/roadmap/myproject/adoption/session-intake.md
 pm/roadmap/myproject/adoption/adoption-discovery-prompt.md
 ```
 
@@ -258,6 +270,7 @@ To have an agent perform the read-only discovery:
   --project-name "My Project" \
   --project-slug myproject \
   --project-prefix MP \
+  --with-intake \
   --agent codex \
   --model gpt-5.5 \
   --dangerous \
@@ -270,6 +283,7 @@ or:
 ./bootstrap/adopt-project.sh /path/to/target-project \
   --project-slug myproject \
   --project-prefix MP \
+  --with-intake \
   --agent claude \
   --model opus \
   --dangerous \
@@ -313,7 +327,8 @@ pmo-roadmap/
 ├── update.sh                     ← re-pull methodology/contract/hook
 ├── bootstrap/
 │   ├── adopt-project.sh          ← mid-project adoption discovery runner
-│   └── new-project.sh            ← scaffold pm/roadmap/{slug}/ skeleton
+│   ├── new-project.sh            ← scaffold pm/roadmap/{slug}/ skeleton
+│   └── session-intake.sh         ← capture user goal, direction, handoff
 ├── hooks/
 │   ├── pre-commit                ← hygiene gate + optional work-log capture
 │   └── post-commit               ← optional daily work-log finalizer
@@ -325,6 +340,7 @@ pmo-roadmap/
 └── templates/
     ├── roadmap-builder.md        ← canonical methodology
     ├── adoption-discovery-prompt.md ← mid-project discovery prompt
+    ├── session-intake.md.tmpl    ← user/session intake template
     ├── PMO-CONTRACT.md           ← rules + contract template
     ├── CLAUDE-snippet.md         ← snippet to add to target CLAUDE.md
     ├── project-README.md.tmpl    ← stub for pm/roadmap/{slug}/README.md
