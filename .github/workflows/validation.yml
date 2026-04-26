@@ -23,10 +23,18 @@ jobs:
             pmo-roadmap/install.sh \
             pmo-roadmap/update.sh \
             pmo-roadmap/tests/adoption-discovery.sh \
-            pmo-roadmap/tests/work-log-mvp.sh
+            pmo-roadmap/tests/work-log-mvp.sh \
+            demos/scripts/prepare-onboarding-demo.sh \
+            demos/scripts/prepare-commit-demo.sh \
+            demos/scripts/write-demo-contract.sh
 
       - name: Adoption discovery smoke test
         run: pmo-roadmap/tests/adoption-discovery.sh
 
       - name: Work log MVP integration test
         run: pmo-roadmap/tests/work-log-mvp.sh
+
+      - name: Demo helper smoke test
+        run: |
+          demos/scripts/prepare-onboarding-demo.sh
+          demos/scripts/prepare-commit-demo.sh

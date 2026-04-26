@@ -93,6 +93,31 @@ Bootstrap a new roadmap:
 ./bootstrap/new-project.sh /path/to/project myproject "My Project" MP
 ```
 
+## Terminal Demos
+
+Charm VHS tapes live in [`demos/`](./demos/):
+
+- [`demos/onboarding.vhs`](./demos/onboarding.vhs) records guided intake and
+  adoption prompt generation.
+- [`demos/commit-gate.vhs`](./demos/commit-gate.vhs) records the commit hook
+  blocking an uncontracted commit, then accepting a fresh contract and writing
+  the consented work log.
+
+### Onboarding
+
+![Delivery Workbench onboarding demo](./demos/rendered/onboarding.gif)
+
+### Commit Gate
+
+![Delivery Workbench commit-gate demo](./demos/rendered/commit-gate.gif)
+
+Render them with:
+
+```bash
+vhs demos/onboarding.vhs
+vhs demos/commit-gate.vhs
+```
+
 ## Commit-Time Flow
 
 ```mermaid
