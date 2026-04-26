@@ -1,6 +1,6 @@
 # Delivery Workbench
 
-![Delivery Workbench icon](./pmo-roadmap/assets/delivery-workbench-icon.gif)
+![Delivery Workbench icon](./pmo-roadmap/assets/delivery-workbench-icon.png)
 
 Delivery Workbench is an evidence-first operating framework for agentic
 software delivery.
