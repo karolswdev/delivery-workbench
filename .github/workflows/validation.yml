@@ -1,0 +1,31 @@
+name: validation
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shell-and-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check shell scripts
+        run: |
+          bash -n \
+            pmo-roadmap/bin/work-log-read \
+            pmo-roadmap/bin/work-log-summarize \
+            pmo-roadmap/bootstrap/adopt-project.sh \
+            pmo-roadmap/bootstrap/new-project.sh \
+            pmo-roadmap/hooks/pre-commit \
+            pmo-roadmap/hooks/post-commit \
+            pmo-roadmap/install.sh \
+            pmo-roadmap/update.sh \
+            pmo-roadmap/tests/adoption-discovery.sh \
+            pmo-roadmap/tests/work-log-mvp.sh
+
+      - name: Adoption discovery smoke test
+        run: pmo-roadmap/tests/adoption-discovery.sh
+
+      - name: Work log MVP integration test
+        run: pmo-roadmap/tests/work-log-mvp.sh

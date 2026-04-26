@@ -1,0 +1,52 @@
+# Phase {{PHASE_N}} — {{PHASE_TITLE}}
+
+**Last updated:** {{DATE}}.
+
+## Goal
+
+{One short paragraph. What does this phase exist to achieve? Quote the
+roadmap or PMO plan. This section is **immutable** for the life of the
+phase.}
+
+## Scope
+
+- **In:** (bulleted concrete deliverables — file paths, story IDs, named artifacts)
+- **Out:** (bulleted things that look related but are NOT in this phase)
+
+## Exit criteria (evidence required)
+
+Every item names a real artifact or test. The phase exits when every
+item is checked or explicitly deferred to a later phase.
+
+- [ ] (e.g. `frontend/scripts/validate-X.ts` exists and exits 0)
+- [ ] (e.g. `npm run test:unit -- foo.test.ts` passes ≥6 cases)
+- [ ] (e.g. iPhone device review screenshots in `…/device-review/`)
+
+## Story status
+
+| ID | Story | Status | Story file | Evidence |
+|---|---|---|---|---|
+| {{PROJECT_PREFIX}}-{{PHASE_N}}-01 | … | backlog | [story-01-…](./story-01-….md) | — |
+
+## Where we are
+
+{2–6 sentences: most recent chunk shipped, what's next, blockers. The
+"pickup snapshot" — a fresh agent reading this should know what to do
+next without reading session history.}
+
+## Active risks
+
+| Risk | Likelihood | Mitigation | Stop signal |
+|---|---|---|---|
+| … | low / medium / high | … | … |
+
+A risk without a **stop signal** is decorative. The stop signal is the
+concrete observation that triggers "halt this approach and regroup."
+
+## Decisions made (this phase)
+
+- {{DATE}} — (decision) — (reason) — (authority).
+
+## Decisions deferred
+
+- (decision) — (trigger to revisit) — (default if no decision is made).

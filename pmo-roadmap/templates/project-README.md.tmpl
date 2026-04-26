@@ -1,0 +1,54 @@
+# {{PROJECT_NAME}} — Roadmap
+
+**Last updated:** {{DATE}}.
+**Current phase:** [phase-0-setup](./phase-0-setup/current-phase-status.md)
+**Status:** planning.
+
+## Vision
+
+{{PROJECT_NAME}} — describe what this project is and why, in 1–3
+paragraphs. Quote canonical docs rather than paraphrasing. If the
+project has a brief or constitution doc, link it here.
+
+## Source canon
+
+Bulleted list of authoritative docs this roadmap serves. Phase
+content must be grounded in these, not invented.
+
+- (e.g. `/APP-SOUL.md`)
+- (e.g. `pm/PLAN.md`)
+- (e.g. `docs/vision.md`)
+
+If a phase disagrees with canon, canon wins.
+
+## Phase index
+
+| Phase | Goal (one line) | Status | Folder |
+|---|---|---|---|
+| 0 | Project + roadmap setup | in-progress | [phase-0-setup](./phase-0-setup/) |
+
+(Add rows as phases are scoped. Status values: `planning`,
+`in-progress`, `done`, `paused`, `cancelled`.)
+
+## Operating cadence
+
+Per the framework methodology (`pm/roadmap/roadmap-builder.md` §3):
+every shipping commit updates, in the same commit:
+
+1. The story file header (status flip).
+2. The phase's `current-phase-status.md` story-status row + "Where we are".
+3. This README's "Last updated" line.
+4. Any project-canon doc touched by the story.
+
+Per `pm/roadmap/PMO-CONTRACT.md`: the pre-commit hook gates every
+commit on a fresh `.tmp/CONTRACT.md`.
+
+## Project metadata
+
+- **Slug:** `{{PROJECT_SLUG}}`
+- **Story ID prefix:** `{{PROJECT_PREFIX}}` (e.g. `{{PROJECT_PREFIX}}-0-01`, `{{PROJECT_PREFIX}}-3-04`)
+- **Greenfield?:** yes / no — if yes, rule §4 of the contract applies.
+
+## Glossary
+
+(Project-specific terms. Skip if not needed.)
