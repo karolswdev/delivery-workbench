@@ -82,6 +82,11 @@ Run adoption discovery for an existing project:
   --require-intake
 ```
 
+`session-intake.sh` runs as a guided terminal interview when attached to a TTY:
+it shows a compact banner, offers numbered choices, captures checkbox-style
+priorities, and asks for the goal, direction, constraints, and handoff. In
+automation, pass the same values as flags and add `--no-prompt`.
+
 Bootstrap a new roadmap:
 
 ```bash

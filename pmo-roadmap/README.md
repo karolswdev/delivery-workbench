@@ -251,10 +251,29 @@ adoption discovery before writing stories:
   --require-intake
 ```
 
-The intake asks what the user wants to accomplish in the session, desired
-direction, success evidence, constraints, and handoff expectations. The
-discovery step then anchors repository research to that intent instead of
+The intake runs as a guided terminal interview when attached to a TTY. It keeps
+the tone light but practical: a small banner, numbered choices, checkbox-style
+priorities and deliverables, risk posture, discovery depth, session goal,
+desired direction, success evidence, constraints, and handoff expectations.
+The discovery step then anchors repository research to that intent instead of
 producing generic reconnaissance.
+
+For automation, pass the same values as flags and add `--no-prompt`:
+
+```bash
+./bootstrap/session-intake.sh /path/to/target-project \
+  --project-name "My Project" \
+  --project-slug myproject \
+  --project-prefix MP \
+  --mode "Delivery slice: identify and execute the next valuable change" \
+  --priorities "- [x] Create a durable handoff" \
+  --risk "Read-only until the plan is explicit" \
+  --depth "Standard: repo map, commands, risks, first stories" \
+  --deliverables "- [x] Immediate session plan" \
+  --handoff-audience "Future agent" \
+  --goal "Turn discovery into a first actionable roadmap" \
+  --no-prompt
+```
 
 That creates:
 

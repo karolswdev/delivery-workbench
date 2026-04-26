@@ -26,10 +26,19 @@ printf '%s\n' '# Existing App' > "$REPO/README.md"
 git -C "$REPO" add README.md
 git -C "$REPO" commit -m "initial" >/dev/null
 
+PRIORITIES="$(printf '%s\n%s' "- [x] Create a durable handoff" "- [x] Reduce delivery risk")"
+DELIVERABLES="$(printf '%s\n%s' "- [x] Immediate session plan" "- [x] Validation command list")"
+
 "$PMO_DIR/bootstrap/session-intake.sh" "$REPO" \
   --project-name "Existing App" \
   --project-slug existing-app \
   --project-prefix EA \
+  --mode "Delivery slice: identify and execute the next valuable change" \
+  --priorities "$PRIORITIES" \
+  --risk "Read-only until the plan is explicit" \
+  --depth "Standard: repo map, commands, risks, first stories" \
+  --deliverables "$DELIVERABLES" \
+  --handoff-audience "Future agent" \
   --goal "Turn repo discovery into a first actionable roadmap" \
   --direction "Preserve current product behavior while adding PMO discipline" \
   --handoff "A future agent can pick the first story without session history" \
@@ -55,6 +64,11 @@ RESOLVED_INTAKE="$RESOLVED_REPO/pm/roadmap/existing-app/adoption/session-intake.
 [ -f "$INTAKE" ] || fail "session intake was not written"
 [ -f "$PROMPT" ] || fail "adoption prompt was not written"
 grep -q 'Turn repo discovery into a first actionable roadmap' "$INTAKE" || fail "session goal missing from intake"
+grep -q 'Delivery slice' "$INTAKE" || fail "session mode missing from intake"
+grep -q 'Create a durable handoff' "$INTAKE" || fail "priority checklist missing from intake"
+grep -q 'Reduce delivery risk' "$INTAKE" || fail "multi-line priority checklist missing from intake"
+grep -q 'Validation command list' "$INTAKE" || fail "multi-line deliverables checklist missing from intake"
+grep -q 'Future agent' "$INTAKE" || fail "handoff audience missing from intake"
 grep -q 'Existing App' "$PROMPT" || fail "project name missing from prompt"
 grep -q 'existing-app' "$PROMPT" || fail "project slug missing from prompt"
 grep -q 'EA' "$PROMPT" || fail "project prefix missing from prompt"
