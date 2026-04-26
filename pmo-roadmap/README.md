@@ -34,6 +34,31 @@ two things mechanically:
 The hygiene gate works for human commits too. CI is unaffected (hooks
 don't run server-side).
 
+## How the pieces fit
+
+```mermaid
+flowchart TD
+  Install[install.sh] --> Hooks[.githooks]
+  Install --> Canon[pm/roadmap/PMO-CONTRACT.md + roadmap-builder.md]
+  Install --> Snippet[CLAUDE.md / AGENTS.md snippet]
+  Hooks --> Pre[pre-commit]
+  Hooks --> Post[post-commit]
+  Hooks --> Read[work-log-read]
+  Hooks --> Summarize[work-log-summarize]
+
+  Canon --> Contract[.tmp/CONTRACT.md per commit]
+  Contract --> Pre
+  Pre --> Gate{PMO checks pass?}
+  Gate -->|No| Block[Commit blocked]
+  Gate -->|Yes| Commit[Commit proceeds]
+  Pre -->|optional consented payload| Pending[.git/pmo-work-log/pending]
+  Commit --> Post
+  Pending --> Post
+  Post --> Log[~/.work/log/YYYY-MM-DD/*.log]
+  Log --> Read
+  Log --> Summarize
+```
+
 ## Install into a target project
 
 ```bash
@@ -66,6 +91,22 @@ The installer:
 
 Re-running is safe (idempotent) but will refuse to overwrite existing
 methodology/contract without `--force`.
+
+## Installation Decision Tree
+
+```mermaid
+flowchart TD
+  A[Target Git project] --> B{New roadmap or existing project?}
+  B -->|New / greenfield| C[install.sh with project slug]
+  C --> D[new-project.sh creates README, phase status, bootstrap story]
+  B -->|Existing / mid-project| E[install.sh --skip-bootstrap]
+  E --> F[adopt-project.sh renders discovery prompt]
+  F --> G{Run agent discovery?}
+  G -->|No| H[Human fills adoption report]
+  G -->|Codex or Claude| I[Agent writes adoption-discovery.md]
+  H --> J[Create current phase and first stories]
+  I --> J
+```
 
 ## Update an installed project
 
@@ -120,6 +161,27 @@ Only explicit `yes` consent creates a log entry. `pre-commit` captures the
 staged payload under `.git/pmo-work-log/`; `post-commit` appends after Git
 creates the commit. The MVP writes deterministic markdown and does not call an
 LLM in the commit path.
+
+```mermaid
+sequenceDiagram
+  participant Dev as Human or Agent
+  participant Contract as .tmp/CONTRACT.md
+  participant Pre as pre-commit
+  participant Git as Git
+  participant Post as post-commit
+  participant Log as ~/.work/log
+  participant Summ as work-log-summarize
+
+  Dev->>Contract: Work-log consent: yes
+  Dev->>Git: git commit
+  Git->>Pre: validate PMO contract
+  Pre->>Pre: filter excluded paths
+  Pre->>.git/pmo-work-log: write pending payload
+  Git->>Post: after commit exists
+  Post->>Log: append deterministic entry
+  Dev->>Summ: optional deferred summarization
+  Summ->>Log: write companion deferred summary
+```
 
 `PMO_WORK_LOG_EXCLUDE_REGEX` is the mechanical privacy/noise control. Matching
 paths are omitted from captured name/status, diff stat, and diff payloads, and
@@ -223,6 +285,24 @@ pm/roadmap/myproject/adoption/adoption-discovery.md
 Use that report to decide whether to run `bootstrap/new-project.sh`, how to
 name the current phase, which source canon matters, which tests prove health,
 and whether the project needs local PMO contract extensions.
+
+## Roadmap Lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> PhaseOpen
+  PhaseOpen --> StoryReady: create story files
+  StoryReady --> InProgress: pick one story
+  InProgress --> CommitGate: stage implementation + docs
+  CommitGate --> Blocked: missing contract/evidence
+  Blocked --> CommitGate: fix docs/evidence/contract
+  CommitGate --> StoryDone: commit accepted
+  StoryDone --> EvidenceWritten: evidence-story-N.md ships
+  EvidenceWritten --> PhaseStatusUpdated: current-phase-status updated
+  PhaseStatusUpdated --> StoryReady: next story
+  PhaseStatusUpdated --> PhaseClosed: exit criteria complete
+  PhaseClosed --> [*]: final-summary.md
+```
 
 ## File map
 

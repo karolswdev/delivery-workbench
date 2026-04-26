@@ -22,6 +22,41 @@ Experimental but usable. The project is intentionally opinionated and designed
 for builders who want agent-assisted software work to leave a durable evidence
 trail.
 
+## System Flow
+
+```mermaid
+flowchart TD
+  A[New or existing Git project] --> B[Install Delivery Workbench]
+  B --> C{Project already in motion?}
+  C -->|Yes| D[Run adoption discovery with Codex or Claude]
+  C -->|No| E[Bootstrap roadmap skeleton]
+  D --> F[Write adoption report]
+  F --> G[Create roadmap phases and first stories]
+  E --> G
+  G --> H[Work one story at a time]
+  H --> I[Commit with PMO contract]
+  I --> J[Hook verifies contract and evidence pairing]
+  J --> K[Optional local work-log entry]
+  K --> L[Deferred summary when useful]
+```
+
+## Artifact Model
+
+```mermaid
+flowchart LR
+  R[pm/roadmap/project README] --> P[current phase status]
+  P --> S1[story-01]
+  P --> S2[story-02]
+  P --> S3[story-N]
+  S1 --> E1[evidence-story-01]
+  S2 --> E2[evidence-story-02]
+  P --> F[final-summary]
+
+  C[PMO-CONTRACT.md] --> H[pre-commit hook]
+  H --> S1
+  H --> E1
+```
+
 ## Quick Start
 
 Install into an existing Git project:
@@ -44,6 +79,44 @@ Bootstrap a new roadmap:
 
 ```bash
 ./bootstrap/new-project.sh /path/to/project myproject "My Project" MP
+```
+
+## Commit-Time Flow
+
+```mermaid
+sequenceDiagram
+  participant Dev as Human or Agent
+  participant Git as git commit
+  participant Hook as pre-commit
+  participant Contract as .tmp/CONTRACT.md
+  participant Roadmap as pm/roadmap
+  participant Log as local work log
+
+  Dev->>Contract: certify rules for this commit
+  Dev->>Git: git commit
+  Git->>Hook: run pre-commit
+  Hook->>Contract: require fresh checked contract
+  Hook->>Roadmap: verify story/evidence pairing
+  alt work-log enabled and consent yes
+    Hook->>Log: capture staged payload under .git/pmo-work-log
+  end
+  Hook-->>Git: allow or block commit
+```
+
+## Work-Log Flow
+
+```mermaid
+flowchart TD
+  A[Contract contains Work-log consent: yes] --> B[pre-commit captures staged metadata]
+  B --> C[Git creates commit]
+  C --> D[post-commit appends deterministic local log entry]
+  D --> E[work-log-read lists or prints entries]
+  D --> F[Optional deferred summarizer]
+  F --> G[Companion deferred-summary markdown]
+
+  X[Consent no or missing] --> Y[No work-log payload]
+  Z[Excluded path regex] --> B
+  Z --> O[Omitted paths listed without captured content]
 ```
 
 ## Why
