@@ -481,6 +481,65 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(self._tree_checksums(), before,
                          "repeated API loads must not modify the roadmap tree")
 
+    # -- traceability timeline (WLA-5-05) --------------------------------------
+
+    def _timeline_for(self, story_id):
+        project = core.get_project(self.root, "demo")
+        for phase in core.discover_phases(project):
+            for row in core.parse_story_rows(phase.path / "current-phase-status.md"):
+                if row.story_id == story_id:
+                    return core.story_timeline(row, phase, project, self.root)
+        raise AssertionError(f"story {story_id} not in fixture")
+
+    def test_story_timeline_chain_and_shipped(self) -> None:
+        tl = self._timeline_for("DM-1-01")
+        self.assertTrue(tl["shipped"])
+        self.assertEqual(tl["not_shipped_reason"], "")
+        hops = {h["hop"]: h for h in tl["chain"]}
+        self.assertEqual(
+            list(hops), ["readme", "phase_status", "story", "evidence", "final_summary"])
+        for hop in ("readme", "phase_status", "story", "evidence"):
+            self.assertTrue(hops[hop]["exists"], hop)
+        # absent hops render as explicit absent states, never disappear
+        self.assertFalse(hops["final_summary"]["exists"])
+        self.assertTrue(hops["final_summary"]["path"])
+        # no git, no work-log root: events degrade to empty, not an error
+        self.assertEqual(tl["events"], [])
+
+    def test_story_timeline_never_claims_unshipped(self) -> None:
+        tl = self._timeline_for("DM-1-02")  # ready, no evidence
+        self.assertFalse(tl["shipped"])
+        self.assertIn("'ready'", tl["not_shipped_reason"])
+        # done + missing evidence must not read as shipped either
+        evidence = self.phase_dir / "evidence-story-01.md"
+        evidence_backup = evidence.read_text(encoding="utf-8")
+        evidence.unlink()
+        tl = self._timeline_for("DM-1-01")
+        self.assertFalse(tl["shipped"])
+        self.assertIn("evidence", tl["not_shipped_reason"])
+        evidence.write_text(evidence_backup, encoding="utf-8")
+
+    def test_story_timeline_work_log_only(self) -> None:
+        import os
+        log_root = self.root / "worklog"
+        (log_root / "2026-07-01").mkdir(parents=True)
+        (log_root / "2026-07-01" / "demo-1-work-summary.log").write_text(
+            "---\nkind: pmo-work-log-entry\ntimestamp: 2026-07-01T10:00:00Z\n"
+            "project: demo\ncommit: abc1234\n---\n\n## Commit\n\n"
+            "- **Subject:** DM-1-01 First story ships\n",
+            encoding="utf-8",
+        )
+        os.environ["PMO_WORK_LOG_DIR"] = str(log_root)
+        try:
+            tl = self._timeline_for("DM-1-01")
+        finally:
+            del os.environ["PMO_WORK_LOG_DIR"]
+        self.assertEqual(len(tl["events"]), 1)
+        event = tl["events"][0]
+        self.assertEqual(event["type"], "work-log")
+        self.assertEqual(event["commit"], "abc1234")
+        self.assertEqual(event["sort_key"], "2026-07-01T10:00:00Z")
+
     # -- adoption bridge (WLA-6-07) -----------------------------------------
 
     GOOD_REPORT = """# New Proj - PMO Adoption Discovery
@@ -1027,6 +1086,59 @@ class GateTest(unittest.TestCase):
             "shipped_story=pm/roadmap/demo/phase-1-alpha/story-01-a.md\n"
         )
         self.assertEqual(core.render_gate_porcelain(result), expected)
+
+
+    def test_story_timeline_with_git_and_work_log(self) -> None:
+        import os
+        root = self.root
+        self.write(
+            "pm/roadmap/demo/README.md",
+            "# Demo - Roadmap\n\n## Project metadata\n\n"
+            "- **Slug:** `demo`\n- **Story ID prefix:** `DM`\n",
+        )
+        self.write(
+            "pm/roadmap/demo/phase-1-alpha/current-phase-status.md",
+            "## Story status\n\n| ID | Story | Status | Story file | Evidence |\n"
+            "|---|---|---|---|---|\n"
+            "| DM-1-01 | First story | done | [story-01-first](./story-01-first.md) "
+            "| [evidence-story-01](./evidence-story-01.md) |\n",
+        )
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-first.md", "done", "DM-1-01")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.git("add", "-A")
+        self.git(
+            "commit", "-m", "DM-1-01 ships with trailers",
+            "-m", "PMO-Story: DM-1-01\nPMO-Contract-Digest: sha256:deadbeef",
+            "--no-verify",
+        )
+        project = core.get_project(root, "demo")
+        phase = core.discover_phases(project)[0]
+        row = next(r for r in core.parse_story_rows(phase.path / "current-phase-status.md")
+                   if r.story_id == "DM-1-01")
+        log_root = root / "worklog"
+        (log_root / "2099-01-01").mkdir(parents=True)
+        (log_root / "2099-01-01" / "demo-1-work-summary.log").write_text(
+            "---\nkind: pmo-work-log-entry\ntimestamp: 2099-01-01T00:00:00Z\n"
+            "project: demo\ncommit: fffffff\n---\n\n## Commit\n\n"
+            "- **Subject:** DM-1-01 logged\n",
+            encoding="utf-8",
+        )
+        os.environ["PMO_WORK_LOG_DIR"] = str(log_root)
+        try:
+            timeline = core.story_timeline(row, phase, project, root)
+        finally:
+            del os.environ["PMO_WORK_LOG_DIR"]
+        types = {e["type"] for e in timeline["events"]}
+        self.assertEqual(types, {"commit", "work-log"})
+        commit_events = [e for e in timeline["events"] if e["type"] == "commit"]
+        self.assertTrue(any(e["pmo_story"] == "DM-1-01" for e in commit_events),
+                        f"no trailer-stamped commit event: {commit_events}")
+        self.assertTrue(all(e["contract_digest"] for e in commit_events
+                            if e["pmo_story"]), "stamped commits should carry digests")
+        # events sorted newest-first by sort_key
+        keys = [str(e["sort_key"]) for e in timeline["events"]]
+        self.assertEqual(keys, sorted(keys, reverse=True))
+        self.assertEqual(timeline["events"][0]["type"], "work-log")  # 2099 sorts first
 
 
 if __name__ == "__main__":

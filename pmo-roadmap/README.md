@@ -480,7 +480,13 @@ switches the UI to synchronous loading for headless screenshot tools.
 JSON API (stable envelope `delivery-workbench-workbench-response`,
 schema_version 1): `/api/context`, `/api/projects`,
 `/api/projects/{slug}`, `/api/projects/{slug}/phases/{n}`,
-`/api/projects/{slug}/stories/{id}`, `/api/file?path=…`.
+`/api/projects/{slug}/stories/{id}`, `/api/health` (structured
+drift/validation report with the `mutation_safe` flag),
+`/api/projects/{slug}/trace/{id}` (the intent-to-proof timeline:
+chain hops with explicit absent states, plus commit events carrying
+`PMO-Story`/`PMO-Contract-Digest` trailers merged with work-log
+entries — this endpoint IS the agent-facing JSON export),
+`/api/projects/{slug}/phases/{n}/events`, `/api/file?path=…`.
 
 ## Adopt an existing project
 

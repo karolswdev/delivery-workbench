@@ -52,6 +52,10 @@ DW="$PMO_DIR/bin/dw"
 "$DW" --root "$REPO" story create sample 0 "Second fixture story" >/dev/null
 
 # ── start the documented command ─────────────────────────────────────
+# Work-log root for the trace tests: exported before start, but the
+# directory does not exist yet — traces must degrade cleanly until the
+# fixture entry is written further down.
+export PMO_WORK_LOG_DIR="$TMP_ROOT/worklog"
 PORT=$(( (RANDOM % 2000) + 18000 ))
 "$PMO_DIR/bin/dw-workbench" --root "$REPO" --port "$PORT" &
 SERVER_PID=$!
@@ -185,5 +189,57 @@ sample = [p for p in d["projects"] if p["slug"] == "sample"][0]
 assert sample["mutation_safe"] is True
 PY
 rm -rf "$DRIFT"
+
+# ── traceability timeline (WLA-5-05) ─────────────────────────────────
+curl -s "$BASE/api/projects/sample/trace/SMP-0-01" > "$TMP_ROOT/trace1.json"
+python3 - "$TMP_ROOT/trace1.json" <<'PY' || fail "trace payload wrong (shipped story, no log root yet)"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["shipped"] is True and d["not_shipped_reason"] == ""
+hops = {h["hop"]: h for h in d["chain"]}
+assert list(hops) == ["readme", "phase_status", "story", "evidence", "final_summary"]
+assert all(hops[h]["exists"] for h in ("readme", "phase_status", "story", "evidence"))
+assert hops["final_summary"]["exists"] is False and hops["final_summary"]["path"]
+assert d["events"] == []  # no git repo, no work-log root: clean degrade
+PY
+
+mkdir -p "$PMO_WORK_LOG_DIR/2026-07-02"
+cat > "$PMO_WORK_LOG_DIR/2026-07-02/sample-1-work-summary.log" <<'EOF'
+---
+kind: pmo-work-log-entry
+timestamp: 2026-07-02T12:00:00Z
+project: sample
+commit: abc1234
+---
+
+## Commit
+
+- **Subject:** SMP-0-01 First fixture story ships
+EOF
+curl -s "$BASE/api/projects/sample/trace/SMP-0-01" > "$TMP_ROOT/trace2.json"
+python3 - "$TMP_ROOT/trace2.json" <<'PY' || fail "trace should pick up the work-log entry live"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert len(d["events"]) == 1, d["events"]
+ev = d["events"][0]
+assert ev["type"] == "work-log" and ev["commit"] == "abc1234"
+assert ev["sort_key"] == "2026-07-02T12:00:00Z"
+PY
+
+curl -s "$BASE/api/projects/sample/trace/SMP-0-02" > "$TMP_ROOT/trace3.json"
+python3 - "$TMP_ROOT/trace3.json" <<'PY' || fail "unshipped story must not claim shipped"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["shipped"] is False
+assert "backlog" in d["not_shipped_reason"]
+hops = {h["hop"]: h for h in d["chain"]}
+assert hops["evidence"]["exists"] is False
+PY
+
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/projects/sample/trace/SMP-9-99")" = "404" ] \
+  || fail "unknown story trace should 404"
+curl -s "$BASE/api/projects/sample/phases/0/events" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['ok'] and d['data']['events'] == []" \
+  || fail "phase events should degrade cleanly without git"
 
 echo "workbench-explorer.sh: ok"

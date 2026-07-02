@@ -151,7 +151,8 @@ async function viewPhase(slug, number) {
     <td>${badge(s.status)}${s.header_status && s.header_status !== s.status ? " " + badge("header: " + s.header_status, "issue") : ""}</td>
     <td>${s.evidence_exists ? badge("evidence", "ok") : badge("no evidence", s.status === "done" ? "issue" : "")}</td>
     <td><a href="#/f/${encodeURIComponent(s.story_path)}"><code>story</code></a>${s.evidence_exists
-      ? ` · <a href="#/f/${encodeURIComponent(s.evidence_path)}"><code>evidence</code></a>` : ""}</td>
+      ? ` · <a href="#/f/${encodeURIComponent(s.evidence_path)}"><code>evidence</code></a>` : ""}
+      · <a href="#/p/${encodeURIComponent(slug)}/t/${encodeURIComponent(s.story_id)}"><code>trace</code></a></td>
   </tr>`).join("");
   app.innerHTML = `
     <div class="meta">
@@ -165,8 +166,23 @@ async function viewPhase(slug, number) {
         <tr><th>ID</th><th>Story</th><th>Status</th><th>Evidence</th><th>Source</th></tr>
         ${rows || '<tr><td colspan="5">no stories yet</td></tr>'}
       </table></div></div>
+    <div class="section"><h2>Recent commits (phase trace)</h2>
+      <div id="phase-events" class="state">Loading…</div></div>
     ${ph.final_summary_content ? `<div class="section"><h2>Final summary</h2>
       <pre class="src">${esc(ph.final_summary_content)}</pre></div>` : ""}`;
+  api(`/api/projects/${encodeURIComponent(slug)}/phases/${encodeURIComponent(number)}/events`).then((ev) => {
+    const rows = ev.data.events.map((c) => `<tr>
+      <td><code>${esc(c.date)}</code></td><td>${esc(c.subject)}
+        ${c.pmo_story ? " " + badge(c.pmo_story, "ok") : ""}
+        ${c.contract_digest ? ` <span class="badge" title="${esc(c.contract_digest)}">digest</span>` : ""}</td>
+      <td><code>${esc(String(c.sha).slice(0, 9))}</code></td></tr>`).join("");
+    document.getElementById("phase-events").outerHTML = rows
+      ? `<div class="tblwrap"><table class="tbl"><tr><th>Date</th><th>Commit</th><th>SHA</th></tr>${rows}</table></div>`
+      : `<div class="state">no commits touch this phase directory yet</div>`;
+  }).catch(() => {
+    const el = document.getElementById("phase-events");
+    if (el) el.textContent = "phase commits unavailable (no git history)";
+  });
 }
 
 async function viewStory(slug, storyId) {
@@ -181,6 +197,7 @@ async function viewStory(slug, storyId) {
       <div class="kv"><div class="k">status</div><div class="v">${badge(s.status)}${s.header_status && s.header_status !== s.status ? " " + badge("header: " + s.header_status, "issue") : ""}</div></div>
       <div class="kv"><div class="k">phase</div><div class="v"><a href="#/p/${encodeURIComponent(slug)}/ph/${s.phase_number}">phase ${s.phase_number}</a></div></div>
       <div class="kv"><div class="k">evidence</div><div class="v">${s.evidence_exists ? esc(s.evidence_path) : "none"}</div></div>
+      <div class="kv"><div class="k">trace</div><div class="v"><a href="#/p/${encodeURIComponent(slug)}/t/${encodeURIComponent(s.story_id)}">intent → proof timeline</a></div></div>
     </div>
     <div class="section pair">
       <div><h2>story · <code>${esc(s.story_path)}</code></h2>
@@ -266,6 +283,63 @@ async function viewHealth() {
   });
 }
 
+
+const HOP_LABELS = {
+  readme: "project README",
+  phase_status: "phase status",
+  story: "story",
+  evidence: "evidence",
+  final_summary: "final summary",
+};
+
+let traceSortAsc = false;
+
+async function viewTrace(slug, storyId) {
+  setCrumbs([{ label: "overview", href: "#/" },
+    { label: slug, href: `#/p/${encodeURIComponent(slug)}` },
+    { label: storyId, href: `#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(storyId)}` },
+    { label: "trace" }]);
+  const apiPath = `/api/projects/${encodeURIComponent(slug)}/trace/${encodeURIComponent(storyId)}`;
+  const body = await api(apiPath);
+  const tl = body.data;
+  const chain = tl.chain.map((hop) => `
+    <div class="hitem">
+      ${badge(hop.exists ? "present" : "absent", hop.exists ? "ok" : "issue")}
+      <span class="msg"><b>${esc(HOP_LABELS[hop.hop] || hop.hop)}</b> —
+        ${hop.exists && hop.path
+          ? `<a href="#/f/${encodeURIComponent(hop.path)}"><code>${esc(hop.path)}</code></a>`
+          : hop.path ? `<code>${esc(hop.path)}</code> <span class="badge issue">not written yet</span>`
+                     : '<span class="badge issue">no path</span>'}</span>
+    </div>`).join("");
+  const events = tl.events.slice();
+  if (traceSortAsc) events.reverse();
+  const eventRows = events.length ? events.map((ev) => `<tr>
+      <td>${badge(ev.type, ev.type === "commit" ? "in-progress" : "ok")}</td>
+      <td><code>${esc(ev.sort_key || ev.date)}</code></td>
+      <td>${esc(ev.subject || "(no subject)")}
+        ${ev.pmo_story ? " " + badge(ev.pmo_story, "ok") : ""}
+        ${ev.contract_digest ? ` <span class="badge" title="${esc(ev.contract_digest)}">digest</span>` : ""}</td>
+      <td><code>${esc(ev.type === "commit" ? String(ev.sha).slice(0, 9) : ev.source)}</code></td>
+    </tr>`).join("")
+    : '<tr><td colspan="4">no commits or work-log entries found for this story\u2019s files</td></tr>';
+  app.innerHTML = `
+    <div class="guard ${tl.shipped ? "ok" : ""}">${tl.shipped
+      ? `shipped: story is done and its evidence exists`
+      : `not shipped: ${esc(tl.not_shipped_reason)}`}</div>
+    <div class="section"><h2>Trace chain — intent to proof</h2>${chain}</div>
+    <div class="section"><h2>Events (commits + work-log)
+      <button id="trace-sort" type="button" class="badge" style="cursor:pointer">${traceSortAsc ? "oldest first ↑" : "newest first ↓"}</button>
+      <a class="badge" href="${apiPath}" target="_blank" title="machine-readable timeline">export JSON</a></h2>
+      <div class="tblwrap"><table class="tbl">
+        <tr><th>Type</th><th>When</th><th>What</th><th>Source</th></tr>
+        ${eventRows}
+      </table></div></div>`;
+  document.getElementById("trace-sort").addEventListener("click", () => {
+    traceSortAsc = !traceSortAsc;
+    route();
+  });
+}
+
 /* ── router ─────────────────────────────────────────────────────────── */
 
 async function route() {
@@ -277,6 +351,7 @@ async function route() {
     if (parts[0] === "p" && parts.length === 2) return await viewProject(parts[1]);
     if (parts[0] === "p" && parts[2] === "ph") return await viewPhase(parts[1], parts[3]);
     if (parts[0] === "p" && parts[2] === "s") return await viewStory(parts[1], parts[3]);
+    if (parts[0] === "p" && parts[2] === "t") return await viewTrace(parts[1], parts[3]);
     if (parts[0] === "health") return await viewHealth();
     if (parts[0] === "f") return await viewFile(parts.slice(1).join("/"));
     app.innerHTML = stateHtml(`Unknown view: ${hash}`, true);

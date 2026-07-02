@@ -21,9 +21,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .api import build_context_payload, next_story, project_context
+from .api import build_context_payload, next_story, phase_events, project_context, story_timeline
 from .model import DwError, OPEN_STATUSES
-from .parse import discover_phases, discover_projects, get_project, parse_story_rows
+from .parse import discover_phases, discover_projects, get_phase, get_project, parse_story_rows
 from .paths import read_text, rel, roadmap_dir
 from .validate import check_project, health_report, project_warnings
 
@@ -143,6 +143,19 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
                         detail["phase_number"] = phase["number"]
                         return 200, envelope(detail)
             return _error(404, f"story not found: {parts[4]}")
+
+        if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3] == "trace":
+            project = get_project(root, parts[2])
+            for phase in discover_phases(project):
+                for row in parse_story_rows(phase.path / "current-phase-status.md"):
+                    if row.story_id == parts[4]:
+                        return 200, envelope(story_timeline(row, phase, project, root))
+            return _error(404, f"story not found: {parts[4]}")
+
+        if len(parts) == 6 and parts[:2] == ["api", "projects"] and parts[3] == "phases" and parts[5] == "events":
+            project = get_project(root, parts[2])
+            phase = get_phase(project, parts[4])
+            return 200, envelope({"phase": phase.number, "events": phase_events(phase, root)})
 
         if parts == ["api", "health"]:
             return 200, envelope(health_report(root, discover_projects(root)))
