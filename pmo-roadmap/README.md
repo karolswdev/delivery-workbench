@@ -6,17 +6,26 @@ A drop-in PMO framework for any git project. Provides:
 
 1. **Methodology** — phase-based, evidence-rich roadmap structure under
    `pm/roadmap/{project}/`. See `templates/roadmap-builder.md`.
-2. **Hygiene gate** — a `pre-commit` hook that blocks commits until the
-   committing agent (or human) writes a fresh `.tmp/CONTRACT.md` with
-   per-rule checkboxes acknowledging the operating principles.
-3. **Work log finalizer** — optional consent-gated `pre-commit` capture plus
-   `post-commit` append into a local daily architect log.
-4. **Deferred summarizer** — optional CLI adapter that can run `codex` or
-   another command over deterministic logs after commits finish.
-5. **Log reader** — small helper for listing or reading local daily logs.
-6. **Bootstrapping** — scripts to scaffold a new project's roadmap tree.
-7. **Updater** — pull methodology / contract / hook updates back into a
-   project that already installed.
+2. **The `dw` CLI and core** — orientation (`next`, `context`, `check`,
+   `doctor`), preview-safe roadmap maintenance, evidence capture, the
+   adoption bridge (`dw adopt`), and the gate engine, all in one
+   python package (`lib/dw_pmo/`).
+3. **The commit gate with verified contracts** — `dw contract new`
+   generates `.tmp/CONTRACT.md` with machine-verified stamped facts;
+   the `pre-commit` shim runs `dw gate`, which re-derives every fact
+   and blocks with the failed rule id and remediation.
+4. **A durable audit trail** — `commit-msg` stamps `PMO-Story:` and
+   `PMO-Contract-Digest:` trailers; `post-commit` archives the exact
+   certified contract under `.git/pmo-contract-archive/<sha>`.
+5. **The workbench** — `dw-workbench`, a localhost web view with
+   explorer, health console, trace timeline, work-log viewer, and a
+   guarded preview→apply editor. Never commits.
+6. **Work logs** — optional consent-gated capture plus `post-commit`
+   append into a local daily architect log, with a reader and a
+   deferred summarizer adapter.
+7. **Bootstrapping, adoption, and updates** — scaffold new roadmaps,
+   adopt running projects in three commands, and roll framework
+   updates forward with `update.sh`.
 
 ## Why
 
@@ -27,9 +36,13 @@ two things mechanically:
   set of files: `current-phase-status.md`, `story-{n}-*.md`,
   `evidence-story-{n}.md`, `final-summary.md`).
 - A **commit-time gate** that forces the committing agent to re-read the
-  rules and certify (per-checkbox) that this commit complies. Stale
-  contracts are rejected via mtime checks. The contract file is deleted
-  on success so each commit needs a fresh one.
+  rules and certify (per-checkbox) that this commit complies. Freshness
+  is cryptographic, not temporal: the contract carries the staged
+  `git write-tree` index tree and the gate re-derives it, so restaging
+  invalidates the contract and `touch` cannot refresh it. On a
+  successful commit the certified contract is archived under
+  `.git/pmo-contract-archive/<sha>` and the working copy cleared —
+  each commit needs a fresh one, and every commit keeps its receipt.
 
 The hygiene gate works for human commits too. CI is unaffected (hooks
 don't run server-side).
@@ -38,25 +51,21 @@ don't run server-side).
 
 ```mermaid
 flowchart TD
-  Install[install.sh] --> Hooks[.githooks]
+  Install[install.sh] --> Hooks[.githooks: pre-commit, commit-msg, post-commit]
+  Install --> Tools[.githooks: dw, dw-workbench, work-log helpers]
   Install --> Canon[pm/roadmap/PMO-CONTRACT.md + roadmap-builder.md]
-  Install --> Snippet[CLAUDE.md / AGENTS.md snippet]
-  Hooks --> Pre[pre-commit]
-  Hooks --> Post[post-commit]
-  Hooks --> Read[work-log-read]
-  Hooks --> Summarize[work-log-summarize]
+  Install --> Agent[managed CLAUDE.md block + .claude/commands]
 
-  Canon --> Contract[.tmp/CONTRACT.md per commit]
-  Contract --> Pre
-  Pre --> Gate{PMO checks pass?}
-  Gate -->|No| Block[Commit blocked]
-  Gate -->|Yes| Commit[Commit proceeds]
-  Pre -->|optional consented payload| Pending[.git/pmo-work-log/pending]
-  Commit --> Post
-  Pending --> Post
-  Post --> Log[~/.work/log/YYYY-MM-DD/*.log]
-  Log --> Read
-  Log --> Summarize
+  Canon --> DW[dw contract new]
+  DW --> Contract[.tmp/CONTRACT.md with stamped facts]
+  Contract --> Gate[pre-commit shim -> dw gate]
+  Gate -->|fail| Block[blocked: rule id + remediation]
+  Gate -->|pass| Msg[commit-msg: PMO trailers]
+  Msg --> Commit[commit created]
+  Commit --> Archive[post-commit: contract archive]
+  Gate -->|consented payload| Pending[.git/pmo-work-log/pending]
+  Commit --> WLog[post-commit: daily work log]
+  Tools --> Workbench[dw-workbench: localhost web view]
 ```
 
 ## Install into a target project
@@ -79,10 +88,12 @@ The installer:
 
 1. Copies `templates/roadmap-builder.md` → `target/pm/roadmap/roadmap-builder.md`
 2. Copies `templates/PMO-CONTRACT.md` → `target/pm/roadmap/PMO-CONTRACT.md`
-3. Copies `hooks/pre-commit` → `target/.githooks/pre-commit` (chmod +x)
-4. Copies `hooks/post-commit` → `target/.githooks/post-commit` (chmod +x)
-5. Copies `bin/dw` → `target/.githooks/dw` and the `lib/dw_pmo/` core
+3. Copies the three hooks — `hooks/pre-commit`, `hooks/commit-msg`,
+   `hooks/post-commit` — into `target/.githooks/` (chmod +x)
+4. Copies `bin/dw` → `target/.githooks/dw` and the `lib/dw_pmo/` core
    package → `target/.githooks/dw_pmo/`
+5. Copies `bin/dw-workbench` → `target/.githooks/dw-workbench` and the
+   web UI → `target/.githooks/workbench/`
 6. Copies `bin/work-log-summarize` → `target/.githooks/work-log-summarize`
 7. Copies `bin/work-log-read` → `target/.githooks/work-log-read`
 8. Copies `agent/dw-*.md` → `target/.claude/commands/` (agent slash
@@ -127,9 +138,11 @@ cd /path/to/delivery-workbench/pmo-roadmap
 ./update.sh /path/to/target-project
 ```
 
-This re-copies the methodology and hook (overwriting). It refuses to
-overwrite `PMO-CONTRACT.md` if it has been customized locally — pass
-`--force` only after reconciling project-extension rules manually.
+This re-copies the methodology, all three hooks, the `dw` CLI and
+core package, and the workbench (overwriting the framework-owned
+copies). It refuses to overwrite `PMO-CONTRACT.md` if it has been
+customized locally — pass `--force` only after reconciling
+project-extension rules manually.
 
 It never touches:
 
@@ -443,18 +456,16 @@ re-verifies at commit time that the referenced block exists in the
 **staged** evidence with exit code 0
 (`contract-tests-capture-mismatch` otherwise).
 
-Gate semantics (shared vocabulary with `dw`): a story "ships" when its
-`**Status:**` header flips from a non-done value in `HEAD` to any of
-`done|complete|closed|shipped` in the index — renames and reformatting
-of already-done stories are not flips. Evidence numbers pair as
-integers (`evidence-story-1.md` matches `story-01-*`). Evidence
-deletions pass unless they orphan a story that remains done in the
-index; modified evidence is legal while its story is done; added
-evidence still requires its story to flip in the same commit. Paths
-with spaces are handled. `EXPECTED_BOXES` and work-log settings resolve
-as: simple assignments in `pre-commit.config` beat the environment,
-which beats defaults (`PMO_WORK_LOG_DIR` follows the same precedence in
-the hooks, `work-log-read`, `work-log-summarize`, and `dw context`).
+Gate semantics — what counts as a story "shipping", how evidence
+numbers pair, how deletions and renames are judged — are owned by the
+canonical rules document; see
+[`templates/PMO-CONTRACT.md`](./templates/PMO-CONTRACT.md) rather than
+a paraphrase here. One operational note that belongs to this README:
+configuration resolves as simple assignments in `pre-commit.config`
+beat the environment, which beats defaults, and `PMO_WORK_LOG_DIR`
+follows that same precedence everywhere it is read (hooks,
+`work-log-read`, `work-log-summarize`, `dw context`, and the
+workbench).
 
 ## Workbench: the local web view
 
@@ -641,36 +652,53 @@ stateDiagram-v2
 
 ```
 pmo-roadmap/
-├── README.md                     ← this file
+├── README.md                     ← this file (install/adopt/operate)
 ├── install.sh                    ← initial install into a target project
-├── update.sh                     ← re-pull methodology/contract/hook
+├── update.sh                     ← roll framework updates forward
+├── agent/                        ← slash-command sources (dw-next, dw-contract,
+│                                    dw-story-done, dw-adopt) → .claude/commands/
+├── assets/                       ← icon and image assets
+├── bin/
+│   ├── dw                        ← roadmap CLI (thin adapter over the core)
+│   ├── dw-workbench              ← localhost web view server
+│   ├── work-log-read             ← daily work-log reader
+│   └── work-log-summarize        ← deferred summarizer helper
 ├── bootstrap/
 │   ├── adopt-project.sh          ← mid-project adoption discovery runner
 │   ├── new-project.sh            ← scaffold pm/roadmap/{slug}/ skeleton
 │   └── session-intake.sh         ← capture user goal, direction, handoff
+├── brand/                        ← brand notes
 ├── hooks/
-│   ├── pre-commit                ← hygiene gate + optional work-log capture
-│   └── post-commit               ← optional daily work-log finalizer
-├── bin/
-│   ├── dw                       ← roadmap maintenance CLI (adapter)
-│   ├── work-log-read             ← daily work-log reader
-│   └── work-log-summarize        ← deferred summarizer helper
+│   ├── pre-commit                ← gate shim + consented work-log capture
+│   ├── commit-msg                ← PMO-Story / PMO-Contract-Digest trailers
+│   └── post-commit               ← contract archive + work-log finalizer
 ├── lib/
-│   └── dw_pmo/                   ← reusable PMO core: model, paths, parse,
-│                                    validate, trace, render, mutations, api
+│   └── dw_pmo/                   ← the core: model, paths, gitio, parse,
+│                                    validate, trace, render, mutations, api,
+│                                    gate, contract, evidence, agentdocs,
+│                                    doctor, adopt, workbench
 ├── tests/
-│   ├── dw-core-tests.py          ← dw_pmo core unit tests
-│   ├── roadmap-cli.sh            ← temp-roadmap CLI coverage
-│   └── work-log-mvp.sh           ← temp-repo integration coverage
+│   ├── dw-core-tests.py          ← core unit suite
+│   ├── adoption-discovery.sh     ← three-command adoption coverage
+│   ├── agent-surface.sh          ← managed block + headless lifecycle
+│   ├── canon-lint.sh             ← forbidden-drift patterns in canon
+│   ├── gate-parity.sh            ← gate-vs-hook parity scenarios
+│   ├── roadmap-cli.sh            ← CLI integration coverage
+│   ├── work-log-mvp.sh           ← work-log pipeline coverage
+│   ├── workbench-explorer.sh     ← workbench server/API integration
+│   └── workbench-ui-smoke.sh     ← headless viewport renders
+├── workbench/                    ← static web UI (index.html, app.js, style.css)
 └── templates/
     ├── roadmap-builder.md        ← canonical methodology
     ├── adoption-discovery-prompt.md ← mid-project discovery prompt
     ├── session-intake.md.tmpl    ← user/session intake template
-    ├── PMO-CONTRACT.md           ← rules + contract template
-    ├── CLAUDE-snippet.md         ← snippet to add to target CLAUDE.md
+    ├── PMO-CONTRACT.md           ← rules + contract template (canonical)
+    ├── CONTRACT.md.tmpl          ← generated-contract template
+    ├── CLAUDE-snippet.md         ← managed agent-docs block source
     ├── project-README.md.tmpl    ← stub for pm/roadmap/{slug}/README.md
     ├── phase-status.md.tmpl      ← stub for current-phase-status.md
-    └── story.md.tmpl             ← stub for story-{n}-*.md
+    ├── story.md.tmpl             ← stub for story-{n}-*.md
+    └── examples/                 ← worked examples (extension, builder)
 ```
 
 ## Conventions
@@ -689,5 +717,8 @@ pmo-roadmap/
 
 - Edit canonical files here, then run `update.sh` against each consumer
   project to roll the change forward.
-- Keep `templates/PMO-CONTRACT.md`, `hooks/pre-commit`, and
-  `hooks/post-commit` in sync when changing work-log contract behavior.
+- Rule logic lives in `lib/dw_pmo/gate.py` (the hooks are shims): when
+  changing gate or contract behavior, keep `templates/PMO-CONTRACT.md`
+  (the rules document agents read), `lib/dw_pmo/`, and all three hooks
+  in sync — the doc-parity unit tests and `canon-lint.sh` catch the
+  drift they know about.

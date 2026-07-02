@@ -2,208 +2,144 @@
 
 ![Delivery Workbench icon](./pmo-roadmap/assets/delivery-workbench-icon.png)
 
-Delivery Workbench is an evidence-first operating framework for agentic
-software delivery.
+**Evidence-first rails for agentic software delivery.** Delivery
+Workbench turns a Git repository into a self-verifying delivery
+system: work is planned as Markdown roadmaps, proven by paired
+evidence files with captured command runs, and gated at commit time
+by machine-verified contracts. It is built for humans and AI agents
+working the same repo — and it ships its own roadmap, built entirely
+on its own rails.
 
-It gives an existing or new Git project:
-
-- roadmap structure for phases, stories, and evidence
-- commit-time PMO contracts
-- mechanical story/evidence pairing checks
-- optional local daily work logs
-- deferred work-log summarization
-- mid-project adoption discovery with Codex or Claude
-
-The framework currently lives in [`pmo-roadmap/`](./pmo-roadmap/).
-
-## Status
-
-Experimental but usable. The project is intentionally opinionated and designed
-for builders who want agent-assisted software work to leave a durable evidence
-trail.
-
-## System Flow
-
-```mermaid
-flowchart TD
-  A[New or existing Git project] --> B[Install Delivery Workbench]
-  B --> C{Project already in motion?}
-  C -->|Yes| U[Capture session intake]
-  U --> D[Run adoption discovery with Codex or Claude]
-  C -->|No| E[Bootstrap roadmap skeleton]
-  D --> F[Write adoption report]
-  F --> G[Create roadmap phases and first stories]
-  E --> G
-  G --> H[Work one story at a time]
-  H --> I[Commit with PMO contract]
-  I --> J[Hook verifies contract and evidence pairing]
-  J --> K[Optional local work-log entry]
-  K --> L[Deferred summary when useful]
-```
-
-## Artifact Model
-
-```mermaid
-flowchart LR
-  R[pm/roadmap/project README] --> P[current phase status]
-  P --> S1[story-01]
-  P --> S2[story-02]
-  P --> S3[story-N]
-  S1 --> E1[evidence-story-01]
-  S2 --> E2[evidence-story-02]
-  P --> F[final-summary]
-
-  C[PMO-CONTRACT.md] --> H[pre-commit hook]
-  H --> S1
-  H --> E1
-```
-
-## Quick Start
-
-Install into an existing Git project:
+Adopt an existing project in three commands:
 
 ```bash
-cd pmo-roadmap
-./install.sh /path/to/project --skip-bootstrap
-```
-
-Run adoption discovery for an existing project:
-
-```bash
-./bootstrap/session-intake.sh /path/to/project \
-  --project-name "My Project" \
-  --project-slug myproject \
-  --project-prefix MP
-
-./bootstrap/adopt-project.sh /path/to/project \
-  --project-name "My Project" \
-  --project-slug myproject \
-  --project-prefix MP \
-  --require-intake
-```
-
-Then turn the discovery report into the roadmap and verify the wiring:
-
-```bash
-cd /path/to/project
+pmo-roadmap/install.sh /path/to/project --skip-bootstrap
+pmo-roadmap/bootstrap/adopt-project.sh /path/to/project \
+  --project-slug myproject --project-prefix MP --with-intake --agent claude
+# then, inside the project:
 .githooks/dw adopt --from-report pm/roadmap/myproject/adoption/adoption-discovery.md --apply
-.githooks/dw doctor
 ```
 
-`session-intake.sh` runs as a guided terminal interview when attached to a TTY:
-it shows a compact banner, offers numbered choices, captures checkbox-style
-priorities, and asks for the goal, direction, constraints, and handoff. In
-automation, pass the same values as flags and add `--no-prompt`.
+Finish with `.githooks/dw doctor` (proves the wiring) and pick up work
+with `.githooks/dw next`.
 
-Bootstrap a new roadmap:
+## What you get
 
-```bash
-./bootstrap/new-project.sh /path/to/project myproject "My Project" MP
-```
+- **A Markdown roadmap** under `pm/roadmap/<project>/` — phases,
+  stories, paired evidence files, final summaries. No database, no
+  tracker: the files are the source of truth.
+- **The `dw` CLI** — orient (`next`, `context`, `check`), maintain
+  (`phase`/`story` commands with preview-safe writes), and prove
+  (`evidence capture` records real command runs into evidence).
+- **A commit gate with verified contracts** — `dw contract new`
+  stamps machine-checked facts (branch, HEAD, `git write-tree` index
+  tree, staged sample, story IDs); the gate re-derives each at commit
+  time. One story ships per commit, always with its evidence.
+- **A durable audit trail** — every gated commit carries `PMO-Story:`
+  and `PMO-Contract-Digest:` trailers, and the exact certified
+  contract is archived under `.git/pmo-contract-archive/<sha>`.
+- **The workbench** — a localhost web view (`dw-workbench`): project
+  overview, health console, intent-to-proof trace timeline, and a
+  guarded editor whose writes go through preview → diff →
+  fingerprint-verified apply. It never commits.
+- **Optional local work logs** — consent-gated daily delivery logs
+  with mechanical path exclusion and deferred summarization.
+- **An agent surface** — a managed `CLAUDE.md` block, slash commands,
+  JSON/porcelain outputs, and strict exit-code contracts so agents
+  can operate the rails headlessly.
 
-## Terminal Demos
-
-Charm VHS tapes live in [`demos/`](./demos/):
-
-- [`demos/onboarding.vhs`](./demos/onboarding.vhs) records guided intake and
-  adoption prompt generation.
-- [`demos/commit-gate.vhs`](./demos/commit-gate.vhs) records the commit hook
-  blocking an uncontracted commit, then accepting a fresh contract and writing
-  the consented work log.
-
-### Onboarding
-
-![Delivery Workbench onboarding demo](./demos/rendered/onboarding.gif)
-
-### Commit Gate
-
-![Delivery Workbench commit-gate demo](./demos/rendered/commit-gate.gif)
-
-Render them with:
-
-```bash
-vhs demos/onboarding.vhs
-vhs demos/commit-gate.vhs
-```
-
-## Commit-Time Flow
+## How a change ships
 
 ```mermaid
 sequenceDiagram
   participant Dev as Human or Agent
+  participant DW as dw CLI
   participant Git as git commit
-  participant Hook as pre-commit
-  participant Contract as .tmp/CONTRACT.md
-  participant Roadmap as pm/roadmap
-  participant Log as local work log
+  participant Gate as pre-commit gate
+  participant Msg as commit-msg
+  participant Post as post-commit
 
-  Dev->>Contract: certify rules for this commit
+  Dev->>DW: dw story status … in-progress
+  Dev->>Dev: do the work
+  Dev->>DW: dw evidence capture … -- <verify command>
+  Dev->>DW: dw story status … done (refuses without evidence)
+  Dev->>Git: git add … 
+  Dev->>DW: dw contract new (stamps verified facts)
+  Dev->>Dev: certify each rule checkbox honestly
   Dev->>Git: git commit
-  Git->>Hook: run pre-commit
-  Hook->>Contract: require fresh checked contract
-  Hook->>Roadmap: verify story/evidence pairing
-  alt work-log enabled and consent yes
-    Hook->>Log: capture staged payload under .git/pmo-work-log
-  end
-  Hook-->>Git: allow or block commit
+  Git->>Gate: run gate (re-derives every stamped fact)
+  Gate-->>Git: pass, or block with the failed rule + remediation
+  Git->>Msg: stamp PMO-Story + PMO-Contract-Digest trailers
+  Git->>Post: archive contract under .git/pmo-contract-archive/<sha>
 ```
 
-## Work-Log Flow
+The artifact model behind it:
 
 ```mermaid
-flowchart TD
-  A[Contract contains Work-log consent: yes] --> B[pre-commit captures staged metadata]
-  B --> C[Git creates commit]
-  C --> D[post-commit appends deterministic local log entry]
-  D --> E[work-log-read lists or prints entries]
-  D --> F[Optional deferred summarizer]
-  F --> G[Companion deferred-summary markdown]
-
-  X[Consent no or missing] --> Y[No work-log payload]
-  Z[Excluded path regex] --> B
-  Z --> O[Omitted paths listed without captured content]
+flowchart LR
+  R[pm/roadmap/project README] --> P[current-phase-status]
+  P --> S1[story-01]
+  P --> S2[story-N]
+  S1 --> E1[evidence-story-01 + captured runs]
+  S2 --> E2[evidence-story-N + captured runs]
+  P --> F[final-summary]
+  E1 -.proves.-> S1
 ```
+
+## The workbench
+
+`dw-workbench --root /path/to/repo` serves a localhost-only web view
+of the roadmap: browse projects and phases, read story/evidence pairs,
+see validation drift on the health console, follow a story's
+intent-to-proof trace (files → trailer-stamped commits → work logs),
+and edit through guarded preview→apply mutations. The runtime boundary
+is strict and tested: localhost binding, one repo root, writes only
+inside `pm/roadmap/**`, no staging, no commits. See the
+[framework README](./pmo-roadmap/README.md#workbench-the-local-web-view)
+for usage and the full API.
+
+## Terminal demos
+
+Charm VHS tapes live in [`demos/`](./demos/):
+
+![Delivery Workbench onboarding demo](./demos/rendered/onboarding.gif)
+
+![Delivery Workbench commit-gate demo](./demos/rendered/commit-gate.gif)
+
+Render them with `vhs demos/onboarding.vhs` and
+`vhs demos/commit-gate.vhs`.
 
 ## Why
 
-Agentic coding work can move fast enough that project memory becomes the
-bottleneck. Delivery Workbench treats planning, verification, and commit-time
-intent as first-class artifacts.
+Agentic coding moves fast enough that project memory becomes the
+bottleneck — and "done" claims outrun proof. Delivery Workbench makes
+planning, verification, and commit-time intent first-class, mechanical
+artifacts. The goal is recoverable delivery: a future human or agent
+can inspect the repository and understand what shipped, why it
+mattered, what proved it, and where the next responsible move begins.
 
-The goal is not ceremony. The goal is recoverable delivery: a future human or
-agent should be able to inspect the repository and understand what shipped,
-why it mattered, what proved it, and where the next responsible move begins.
+This repository practices what it enforces: every phase and story of
+the framework itself was shipped through its own gate, with evidence,
+contracts, trailers, and archives — inspect
+[`pmo-roadmap/pm/roadmap/work-log-automation/`](./pmo-roadmap/pm/roadmap/work-log-automation/)
+for the complete audit trail.
 
 ## Documentation
 
-- [Framework README](./pmo-roadmap/README.md)
-- [PMO contract](./pmo-roadmap/templates/PMO-CONTRACT.md)
+- [Architecture guide](./docs/architecture.md) — how the six
+  subsystems work and what proves each claim
+- [Framework README](./pmo-roadmap/README.md) — install, update,
+  adopt, operate
+- [PMO contract](./pmo-roadmap/templates/PMO-CONTRACT.md) — the rules
+  and the contract template (canonical)
 - [Roadmap builder methodology](./pmo-roadmap/templates/roadmap-builder.md)
+- [Security and privacy](./SECURITY.md)
 - [Brand notes](./pmo-roadmap/brand/delivery-workbench.md)
 
 ## Validation
 
 ```bash
-bash -n pmo-roadmap/bin/work-log-read \
-  pmo-roadmap/bin/work-log-summarize \
-  pmo-roadmap/bootstrap/adopt-project.sh \
-  pmo-roadmap/bootstrap/new-project.sh \
-  pmo-roadmap/bootstrap/session-intake.sh \
-  pmo-roadmap/hooks/pre-commit \
-  pmo-roadmap/hooks/commit-msg \
-  pmo-roadmap/hooks/post-commit \
-  pmo-roadmap/install.sh \
-  pmo-roadmap/update.sh \
-  pmo-roadmap/tests/adoption-discovery.sh \
-  pmo-roadmap/tests/agent-surface.sh \
-  pmo-roadmap/tests/canon-lint.sh \
-  pmo-roadmap/tests/gate-parity.sh \
-  pmo-roadmap/tests/roadmap-cli.sh \
-  pmo-roadmap/tests/work-log-mvp.sh \
-  pmo-roadmap/tests/workbench-explorer.sh
-pmo-roadmap/tests/workbench-ui-smoke.sh
-
-python3 -m py_compile pmo-roadmap/bin/dw
+python3 -m py_compile pmo-roadmap/bin/dw pmo-roadmap/bin/dw-workbench
 python3 -m compileall -q pmo-roadmap/lib/dw_pmo
 python3 pmo-roadmap/tests/dw-core-tests.py
 pmo-roadmap/tests/adoption-discovery.sh
@@ -215,14 +151,22 @@ pmo-roadmap/tests/work-log-mvp.sh
 pmo-roadmap/tests/workbench-explorer.sh
 pmo-roadmap/tests/workbench-ui-smoke.sh
 pmo-roadmap/bin/dw check work-log-automation
-shellcheck pmo-roadmap/install.sh pmo-roadmap/update.sh \
+shellcheck -e SC2317 pmo-roadmap/install.sh pmo-roadmap/update.sh \
   pmo-roadmap/hooks/* pmo-roadmap/bin/work-log-* \
   pmo-roadmap/bootstrap/*.sh pmo-roadmap/tests/*.sh demos/scripts/*.sh
 ```
 
-CI runs everything above on ubuntu and macos, plus the dw core suite on
-the declared python3 3.9 floor.
+CI runs all of it on ubuntu and macos, plus the core suite on the
+declared python3 3.9 floor and the headless viewport smoke where
+Firefox is available.
+
+## Status
+
+Experimental but battle-used: the framework has shipped its own
+seven-phase roadmap through its own gate. Intentionally opinionated,
+built for builders who want agent-assisted work to leave a durable
+evidence trail.
 
 ## License
 
-MIT.
+[MIT](./LICENSE).
