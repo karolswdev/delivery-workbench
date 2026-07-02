@@ -61,15 +61,18 @@ state store.
 
 ## Exit criteria (evidence required)
 
-- [ ] `pmo-roadmap/lib/dw_pmo/` owns the parser, validator, context, trace, and
-  mutation-planning code now embedded in `pmo-roadmap/bin/dw`.
-- [ ] `pmo-roadmap/bin/dw` remains compatible with the Phase 4 CLI contract and
-  imports the shared core.
-- [ ] A documented local workbench command serves a read-only UI and JSON API
-  against an allowlisted repo root.
-- [ ] The read-only UI can browse projects, phases, story/evidence pairs, final
+- [x] `pmo-roadmap/lib/dw_pmo/` owns the parser, validator, context, trace, and
+  mutation-planning code now embedded in `pmo-roadmap/bin/dw`
+  (evidence-story-02).
+- [x] `pmo-roadmap/bin/dw` remains compatible with the Phase 4 CLI contract and
+  imports the shared core (byte-identical output matrix;
+  evidence-story-02).
+- [x] A documented local workbench command serves a read-only UI and JSON API
+  against an allowlisted repo root (`dw-workbench --root PATH`;
+  evidence-story-03).
+- [x] The read-only UI can browse projects, phases, story/evidence pairs, final
   summaries, supplemental canon, drift warnings, validation issues, and next
-  actionable work.
+  actionable work (evidence-story-03 with screenshots).
 - [ ] The trace UI links README, phase status, story, evidence, final summary,
   recent commits, and work-log entries where available.
 - [ ] The editor supports create phase, create story, update story status,
@@ -89,7 +92,7 @@ state store.
 |---|---|---|---|---|
 | WLA-5-01 | Define Workbench product contract and UX architecture | done | [story-01-product-contract-ux-architecture](./story-01-product-contract-ux-architecture.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-5-02 | Extract reusable PMO core API boundary | done | [story-02-reusable-core-api-boundary](./story-02-reusable-core-api-boundary.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-5-03 | Build read-only roadmap explorer | backlog | [story-03-read-only-roadmap-explorer](./story-03-read-only-roadmap-explorer.md) | - |
+| WLA-5-03 | Build read-only roadmap explorer | done | [story-03-read-only-roadmap-explorer](./story-03-read-only-roadmap-explorer.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-5-04 | Build health drift and validation console | backlog | [story-04-health-drift-validation-console](./story-04-health-drift-validation-console.md) | - |
 | WLA-5-05 | Build traceability timeline | backlog | [story-05-traceability-timeline](./story-05-traceability-timeline.md) | - |
 | WLA-5-06 | Build structured PMO editor | backlog | [story-06-structured-pmo-editor](./story-06-structured-pmo-editor.md) | - |
@@ -117,15 +120,16 @@ state store.
 
 ## Where we are
 
-WLA-5-02 is done with evidence: the reusable core lives in
-`pmo-roadmap/lib/dw_pmo/` (model, paths, parse, validate, trace, render,
-mutations, api), `bin/dw` is a thin adapter with byte-identical Phase 4
-output, mutations expose the preview -> apply-with-fingerprint ->
-revalidate primitives the workbench needs, and the core has its own
-12-case unit suite wired into CI. Per the Phase 6 sequencing decision,
-the next move is WLA-6-02 (single `dw gate` engine on top of this core);
-Phase 5 UI stories (WLA-5-03 onward) resume after the Phase 6 gate work
-lands.
+WLA-5-03 is done with evidence: the read-only explorer is live —
+`dw-workbench --root PATH` serves a localhost-only JSON API and static
+UI computed entirely through the `dw_pmo` core (no second parser, no
+cache, GET-only with containment-checked reads), with overview, phase
+board, story/evidence pair, and canon views proven by unit view-model
+tests, a CI-run integration suite (including the checksum read-only
+guarantee), and real desktop/mobile screenshots in `assets/`. Four
+phase exit criteria are now checked. Next per the execution sequence:
+WLA-5-04 (health/drift validation console), then WLA-5-05 (trace
+timeline) to finish the read-only tier before mutation work.
 
 ## Active risks
 
