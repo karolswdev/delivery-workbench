@@ -30,9 +30,10 @@ treatment as the code.
 
 ## Exit criteria (evidence required)
 
-- [ ] A documentation inventory maps every doc surface to audience,
+- [x] A documentation inventory maps every doc surface to audience,
   purpose, freshness verdict, and disposition, with four executable
-  audience paths (evaluator, adopter, contributor, operating agent).
+  audience paths (evaluator, adopter, contributor, operating agent)
+  (evidence-story-01: 15 surfaces, 12 findings F1-F12, target IA).
 - [ ] The root README orients in one screen and every quickstart
   command runs as printed (captured verbatim in fixtures).
 - [ ] `docs/architecture.md` explains core, gate, contract v2,
@@ -61,7 +62,7 @@ treatment as the code.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-7-01 | Documentation audit and information architecture | backlog | [story-01-documentation-audit-and-information-architecture](./story-01-documentation-audit-and-information-architecture.md) | - |
+| WLA-7-01 | Documentation audit and information architecture | done | [story-01-documentation-audit-and-information-architecture](./story-01-documentation-audit-and-information-architecture.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-7-02 | Core docs overhaul and architecture guide | backlog | [story-02-core-docs-overhaul-and-architecture-guide](./story-02-core-docs-overhaul-and-architecture-guide.md) | - |
 | WLA-7-03 | Canon and template accuracy pass | backlog | [story-03-canon-and-template-accuracy-pass](./story-03-canon-and-template-accuracy-pass.md) | - |
 | WLA-7-04 | Package the Claude Code plugin | backlog | [story-04-package-the-claude-code-plugin](./story-04-package-the-claude-code-plugin.md) | - |
@@ -86,12 +87,16 @@ treatment as the code.
 
 ## Where we are
 
-Phase 7 is planned: the phase was created through the workbench's own
-preview → apply mutation workflow (fingerprint-verified, clean
-post-apply revalidation), seven stories are scoped with acceptance
-criteria and test plans, and the sequencing above is frozen. Nothing
-is in progress yet; WLA-7-01 (the audit) is the next actionable
-story.
+WLA-7-01 is done with evidence: fifteen documentation surfaces
+inventoried with dispositions, twelve staleness findings (F1-F12)
+quoted and mechanically verified by captured grep runs — including a
+direct self-contradiction in the framework README (mtime/delete
+claims at :31 vs the index-tree/archive reality at :355-365) and a
+broken command block in the root README's validation section. The
+target information architecture assigns one owning document per topic;
+four audience paths are defined. The audit is now the phase's
+contract: WLA-7-02 (reader docs) and WLA-7-03 (operator canon)
+implement its dispositions next.
 
 ## Active risks
 
