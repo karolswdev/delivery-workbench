@@ -73,8 +73,9 @@ state store.
 - [x] The read-only UI can browse projects, phases, story/evidence pairs, final
   summaries, supplemental canon, drift warnings, validation issues, and next
   actionable work (evidence-story-03 with screenshots).
-- [ ] The trace UI links README, phase status, story, evidence, final summary,
-  recent commits, and work-log entries where available.
+- [x] The trace UI links README, phase status, story, evidence, final summary,
+  recent commits, and work-log entries where available
+  (evidence-story-05 with screenshots).
 - [ ] The editor supports create phase, create story, update story status,
   attach evidence, and close phase through core mutation plans only.
 - [ ] Every write operation has preview, diff, validation, apply, and
@@ -94,7 +95,7 @@ state store.
 | WLA-5-02 | Extract reusable PMO core API boundary | done | [story-02-reusable-core-api-boundary](./story-02-reusable-core-api-boundary.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-5-03 | Build read-only roadmap explorer | done | [story-03-read-only-roadmap-explorer](./story-03-read-only-roadmap-explorer.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-5-04 | Build health drift and validation console | done | [story-04-health-drift-validation-console](./story-04-health-drift-validation-console.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-5-05 | Build traceability timeline | backlog | [story-05-traceability-timeline](./story-05-traceability-timeline.md) | - |
+| WLA-5-05 | Build traceability timeline | done | [story-05-traceability-timeline](./story-05-traceability-timeline.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-5-06 | Build structured PMO editor | backlog | [story-06-structured-pmo-editor](./story-06-structured-pmo-editor.md) | - |
 | WLA-5-07 | Build safe mutation preview and diff workflow | backlog | [story-07-mutation-preview-diff-workflow](./story-07-mutation-preview-diff-workflow.md) | - |
 | WLA-5-08 | Integrate commit and work-log evidence views | backlog | [story-08-commit-worklog-evidence-views](./story-08-commit-worklog-evidence-views.md) | - |
@@ -120,16 +121,16 @@ state store.
 
 ## Where we are
 
-WLA-5-04 is done with evidence: the health console makes drift
-first-class — structured classification in the core (kind, category,
-severity, explanation, parsed phase folders), `/api/health` with the
-`mutation_safe` refusal-state handoff the editor stories will consume,
-and a console view that groups issues with source links, explains the
-drift-prone kinds, panels the hook seams and work-log config, and
-offers copyable `dw check` output. Project views show a
-"mutations guarded" banner whenever issues exist. Next per the
-execution sequence: WLA-5-05 (traceability timeline) closes the
-read-only tier, riding the trailer/digest chain Phase 6 built.
+WLA-5-05 is done with evidence, completing the read-only tier
+(explorer, health, trace). The timeline normalizes the intent-to-proof
+chain — five hops with explicit absent states, commits scoped to the
+story's PMO files carrying the Phase 6 trailers, work-log entries under
+the unified PMO_WORK_LOG_DIR resolution — and never claims a story is
+shipped unless status and evidence agree. Five phase exit criteria are
+checked. Next per the execution sequence: WLA-5-06 (structured editor)
+and WLA-5-07 (mutation preview/diff) open the write tier on the core's
+preview → apply-with-fingerprint → revalidate primitives, guarded by
+the health console's mutation_safe handoff.
 
 ## Active risks
 
