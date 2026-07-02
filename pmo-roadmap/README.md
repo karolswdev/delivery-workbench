@@ -509,6 +509,31 @@ for mutations whose projected issue set strictly shrinks the current
 one — a fix is never ambiguous — or requests that explicitly
 acknowledge the issues. The server never commits.
 
+### Workbench adoption guidance (consumer repos)
+
+- **Source of truth:** Markdown under `pm/roadmap/**` is authoritative;
+  every workbench response derives from it live. There is no database
+  or cache to migrate, back up, or trust — delete nothing, sync
+  nothing.
+- **Permission boundary:** localhost only, one repo root per process,
+  writes only through preview→apply inside `pm/roadmap/**`, no
+  staging, no commits — committing (and the commit gate) stays in your
+  hands and hooks. Anything outside that boundary is a bug; the
+  refusal states above are tested per push.
+- **Work-log caveat:** the work-log viewer reads `PMO_WORK_LOG_DIR`
+  (config > environment > default `~/.work/log`) and serves only
+  capture/digest artifacts from inside it. Logs are supplementary
+  evidence — never a substitute for `evidence-story-NN.md`, and the UI
+  says so wherever they appear.
+- **Proving health:** `.githooks/dw doctor` proves the wiring;
+  `.githooks/dw check <project>` (or the workbench health console /
+  `GET /api/health`, which embeds the same output copyably) proves
+  roadmap integrity — `dw check: ok` is the green signal. The full
+  validation matrix for this repo is in the root README and runs in CI
+  on every push: core unit tests, CLI/gate/agent/adoption integration,
+  workbench server/API integration, the viewport smoke, shellcheck,
+  and the python-3.9 floor.
+
 ## Adopt an existing project
 
 For a running project, install the mechanics first, then run session intake and
