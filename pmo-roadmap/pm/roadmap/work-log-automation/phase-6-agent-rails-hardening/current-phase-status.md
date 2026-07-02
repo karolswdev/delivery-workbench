@@ -90,8 +90,9 @@ what the framework claims and what it verifies.
 - [x] No canonical template contains personal paths, private memory
   references, Pantrybot content, or dead links (canon-lint.sh green in
   CI; evidence-story-06).
-- [ ] Three-command adoption on a temp clone ends with `dw doctor` healthy;
-  the hostile-name injection test passes.
+- [x] Three-command adoption on a temp clone ends with `dw doctor` healthy;
+  the hostile-name injection test passes (adoption-discovery.sh, CI-run;
+  evidence-story-07).
 - [ ] `.github/workflows/validation.yml` runs the full suite green on
   ubuntu and macos with least-privilege permissions, shellcheck, and
   `dw check work-log-automation`.
@@ -106,7 +107,7 @@ what the framework claims and what it verifies.
 | WLA-6-04 | Add evidence capture tooling and content linting | done | [story-04-evidence-capture](./story-04-evidence-capture.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-6-05 | Ship the first-class agent surface | done | [story-05-agent-surface](./story-05-agent-surface.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-6-06 | Right-size ceremony and unify template canon | done | [story-06-ceremony-proportionality](./story-06-ceremony-proportionality.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-6-07 | Harden onboarding and adoption bridge | backlog | [story-07-onboarding-hardening](./story-07-onboarding-hardening.md) | - |
+| WLA-6-07 | Harden onboarding and adoption bridge | done | [story-07-onboarding-hardening](./story-07-onboarding-hardening.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-6-08 | Harden CI, parity, and portability testing | backlog | [story-08-ci-parity-hardening](./story-08-ci-parity-hardening.md) | - |
 
 ## Execution sequence
@@ -128,17 +129,16 @@ what the framework claims and what it verifies.
 
 ## Where we are
 
-WLA-6-06 is done with evidence: ceremony is now proportional — the
-gate decides the contract tier mechanically (short form with stamped
-facts + the no-bypass rule for non-roadmap commits, full rule set for
-anything roadmap-shaped, `PMO_CONTRACT_TIER=full` to opt out), the
-story-status vocabulary is declared once in roadmap-builder §2.3 with
-a doc-vs-constant parity test, every canonical surface is
-de-personalized with `canon-lint.sh` enforcing it in CI, templates and
-builder §2 reconcile section-for-section, and final summaries slimmed
-to four sections. Remaining: WLA-6-07 (onboarding and adoption bridge)
-and WLA-6-08 (CI, parity, and portability hardening), which can land
-in either order and close the phase.
+WLA-6-07 is done with evidence: adoption is three commands ending in
+`dw doctor` healthy — `dw adopt --from-report` turns the discovery
+report's stabilized tables into the roadmap scaffold with
+preview-then-apply and line-numbered refusals; rendering is
+injection-proof and repo-relative; the installer refuses foreign hook
+managers without `--force` and warns about hooks it disables; the
+intake asks 4 core questions (full set behind `--extended`) and flags
+Enter-through intakes. One story remains: WLA-6-08 (CI, parity, and
+portability hardening) closes the phase — macOS matrix, shellcheck,
+workflow hygiene, and the checkout action bump.
 
 ## Active risks
 
