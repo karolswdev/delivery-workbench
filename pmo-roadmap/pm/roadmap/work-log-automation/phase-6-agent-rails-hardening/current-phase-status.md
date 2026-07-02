@@ -64,9 +64,12 @@ what the framework claims and what it verifies.
 
 ## Exit criteria (evidence required)
 
-- [ ] `git config core.hooksPath` is `.githooks` in this repo,
-  `git status --porcelain` is empty, and every Phase 6 commit carries
-  `PMO-Story:` and `PMO-Contract-Digest:` trailers.
+- [x] `git config core.hooksPath` is `.githooks` in this repo,
+  `git status --porcelain` is empty at every story close, and every
+  Phase 6 commit since contract v2 (faa7de6) carries `PMO-Story:` and
+  `PMO-Contract-Digest:` trailers — the five pre-v2 landing commits
+  carry story IDs but predate digest trailers, recorded as expected
+  history in evidence-story-03.
 - [x] `dw context work-log-automation --trace` resolves at least one story
   through the full chain: story -> evidence -> commit -> contract digest ->
   work-log entry (WLA-6-03 via faa7de6; evidence-story-03).
@@ -93,9 +96,11 @@ what the framework claims and what it verifies.
 - [x] Three-command adoption on a temp clone ends with `dw doctor` healthy;
   the hostile-name injection test passes (adoption-discovery.sh, CI-run;
   evidence-story-07).
-- [ ] `.github/workflows/validation.yml` runs the full suite green on
-  ubuntu and macos with least-privilege permissions, shellcheck, and
-  `dw check work-log-automation`.
+- [x] `.github/workflows/validation.yml` runs the full suite green on
+  ubuntu and macos with least-privilege permissions, shellcheck, a
+  python-3.9 floor job, and `dw check work-log-automation` (workflow
+  ships in this phase's closing commits; greenness verified on their
+  Actions runs; evidence-story-08).
 
 ## Story status
 
@@ -108,7 +113,7 @@ what the framework claims and what it verifies.
 | WLA-6-05 | Ship the first-class agent surface | done | [story-05-agent-surface](./story-05-agent-surface.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-6-06 | Right-size ceremony and unify template canon | done | [story-06-ceremony-proportionality](./story-06-ceremony-proportionality.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-6-07 | Harden onboarding and adoption bridge | done | [story-07-onboarding-hardening](./story-07-onboarding-hardening.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-6-08 | Harden CI, parity, and portability testing | backlog | [story-08-ci-parity-hardening](./story-08-ci-parity-hardening.md) | - |
+| WLA-6-08 | Harden CI, parity, and portability testing | done | [story-08-ci-parity-hardening](./story-08-ci-parity-hardening.md) | [evidence-story-08](./evidence-story-08.md) |
 
 ## Execution sequence
 
@@ -129,16 +134,13 @@ what the framework claims and what it verifies.
 
 ## Where we are
 
-WLA-6-07 is done with evidence: adoption is three commands ending in
-`dw doctor` healthy — `dw adopt --from-report` turns the discovery
-report's stabilized tables into the roadmap scaffold with
-preview-then-apply and line-numbered refusals; rendering is
-injection-proof and repo-relative; the installer refuses foreign hook
-managers without `--force` and warns about hooks it disables; the
-intake asks 4 core questions (full set behind `--extended`) and flags
-Enter-through intakes. One story remains: WLA-6-08 (CI, parity, and
-portability hardening) closes the phase — macOS matrix, shellcheck,
-workflow hygiene, and the checkout action bump.
+Phase 6 is complete: all eight stories done with evidence, all ten
+exit criteria checked, and the phase closed with
+[final-summary.md](./final-summary.md) (the first in the slimmed
+four-section format). The rails this phase set out to build are the
+rails it was built on — every commit gated, contracted, trailed,
+archived, and logged. Work resumes on Phase 5 (WLA-5-03, the read-only
+roadmap explorer) atop the hardened core. This file is frozen.
 
 ## Active risks
 

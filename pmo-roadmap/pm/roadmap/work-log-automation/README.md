@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
 **Last updated:** 2026-07-02.
-**Current phase:** [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/current-phase-status.md).
+**Current phase:** [phase-5-pmo-workbench-interaction-layer](./phase-5-pmo-workbench-interaction-layer/current-phase-status.md).
 **Status:** active.
 
 ## Vision
@@ -61,7 +61,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 3 | Roll out installer/update/docs support and prove adoption on a consumer project | done | [phase-3-rollout](./phase-3-rollout/) |
 | 4 | Add CLI support for routine roadmap maintenance and inspection | done | [phase-4-cli-maintenance-tools](./phase-4-cli-maintenance-tools/) |
 | 5 | Ship the rich PMO Workbench interaction layer on top of the existing agent-safe CLI/core without creating a second source of truth. | planned | [phase-5-pmo-workbench-interaction-layer](./phase-5-pmo-workbench-interaction-layer/) |
-| 6 | Harden the agent rails: single machine-checked gate, durable contract audit trail, first-class agent surface, proportionate ceremony, dogfooded on this repo | planned | [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/) |
+| 6 | Harden the agent rails: single machine-checked gate, durable contract audit trail, first-class agent surface, proportionate ceremony, dogfooded on this repo | done | [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/) |
 
 ## Operating cadence
 
@@ -94,12 +94,13 @@ behavior is:
 
 ## Active extension
 
-Phase 6 owns Agent Rails Hardening: dogfood-integrity restoration, a single
-`dw gate` enforcement engine, verified contracts with a durable audit trail,
-evidence capture tooling, the shipped agent surface, proportionate ceremony,
-and CI/portability hardening. It precedes further Phase 5 UI work because an
-interaction layer over a gameable gate multiplies the wrong thing; WLA-5-02
-(core extraction) remains the shared prerequisite for the gate engine.
+Phase 6 (Agent Rails Hardening) shipped: the gate is single-sourced in the
+`dw_pmo` core, contracts carry gate-verified stamped facts with durable
+trailers and archives, evidence carries captured runs, the agent surface is
+installed automatically, ceremony is tier-proportional, adoption is three
+commands, and CI runs the full suite on two OSes with shellcheck and a
+python-floor job. See
+[phase-6-agent-rails-hardening/final-summary.md](./phase-6-agent-rails-hardening/final-summary.md).
 
 Phase 5 owns the PMO Workbench interaction layer: the local human/agent
 console, editor, trace views, validation health surface, and runtime model that
