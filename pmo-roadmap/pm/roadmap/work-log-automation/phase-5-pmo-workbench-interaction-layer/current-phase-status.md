@@ -96,7 +96,7 @@ state store.
 | WLA-5-03 | Build read-only roadmap explorer | done | [story-03-read-only-roadmap-explorer](./story-03-read-only-roadmap-explorer.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-5-04 | Build health drift and validation console | done | [story-04-health-drift-validation-console](./story-04-health-drift-validation-console.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-5-05 | Build traceability timeline | done | [story-05-traceability-timeline](./story-05-traceability-timeline.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-5-06 | Build structured PMO editor | backlog | [story-06-structured-pmo-editor](./story-06-structured-pmo-editor.md) | - |
+| WLA-5-06 | Build structured PMO editor | done | [story-06-structured-pmo-editor](./story-06-structured-pmo-editor.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-5-07 | Build safe mutation preview and diff workflow | backlog | [story-07-mutation-preview-diff-workflow](./story-07-mutation-preview-diff-workflow.md) | - |
 | WLA-5-08 | Integrate commit and work-log evidence views | backlog | [story-08-commit-worklog-evidence-views](./story-08-commit-worklog-evidence-views.md) | - |
 | WLA-5-09 | Harden permissions and local runtime model | backlog | [story-09-permissions-local-runtime-model](./story-09-permissions-local-runtime-model.md) | - |
@@ -121,16 +121,16 @@ state store.
 
 ## Where we are
 
-WLA-5-05 is done with evidence, completing the read-only tier
-(explorer, health, trace). The timeline normalizes the intent-to-proof
-chain — five hops with explicit absent states, commits scoped to the
-story's PMO files carrying the Phase 6 trailers, work-log entries under
-the unified PMO_WORK_LOG_DIR resolution — and never claims a story is
-shipped unless status and evidence agree. Five phase exit criteria are
-checked. Next per the execution sequence: WLA-5-06 (structured editor)
-and WLA-5-07 (mutation preview/diff) open the write tier on the core's
-preview → apply-with-fingerprint → revalidate primitives, guarded by
-the health console's mutation_safe handoff.
+WLA-5-06 is done with evidence: the write tier is open at the intent
+level. The editor's five forms map one-to-one onto core mutation plans,
+POST /api/mutations/preview returns planned contents plus a
+deterministic content-bound fingerprint while writing nothing
+(checksum-proved), refusals are the core's own (done-without-evidence,
+collisions, force semantics), and the health console's mutation_safe
+guard gates previews behind explicit acknowledgment. Apply, diffs, and
+stale-preview refusal are next: WLA-5-07 completes the
+preview → diff → apply → revalidate loop on the fingerprint this story
+minted. The editor exit criterion stays open until that loop closes.
 
 ## Active risks
 
