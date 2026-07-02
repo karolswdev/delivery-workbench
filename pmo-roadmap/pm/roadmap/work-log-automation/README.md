@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-04-25.
-**Current phase:** [phase-0-architecture](./phase-0-architecture/current-phase-status.md)
-**Status:** planning.
+**Last updated:** 2026-07-02.
+**Current phase:** [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/current-phase-status.md).
+**Status:** active.
 
 ## Vision
 
@@ -36,15 +36,32 @@ summarization can improve those entries after the lifecycle is proven.
   architect's log of delivered value.
 - Claude Opus architecture review, 2026-04-25:
   `/tmp/claudes-honest-but-supportive-opinion`.
+- User requirement, 2026-07-01: make mundane PMO maintenance tasks such as
+  creating phases, reading done trees, and listing phase contents available
+  through a small CLI.
+- User requirement, 2026-07-01: plan the next PMO Workbench interaction layer
+  comprehensively and dogfood the PMO roadmap by giving that work its own
+  phase, stories, sequencing, risks, and proof gates.
+- User requirement, 2026-07-02: run a comprehensive architectural review of
+  the framework as "rails" for agentic development (ease of use,
+  transparency, auditability, value) and dogfood the resulting hardening
+  plan as its own phase.
+- Claude Fable architecture review, 2026-07-02: verification-vs-choreography
+  gap, gate-logic drift bypasses, ephemeral contract audit trail, evidence
+  backfill risk, missing agent surface, and dogfood-integrity findings that
+  seed Phase 6.
 
 ## Phase index
 
 | Phase | Goal (one line) | Status | Folder |
 |---|---|---|---|
-| 0 | Lock the contract, lifecycle, and implementation slices before coding | in-progress | [phase-0-architecture](./phase-0-architecture/) |
-| 1 | Ship the local, opt-in MVP with pre-commit capture and post-commit append | not-started | [phase-1-mvp](./phase-1-mvp/) |
-| 2 | Harden summarization, privacy controls, and failure behavior | not-started | [phase-2-hardening](./phase-2-hardening/) |
-| 3 | Roll out installer/update/docs support and prove adoption on a consumer project | not-started | [phase-3-rollout](./phase-3-rollout/) |
+| 0 | Lock the contract, lifecycle, and implementation slices before coding | done | [phase-0-architecture](./phase-0-architecture/) |
+| 1 | Ship the local, opt-in MVP with pre-commit capture and post-commit append | done | [phase-1-mvp](./phase-1-mvp/) |
+| 2 | Harden summarization, privacy controls, and failure behavior | done | [phase-2-hardening](./phase-2-hardening/) |
+| 3 | Roll out installer/update/docs support and prove adoption on a consumer project | done | [phase-3-rollout](./phase-3-rollout/) |
+| 4 | Add CLI support for routine roadmap maintenance and inspection | done | [phase-4-cli-maintenance-tools](./phase-4-cli-maintenance-tools/) |
+| 5 | Ship the rich PMO Workbench interaction layer on top of the existing agent-safe CLI/core without creating a second source of truth. | planned | [phase-5-pmo-workbench-interaction-layer](./phase-5-pmo-workbench-interaction-layer/) |
+| 6 | Harden the agent rails: single machine-checked gate, durable contract audit trail, first-class agent surface, proportionate ceremony, dogfooded on this repo | planned | [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/) |
 
 ## Operating cadence
 
@@ -59,6 +76,39 @@ Every shipping commit for this roadmap updates, in the same commit:
 Per `pmo-roadmap/templates/PMO-CONTRACT.md`, the pre-commit hook gates every
 commit on a fresh `.tmp/CONTRACT.md`. Once Work Log Automation ships, commits
 that opt into logging must also carry explicit work-log consent and reasons.
+
+## Shipped foundation
+
+Work Log Automation and the PMO CLI/core foundation are shipped. The durable
+behavior is:
+
+- Work logging is opt-in through `.githooks/pre-commit.config`.
+- A commit creates a daily log entry only when the fresh PMO contract says
+  `**Work-log consent:** yes`.
+- `pre-commit` captures the staged payload under `.git/pmo-work-log/`.
+- `post-commit` appends deterministic markdown after Git creates the commit.
+- `work-log-summarize` can create bounded companion digests after commits.
+- `work-log-read` reads or lists local daily logs.
+- `dw` performs routine roadmap inspection, scaffolding, evidence-backed status
+  updates, phase closing, drift reporting, and checks.
+
+## Active extension
+
+Phase 6 owns Agent Rails Hardening: dogfood-integrity restoration, a single
+`dw gate` enforcement engine, verified contracts with a durable audit trail,
+evidence capture tooling, the shipped agent surface, proportionate ceremony,
+and CI/portability hardening. It precedes further Phase 5 UI work because an
+interaction layer over a gameable gate multiplies the wrong thing; WLA-5-02
+(core extraction) remains the shared prerequisite for the gate engine.
+
+Phase 5 owns the PMO Workbench interaction layer: the local human/agent
+console, editor, trace views, validation health surface, and runtime model that
+must sit on top of the shipped `dw` CLI/core without creating a second source
+of truth. Markdown under `pm/roadmap/**` remains authoritative.
+
+Future work remains possible around default-on policy, richer redaction, remote
+sync, and hosted collaboration, but Phase 5 is deliberately local-first and
+source-of-truth-first.
 
 ## Project metadata
 
