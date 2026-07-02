@@ -19,9 +19,13 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Shellcheck all shipped shell
+        # SC2317 excluded: the runner's shellcheck 0.9.0 flags functions
+        # invoked indirectly (sourced pre-commit.local seams, traps) as
+        # unreachable; 0.10+ replaced this with the smarter SC2329, which
+        # the sources already disable with reasons where intentional.
         run: |
           shellcheck --version
-          shellcheck \
+          shellcheck -e SC2317 \
             pmo-roadmap/install.sh \
             pmo-roadmap/update.sh \
             pmo-roadmap/hooks/pre-commit \
