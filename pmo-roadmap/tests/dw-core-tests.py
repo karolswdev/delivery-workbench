@@ -849,6 +849,23 @@ class DwCoreTest(unittest.TestCase):
             serve(self.root / "ghost", port=0)
         self.assertIn("does not exist", ctx.exception.message)
 
+    def test_captured_run_parse_survives_multiline_commands(self) -> None:
+        from dw_pmo.evidence import latest_passing_capture, parse_captured_runs
+
+        script = "\n".join(f"echo line-{i}" for i in range(20))
+        text = (
+            "### Captured run — 2026-07-02T10:00:00Z\n\n"
+            f"- **Command:** `sh -c '{script}'`\n"
+            "- **Cwd:** `.`\n"
+            "- **Exit code:** 0\n"
+            "- **Index-tree:** abc\n\n"
+            "```text\nout\n```\n"
+        )
+        runs = parse_captured_runs(text)
+        self.assertEqual(runs[0]["exit_code"], 0,
+                         "a long multiline command must not push exit code out of the parse window")
+        self.assertIsNotNone(latest_passing_capture(text))
+
     # -- adoption bridge (WLA-6-07) -----------------------------------------
 
     GOOD_REPORT = """# New Proj - PMO Adoption Discovery

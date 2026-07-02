@@ -97,15 +97,17 @@ def parse_captured_runs(text: str) -> list[dict[str, object]]:
         if not m:
             continue
         run: dict[str, object] = {"timestamp": m.group(1), "exit_code": None, "command": ""}
-        for follow in lines[i + 1 : i + 8]:
+        # Scan the whole header of this block (until the fenced output or
+        # the next capture heading) — commands may span many lines.
+        for follow in lines[i + 1 :]:
+            if CAPTURE_HEADING_RE.match(follow) or follow.startswith("```"):
+                break
             em = _EXIT_CODE_RE.match(follow)
             if em:
                 run["exit_code"] = int(em.group(1))
             cm = _COMMAND_RE.match(follow)
             if cm:
                 run["command"] = cm.group(1)
-            if CAPTURE_HEADING_RE.match(follow):
-                break
         runs.append(run)
     return runs
 
