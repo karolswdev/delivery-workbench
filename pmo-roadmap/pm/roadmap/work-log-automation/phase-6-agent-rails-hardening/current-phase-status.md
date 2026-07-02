@@ -97,7 +97,7 @@ what the framework claims and what it verifies.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-6-01 | Restore dogfood integrity and land the working tree through the rails | ready | [story-01-dogfood-integrity](./story-01-dogfood-integrity.md) | - |
+| WLA-6-01 | Restore dogfood integrity and land the working tree through the rails | done | [story-01-dogfood-integrity](./story-01-dogfood-integrity.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-6-02 | Unify the commit gate into a single dw gate engine | backlog | [story-02-single-gate-engine](./story-02-single-gate-engine.md) | - |
 | WLA-6-03 | Ship verified contract v2 with durable audit trail | backlog | [story-03-verified-contract-v2](./story-03-verified-contract-v2.md) | - |
 | WLA-6-04 | Add evidence capture tooling and content linting | backlog | [story-04-evidence-capture](./story-04-evidence-capture.md) | - |
@@ -125,12 +125,15 @@ what the framework claims and what it verifies.
 
 ## Where we are
 
-Phase 6 is planned. All eight stories are scaffolded with acceptance
-criteria and dependencies; WLA-6-01 is ready and is the mandatory first
-move: install the hooks on this repository and land the uncommitted
-phase 0-5 proof layer as story-scoped, contract-gated commits. No Phase 6
-implementation work has started. Phase 5 remains open at WLA-5-02
-(core extraction), which is a shared prerequisite for WLA-6-02.
+WLA-6-01 is done with evidence: the rails are installed on this repo
+(hooks, work logging with consent, a self-host `pre-commit.local`
+applying the structural checks to the nested roadmap prefix), and the
+entire phase 0-5 proof layer landed as eight gated, consented, logged
+commits (690dcec..565a106 plus the WLA-6-01 closing commit). All eight
+work-log entries cryptographically match their commit trees, and the
+evidence file carries a nine-item friction log feeding WLA-6-02/03/04/07.
+The next move is WLA-5-02 (extract the `dw_pmo` core), which is the
+shared prerequisite for WLA-6-02's single gate engine.
 
 ## Active risks
 
@@ -156,6 +159,16 @@ implementation work has started. Phase 5 remains open at WLA-5-02
 - 2026-07-02 - Contract freshness moves from file mtime to index-tree
   identity - mtime is defeated by `touch` and clock skew; the index tree
   is what the contract actually certifies - review findings.
+- 2026-07-02 - This repo's work log lives in the framework default
+  `~/.work/log` - hooks (config-driven) and dw/work-log-read
+  (env-or-default) agree without per-shell setup - WLA-6-01 execution.
+- 2026-07-02 - `.githooks/` copies are committed, consumer-style, with
+  source of truth in `pmo-roadmap/hooks` and `bin`; refresh via
+  `update.sh` - WLA-6-01 execution.
+- 2026-07-02 - The pre-Phase-6 landing commits keep their non-parsing
+  `PMO-Story:` body lines (a blank line separated them from the trailer
+  block) - rewriting would dangle the work-log entries' recorded SHAs;
+  the defect is preserved as WLA-6-03 evidence - WLA-6-01 execution.
 
 ## Decisions deferred
 
