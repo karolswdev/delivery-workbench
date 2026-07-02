@@ -1,0 +1,82 @@
+"""Delivery Workbench PMO core.
+
+Deterministic parser, validator, trace, and mutation primitives over the
+Markdown roadmap under ``pm/roadmap/**``. This package is the single
+source of behavior for ``bin/dw`` and any future adapter (workbench
+server, gate engine). Markdown stays authoritative: nothing here caches
+state outside the roadmap tree.
+"""
+
+from __future__ import annotations
+
+from .model import (
+    DONE_STATUSES,
+    OPEN_STATUSES,
+    PHASE_RE,
+    STORY_ID_RE,
+    STORY_RE,
+    DwError,
+    Phase,
+    Project,
+    StoryRow,
+    die,
+)
+from .paths import (
+    ensure_under,
+    find_root,
+    read_text,
+    rel,
+    roadmap_dir,
+    slugify,
+    strip_code,
+    template_dir,
+    work_log_root,
+    write_text,
+)
+from .parse import (
+    current_phase_status_path,
+    discover_phases,
+    discover_projects,
+    find_story,
+    get_phase,
+    get_project,
+    header_status,
+    hook_snapshot,
+    infer_prefix,
+    link_target,
+    parse_current_phase_target,
+    parse_story_rows,
+    split_table_row,
+    story_num_from_file,
+    story_title,
+    supplemental_canon,
+)
+from .trace import parse_work_log_entry, recent_commits, work_log_entries
+from .render import (
+    evidence_link_for,
+    render_evidence,
+    render_final_summary,
+    render_phase_template,
+    render_story_template,
+    replace_phase_index_content,
+    replace_story_table_content,
+    update_phase_index_status_content,
+    update_story_header_status_content,
+    update_story_table_row_content,
+)
+from .validate import check_project, project_warnings
+from .mutations import (
+    FileChange,
+    MutationPlan,
+    apply_plan,
+    plan_phase_close,
+    plan_phase_create,
+    plan_story_create,
+    plan_story_evidence,
+    plan_story_status,
+    preview_plan,
+    write_changes,
+)
+from .api import build_context_payload, next_story, project_context, story_context
+
+__version__ = "1.0.0"

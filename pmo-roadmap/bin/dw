@@ -1,682 +1,67 @@
 #!/usr/bin/env python3
-"""Delivery Workbench roadmap maintenance CLI."""
+"""Delivery Workbench roadmap maintenance CLI.
+
+Thin adapter over the ``dw_pmo`` core package. All parsing, validation,
+trace, and mutation behavior lives in ``pmo-roadmap/lib/dw_pmo`` so the
+CLI, the workbench server, and future adapters share one implementation.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
-import subprocess
 import sys
-from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 
 
-PHASE_RE = re.compile(r"^phase-(\d+)-(.+)$")
-STORY_RE = re.compile(r"^story-(\d+)-(.+)\.md$")
-STORY_ID_RE = re.compile(r"^([A-Z][A-Z0-9]*)-(\d+)-(\d+)$")
-DONE_STATUSES = {"done", "complete", "closed", "shipped"}
-OPEN_STATUSES = {"backlog", "ready", "in-progress", "planned", "not-started"}
+def _bootstrap_core() -> None:
+    """Make dw_pmo importable in both source and installed layouts.
+
+    Source layout: this file is pmo-roadmap/bin/dw and the package is
+    pmo-roadmap/lib/dw_pmo. Installed layout: this file is
+    <target>/.githooks/dw and the package is <target>/.githooks/dw_pmo.
+    """
+    here = Path(__file__).resolve().parent
+    for candidate in (here.parent / "lib", here / "lib", here):
+        if (candidate / "dw_pmo" / "__init__.py").is_file():
+            if str(candidate) not in sys.path:
+                sys.path.insert(0, str(candidate))
+            return
 
 
-@dataclass
-class Project:
-    slug: str
-    path: Path
-    prefix: str
+_bootstrap_core()
 
-
-@dataclass
-class Phase:
-    number: int
-    slug: str
-    path: Path
-
-
-@dataclass
-class StoryRow:
-    story_id: str
-    title: str
-    status: str
-    story_file: str
-    evidence: str
+try:
+    from dw_pmo import (
+        DwError,
+        apply_plan,
+        build_context_payload,
+        discover_phases,
+        discover_projects,
+        find_root,
+        get_phase,
+        get_project,
+        parse_story_rows,
+        plan_phase_close,
+        plan_phase_create,
+        plan_story_create,
+        plan_story_evidence,
+        plan_story_status,
+        read_text,
+        story_num_from_file,
+    )
+except ImportError as exc:  # pragma: no cover - environment failure path
+    print(
+        "dw: cannot import the dw_pmo core package "
+        f"({exc}); expected it next to this script or under ../lib",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
 
 
 def die(message: str, code: int = 1) -> None:
     print(f"dw: {message}", file=sys.stderr)
     raise SystemExit(code)
-
-
-def run_git_root(cwd: Path) -> Path | None:
-    try:
-        out = subprocess.check_output(
-            ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        ).strip()
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return Path(out) if out else None
-
-
-def find_root(start: Path) -> Path:
-    git_root = run_git_root(start)
-    if git_root:
-        return git_root
-    cur = start.resolve()
-    for candidate in [cur, *cur.parents]:
-        if (candidate / "pm" / "roadmap").is_dir():
-            return candidate
-    return cur
-
-
-def roadmap_dir(root: Path) -> Path:
-    rd = root / "pm" / "roadmap"
-    if rd.is_dir():
-        return rd
-    source_layout = root / "pmo-roadmap" / "pm" / "roadmap"
-    if source_layout.is_dir():
-        return source_layout
-    die(f"roadmap directory not found: {rd}")
-
-
-def slugify(value: str) -> str:
-    value = value.strip().lower()
-    value = re.sub(r"[^a-z0-9]+", "-", value)
-    value = re.sub(r"^-+|-+$", "", value)
-    return value or "untitled"
-
-
-def strip_code(value: str) -> str:
-    value = value.strip()
-    if value.startswith("`") and value.endswith("`"):
-        return value[1:-1]
-    return value
-
-
-def read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
-def write_text(path: Path, content: str) -> None:
-    path.write_text(content, encoding="utf-8")
-
-
-def write_changes(root: Path, changes: dict[Path, str], create_dirs: list[Path] | None = None) -> None:
-    """Write a small PMO change set and restore originals if a later write fails."""
-    allowed = roadmap_dir(root)
-    normalized: dict[Path, str] = {}
-    originals: dict[Path, str | None] = {}
-    for path, content in changes.items():
-        ensure_under(path, allowed)
-        if path.exists() and path.is_dir():
-            die(f"refusing to overwrite directory: {path}")
-        normalized[path] = content
-        originals[path] = read_text(path) if path.exists() else None
-
-    created_dirs: list[Path] = []
-    try:
-        for directory in create_dirs or []:
-            ensure_under(directory, allowed)
-            if directory.exists() and not directory.is_dir():
-                die(f"refusing to create directory over file: {directory}")
-            if not directory.exists():
-                directory.mkdir(parents=True)
-                created_dirs.append(directory)
-        for path, content in normalized.items():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            write_text(path, content)
-    except Exception:
-        for path, original in originals.items():
-            try:
-                if original is None:
-                    if path.exists():
-                        path.unlink()
-                else:
-                    write_text(path, original)
-            except OSError:
-                pass
-        for directory in reversed(created_dirs):
-            try:
-                directory.rmdir()
-            except OSError:
-                pass
-        raise
-
-
-def rel(path: Path, root: Path) -> str:
-    try:
-        return str(path.relative_to(root))
-    except ValueError:
-        return str(path)
-
-
-def ensure_under(path: Path, allowed_root: Path) -> None:
-    resolved = path.resolve()
-    allowed = allowed_root.resolve()
-    if resolved != allowed and allowed not in resolved.parents:
-        die(f"refusing to write outside PMO roadmap tree: {resolved}")
-
-
-def infer_prefix(project: Path) -> str:
-    readme = project / "README.md"
-    if readme.exists():
-        for line in read_text(readme).splitlines():
-            m = re.match(r"- \*\*Story ID prefix:\*\*\s*(.+)$", line)
-            if m:
-                prefix = strip_code(m.group(1)).strip()
-                if prefix:
-                    return re.sub(r"[^A-Z0-9]", "", prefix.upper()) or "PRJ"
-    parts = [p[0] for p in re.split(r"[^A-Za-z0-9]+", project.name) if p]
-    return ("".join(parts) or project.name[:3] or "PRJ").upper()
-
-
-def discover_projects(root: Path) -> list[Project]:
-    projects: list[Project] = []
-    for path in sorted(roadmap_dir(root).iterdir()):
-        if not path.is_dir():
-            continue
-        projects.append(Project(path.name, path, infer_prefix(path)))
-    return projects
-
-
-def get_project(root: Path, slug: str | None) -> Project:
-    projects = discover_projects(root)
-    if slug:
-        for project in projects:
-            if project.slug == slug:
-                return project
-        die(f"roadmap project not found: {slug}")
-    if len(projects) == 1:
-        return projects[0]
-    if not projects:
-        die("no roadmap projects found")
-    die("multiple roadmap projects found; pass a project slug")
-
-
-def discover_phases(project: Project) -> list[Phase]:
-    phases: list[Phase] = []
-    for path in sorted(project.path.iterdir()):
-        if not path.is_dir():
-            continue
-        m = PHASE_RE.match(path.name)
-        if not m:
-            continue
-        phases.append(Phase(int(m.group(1)), m.group(2), path))
-    return sorted(phases, key=lambda p: p.number)
-
-
-def get_phase(project: Project, selector: str) -> Phase:
-    phases = discover_phases(project)
-    for phase in phases:
-        if str(phase.number) == selector or phase.path.name == selector:
-            return phase
-    die(f"phase not found in {project.slug}: {selector}")
-
-
-def split_table_row(line: str) -> list[str]:
-    stripped = line.strip()
-    if not stripped.startswith("|") or not stripped.endswith("|"):
-        return []
-    return [cell.strip() for cell in stripped.strip("|").split("|")]
-
-
-def parse_story_rows(status_file: Path) -> list[StoryRow]:
-    if not status_file.exists():
-        return []
-    rows: list[StoryRow] = []
-    in_table = False
-    for line in read_text(status_file).splitlines():
-        if line.startswith("| ID | Story | Status | Story file | Evidence |"):
-            in_table = True
-            continue
-        if not in_table:
-            continue
-        if line.startswith("|---"):
-            continue
-        if not line.startswith("|"):
-            break
-        cells = split_table_row(line)
-        if len(cells) != 5:
-            continue
-        rows.append(StoryRow(*cells))
-    return rows
-
-
-def link_target(link: str) -> str:
-    m = re.search(r"\]\(([^)]+)\)", link)
-    return m.group(1) if m else link
-
-
-def story_num_from_file(link_or_path: str) -> int | None:
-    target = Path(link_target(link_or_path)).name
-    m = STORY_RE.match(target)
-    return int(m.group(1)) if m else None
-
-
-def header_status(path: Path) -> str | None:
-    if not path.exists():
-        return None
-    for line in read_text(path).splitlines():
-        m = re.match(r"- \*\*Status:\*\*\s*(.+)$", line)
-        if m:
-            return m.group(1).strip()
-    return None
-
-
-def story_title(path: Path) -> str:
-    if not path.exists():
-        return path.stem
-    first = read_text(path).splitlines()[0].lstrip("#").strip()
-    if " - " in first:
-        return first.split(" - ", 1)[1]
-    if " — " in first:
-        return first.split(" — ", 1)[1]
-    return first
-
-
-def recent_commits(root: Path, paths: list[Path], limit: int = 5) -> list[dict[str, str]]:
-    rel_paths = [rel(path, root) for path in paths if path and path.exists()]
-    if not rel_paths:
-        return []
-    try:
-        out = subprocess.check_output(
-            ["git", "-C", str(root), "log", f"--max-count={limit}", "--format=%H%x09%cs%x09%s", "--", *rel_paths],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return []
-    commits = []
-    for line in out.splitlines():
-        parts = line.split("\t", 2)
-        if len(parts) == 3:
-            commits.append({"sha": parts[0], "date": parts[1], "subject": parts[2]})
-    return commits
-
-
-def work_log_root() -> Path:
-    return Path(os.environ.get("PMO_WORK_LOG_DIR") or Path.home() / ".work" / "log")
-
-
-def parse_work_log_entry(path: Path, root: Path, project: Project, story: StoryRow | None = None) -> dict[str, str] | None:
-    try:
-        text = read_text(path)
-    except OSError:
-        return None
-    if f"project: {project.slug}" not in text and project.slug not in path.name:
-        return None
-    if story and story.story_id not in text and story.title not in text:
-        return None
-    commit = ""
-    subject = ""
-    timestamp = ""
-    for line in text.splitlines():
-        if line.startswith("timestamp: ") and not timestamp:
-            timestamp = line.split(": ", 1)[1]
-        elif line.startswith("commit: ") and not commit:
-            commit = line.split(": ", 1)[1]
-        elif line.startswith("- **Subject:** ") and not subject:
-            subject = line.split("- **Subject:** ", 1)[1]
-    return {
-        "path": str(path),
-        "date": path.parent.name,
-        "commit": commit,
-        "subject": subject,
-        "timestamp": timestamp,
-    }
-
-
-def work_log_entries(root: Path, project: Project, story: StoryRow | None = None, limit: int = 10) -> list[dict[str, str]]:
-    log_root = work_log_root()
-    if not log_root.is_dir():
-        return []
-    entries: list[dict[str, str]] = []
-    for path in sorted(log_root.glob("*/*-work-summary.log"), reverse=True):
-        entry = parse_work_log_entry(path, root, project, story)
-        if entry:
-            entries.append(entry)
-        if len(entries) >= limit:
-            break
-    return entries
-
-
-def parse_current_phase_target(project: Project) -> str:
-    readme = project.path / "README.md"
-    if not readme.exists():
-        return ""
-    for line in read_text(readme).splitlines():
-        m = re.match(r"^\*\*Current phase:\*\*\s*(.+)$", line)
-        if not m:
-            continue
-        raw = m.group(1).strip().rstrip(".")
-        target = link_target(raw)
-        if target == raw and raw.lower() in {"complete", "n/a", "none"}:
-            return ""
-        return target
-    return ""
-
-
-def current_phase_status_path(project: Project) -> Path | None:
-    target = parse_current_phase_target(project)
-    if not target:
-        return None
-    return (project.path / target).resolve()
-
-
-def supplemental_canon(root: Path, project: Project) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
-    for scope, base in (("roadmap-root", roadmap_dir(root)), ("project", project.path)):
-        for path in sorted(base.iterdir()):
-            if path.is_dir():
-                continue
-            if path.name == "README.md":
-                continue
-            if path.suffix.lower() not in {".md", ".markdown"}:
-                continue
-            if path.name.startswith("story-") or path.name.startswith("evidence-story-"):
-                continue
-            kind = "supplemental"
-            lower = path.name.lower()
-            if lower in {"pmo-contract.md", "roadmap-builder.md"}:
-                kind = "framework-canon"
-            elif "master" in lower or "execution" in lower:
-                kind = "orchestrator"
-            elif "handover" in lower or "handoff" in lower:
-                kind = "handover"
-            elif "audit" in lower:
-                kind = "audit"
-            elif "vision" in lower:
-                kind = "vision"
-            items.append({"scope": scope, "kind": kind, "path": rel(path, root)})
-    return items
-
-
-def hook_snapshot(root: Path) -> dict[str, object]:
-    hooks = root / ".githooks"
-    pre = hooks / "pre-commit"
-    post = hooks / "post-commit"
-    pre_text = read_text(pre) if pre.exists() else ""
-    return {
-        "hooks_path": rel(hooks, root),
-        "pre_commit_exists": pre.exists(),
-        "post_commit_exists": post.exists(),
-        "config_exists": (hooks / "pre-commit.config").exists(),
-        "local_exists": (hooks / "pre-commit.local").exists(),
-        "has_config_seam": "pre-commit.config" in pre_text,
-        "has_local_seam": "pre-commit.local" in pre_text,
-        "has_work_log_capture": "PMO_WORK_LOG_ENABLED" in pre_text and "pmo-work-log" in pre_text,
-        "appears_older_snapshot": pre.exists() and (
-            "pre-commit.config" not in pre_text or "pre-commit.local" not in pre_text or "PMO_WORK_LOG_ENABLED" not in pre_text
-        ),
-    }
-
-
-def template_dir() -> Path | None:
-    candidate = Path(__file__).resolve().parents[1] / "templates"
-    return candidate if candidate.is_dir() else None
-
-
-def render_phase_template(project: Project, number: int, title: str, goal: str) -> str:
-    today = date.today().isoformat()
-    templates = template_dir()
-    if templates and (templates / "phase-status.md.tmpl").exists():
-        text = read_text(templates / "phase-status.md.tmpl")
-        replacements = {
-            "{{DATE}}": today,
-            "{{PHASE_N}}": str(number),
-            "{{PHASE_TITLE}}": title,
-            "{{PROJECT_PREFIX}}": project.prefix,
-        }
-        for old, new in replacements.items():
-            text = text.replace(old, new)
-        text = text.replace("{One short paragraph. What does this phase exist to achieve? Quote the\nroadmap or PMO plan. This section is **immutable** for the life of the\nphase.}", goal)
-        lines = [
-            line for line in text.splitlines()
-            if "story-01-" not in line and f"{project.prefix}-{number}-01" not in line
-        ]
-        return "\n".join(lines).rstrip() + "\n"
-
-    return f"""# Phase {number} - {title}
-
-**Last updated:** {today}.
-
-## Goal
-
-{goal}
-
-## Scope
-
-- **In:** CLI-supported artifacts and workflow needed for this phase.
-- **Out:** Related work not explicitly named by this phase.
-
-## Exit criteria (evidence required)
-
-- [ ] Exit criteria are defined before implementation begins.
-
-## Story status
-
-| ID | Story | Status | Story file | Evidence |
-|---|---|---|---|---|
-
-## Where we are
-
-This phase has been scaffolded and is ready for story planning.
-
-## Active risks
-
-| Risk | Likelihood | Mitigation | Stop signal |
-|---|---|---|---|
-| Scope is underspecified | medium | Add concrete stories before implementation | A story cannot name testable acceptance criteria |
-
-## Decisions made (this phase)
-
-- {today} - Phase scaffolded with `dw phase create` - keeps roadmap structure consistent - CLI.
-
-## Decisions deferred
-
-- Detailed story breakdown - trigger before implementation begins - default is no code changes without stories.
-"""
-
-
-def render_story_template(project: Project, phase: Phase, number: int, title: str, status: str) -> str:
-    story_id = f"{project.prefix}-{phase.number}-{number:02d}"
-    return f"""# {story_id} - {title}
-
-- **Project:** {project.slug}
-- **Phase:** {phase.number}
-- **Status:** {status}
-- **Depends on:** none
-- **Unblocks:** (optional)
-- **Owner:** unassigned
-
-## Problem
-
-Describe why this story exists and what it unlocks.
-
-## Scope
-
-- **In:** Concrete deliverables and file paths when known.
-- **Out:** Related work this story does not cover.
-
-## Acceptance criteria
-
-- [ ] Define a verifiable acceptance criterion.
-
-## Test plan
-
-- **Unit:** n/a.
-- **Integration / Cypress:** n/a.
-- **Manual / device:** n/a.
-
-## Notes / open questions
-
-Record unresolved decisions here before implementation starts.
-"""
-
-
-def replace_phase_index_content(readme: Path, new_row: str, phase_number: int) -> str:
-    if not readme.exists():
-        die(f"project README not found: {readme}")
-    lines = read_text(readme).splitlines()
-    header_idx = None
-    for i, line in enumerate(lines):
-        if line.startswith("| Phase | Goal (one line) | Status | Folder |"):
-            header_idx = i
-            break
-    if header_idx is None:
-        lines.extend(["", "## Phase index", "", "| Phase | Goal (one line) | Status | Folder |", "|---|---|---|---|", new_row])
-        return "\n".join(lines) + "\n"
-
-    start = header_idx + 2
-    end = start
-    rows: list[str] = []
-    while end < len(lines) and lines[end].startswith("|"):
-        cells = split_table_row(lines[end])
-        if cells:
-            if cells[0] == str(phase_number):
-                die(f"phase {phase_number} already exists in {readme}")
-            rows.append(lines[end])
-        end += 1
-    rows.append(new_row)
-
-    def phase_key(row: str) -> int:
-        cells = split_table_row(row)
-        try:
-            return int(cells[0])
-        except (IndexError, ValueError):
-            return 999999
-
-    lines[header_idx + 2:end] = sorted(rows, key=phase_key)
-    return "\n".join(lines) + "\n"
-
-
-def replace_phase_index(readme: Path, new_row: str, phase_number: int) -> None:
-    write_text(readme, replace_phase_index_content(readme, new_row, phase_number))
-
-
-def replace_story_table_content(status_file: Path, new_row: str) -> str:
-    lines = read_text(status_file).splitlines()
-    header_idx = None
-    for i, line in enumerate(lines):
-        if line.startswith("| ID | Story | Status | Story file | Evidence |"):
-            header_idx = i
-            break
-    if header_idx is None:
-        die(f"story table not found: {status_file}")
-    start = header_idx + 2
-    end = start
-    rows: list[str] = []
-    while end < len(lines) and lines[end].startswith("|"):
-        rows.append(lines[end])
-        end += 1
-    rows.append(new_row)
-    lines[start:end] = rows
-    return "\n".join(lines) + "\n"
-
-
-def replace_story_table(status_file: Path, new_row: str) -> None:
-    write_text(status_file, replace_story_table_content(status_file, new_row))
-
-
-def update_story_header_status_content(story_path: Path, status: str) -> str:
-    if not story_path.exists():
-        die(f"story file not found: {story_path}")
-    lines = read_text(story_path).splitlines()
-    changed = False
-    for i, line in enumerate(lines):
-        if line.startswith("- **Status:**"):
-            lines[i] = f"- **Status:** {status}"
-            changed = True
-            break
-    if not changed:
-        die(f"story status header not found: {story_path}")
-    return "\n".join(lines) + "\n"
-
-
-def update_story_header_status(story_path: Path, status: str) -> None:
-    write_text(story_path, update_story_header_status_content(story_path, status))
-
-
-def update_story_table_row_content(status_file: Path, story_id: str, status: str | None = None, evidence: str | None = None) -> str:
-    lines = read_text(status_file).splitlines()
-    changed = False
-    for i, line in enumerate(lines):
-        if not line.startswith("|"):
-            continue
-        cells = split_table_row(line)
-        if len(cells) != 5 or cells[0] != story_id:
-            continue
-        if status is not None:
-            cells[2] = status
-        if evidence is not None:
-            cells[4] = evidence
-        lines[i] = f"| {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | {cells[4]} |"
-        changed = True
-        break
-    if not changed:
-        die(f"story row not found in {status_file}: {story_id}")
-    return "\n".join(lines) + "\n"
-
-
-def update_story_table_row(status_file: Path, story_id: str, status: str | None = None, evidence: str | None = None) -> None:
-    write_text(status_file, update_story_table_row_content(status_file, story_id, status, evidence))
-
-
-def update_phase_index_status_content(readme: Path, phase_number: int, status: str) -> str:
-    lines = read_text(readme).splitlines()
-    changed = False
-    for i, line in enumerate(lines):
-        cells = split_table_row(line)
-        if len(cells) == 4 and cells[0] == str(phase_number):
-            cells[2] = status
-            lines[i] = f"| {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} |"
-            changed = True
-            break
-    if not changed:
-        die(f"phase {phase_number} row not found in {readme}")
-    return "\n".join(lines) + "\n"
-
-
-def update_phase_index_status(readme: Path, phase_number: int, status: str) -> None:
-    write_text(readme, update_phase_index_status_content(readme, phase_number, status))
-
-
-def evidence_link_for(story_num: int) -> str:
-    return f"[evidence-story-{story_num:02d}](./evidence-story-{story_num:02d}.md)"
-
-
-def render_final_summary(phase: Phase, summary_body: str) -> str:
-    today = date.today().isoformat()
-    return f"""# Phase {phase.number} Final Summary
-
-**Status:** complete.
-**Date:** {today}.
-
-{summary_body}
-"""
-
-
-def find_story(project: Project, phase: Phase, selector: str) -> tuple[StoryRow, int, Path]:
-    rows = parse_story_rows(phase.path / "current-phase-status.md")
-    for row in rows:
-        story_num = story_num_from_file(row.story_file)
-        story_target = link_target(row.story_file)
-        story_path = (phase.path / story_target).resolve()
-        selectors = {
-            row.story_id,
-            str(story_num) if story_num is not None else "",
-            f"{story_num:02d}" if story_num is not None else "",
-            Path(story_target).name,
-            Path(story_target).stem,
-        }
-        if selector in selectors:
-            if story_num is None:
-                die(f"could not infer story number for {row.story_id}")
-            return row, story_num, story_path
-    die(f"story not found in {project.slug} phase {phase.number}: {selector}")
 
 
 def read_body_arg(body: str | None, from_file: Path | None) -> str:
@@ -685,108 +70,6 @@ def read_body_arg(body: str | None, from_file: Path | None) -> str:
     if from_file:
         return read_text(from_file)
     return body or ""
-
-
-def render_evidence(row: StoryRow, story_num: int, body: str) -> str:
-    today = date.today().isoformat()
-    body = body.strip()
-    if not body:
-        body = "- Evidence body intentionally left for the operator to complete before commit."
-    return f"""# Evidence - {row.story_id}
-
-- **Story:** {row.story_id} - {row.title}
-- **Status:** done
-- **Date:** {today}
-
-## Proof
-
-{body}
-"""
-
-
-def write_or_attach_evidence(
-    root: Path,
-    project: Project,
-    phase: Phase,
-    row: StoryRow,
-    story_num: int,
-    body: str,
-    force: bool,
-) -> Path:
-    evidence_path = phase.path / f"evidence-story-{story_num:02d}.md"
-    status_file = phase.path / "current-phase-status.md"
-    if evidence_path.exists() and body and not force:
-        die(f"evidence already exists; pass --force to replace: {rel(evidence_path, root)}")
-    changes: dict[Path, str] = {
-        status_file: update_story_table_row_content(status_file, row.story_id, evidence=evidence_link_for(story_num)),
-    }
-    if body or not evidence_path.exists():
-        changes[evidence_path] = render_evidence(row, story_num, body)
-    write_changes(root, changes)
-    return evidence_path
-
-
-def command_story_status(args: argparse.Namespace) -> int:
-    status = args.status.strip().lower()
-    project = get_project(args.root, args.project)
-    phase = get_phase(project, args.phase)
-    row, story_num, story_path = find_story(project, phase, args.story)
-    status_file = phase.path / "current-phase-status.md"
-    evidence_path = phase.path / f"evidence-story-{story_num:02d}.md"
-    evidence_body = read_body_arg(args.evidence_body, args.evidence_from_file)
-    if status in DONE_STATUSES and not evidence_path.exists() and not evidence_body:
-        die("refusing to mark story done without evidence; pass --evidence-body or --evidence-from-file")
-    if evidence_path.exists() and evidence_body and not args.force:
-        die(f"evidence already exists; pass --force to replace: {rel(evidence_path, args.root)}")
-
-    evidence_link = evidence_link_for(story_num) if (evidence_body or status in DONE_STATUSES) else None
-    changes: dict[Path, str] = {
-        story_path: update_story_header_status_content(story_path, status),
-        status_file: update_story_table_row_content(status_file, row.story_id, status=status, evidence=evidence_link),
-    }
-    if evidence_body:
-        changes[evidence_path] = render_evidence(row, story_num, evidence_body)
-    write_changes(args.root, changes)
-    print(f"{row.story_id}\t{status}\t{rel(story_path, args.root)}")
-    return 0
-
-
-def command_story_evidence(args: argparse.Namespace) -> int:
-    project = get_project(args.root, args.project)
-    phase = get_phase(project, args.phase)
-    row, story_num, _story_path = find_story(project, phase, args.story)
-    body = read_body_arg(args.body, args.from_file)
-    evidence_path = write_or_attach_evidence(args.root, project, phase, row, story_num, body, args.force)
-    print(rel(evidence_path, args.root))
-    return 0
-
-
-def command_phase_close(args: argparse.Namespace) -> int:
-    status = args.status.strip().lower()
-    project = get_project(args.root, args.project)
-    phase = get_phase(project, args.phase)
-    rows = parse_story_rows(phase.path / "current-phase-status.md")
-    open_rows = [row for row in rows if row.status not in DONE_STATUSES]
-    if open_rows and not args.force:
-        ids = ", ".join(row.story_id for row in open_rows)
-        die(f"refusing to close phase with non-done stories: {ids}")
-    summary_path = phase.path / "final-summary.md"
-    ensure_under(summary_path, roadmap_dir(args.root))
-    if summary_path.exists() and not args.force:
-        die(f"final summary already exists; pass --force to replace: {rel(summary_path, args.root)}")
-    summary_body = read_body_arg(args.summary, args.from_file).strip()
-    if not summary_body:
-        summary_body = "Phase closed by `dw phase close`; see story evidence files for proof."
-    readme = project.path / "README.md"
-    write_changes(
-        args.root,
-        {
-            summary_path: render_final_summary(phase, summary_body),
-            readme: update_phase_index_status_content(readme, phase.number, status),
-        },
-    )
-    print(rel(summary_path, args.root))
-    return 0
 
 
 def command_projects(args: argparse.Namespace) -> int:
@@ -814,51 +97,85 @@ def command_phase_show(args: argparse.Namespace) -> int:
 
 def command_phase_create(args: argparse.Namespace) -> int:
     project = get_project(args.root, args.project)
-    slug = args.slug or slugify(args.title)
-    phase_dir = project.path / f"phase-{args.number}-{slug}"
-    ensure_under(phase_dir, roadmap_dir(args.root))
-    if phase_dir.exists():
-        die(f"phase directory already exists: {phase_dir}")
-    goal = args.goal or f"Deliver {args.title}."
-    row = f"| {args.number} | {goal} | {args.status} | [{phase_dir.name}](./{phase_dir.name}/) |"
-    readme = project.path / "README.md"
-    write_changes(
+    plan = plan_phase_create(
         args.root,
-        {
-            phase_dir / "current-phase-status.md": render_phase_template(project, args.number, args.title, goal),
-            readme: replace_phase_index_content(readme, row, args.number),
-        },
-        create_dirs=[phase_dir],
+        project,
+        args.number,
+        args.title,
+        slug=args.slug,
+        status=args.status,
+        goal=args.goal,
     )
-    print(phase_dir.relative_to(args.root))
+    apply_plan(plan, validate_after=False)
+    print(plan.summary["phase_dir"])
+    return 0
+
+
+def command_phase_close(args: argparse.Namespace) -> int:
+    project = get_project(args.root, args.project)
+    phase = get_phase(project, args.phase)
+    summary_body = read_body_arg(args.summary, args.from_file)
+    plan = plan_phase_close(
+        args.root,
+        project,
+        phase,
+        summary_body=summary_body,
+        status=args.status,
+        force=args.force,
+    )
+    apply_plan(plan, validate_after=False)
+    print(plan.summary["summary_path"])
     return 0
 
 
 def command_story_create(args: argparse.Namespace) -> int:
     project = get_project(args.root, args.project)
     phase = get_phase(project, args.phase)
-    existing = []
-    for story in phase.path.glob("story-*.md"):
-        m = STORY_RE.match(story.name)
-        if m:
-            existing.append(int(m.group(1)))
-    number = max(existing, default=0) + 1
-    slug = args.slug or slugify(args.title)
-    story_file = phase.path / f"story-{number:02d}-{slug}.md"
-    ensure_under(story_file, roadmap_dir(args.root))
-    if story_file.exists():
-        die(f"story file already exists: {story_file}")
-    story_id = f"{project.prefix}-{phase.number}-{number:02d}"
-    row = f"| {story_id} | {args.title} | {args.status} | [{story_file.stem}](./{story_file.name}) | - |"
-    status_file = phase.path / "current-phase-status.md"
-    write_changes(
+    plan = plan_story_create(
         args.root,
-        {
-            story_file: render_story_template(project, phase, number, args.title, args.status),
-            status_file: replace_story_table_content(status_file, row),
-        },
+        project,
+        phase,
+        args.title,
+        slug=args.slug,
+        status=args.status,
     )
-    print(story_file.relative_to(args.root))
+    apply_plan(plan, validate_after=False)
+    print(plan.summary["story_path"])
+    return 0
+
+
+def command_story_status(args: argparse.Namespace) -> int:
+    project = get_project(args.root, args.project)
+    phase = get_phase(project, args.phase)
+    evidence_body = read_body_arg(args.evidence_body, args.evidence_from_file)
+    plan = plan_story_status(
+        args.root,
+        project,
+        phase,
+        args.story,
+        args.status,
+        evidence_body=evidence_body,
+        force=args.force,
+    )
+    apply_plan(plan, validate_after=False)
+    print(f"{plan.summary['story_id']}\t{plan.summary['status']}\t{plan.summary['story_path']}")
+    return 0
+
+
+def command_story_evidence(args: argparse.Namespace) -> int:
+    project = get_project(args.root, args.project)
+    phase = get_phase(project, args.phase)
+    body = read_body_arg(args.body, args.from_file)
+    plan = plan_story_evidence(
+        args.root,
+        project,
+        phase,
+        args.story,
+        body=body,
+        force=args.force,
+    )
+    apply_plan(plan, validate_after=False)
+    print(plan.summary["evidence_path"])
     return 0
 
 
@@ -909,214 +226,23 @@ def command_next(args: argparse.Namespace) -> int:
     return 1
 
 
-def next_story(project: Project, root: Path) -> dict[str, object] | None:
-    preferred = ("in-progress", "ready", "backlog")
-    for status in preferred:
-        for phase in discover_phases(project):
-            for row in parse_story_rows(phase.path / "current-phase-status.md"):
-                if row.status == status:
-                    story_target = link_target(row.story_file)
-                    return {
-                        "story_id": row.story_id,
-                        "title": row.title,
-                        "status": row.status,
-                        "phase": phase.number,
-                        "phase_path": phase.path.name,
-                        "story_path": rel((phase.path / story_target).resolve(), root),
-                    }
-    return None
-
-
-def project_warnings(project: Project, root: Path) -> list[str]:
-    warnings: list[str] = []
-    active = []
-    for phase in discover_phases(project):
-        rows = parse_story_rows(phase.path / "current-phase-status.md")
-        if any(row.status in OPEN_STATUSES for row in rows):
-            active.append(phase.path.name)
-    if len(active) > 1:
-        warnings.append(f"multiple open phases detected: {', '.join(active)}")
-    snapshot = hook_snapshot(root)
-    if snapshot["appears_older_snapshot"]:
-        warnings.append("installed pre-commit hook appears older than current Delivery Workbench seams")
-    return warnings
-
-
-def check_project(project: Project, root: Path) -> list[str]:
-    issues: list[str] = []
-    current_status = current_phase_status_path(project)
-    if current_status and not current_status.exists():
-        issues.append(f"{rel(project.path / 'README.md', root)}: current phase pointer is stale: {parse_current_phase_target(project)}")
-
-    for phase in discover_phases(project):
-        status_file = phase.path / "current-phase-status.md"
-        if not status_file.exists():
-            issues.append(f"{rel(phase.path, root)}: missing current-phase-status.md")
-            continue
-        rows = parse_story_rows(status_file)
-        story_nums: set[int] = set()
-        done_nums: set[int] = set()
-        for row in rows:
-            story_target = link_target(row.story_file)
-            story_path = (phase.path / story_target).resolve()
-            story_num = story_num_from_file(row.story_file)
-            if story_num is not None:
-                story_nums.add(story_num)
-                if row.status in DONE_STATUSES:
-                    done_nums.add(story_num)
-            if not story_path.exists():
-                issues.append(f"{status_file.relative_to(root)}: broken story link for {row.story_id}: {story_target}")
-                continue
-            status = header_status(story_path)
-            if status and status != row.status:
-                issues.append(
-                    f"{story_path.relative_to(root)}: header status {status!r} differs from phase table {row.status!r}"
-                )
-            evidence_target = link_target(row.evidence)
-            if row.status in DONE_STATUSES:
-                if row.evidence in {"-", "—", ""}:
-                    issues.append(f"{status_file.relative_to(root)}: done story {row.story_id} has no evidence link")
-                elif evidence_target and evidence_target not in {"-", "—"}:
-                    evidence_path = (phase.path / evidence_target).resolve()
-                    if not evidence_path.exists():
-                        issues.append(f"{status_file.relative_to(root)}: broken evidence link for {row.story_id}: {evidence_target}")
-                elif story_num is not None and not (phase.path / f"evidence-story-{story_num:02d}.md").exists():
-                    issues.append(f"{status_file.relative_to(root)}: done story {row.story_id} missing evidence-story-{story_num:02d}.md")
-        for evidence in sorted(phase.path.glob("evidence-story-*.md")):
-            m = re.match(r"^evidence-story-(\d+)\.md$", evidence.name)
-            if not m:
-                continue
-            ev_num = int(m.group(1))
-            if ev_num not in story_nums:
-                issues.append(f"{rel(evidence, root)}: orphan evidence has no matching story row")
-            elif ev_num not in done_nums:
-                issues.append(f"{rel(evidence, root)}: evidence exists but matching story is not done")
-        if rows and all(row.status in DONE_STATUSES for row in rows) and not (phase.path / "final-summary.md").exists():
-            issues.append(f"{rel(phase.path, root)}: all stories are done but final-summary.md is missing")
-    return issues
-
-
-def story_context(row: StoryRow, phase: Phase, project: Project, root: Path, include_trace: bool = False) -> dict[str, object]:
-    story_target = link_target(row.story_file)
-    story_path = (phase.path / story_target).resolve()
-    story_num = story_num_from_file(row.story_file)
-    evidence_target = link_target(row.evidence)
-    if row.evidence in {"-", "—", ""} and story_num is not None:
-        evidence_path = phase.path / f"evidence-story-{story_num:02d}.md"
-        evidence_link = ""
-    elif evidence_target and evidence_target not in {"-", "—"}:
-        evidence_path = (phase.path / evidence_target).resolve()
-        evidence_link = evidence_target
-    else:
-        evidence_path = None
-        evidence_link = ""
-
-    header = header_status(story_path)
-    paths = [
-        project.path / "README.md",
-        phase.path / "current-phase-status.md",
-        story_path,
-    ]
-    if evidence_path:
-        paths.append(evidence_path)
-    final_summary = phase.path / "final-summary.md"
-    if final_summary.exists():
-        paths.append(final_summary)
-
-    item = {
-        "story_id": row.story_id,
-        "title": row.title,
-        "status": row.status,
-        "header_status": header,
-        "story_file": story_target,
-        "story_path": rel(story_path, root),
-        "story_exists": story_path.exists(),
-        "evidence": row.evidence,
-        "evidence_file": evidence_link,
-        "evidence_path": rel(evidence_path, root) if evidence_path else "",
-        "evidence_exists": bool(evidence_path and evidence_path.exists()),
-        "trace": {
-            "readme": rel(project.path / "README.md", root),
-            "phase_status": rel(phase.path / "current-phase-status.md", root),
-            "story": rel(story_path, root),
-            "evidence": rel(evidence_path, root) if evidence_path else "",
-            "final_summary": rel(final_summary, root),
-        },
-    }
-    if include_trace:
-        item["recent_commits"] = recent_commits(root, paths)
-        item["work_log_entries"] = work_log_entries(root, project, row)
-    return item
-
-
-def project_context(
-    project: Project,
-    root: Path,
-    phase_selector: str | None = None,
-    status_filter: str | None = None,
-    include_trace: bool = False,
-) -> dict[str, object]:
-    phases = discover_phases(project)
-    if phase_selector:
-        phases = [get_phase(project, phase_selector)]
-
-    phase_items: list[dict[str, object]] = []
-    for phase in phases:
-        all_rows = parse_story_rows(phase.path / "current-phase-status.md")
-        rows = []
-        for row in all_rows:
-            if status_filter and row.status != status_filter:
-                continue
-            rows.append(story_context(row, phase, project, root, include_trace))
-        phase_items.append(
-            {
-                "number": phase.number,
-                "slug": phase.slug,
-                "path": rel(phase.path, root),
-                "status_file": rel(phase.path / "current-phase-status.md", root),
-                "status_file_exists": (phase.path / "current-phase-status.md").exists(),
-                "final_summary": rel(phase.path / "final-summary.md", root),
-                "final_summary_exists": (phase.path / "final-summary.md").exists(),
-                "active": any(row.status in OPEN_STATUSES for row in all_rows),
-                "stories": rows,
-            }
-        )
-
-    return {
-        "slug": project.slug,
-        "prefix": project.prefix,
-        "path": rel(project.path, root),
-        "readme": rel(project.path / "README.md", root),
-        "readme_exists": (project.path / "README.md").exists(),
-        "current_phase_target": parse_current_phase_target(project),
-        "next_story": next_story(project, root),
-        "issues": check_project(project, root),
-        "warnings": project_warnings(project, root),
-        "supplemental_canon": supplemental_canon(root, project),
-        "hook_snapshot": hook_snapshot(root),
-        "work_logs": work_log_entries(root, project),
-        "phases": phase_items,
-    }
-
-
 def command_context(args: argparse.Namespace) -> int:
     projects = [get_project(args.root, args.project)] if args.project else discover_projects(args.root)
     status_filter = "done" if args.done else args.status
-    payload = {
-        "kind": "delivery-workbench-roadmap-context",
-        "schema_version": 1,
-        "root": str(args.root),
-        "roadmap_dir": rel(roadmap_dir(args.root), args.root),
-        "projects": [
-            project_context(project, args.root, args.phase, status_filter, args.trace)
-            for project in projects
-        ],
-    }
+    payload = build_context_payload(
+        args.root,
+        projects,
+        phase_selector=args.phase,
+        status_filter=status_filter,
+        include_trace=args.trace,
+    )
     print(json.dumps(payload, indent=None if args.compact else 2, sort_keys=True))
     return 0
 
 
 def command_check(args: argparse.Namespace) -> int:
+    from dw_pmo import check_project
+
     projects = [get_project(args.root, args.project)] if args.project else discover_projects(args.root)
     issues: list[str] = []
     for project in projects:
@@ -1225,7 +351,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     args.root = (args.root.resolve() if args.root else find_root(Path.cwd()))
-    return args.func(args)
+    try:
+        return args.func(args)
+    except DwError as err:
+        print(f"dw: {err.message}", file=sys.stderr)
+        return err.code
 
 
 if __name__ == "__main__":

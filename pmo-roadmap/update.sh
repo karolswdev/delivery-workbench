@@ -15,6 +15,7 @@ Always overwrites (these are framework-owned):
   - hooks/post-commit            → .githooks/post-commit, unless a
                                     non-framework hook exists without --force
   - bin/dw                       → .githooks/dw
+  - lib/dw_pmo/                  → .githooks/dw_pmo/
   - bin/work-log-summarize       → .githooks/work-log-summarize
   - bin/work-log-read            → .githooks/work-log-read
 
@@ -83,6 +84,11 @@ echo "  ✓ .githooks/work-log-summarize updated"
 cp "$SOURCE_DIR/bin/dw" "$TARGET/.githooks/dw"
 chmod +x "$TARGET/.githooks/dw"
 echo "  ✓ .githooks/dw updated"
+
+rm -rf "$TARGET/.githooks/dw_pmo"
+mkdir -p "$TARGET/.githooks/dw_pmo"
+cp "$SOURCE_DIR/lib/dw_pmo/"*.py "$TARGET/.githooks/dw_pmo/"
+echo "  ✓ .githooks/dw_pmo updated"
 
 cp "$SOURCE_DIR/bin/work-log-read" "$TARGET/.githooks/work-log-read"
 chmod +x "$TARGET/.githooks/work-log-read"

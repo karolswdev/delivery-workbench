@@ -1,0 +1,55 @@
+"""Domain model, shared constants, and the core error type."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from pathlib import Path
+
+
+PHASE_RE = re.compile(r"^phase-(\d+)-(.+)$")
+STORY_RE = re.compile(r"^story-(\d+)-(.+)\.md$")
+STORY_ID_RE = re.compile(r"^([A-Z][A-Z0-9]*)-(\d+)-(\d+)$")
+DONE_STATUSES = {"done", "complete", "closed", "shipped"}
+OPEN_STATUSES = {"backlog", "ready", "in-progress", "planned", "not-started"}
+
+
+class DwError(Exception):
+    """A refusal or failure the caller can handle.
+
+    The CLI adapter converts this to the historical ``dw: <message>``
+    stderr line and exit code; library consumers (workbench server, gate
+    engine) catch it instead of dying.
+    """
+
+    def __init__(self, message: str, code: int = 1) -> None:
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+
+def die(message: str, code: int = 1) -> None:
+    raise DwError(message, code)
+
+
+@dataclass
+class Project:
+    slug: str
+    path: Path
+    prefix: str
+
+
+@dataclass
+class Phase:
+    number: int
+    slug: str
+    path: Path
+
+
+@dataclass
+class StoryRow:
+    story_id: str
+    title: str
+    status: str
+    story_file: str
+    evidence: str

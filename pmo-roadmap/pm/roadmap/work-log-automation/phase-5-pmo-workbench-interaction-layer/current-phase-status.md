@@ -1,6 +1,6 @@
 # Phase 5 - PMO Workbench Interaction Layer
 
-**Last updated:** 2026-07-01.
+**Last updated:** 2026-07-02.
 
 ## Goal
 
@@ -88,7 +88,7 @@ state store.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-5-01 | Define Workbench product contract and UX architecture | done | [story-01-product-contract-ux-architecture](./story-01-product-contract-ux-architecture.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-5-02 | Extract reusable PMO core API boundary | ready | [story-02-reusable-core-api-boundary](./story-02-reusable-core-api-boundary.md) | - |
+| WLA-5-02 | Extract reusable PMO core API boundary | done | [story-02-reusable-core-api-boundary](./story-02-reusable-core-api-boundary.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-5-03 | Build read-only roadmap explorer | backlog | [story-03-read-only-roadmap-explorer](./story-03-read-only-roadmap-explorer.md) | - |
 | WLA-5-04 | Build health drift and validation console | backlog | [story-04-health-drift-validation-console](./story-04-health-drift-validation-console.md) | - |
 | WLA-5-05 | Build traceability timeline | backlog | [story-05-traceability-timeline](./story-05-traceability-timeline.md) | - |
@@ -117,12 +117,15 @@ state store.
 
 ## Where we are
 
-Phase 5 has been planned and scaffolded after the Phase 4 CLI/core shipped.
-WLA-5-01 is done with evidence: the product contract, implementation plan,
-story sequence, and acceptance gates are now in the roadmap. The next move is
-WLA-5-02: extract `pmo-roadmap/bin/dw` parser, validator, trace, and mutation
-logic into a reusable `dw_pmo` core before building any UI or server routes.
-No UI files should be created before the core extraction boundary is settled.
+WLA-5-02 is done with evidence: the reusable core lives in
+`pmo-roadmap/lib/dw_pmo/` (model, paths, parse, validate, trace, render,
+mutations, api), `bin/dw` is a thin adapter with byte-identical Phase 4
+output, mutations expose the preview -> apply-with-fingerprint ->
+revalidate primitives the workbench needs, and the core has its own
+12-case unit suite wired into CI. Per the Phase 6 sequencing decision,
+the next move is WLA-6-02 (single `dw gate` engine on top of this core);
+Phase 5 UI stories (WLA-5-03 onward) resume after the Phase 6 gate work
+lands.
 
 ## Active risks
 

@@ -30,7 +30,12 @@ jobs:
             demos/scripts/write-demo-contract.sh
 
       - name: Python syntax check
-        run: python3 -m py_compile pmo-roadmap/bin/dw
+        run: |
+          python3 -m py_compile pmo-roadmap/bin/dw
+          python3 -m compileall -q pmo-roadmap/lib/dw_pmo
+
+      - name: dw core unit tests
+        run: python3 pmo-roadmap/tests/dw-core-tests.py
 
       - name: Adoption discovery smoke test
         run: pmo-roadmap/tests/adoption-discovery.sh

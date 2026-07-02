@@ -80,6 +80,8 @@ git -C "$REPO" config user.email "pmo-test@example.test"
 "$PMO_DIR/install.sh" "$REPO" --project-name "Demo" --project-slug demo --project-prefix DEMO >/dev/null
 cd "$REPO"
 [ -x .githooks/dw ] || fail "install should write dw helper"
+[ -f .githooks/dw_pmo/__init__.py ] || fail "install should write the dw_pmo core package"
+.githooks/dw --help >/dev/null 2>&1 || fail "installed dw should run against the bundled dw_pmo core"
 [ -x .githooks/work-log-summarize ] || fail "install should write work-log-summarize helper"
 [ -x .githooks/work-log-read ] || fail "install should write work-log-read helper"
 

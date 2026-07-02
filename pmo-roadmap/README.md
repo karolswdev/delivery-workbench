@@ -81,7 +81,8 @@ The installer:
 2. Copies `templates/PMO-CONTRACT.md` → `target/pm/roadmap/PMO-CONTRACT.md`
 3. Copies `hooks/pre-commit` → `target/.githooks/pre-commit` (chmod +x)
 4. Copies `hooks/post-commit` → `target/.githooks/post-commit` (chmod +x)
-5. Copies `bin/dw` → `target/.githooks/dw`
+5. Copies `bin/dw` → `target/.githooks/dw` and the `lib/dw_pmo/` core
+   package → `target/.githooks/dw_pmo/`
 6. Copies `bin/work-log-summarize` → `target/.githooks/work-log-summarize`
 7. Copies `bin/work-log-read` → `target/.githooks/work-log-read`
 8. Sets `git config core.hooksPath .githooks` in target
@@ -435,10 +436,14 @@ pmo-roadmap/
 │   ├── pre-commit                ← hygiene gate + optional work-log capture
 │   └── post-commit               ← optional daily work-log finalizer
 ├── bin/
-│   ├── dw                       ← roadmap maintenance CLI
+│   ├── dw                       ← roadmap maintenance CLI (adapter)
 │   ├── work-log-read             ← daily work-log reader
 │   └── work-log-summarize        ← deferred summarizer helper
+├── lib/
+│   └── dw_pmo/                   ← reusable PMO core: model, paths, parse,
+│                                    validate, trace, render, mutations, api
 ├── tests/
+│   ├── dw-core-tests.py          ← dw_pmo core unit tests
 │   ├── roadmap-cli.sh            ← temp-roadmap CLI coverage
 │   └── work-log-mvp.sh           ← temp-repo integration coverage
 └── templates/
