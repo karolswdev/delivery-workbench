@@ -737,6 +737,79 @@ class DwCoreTest(unittest.TestCase):
             os.chmod(locked_dir, 0o700)
             locked_dir.rmdir()
 
+    # -- commit/work-log evidence views (WLA-5-08) -----------------------------
+
+    def _write_worklog_fixture(self):
+        import os
+        log_root = self.root / "worklog"
+        day = log_root / "2026-07-02"
+        day.mkdir(parents=True, exist_ok=True)
+        entry = day / "demo-1-work-summary.log"
+        entry.write_text(
+            "---\nkind: pmo-work-log-entry\ntimestamp: 2026-07-02T09:00:00Z\n"
+            "project: demo\ncommit: abc1234\n---\n\n## Commit\n\n"
+            "- **Subject:** DM-1-01 ships\n\n## Omitted Paths\n\n"
+            "- `secrets/token.txt`\n",
+            encoding="utf-8",
+        )
+        os.environ["PMO_WORK_LOG_DIR"] = str(log_root)
+        self.addCleanup(os.environ.pop, "PMO_WORK_LOG_DIR", None)
+        return entry
+
+    def test_worklog_endpoint_containment_and_omission(self) -> None:
+        from dw_pmo import workbench as wb
+
+        entry = self._write_worklog_fixture()
+        # absolute, slashless (hash-router), and log-root-relative all resolve
+        for raw in (str(entry), str(entry).lstrip("/"), "2026-07-02/demo-1-work-summary.log"):
+            status, payload = wb.handle_api(self.root, "/api/worklog", {"path": [raw]})
+            self.assertEqual(status, 200, raw)
+            content = payload["data"]["content"]
+            self.assertIn("Omitted Paths", content)
+            self.assertIn("secrets/token.txt", content)
+            self.assertNotIn("not-for-log", content, "omitted content stays omitted")
+        # containment: repo files and non-log names are refused
+        status, _ = wb.handle_api(self.root, "/api/worklog",
+                                  {"path": [str(self.root / "pm" / "roadmap" / "demo" / "README.md")]})
+        self.assertEqual(status, 403)
+        stray = entry.parent / "not-a-log.txt"
+        stray.write_text("x", encoding="utf-8")
+        status, _ = wb.handle_api(self.root, "/api/worklog", {"path": [str(stray)]})
+        self.assertEqual(status, 403, "only work-log artifact names are served")
+        status, _ = wb.handle_api(self.root, "/api/worklog",
+                                  {"path": ["2026-07-02/ghost-work-summary.log"]})
+        self.assertEqual(status, 404)
+
+    def test_worklog_absent_root_is_optional_not_error(self) -> None:
+        import os
+        from dw_pmo import workbench as wb
+
+        os.environ["PMO_WORK_LOG_DIR"] = str(self.root / "no-such-log-root")
+        self.addCleanup(os.environ.pop, "PMO_WORK_LOG_DIR", None)
+        status, payload = wb.handle_api(self.root, "/api/worklog", {"path": ["x-work-summary.log"]})
+        self.assertEqual(status, 404)
+        self.assertIn("optional evidence", payload["issues"][0])
+
+    def test_handoff_summary_text(self) -> None:
+        from dw_pmo import workbench as wb
+
+        self._write_worklog_fixture()
+        status, payload = wb.handle_api(self.root, "/api/projects/demo/handoff/DM-1-01", {})
+        self.assertEqual(status, 200)
+        text = payload["data"]["text"]
+        self.assertIn("handoff — DM-1-01", text)
+        self.assertIn("shipped: yes", text)
+        self.assertIn("story: pm/roadmap/demo/phase-1-alpha/story-01-first.md", text)
+        self.assertIn("(absent) pm/roadmap/demo/phase-1-alpha/final-summary.md", text)
+        self.assertIn("narrative-only evidence", text)  # fixture evidence has no captures
+        self.assertIn("never a substitute for evidence-story-NN.md", text)
+        self.assertIn("demo-1-work-summary.log", text)
+        # a story without evidence states the requirement instead of hiding it
+        status, payload = wb.handle_api(self.root, "/api/projects/demo/handoff/DM-1-02", {})
+        self.assertEqual(status, 200)
+        self.assertIn("no evidence file exists yet — required before done", payload["data"]["text"])
+        self.assertIn("shipped: no", payload["data"]["text"])
+
     # -- adoption bridge (WLA-6-07) -----------------------------------------
 
     GOOD_REPORT = """# New Proj - PMO Adoption Discovery

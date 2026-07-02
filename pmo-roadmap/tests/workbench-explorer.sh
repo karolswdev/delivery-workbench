@@ -348,4 +348,29 @@ NOOP_BEFORE="$(sum_tree)"
 [ "$(mut "${REQ%\}}, \"fingerprint\":\"$FP\"}" apply)" = "200" ] || fail "no-op apply failed"
 [ "$NOOP_BEFORE" = "$(sum_tree)" ] || fail "no-op apply must leave the tree byte-identical"
 
+# ── commit/work-log evidence views (WLA-5-08) ─────────────────────────
+ENTRY="$PMO_WORK_LOG_DIR/2026-07-02/sample-1-work-summary.log"
+curl -s "$BASE/api/worklog?path=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$ENTRY")" \
+  > "$TMP_ROOT/wl.json"
+python3 - "$TMP_ROOT/wl.json" <<'PY' || fail "worklog endpoint should serve the fixture entry"
+import json, sys
+body = json.load(open(sys.argv[1]))
+assert body["ok"] is True
+assert "SMP-0-01 First fixture story ships" in body["data"]["content"]
+PY
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/worklog?path=pm/roadmap/sample/README.md")" = "403" ] \
+  || fail "worklog endpoint must refuse non-log paths"
+
+curl -s "$BASE/api/projects/sample/handoff/SMP-0-01" > "$TMP_ROOT/handoff.json"
+python3 - "$TMP_ROOT/handoff.json" <<'PY' || fail "handoff summary wrong"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["shipped"] is True
+text = d["text"]
+assert "handoff — SMP-0-01" in text
+assert "evidence: pm/roadmap/sample/" in text
+assert "sample-1-work-summary.log" in text
+assert "never a substitute for evidence-story-NN.md" in text
+PY
+
 echo "workbench-explorer.sh: ok"

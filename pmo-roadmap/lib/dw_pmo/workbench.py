@@ -21,10 +21,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .api import build_context_payload, next_story, phase_events, project_context, story_timeline
+from .api import build_context_payload, handoff_summary, next_story, phase_events, project_context, story_timeline
 from .model import DwError, OPEN_STATUSES
 from .parse import discover_phases, discover_projects, get_phase, get_project, parse_story_rows
-from .paths import read_text, rel, roadmap_dir
+from .paths import read_text, rel, roadmap_dir, work_log_root
 from .mutations import (
     apply_plan,
     plan_fingerprint,
@@ -110,6 +110,40 @@ def _contained_read(root: Path, raw_path: str) -> tuple[int, dict[str, object]]:
     return 200, envelope({"path": rel(target, root), "content": read_text(target)})
 
 
+
+def _worklog_read(root: Path, raw_path: str) -> tuple[int, dict[str, object]]:
+    """Read a work-log artifact strictly inside the resolved log root.
+
+    Only the capture/digest naming patterns are served; the log content
+    is returned verbatim — omitted paths stay omitted because capture
+    never wrote their content in the first place."""
+    if not raw_path:
+        return _error(400, "missing path parameter")
+    log_root = work_log_root(root).resolve()
+    if not log_root.is_dir():
+        return _error(404, "no work-log root exists (work logs are optional evidence)")
+    # Hash routers drop the leading slash of absolute paths; accept the
+    # path as given, rooted at /, or relative to the log root — but only
+    # ever serve from inside the log root.
+    candidates = [Path(raw_path)] if Path(raw_path).is_absolute() else [
+        Path("/" + raw_path),
+        log_root / raw_path,
+    ]
+    target = None
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if log_root in resolved.parents:
+            target = resolved
+            if resolved.is_file():
+                break
+    if target is None:
+        return _error(403, f"path is outside the work-log root: {raw_path}")
+    if not (target.name.endswith("-work-summary.log") or target.name.endswith("-deferred-summary.md")):
+        return _error(403, f"not a work-log artifact: {target.name}")
+    if not target.is_file():
+        return _error(404, f"no such work-log entry: {raw_path}")
+    return 200, envelope({"path": str(target), "content": read_text(target)})
+
 def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
     parts = [part for part in path.strip("/").split("/") if part]
     try:
@@ -167,6 +201,17 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             project = get_project(root, parts[2])
             phase = get_phase(project, parts[4])
             return 200, envelope({"phase": phase.number, "events": phase_events(phase, root)})
+
+        if parts == ["api", "worklog"]:
+            return _worklog_read(root, query.get("path", [""])[0])
+
+        if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3] == "handoff":
+            project = get_project(root, parts[2])
+            for phase in discover_phases(project):
+                for row in parse_story_rows(phase.path / "current-phase-status.md"):
+                    if row.story_id == parts[4]:
+                        return 200, envelope(handoff_summary(row, phase, project, root))
+            return _error(404, f"story not found: {parts[4]}")
 
         if parts == ["api", "health"]:
             return 200, envelope(health_report(root, discover_projects(root)))

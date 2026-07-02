@@ -236,3 +236,53 @@ def phase_events(phase: Phase, root: Path) -> list[dict[str, object]]:
     """Recent commits scoped to the phase directory (phase trace view)."""
     return recent_commits(root, [phase.path], limit=10)
 
+def handoff_summary(row: StoryRow, phase: Phase, project: Project, root: Path) -> dict[str, object]:
+    """Concise agent handoff for one story: PMO source paths, captured
+    command-output references, PMO-scoped commits, and supplementary
+    work-log pointers. Deterministic text, safe to paste into a task or
+    commit-contract context. Work logs are labeled supplementary —
+    evidence-story-NN.md remains the proof of record."""
+    from .evidence import parse_captured_runs
+    from .paths import read_text
+
+    timeline = story_timeline(row, phase, project, root)
+    lines = [
+        f"# Delivery Workbench handoff — {timeline['story_id']}",
+        f"Story: {timeline['story_id']} — {timeline['title']} [{timeline['status']}]"
+        f" (shipped: {'yes' if timeline['shipped'] else 'no — ' + str(timeline['not_shipped_reason'])})",
+        "Sources:",
+    ]
+    evidence_path = None
+    for hop in timeline["chain"]:
+        state = hop["path"] if hop["exists"] else f"(absent) {hop['path']}"
+        lines.append(f"  {hop['hop']}: {state}")
+        if hop["hop"] == "evidence" and hop["exists"]:
+            evidence_path = root / str(hop["path"])
+    lines.append("Captured runs (command output references in evidence):")
+    runs = parse_captured_runs(read_text(evidence_path)) if evidence_path else []
+    if runs:
+        for run in runs:
+            lines.append(f"  - {run['timestamp']} `{run['command']}` exit {run['exit_code']}")
+    elif evidence_path:
+        lines.append("  - none (narrative-only evidence)")
+    else:
+        lines.append("  - none (no evidence file exists yet — required before done)")
+    lines.append("Recent commits (scoped to this story's PMO files):")
+    commits = [e for e in timeline["events"] if e["type"] == "commit"]
+    for event in commits or []:
+        trailer = f" [PMO-Story: {event['pmo_story']}]" if event["pmo_story"] else ""
+        lines.append(f"  - {str(event['sha'])[:9]} {event['date']} {event['subject']}{trailer}")
+    if not commits:
+        lines.append("  - none found")
+    lines.append("Work logs (supplementary; never a substitute for evidence-story-NN.md):")
+    logs = [e for e in timeline["events"] if e["type"] == "work-log"]
+    for event in logs or []:
+        lines.append(f"  - {event['source']} ({event['sort_key']})")
+    if not logs:
+        lines.append("  - none (optional evidence; absent)")
+    return {
+        "story_id": timeline["story_id"],
+        "shipped": timeline["shipped"],
+        "text": "\n".join(lines),
+    }
+

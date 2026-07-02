@@ -343,9 +343,11 @@ async function viewTrace(slug, storyId) {
       <td>${esc(ev.subject || "(no subject)")}
         ${ev.pmo_story ? " " + badge(ev.pmo_story, "ok") : ""}
         ${ev.contract_digest ? ` <span class="badge" title="${esc(ev.contract_digest)}">digest</span>` : ""}</td>
-      <td><code>${esc(ev.type === "commit" ? String(ev.sha).slice(0, 9) : ev.source)}</code></td>
+      <td>${ev.type === "commit"
+        ? `<code>${esc(String(ev.sha).slice(0, 9))}</code>`
+        : `<a href="#/wl/${encodeURIComponent(ev.source)}"><code>${esc(ev.source)}</code></a>`}</td>
     </tr>`).join("")
-    : '<tr><td colspan="4">no commits or work-log entries found for this story\u2019s files</td></tr>';
+    : '<tr><td colspan="4">no commits found for this story\u2019s PMO files; no work-log entries (optional evidence \u2014 absent, not an error)</td></tr>';
   app.innerHTML = `
     <div class="guard ${tl.shipped ? "ok" : ""}">${tl.shipped
       ? `shipped: story is done and its evidence exists`
@@ -357,13 +359,36 @@ async function viewTrace(slug, storyId) {
       <div class="tblwrap"><table class="tbl">
         <tr><th>Type</th><th>When</th><th>What</th><th>Source</th></tr>
         ${eventRows}
-      </table></div></div>`;
+      </table></div>
+      <p class="hint">work-log entries are supplementary evidence; evidence-story-NN.md
+        remains the proof of record and is required before a story counts as shipped.</p></div>
+    <div class="section"><h2>Agent handoff</h2>
+      <div class="copybar"><button id="copy-handoff" type="button">copy</button></div>
+      <pre class="src" id="handoff-text">Loading\u2026</pre></div>`;
+  api(`/api/projects/${encodeURIComponent(slug)}/handoff/${encodeURIComponent(storyId)}`).then((h) => {
+    document.getElementById("handoff-text").textContent = h.data.text;
+  }).catch((err) => {
+    document.getElementById("handoff-text").textContent = `handoff unavailable: ${err.message}`;
+  });
+  document.getElementById("copy-handoff").addEventListener("click", () => {
+    navigator.clipboard.writeText(document.getElementById("handoff-text").textContent);
+  });
   document.getElementById("trace-sort").addEventListener("click", () => {
     traceSortAsc = !traceSortAsc;
     route();
   });
 }
 
+
+async function viewWorklog(path) {
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "work log" }]);
+  const body = await api(`/api/worklog?path=${encodeURIComponent(path)}`);
+  app.innerHTML = `
+    <div class="guard ok">supplementary evidence \u2014 work logs never replace evidence-story-NN.md</div>
+    <div class="section"><h2>work log \u00b7 <code>${esc(body.data.path)}</code> (read-only, verbatim \u2014
+      excluded paths were omitted at capture time and stay omitted here)</h2>
+      <pre class="src">${esc(body.data.content)}</pre></div>`;
+}
 
 /* ── structured editor (WLA-5-06) ───────────────────────────────────
  * The editor constructs structured intent and POSTs it to
@@ -574,6 +599,7 @@ async function route() {
     if (parts[0] === "p" && parts[2] === "ph") return await viewPhase(parts[1], parts[3]);
     if (parts[0] === "p" && parts[2] === "s") return await viewStory(parts[1], parts[3]);
     if (parts[0] === "p" && parts[2] === "t") return await viewTrace(parts[1], parts[3]);
+    if (parts[0] === "wl") return await viewWorklog(parts.slice(1).join("/"));
     if (parts[0] === "edit") return await viewEdit(parts[1]);
     if (parts[0] === "health") return await viewHealth();
     if (parts[0] === "f") return await viewFile(parts.slice(1).join("/"));
