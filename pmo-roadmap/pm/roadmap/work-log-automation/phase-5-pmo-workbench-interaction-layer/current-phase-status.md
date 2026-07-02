@@ -82,8 +82,10 @@ state store.
 - [x] Every write operation has preview, diff, validation, apply, and
   post-apply revalidation states (evidence-story-07 with screenshots
   and captured cycles).
-- [ ] Permission tests prove the runtime refuses non-allowlisted repo roots,
-  path traversal, arbitrary file writes, and auto-commit attempts.
+- [x] Permission tests prove the runtime refuses non-allowlisted repo roots,
+  path traversal, arbitrary file writes, and auto-commit attempts
+  (evidence-story-09: Host allowlist, slug alphabet, roadmap-tree
+  containment, empty-git-index proof).
 - [ ] UI tests cover desktop and mobile viewports for explorer, health, trace,
   editor, preview, and validation states.
 - [ ] Dogfood evidence records command output, screenshots or equivalent UI
@@ -101,7 +103,7 @@ state store.
 | WLA-5-06 | Build structured PMO editor | done | [story-06-structured-pmo-editor](./story-06-structured-pmo-editor.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-5-07 | Build safe mutation preview and diff workflow | done | [story-07-mutation-preview-diff-workflow](./story-07-mutation-preview-diff-workflow.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-5-08 | Integrate commit and work-log evidence views | done | [story-08-commit-worklog-evidence-views](./story-08-commit-worklog-evidence-views.md) | [evidence-story-08](./evidence-story-08.md) |
-| WLA-5-09 | Harden permissions and local runtime model | backlog | [story-09-permissions-local-runtime-model](./story-09-permissions-local-runtime-model.md) | - |
+| WLA-5-09 | Harden permissions and local runtime model | done | [story-09-permissions-local-runtime-model](./story-09-permissions-local-runtime-model.md) | [evidence-story-09](./evidence-story-09.md) |
 | WLA-5-10 | Ship documentation tests and adoption path | backlog | [story-10-docs-tests-adoption-path](./story-10-docs-tests-adoption-path.md) | - |
 
 ## Execution sequence
@@ -123,15 +125,15 @@ state store.
 
 ## Where we are
 
-WLA-5-08 is done with evidence: commit and work-log evidence are
-first-class without becoming a second source of truth. Work-log
-artifacts are served under strict log-root containment with omitted
-paths staying omitted; every story trace ends in a copyable agent
-handoff quoting the evidence file's captured runs, trailer-stamped
-commits, and supplementary work-log pointers. Two stories remain:
-WLA-5-09 (permission hardening and the local runtime model — the gate
-to distributing the workbench into consumer repos) and WLA-5-10
-(docs, viewport tests, adoption path, and the phase close-out audit).
+WLA-5-09 is done with evidence: the runtime boundary is boring and
+explicit. Startup fails closed with remediation in every message;
+HTTP-layer default-deny covers Host headers, CORS, and methods; the
+security tests found and fixed a real cross-project slug-containment
+hole at the core; git-index purity is proven per suite run; and — the
+boundary proven — install/update now distribute dw-workbench and the
+UI into consumer repos, exercised end to end by the integration
+suite. One story remains: WLA-5-10 (docs, viewport tests, adoption
+path, and the phase close-out audit).
 
 ## Active risks
 
