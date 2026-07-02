@@ -79,8 +79,14 @@ git -C "$REPO" config user.email "pmo-test@example.test"
 
 "$PMO_DIR/install.sh" "$REPO" --project-name "Demo" --project-slug demo --project-prefix DEMO >/dev/null
 cd "$REPO"
+[ -x .githooks/dw ] || fail "install should write dw helper"
 [ -x .githooks/work-log-summarize ] || fail "install should write work-log-summarize helper"
 [ -x .githooks/work-log-read ] || fail "install should write work-log-read helper"
+
+git add .
+write_contract yes
+git commit -m "initial framework logging disabled" >/dev/null
+assert_eq "$(find "$LOG_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ')" "0" "logging disabled should not write logs"
 
 cat > .githooks/pre-commit.config <<EOF
 PMO_WORK_LOG_ENABLED=1
@@ -89,15 +95,16 @@ PMO_WORK_LOG_DIR='$LOG_ROOT'
 PMO_WORK_LOG_EXCLUDE_REGEX='^secrets/'
 EOF
 
-git add .
+git add .githooks/pre-commit.config
 write_contract no
-git commit -m "initial framework" >/dev/null
-assert_eq "$(find "$LOG_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ')" "0" "denied initial consent should not write logs"
+git commit -m "enable work log config with denied consent" >/dev/null
+assert_eq "$(find "$LOG_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ')" "0" "denied consent should not write logs"
 
 echo "one" > app.txt
 git add app.txt
 write_contract yes
-git commit -m "add app file" >/dev/null
+COMMIT_OUTPUT="$(git commit -m "add app file" 2>&1)"
+printf '%s\n' "$COMMIT_OUTPUT" | grep -q 'work log appended to' || fail "commit output should name appended log path"
 
 LOG_FILE="$(find "$LOG_ROOT/$(date +%F)" -type f -name '*-work-summary.log' | sed -n '1p')"
 [ -n "$LOG_FILE" ] || fail "consented commit did not write a work log"
@@ -121,11 +128,26 @@ if .githooks/work-log-summarize --log-file "$LOG_FILE" --force --timeout-seconds
   fail "deferred summarizer should fail on timeout"
 fi
 grep -q '^Deferred summary for Source log:' "$DIGEST_FILE" || fail "timeout should not replace existing digest"
+if .githooks/work-log-summarize --log-file "$LOG_FILE" --force --command "sh -c 'exit 42'" >/dev/null 2>&1; then
+  fail "deferred summarizer should fail on nonzero exit"
+fi
+grep -q '^Deferred summary for Source log:' "$DIGEST_FILE" || fail "nonzero failure should not replace existing digest"
+.githooks/work-log-summarize --log-file "$LOG_FILE" --force --command "true" >/dev/null
+grep -q '^## Deterministic Fallback$' "$DIGEST_FILE" || fail "empty summarizer output should write fallback digest"
+.githooks/work-log-summarize --log-file "$LOG_FILE" --force --max-output-bytes 64 --command "awk 'BEGIN { for (i = 0; i < 200; i++) print \"oversized\" }'" >/dev/null
+grep -q 'PMO_WORK_LOG_SUMMARY_TRUNCATED' "$DIGEST_FILE" || fail "oversized summarizer output should be truncated"
 
 mkdir -p secrets
 echo "not-for-log" > secrets/token.txt
 echo "public two" >> app.txt
 git add app.txt secrets/token.txt
+write_contract yes
+.githooks/pre-commit >/dev/null
+[ -f .git/pmo-work-log/pending ] || fail "manual pre-commit should write pending payload"
+grep -q 'secrets/token.txt' .git/pmo-work-log/pending || fail "pending payload should name omitted path"
+if grep -q 'not-for-log' .git/pmo-work-log/pending; then
+  fail "excluded file content should not appear in pending payload"
+fi
 write_contract yes
 git commit -m "excluded secret path" >/dev/null
 assert_eq "$(entry_count)" "2" "excluded-path commit should append one entry"

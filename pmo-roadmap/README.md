@@ -81,13 +81,14 @@ The installer:
 2. Copies `templates/PMO-CONTRACT.md` → `target/pm/roadmap/PMO-CONTRACT.md`
 3. Copies `hooks/pre-commit` → `target/.githooks/pre-commit` (chmod +x)
 4. Copies `hooks/post-commit` → `target/.githooks/post-commit` (chmod +x)
-5. Copies `bin/work-log-summarize` → `target/.githooks/work-log-summarize`
-6. Copies `bin/work-log-read` → `target/.githooks/work-log-read`
-7. Sets `git config core.hooksPath .githooks` in target
-8. Adds `.tmp/` to target `.gitignore` if missing
-9. (Optional) scaffolds `pm/roadmap/{slug}/` with `README.md` + a starter
+5. Copies `bin/dw` → `target/.githooks/dw`
+6. Copies `bin/work-log-summarize` → `target/.githooks/work-log-summarize`
+7. Copies `bin/work-log-read` → `target/.githooks/work-log-read`
+8. Sets `git config core.hooksPath .githooks` in target
+9. Adds `.tmp/` to target `.gitignore` if missing
+10. (Optional) scaffolds `pm/roadmap/{slug}/` with `README.md` + a starter
    `phase-0-setup/` folder
-10. Prints a snippet to add to target's `CLAUDE.md` / `AGENTS.md`
+11. Prints a snippet to add to target's `CLAUDE.md` / `AGENTS.md`
 
 Re-running is safe (idempotent) but will refuse to overwrite existing
 methodology/contract without `--force`.
@@ -130,6 +131,13 @@ It never touches:
 If a target already has a non-framework `.githooks/post-commit`, install/update
 refuses to replace it unless you pass `--force` after deciding how to preserve
 or compose the existing behavior.
+
+For a project with a customized `pm/roadmap/PMO-CONTRACT.md`, run `update.sh`
+without `--force` first. If it reports a contract difference, compare the
+project file with `pmo-roadmap/templates/PMO-CONTRACT.md`, manually merge the
+canonical consent block and any new framework language around your
+project-specific extensions, then rerun with `--force` only if you intend to
+replace the whole target contract.
 
 ## Optional daily work log
 
@@ -189,6 +197,13 @@ paths are omitted from captured name/status, diff stat, and diff payloads, and
 the final log lists them under "Omitted Paths". Contract exclusions remain the
 human rationale; the regex is what the hook enforces.
 
+Treat consent and exclusions as the privacy boundary. Delivery Workbench does
+not perform general-purpose secret scanning. Best-effort omission by path
+cannot reliably catch base64 blobs, JWT payloads, generated credentials,
+environment-expanded values, screenshots, binary files, or secrets pasted into
+otherwise safe paths. If the material should not be preserved in a local daily
+log, deny consent or exclude the path mechanically before committing.
+
 Logs land under:
 
 ```bash
@@ -211,7 +226,35 @@ PMO_WORK_LOG_SUMMARIZER='codex -p --model gpt-5.5'
 ```
 
 The helper writes `{log-identity}-deferred-summary.md` beside the source log.
-It does not rewrite deterministic commit entries.
+It does not rewrite deterministic commit entries. If the configured command
+times out or exits nonzero, the deterministic log remains untouched and the
+helper reports the failure. If the command returns empty output, the helper
+writes a small deterministic fallback digest instead of inventing a model
+summary. Oversized output is capped and marked with
+`[PMO_WORK_LOG_SUMMARY_TRUNCATED]`.
+
+### Troubleshooting work logs
+
+- **No log entry:** confirm `.githooks/pre-commit.config` contains
+  `PMO_WORK_LOG_ENABLED=1`, the commit contract says
+  `**Work-log consent:** yes`, and the commit actually completed.
+- **Stale pending payload:** an editor-aborted commit can leave
+  `.git/pmo-work-log/pending`; the next consented `pre-commit` overwrites it
+  with a warning before finalization.
+- **Unexpected log path:** check `PMO_WORK_LOG_DIR`, `PMO_WORK_LOG_ID`, and
+  `PMO_WORK_LOG_PROJECT_SLUG`. By default the filename includes a stable hash
+  of the absolute repo path to avoid collisions.
+- **Summarizer failure:** rerun `.githooks/work-log-summarize` after fixing the
+  configured command. The source `*-work-summary.log` is append-only and is not
+  deleted or rewritten by summarizer failures.
+
+For a multi-day review, list each day's directory and read the same identity
+across dates:
+
+```bash
+find "${PMO_WORK_LOG_DIR:-$HOME/.work/log}" -maxdepth 2 -name '*-work-summary.log' | sort
+.githooks/work-log-read --date "$(date +%F)" --identity myproject-123456789
+```
 
 ## Project-specific rules
 
@@ -232,6 +275,46 @@ sources that file after its own checks; `update.sh` never touches it.
 
 Creates `target/pm/roadmap/myproject/` with the project README and
 `phase-0-setup/current-phase-status.md` ready to extend.
+
+## Roadmap maintenance CLI
+
+The installed `.githooks/dw` helper performs routine roadmap maintenance over
+the existing markdown files; it does not create a separate tracker.
+
+```bash
+.githooks/dw projects
+.githooks/dw tree myproject
+.githooks/dw tree myproject --done
+.githooks/dw context myproject --trace
+.githooks/dw phase list myproject
+.githooks/dw phase create myproject 1 "MVP" \
+  --goal "Ship the smallest useful release."
+.githooks/dw story create myproject 1 "Add the first feature"
+.githooks/dw story status myproject 1 PRJ-1-01 done \
+  --evidence-body "- Test output and implementation notes."
+.githooks/dw story evidence myproject 1 PRJ-1-01 \
+  --body "- Additional verification detail."
+.githooks/dw phase close myproject 1 \
+  --summary "Phase closed with all stories evidenced."
+.githooks/dw check myproject
+```
+
+Use `tree` to see what is in a phase, `tree --done` to see completed work, and
+`check` before a status update to catch broken links or story/table status
+mismatches. Use `context` when an agent needs a JSON snapshot with projects,
+active phases, stories, evidence presence, next story, stale-pointer issues,
+drift warnings, supplemental canon, hook compatibility, trace paths, optional
+recent commits, and work-log entries before it chooses a write operation.
+
+Write commands are intentionally narrow. `story status ... done` refuses to
+proceed unless paired evidence already exists or evidence text is provided in
+the same command. `story evidence` only creates or attaches
+`evidence-story-N.md` in the story's phase folder. `phase close` refuses open
+stories unless forced and writes only `final-summary.md` plus the project README
+phase-index status. These commands compute all affected file contents before
+writing and restore already-touched files if a later write fails. The CLI treats
+generated JSON as disposable context; the markdown files remain the source of
+truth.
 
 ## Adopt an existing project
 
@@ -352,9 +435,11 @@ pmo-roadmap/
 │   ├── pre-commit                ← hygiene gate + optional work-log capture
 │   └── post-commit               ← optional daily work-log finalizer
 ├── bin/
+│   ├── dw                       ← roadmap maintenance CLI
 │   ├── work-log-read             ← daily work-log reader
 │   └── work-log-summarize        ← deferred summarizer helper
 ├── tests/
+│   ├── roadmap-cli.sh            ← temp-roadmap CLI coverage
 │   └── work-log-mvp.sh           ← temp-repo integration coverage
 └── templates/
     ├── roadmap-builder.md        ← canonical methodology

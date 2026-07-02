@@ -13,6 +13,7 @@ Installs the pmo-roadmap framework into <target-dir>:
   - copies templates/PMO-CONTRACT.md      → pm/roadmap/PMO-CONTRACT.md
   - copies hooks/pre-commit               → .githooks/pre-commit (chmod +x)
   - copies hooks/post-commit              → .githooks/post-commit (chmod +x)
+  - copies bin/dw                         → .githooks/dw
   - copies bin/work-log-summarize         → .githooks/work-log-summarize
   - copies bin/work-log-read              → .githooks/work-log-read
   - sets git config core.hooksPath .githooks
@@ -100,6 +101,10 @@ fi
 cp "$POST_COMMIT_SRC" "$POST_COMMIT_DST"
 chmod +x "$POST_COMMIT_DST"
 echo "  ✓ wrote .githooks/post-commit"
+
+cp "$SOURCE_DIR/bin/dw" "$TARGET/.githooks/dw"
+chmod +x "$TARGET/.githooks/dw"
+echo "  ✓ wrote .githooks/dw"
 
 cp "$SOURCE_DIR/bin/work-log-summarize" "$TARGET/.githooks/work-log-summarize"
 chmod +x "$TARGET/.githooks/work-log-summarize"

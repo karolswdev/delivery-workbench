@@ -186,9 +186,12 @@ bash -n pmo-roadmap/bin/work-log-read \
   pmo-roadmap/install.sh \
   pmo-roadmap/update.sh \
   pmo-roadmap/tests/adoption-discovery.sh \
+  pmo-roadmap/tests/roadmap-cli.sh \
   pmo-roadmap/tests/work-log-mvp.sh
 
+python3 -m py_compile pmo-roadmap/bin/dw
 pmo-roadmap/tests/adoption-discovery.sh
+pmo-roadmap/tests/roadmap-cli.sh
 pmo-roadmap/tests/work-log-mvp.sh
 ```
 

@@ -23,13 +23,23 @@ jobs:
             pmo-roadmap/install.sh \
             pmo-roadmap/update.sh \
             pmo-roadmap/tests/adoption-discovery.sh \
+            pmo-roadmap/tests/roadmap-cli.sh \
             pmo-roadmap/tests/work-log-mvp.sh \
             demos/scripts/prepare-onboarding-demo.sh \
             demos/scripts/prepare-commit-demo.sh \
             demos/scripts/write-demo-contract.sh
 
+      - name: Python syntax check
+        run: python3 -m py_compile pmo-roadmap/bin/dw
+
       - name: Adoption discovery smoke test
         run: pmo-roadmap/tests/adoption-discovery.sh
+
+      - name: Roadmap CLI integration test
+        run: pmo-roadmap/tests/roadmap-cli.sh
+
+      - name: Roadmap self-validation (dogfood)
+        run: pmo-roadmap/bin/dw check work-log-automation
 
       - name: Work log MVP integration test
         run: pmo-roadmap/tests/work-log-mvp.sh

@@ -14,6 +14,7 @@ Always overwrites (these are framework-owned):
   - hooks/pre-commit             → .githooks/pre-commit
   - hooks/post-commit            → .githooks/post-commit, unless a
                                     non-framework hook exists without --force
+  - bin/dw                       → .githooks/dw
   - bin/work-log-summarize       → .githooks/work-log-summarize
   - bin/work-log-read            → .githooks/work-log-read
 
@@ -78,6 +79,10 @@ fi
 cp "$SOURCE_DIR/bin/work-log-summarize" "$TARGET/.githooks/work-log-summarize"
 chmod +x "$TARGET/.githooks/work-log-summarize"
 echo "  ✓ .githooks/work-log-summarize updated"
+
+cp "$SOURCE_DIR/bin/dw" "$TARGET/.githooks/dw"
+chmod +x "$TARGET/.githooks/dw"
+echo "  ✓ .githooks/dw updated"
 
 cp "$SOURCE_DIR/bin/work-log-read" "$TARGET/.githooks/work-log-read"
 chmod +x "$TARGET/.githooks/work-log-read"
