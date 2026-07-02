@@ -220,12 +220,12 @@ render_template() {
       "{{AGENT_STYLE}}") render_block "$AGENT_STYLE" ;;
       "{{OPEN_QUESTIONS}}") render_block "$OPEN_QUESTIONS" ;;
       *)
-        line="${line//\{\{PROJECT_NAME\}\}/$PROJECT_NAME}"
-        line="${line//\{\{DATE\}\}/$DATE}"
-        line="${line//\{\{PROJECT_SLUG\}\}/$PROJECT_SLUG}"
-        line="${line//\{\{PROJECT_PREFIX\}\}/$PROJECT_PREFIX}"
+        line="${line//\{\{PROJECT_NAME\}\}/"$PROJECT_NAME"}"
+        line="${line//\{\{DATE\}\}/"$DATE"}"
+        line="${line//\{\{PROJECT_SLUG\}\}/"$PROJECT_SLUG"}"
+        line="${line//\{\{PROJECT_PREFIX\}\}/"$PROJECT_PREFIX"}"
         line="${line//\{\{TARGET_DIR\}\}/.}"
-        line="${line//\{\{HANDOFF_AUDIENCE\}\}/$HANDOFF_AUDIENCE}"
+        line="${line//\{\{HANDOFF_AUDIENCE\}\}/"$HANDOFF_AUDIENCE"}"
         printf '%s\n' "$line"
         ;;
     esac

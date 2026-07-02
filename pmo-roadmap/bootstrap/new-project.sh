@@ -47,17 +47,17 @@ render() {
     return 0
   fi
   text="$(cat "$src")"
-  text="${text//\{\{PROJECT_NAME\}\}/$NAME}"
-  text="${text//\{\{PROJECT_SLUG\}\}/$SLUG}"
-  text="${text//\{\{PROJECT_PREFIX\}\}/$PREFIX}"
-  text="${text//\{\{DATE\}\}/$DATE}"
+  text="${text//\{\{PROJECT_NAME\}\}/"$NAME"}"
+  text="${text//\{\{PROJECT_SLUG\}\}/"$SLUG"}"
+  text="${text//\{\{PROJECT_PREFIX\}\}/"$PREFIX"}"
+  text="${text//\{\{DATE\}\}/"$DATE"}"
   text="${text//\{\{PHASE_N\}\}/0}"
   text="${text//\{\{PHASE_TITLE\}\}/Setup}"
-  text="${text//\{\{STORY_ID\}\}/$PREFIX-0-01}"
+  text="${text//\{\{STORY_ID\}\}/"$PREFIX-0-01"}"
   text="${text//\{\{STORY_TITLE\}\}/Bootstrap roadmap project}"
   placeholder_row="| $PREFIX-0-01 | … | backlog | [story-01-…](./story-01-….md) | — |"
   bootstrap_row="| $PREFIX-0-01 | Bootstrap roadmap project | backlog | [story-01-bootstrap](./story-01-bootstrap.md) | - |"
-  text="${text/"$placeholder_row"/$bootstrap_row}"
+  text="${text/"$placeholder_row"/"$bootstrap_row"}"
   printf '%s\n' "$text" > "$dst"
   echo "  ✓ wrote ${dst#$TARGET/}"
 }

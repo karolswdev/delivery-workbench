@@ -136,12 +136,12 @@ render_prompt() {
   # names), and repo-relative paths only — the rendered prompt is a
   # committed artifact and must not embed absolute machine paths.
   text="$(cat "$TEMPLATE")"
-  text="${text//\{\{PROJECT_NAME\}\}/$PROJECT_NAME}"
-  text="${text//\{\{PROJECT_SLUG\}\}/$PROJECT_SLUG}"
-  text="${text//\{\{PROJECT_PREFIX\}\}/$PROJECT_PREFIX}"
+  text="${text//\{\{PROJECT_NAME\}\}/"$PROJECT_NAME"}"
+  text="${text//\{\{PROJECT_SLUG\}\}/"$PROJECT_SLUG"}"
+  text="${text//\{\{PROJECT_PREFIX\}\}/"$PROJECT_PREFIX"}"
   text="${text//\{\{TARGET_DIR\}\}/.}"
-  text="${text//\{\{OUTPUT_PATH\}\}/${OUTPUT#$TARGET/}}"
-  text="${text//\{\{INTAKE_PATH\}\}/${INTAKE_FILE#$TARGET/}}"
+  text="${text//\{\{OUTPUT_PATH\}\}/"${OUTPUT#$TARGET/}"}"
+  text="${text//\{\{INTAKE_PATH\}\}/"${INTAKE_FILE#$TARGET/}"}"
   printf '%s\n' "$text"
 }
 
