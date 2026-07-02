@@ -1,4 +1,5 @@
-/* Delivery Workbench explorer — read-only, hash-routed, API-backed.
+/* Delivery Workbench — hash-routed, API-backed. Views are read-only;
+ * mutations go only through the preview → apply workflow below.
  * Every byte of state comes from /api/*, which derives live from the
  * Markdown roadmap through the dw_pmo core. No local persistence. */
 
@@ -25,6 +26,29 @@ function syncGet(path) {
   xhr.open("GET", path, false);
   xhr.send();
   return { status: xhr.status, body: JSON.parse(xhr.responseText) };
+}
+
+async function postJson(path, payload) {
+  if (SNAPSHOT_MODE) {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", path, false);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.send(JSON.stringify(payload));
+    return { status: xhr.status, body: JSON.parse(xhr.responseText) };
+  }
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return { status: res.status, body: await res.json() };
+}
+
+function diffHtml(diff) {
+  return diff.split("\n").map((line) => {
+    const cls = line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : line.startsWith("@@") ? "hunk" : "";
+    return cls ? `<span class="${cls}">${esc(line)}</span>` : esc(line);
+  }).join("\n");
 }
 
 async function api(path) {
@@ -437,14 +461,13 @@ async function viewEdit(action) {
       ${guarded ? `<div class="checkline"><input type="checkbox" name="acknowledge_issues" id="f-ack">
         <label for="f-ack">I acknowledge the validation issues and still want a preview</label></div>` : ""}
       <button type="submit">preview — no files are written</button>
-      <div class="hint">The editor constructs structured intent only. Apply (with diff and
-        stale-preview refusal) arrives with the WLA-5-07 workflow; committing stays with you.</div>
+      <div class="hint">Preview shows exact diffs, projected validation, and a fingerprint;
+        apply refuses stale previews and never commits — committing stays with you.</div>
     </form>
     <div id="preview-out"></div>`;
 
-  document.getElementById("edit-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const form = e.target;
+  const editForm = document.getElementById("edit-form");
+  async function runEditPreview(form) {
     const out = document.getElementById("preview-out");
     const body = { kind: action };
     for (const el of form.elements) {
@@ -463,14 +486,9 @@ async function viewEdit(action) {
     }
     out.innerHTML = stateHtml("Previewing…");
     try {
-      const res = await fetch("/api/mutations/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const payload = await res.json();
-      if (!res.ok || payload.ok === false) {
-        const msg = (payload.data && payload.data.error) || (payload.issues && payload.issues[0]) || `error ${res.status}`;
+      const { status, body: payload } = await postJson("/api/mutations/preview", body);
+      if (status >= 400 || payload.ok === false) {
+        const msg = (payload.data && payload.data.error) || (payload.issues && payload.issues[0]) || `error ${status}`;
         out.innerHTML = `<div class="guard">${esc(msg)}</div>` +
           (payload.data && payload.data.issues
             ? `<ul class="plain">${payload.data.issues.map((i) => `<li class="issue">${esc(i)}</li>`).join("")}</ul>` : "");
@@ -478,25 +496,70 @@ async function viewEdit(action) {
       }
       const d = payload.data;
       out.innerHTML = `
-        <div class="section"><h2>Preview — ${esc(d.kind)} ${badge("nothing written", "ok")}</h2>
+        <div class="section"><h2>Preview — ${esc(d.kind)} ${badge("nothing written yet", "ok")}
+          ${d.no_op ? badge("no-op: repeating this mutation changes nothing", "warn") : ""}</h2>
           <div class="meta">
             ${Object.entries(d.summary).map(([k, v]) =>
               `<div class="kv"><div class="k">${esc(k)}</div><div class="v">${esc(String(v))}</div></div>`).join("")}
             <div class="kv"><div class="k">fingerprint</div><div class="v">${esc(d.fingerprint.slice(0, 24))}…</div></div>
           </div>
+          ${d.issues_before && d.issues_before.length ? `<div class="section"><h2>Validation before write</h2>
+            <ul class="plain">${d.issues_before.map((i) => `<li class="issue">${esc(i)}</li>`).join("")}</ul></div>` : ""}
+          ${d.issues_after === null ? `<p class="hint">projected post-write validation unavailable</p>`
+            : d.issues_after.length ? `<div class="section"><h2>Projected validation after write</h2>
+            <ul class="plain">${d.issues_after.map((i) => `<li class="warn">${esc(i)}</li>`).join("")}</ul></div>`
+            : `<p class="hint">projected post-write validation: clean</p>`}
           ${d.create_dirs.length ? `<p class="hint">creates directory: <code>${d.create_dirs.map(esc).join(", ")}</code></p>` : ""}
           ${d.files.map((f) => `
-            <details class="filepreview">
-              <summary>${badge(f.action, f.action === "create" ? "ok" : "in-progress")}
-                <code>${esc(f.path)}</code> ${f.changed ? "" : badge("no-op", "warn")}
+            <details class="filepreview" ${f.changed ? "open" : ""}>
+              <summary>${badge(f.action === "create" ? "new file" : f.changed ? "changed" : "unchanged (owned)",
+                  f.action === "create" ? "ok" : f.changed ? "in-progress" : "warn")}
+                <code>${esc(f.path)}</code>
                 <span class="hint">${f.bytes_before} → ${f.bytes_after} bytes</span></summary>
-              <pre class="src">${esc(f.new_content || "")}</pre>
+              ${f.action === "create"
+                ? `<pre class="src">${esc(f.new_content || "")}</pre>`
+                : f.diff ? `<pre class="diff">${diffHtml(f.diff)}</pre>` : `<pre class="src">${esc(f.new_content || "")}</pre>`}
             </details>`).join("")}
+          <button type="button" class="applybtn" id="apply-btn">apply — writes the files above (no commit)</button>
         </div>`;
+      document.getElementById("apply-btn").addEventListener("click", async () => {
+        out.querySelector("#apply-btn").disabled = true;
+        const { status: st, body: applied } = await postJson("/api/mutations/apply", { ...body, fingerprint: d.fingerprint });
+        const resultBox = document.createElement("div");
+        if (st === 409) {
+          resultBox.innerHTML = `<div class="guard">stale preview refused — the source files changed after this
+            preview was taken; nothing was written. Re-run the preview for a fresh fingerprint.</div>`;
+        } else if (st >= 400 || applied.ok === false) {
+          const msg = (applied.data && applied.data.error) || `apply failed (${st})`;
+          resultBox.innerHTML = `<div class="guard">${esc(msg)}${applied.data && applied.data.rolled_back
+            ? " — all writes were rolled back" : ""}</div>`;
+        } else {
+          const r = applied.data;
+          resultBox.innerHTML = `
+            <div class="guard ok">applied: ${r.changed.length} file${r.changed.length === 1 ? "" : "s"} written (no commit made)</div>
+            <div class="section"><h2>Post-apply revalidation</h2>
+              ${r.issues.length ? `<ul class="plain">${r.issues.map((i) => `<li class="issue">${esc(i)}</li>`).join("")}</ul>`
+                : `<p class="hint">dw check: clean — <a href="#/p/${encodeURIComponent(body.project)}">view the refreshed project</a></p>`}
+              <ul class="plain">${r.changed.map((c) => `<li><a href="#/f/${encodeURIComponent(c)}"><code>${esc(c)}</code></a></li>`).join("")}</ul>
+            </div>`;
+        }
+        out.appendChild(resultBox);
+      });
     } catch (err) {
       out.innerHTML = `<div class="guard">${esc(err.message)}</div>`;
     }
+  }
+
+  editForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    runEditPreview(e.target);
   });
+  // Screenshot affordance: ?snapshot=1&autopreview=1 runs the preview
+  // with the form defaults inside this synchronous load chain so
+  // headless capture sees the rendered result. Not for interactive use.
+  if (SNAPSHOT_MODE && new URLSearchParams(location.search).has("autopreview")) {
+    await runEditPreview(editForm);
+  }
 }
 
 /* ── router ─────────────────────────────────────────────────────────── */

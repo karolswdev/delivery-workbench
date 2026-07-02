@@ -26,12 +26,15 @@ from .model import DwError, OPEN_STATUSES
 from .parse import discover_phases, discover_projects, get_phase, get_project, parse_story_rows
 from .paths import read_text, rel, roadmap_dir
 from .mutations import (
+    apply_plan,
+    plan_fingerprint,
     plan_phase_close,
     plan_phase_create,
     plan_story_create,
     plan_story_evidence,
     plan_story_status,
     preview_plan,
+    projected_issues,
 )
 from .validate import check_project, health_report, project_warnings
 
@@ -260,29 +263,86 @@ def build_mutation_plan(root: Path, body: dict[str, object]):
     )
 
 
+def _issues_guard(root: Path, body: dict[str, object], plan) -> tuple[int, dict[str, object]] | None:
+    """Refuse mutations while the project has validation issues — unless
+    the plan remediates (its projected issue set is a strict subset of
+    the current one; a fix is never ambiguous) or the request
+    explicitly acknowledges the issues."""
+    project_slug = str(body.get("project", "") or "")
+    if not project_slug:
+        return None
+    project = get_project(root, project_slug)
+    issues = check_project(project, root)
+    if not issues or bool(body.get("acknowledge_issues", False)):
+        return None
+    projected = projected_issues(plan)
+    if projected is not None and set(projected) < set(issues):
+        return None  # this mutation strictly reduces drift; let the fix through
+    return 409, envelope(
+        {
+            "error": "project has validation issues; mutations are guarded",
+            "issues": issues,
+            "hint": "resolve them in the source Markdown (see /api/health), apply a mutation that fixes them, or resend with acknowledge_issues: true",
+        },
+        ok=False,
+        issues=issues,
+    )
+
+
 def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
-    """POST routes. Only /api/mutations/preview exists in this slice."""
-    if path.rstrip("/") != "/api/mutations/preview":
-        return _error(405, "the workbench explorer is read-only (GET only)")
-    try:
-        project_slug = str(body.get("project", "") or "")
-        if project_slug:
-            project = get_project(root, project_slug)
-            issues = check_project(project, root)
-            if issues and not bool(body.get("acknowledge_issues", False)):
+    """POST routes: /api/mutations/preview and /api/mutations/apply."""
+    route = path.rstrip("/")
+    if route == "/api/mutations/preview":
+        try:
+            plan = build_mutation_plan(root, body)
+            guarded = _issues_guard(root, body, plan)
+            if guarded:
+                return guarded
+            payload = preview_plan(plan, include_content=True, include_diff=True)
+            project = get_project(root, str(body["project"]))
+            payload["issues_before"] = check_project(project, root)
+            payload["issues_after"] = projected_issues(plan)
+            return 200, envelope(payload)
+        except DwError as err:
+            return _error(400, err.message)
+
+    if route == "/api/mutations/apply":
+        try:
+            supplied = str(body.get("fingerprint", "") or "")
+            if not supplied:
+                return _error(400, "apply requires the fingerprint from a preview response")
+            plan = build_mutation_plan(root, body)
+            guarded = _issues_guard(root, body, plan)
+            if guarded:
+                return guarded
+            current = plan_fingerprint(plan)
+            if current != supplied:
                 return 409, envelope(
                     {
-                        "error": "project has validation issues; mutations are guarded",
-                        "issues": issues,
-                        "hint": "resolve them in the source Markdown (see /api/health) or resend with acknowledge_issues: true",
+                        "error": "stale preview: source files changed after the preview was taken",
+                        "supplied_fingerprint": supplied,
+                        "current_fingerprint": current,
+                        "hint": "re-run the preview and apply with the fresh fingerprint",
                     },
                     ok=False,
-                    issues=issues,
+                    issues=["stale preview refused; nothing was written"],
                 )
-        plan = build_mutation_plan(root, body)
-        return 200, envelope(preview_plan(plan, include_content=True))
-    except DwError as err:
-        return _error(400, err.message)
+            result = apply_plan(plan, validate_after=True)
+            result["applied"] = True
+            return 200, envelope(result)
+        except DwError as err:
+            return _error(400, err.message)
+        except Exception as err:  # core writes roll back before raising
+            return 500, envelope(
+                {
+                    "error": f"apply failed and was rolled back: {err}",
+                    "rolled_back": True,
+                },
+                ok=False,
+                issues=[f"apply failed and was rolled back: {err}"],
+            )
+
+    return _error(405, "unsupported method or route; mutations go through /api/mutations/preview and /api/mutations/apply")
 
 def create_handler(root: Path, static_dir: Path | None):
     class WorkbenchHandler(BaseHTTPRequestHandler):

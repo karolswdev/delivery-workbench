@@ -135,8 +135,10 @@ def plan_fingerprint(plan: MutationPlan) -> str:
     return f"sha256:{h.hexdigest()}"
 
 
-def preview_plan(plan: MutationPlan, include_content: bool = False) -> dict[str, object]:
+def preview_plan(plan: MutationPlan, include_content: bool = False, include_diff: bool = False) -> dict[str, object]:
     """Render a plan without writing anything."""
+    import difflib
+
     files = []
     for change in plan.changes:
         entry = {
@@ -148,15 +150,56 @@ def preview_plan(plan: MutationPlan, include_content: bool = False) -> dict[str,
         }
         if include_content:
             entry["new_content"] = change.new_content
+        if include_diff:
+            entry["diff"] = "\n".join(
+                difflib.unified_diff(
+                    (change.old_content or "").splitlines(),
+                    change.new_content.splitlines(),
+                    fromfile=f"a/{entry['path']}",
+                    tofile=f"b/{entry['path']}",
+                    lineterm="",
+                )
+            )
         files.append(entry)
     return {
         "kind": plan.kind,
         "project": plan.project_slug,
         "fingerprint": plan_fingerprint(plan),
+        "no_op": all(not f["changed"] for f in files),
         "create_dirs": [rel(d, plan.root) for d in plan.create_dirs],
         "files": files,
         "summary": plan.summary,
     }
+
+
+def projected_issues(plan: MutationPlan) -> list[str] | None:
+    """Validation issues the project would have after applying the plan.
+
+    Mirrors the project's roadmap directory into a scratch root,
+    overlays the planned contents, and runs the same validator. Returns
+    None when projection is not feasible (never blocks a preview).
+    """
+    import shutil
+    import tempfile
+
+    try:
+        project = get_project(plan.root, plan.project_slug)
+        scratch = Path(tempfile.mkdtemp(prefix="dw-projection.")).resolve()
+        try:
+            mirror_project_dir = scratch / rel(project.path, plan.root)
+            shutil.copytree(project.path, mirror_project_dir)
+            for directory in plan.create_dirs:
+                (scratch / rel(directory, plan.root)).mkdir(parents=True, exist_ok=True)
+            for change in plan.changes:
+                target = scratch / rel(change.path, plan.root)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                write_text(target, change.new_content)
+            mirrored = get_project(scratch, plan.project_slug)
+            return check_project(mirrored, scratch)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+    except Exception:
+        return None
 
 
 def apply_plan(plan: MutationPlan, validate_after: bool = True) -> dict[str, object]:

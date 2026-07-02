@@ -264,8 +264,8 @@ PY
 [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -d 'not json' "$BASE/api/mutations/preview")" = "400" ] \
   || fail "malformed JSON body should 400"
 [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' \
-    "$BASE/api/mutations/apply")" = "405" ] \
-  || fail "apply must not exist before WLA-5-07"
+    "$BASE/api/mutations/apply")" = "400" ] \
+  || fail "apply without a preview fingerprint must be refused"
 [ "$PRE_EDIT" = "$(sum_tree)" ] || fail "previews must never write files"
 
 # guard: a project with validation issues refuses preview without acknowledgment
@@ -280,5 +280,72 @@ printf '# stray\n' > "$PHASE_DIR/evidence-story-09.md"
     "$BASE/api/mutations/preview")" = "200" ] \
   || fail "explicit acknowledgment should unlock the preview"
 rm -f "$PHASE_DIR/evidence-story-09.md"
+
+# ── preview → apply workflow (WLA-5-07) ──────────────────────────────
+mut() { # json -> response file; echoes http code
+  curl -s -o "$TMP_ROOT/mut.json" -w '%{http_code}' -X POST \
+    -H 'Content-Type: application/json' -d "$1" "$BASE/api/mutations/$2"
+}
+fp_of() { python3 -c "import json;print(json.load(open('$TMP_ROOT/mut.json'))['data']['fingerprint'])"; }
+
+# full cycle: create story
+REQ='{"kind":"create_story","project":"sample","phase":"0","title":"Applied by workflow"}'
+[ "$(mut "$REQ" preview)" = "200" ] || fail "workflow preview failed"
+python3 - "$TMP_ROOT/mut.json" <<'PY' || fail "preview must carry diffs and validation projections"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["no_op"] is False
+assert d["issues_before"] == []
+assert d["issues_after"] == []
+assert any("diff" in f and f["action"] == "update" for f in d["files"])
+assert all(("+" in f["diff"]) for f in d["files"] if f.get("diff") and f["changed"])
+PY
+FP="$(fp_of)"
+[ "$(mut "${REQ%\}}, \"fingerprint\":\"$FP\"}" apply)" = "200" ] || fail "apply with fresh fingerprint failed"
+python3 - "$TMP_ROOT/mut.json" <<'PY' || fail "apply result shape wrong"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["applied"] is True and d["issues"] == []
+assert any(p.endswith("story-03-applied-by-workflow.md") for p in d["changed"])
+PY
+[ -f "$PHASE_DIR/story-03-applied-by-workflow.md" ] || fail "applied story file missing"
+"$DW" --root "$REPO" check sample >/dev/null || fail "post-apply dw check should pass"
+
+# stale refusal: same fingerprint again (tree changed underneath it)
+[ "$(mut "${REQ%\}}, \"fingerprint\":\"$FP\"}" apply)" = "409" ] || fail "stale fingerprint must be refused"
+grep -q "stale preview" "$TMP_ROOT/mut.json" || fail "refusal should name staleness"
+
+# done-with-evidence cycle
+REQ='{"kind":"update_story_status","project":"sample","phase":"0","story":"SMP-0-02","status":"done","evidence_body":"- workflow proof."}'
+[ "$(mut "$REQ" preview)" = "200" ] || fail "done preview failed"
+FP="$(fp_of)"
+[ "$(mut "${REQ%\}}, \"fingerprint\":\"$FP\"}" apply)" = "200" ] || fail "done apply failed"
+"$DW" --root "$REPO" check sample >/dev/null || fail "check should pass after done-with-evidence"
+
+# flip the workflow-created story done too (second done-with-evidence cycle)
+REQ='{"kind":"update_story_status","project":"sample","phase":"0","story":"SMP-0-03","status":"done","evidence_body":"- workflow proof three."}'
+[ "$(mut "$REQ" preview)" = "200" ] || fail "second done preview failed"
+FP="$(fp_of)"
+[ "$(mut "${REQ%\}}, \"fingerprint\":\"$FP\"}" apply)" = "200" ] || fail "second done apply failed"
+
+# close phase cycle — all stories done, so dw check now flags the missing
+# final summary; the guard must recognize close_phase as remediation and
+# let it through WITHOUT acknowledge_issues.
+REQ='{"kind":"close_phase","project":"sample","phase":"0","summary_body":"Closed by the workflow test."}'
+[ "$(mut "$REQ" preview)" = "200" ] || fail "close preview failed"
+FP="$(fp_of)"
+[ "$(mut "${REQ%\}}, \"fingerprint\":\"$FP\"}" apply)" = "200" ] || fail "close apply failed"
+[ -f "$PHASE_DIR/final-summary.md" ] || fail "final summary missing after close"
+"$DW" --root "$REPO" check sample | grep -q 'dw check: ok' || fail "check should pass after close"
+
+# no-op: re-attaching existing evidence without body is explicitly idempotent
+REQ='{"kind":"attach_evidence","project":"sample","phase":"0","story":"SMP-0-01"}'
+[ "$(mut "$REQ" preview)" = "200" ] || fail "no-op preview failed"
+python3 -c "import json; d=json.load(open('$TMP_ROOT/mut.json'))['data']; assert d['no_op'] is True" \
+  || fail "no-op preview should say so"
+FP="$(fp_of)"
+NOOP_BEFORE="$(sum_tree)"
+[ "$(mut "${REQ%\}}, \"fingerprint\":\"$FP\"}" apply)" = "200" ] || fail "no-op apply failed"
+[ "$NOOP_BEFORE" = "$(sum_tree)" ] || fail "no-op apply must leave the tree byte-identical"
 
 echo "workbench-explorer.sh: ok"

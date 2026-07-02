@@ -195,3 +195,13 @@ form.edit button[type="submit"]:disabled { color: var(--muted); border-color: va
 details.filepreview { border: 1px solid var(--line); border-radius: 6px; margin-top: 8px; }
 details.filepreview summary { padding: 8px 12px; cursor: pointer; font-size: 13px; font-family: var(--mono); }
 details.filepreview pre.src { border: 0; border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; }
+
+pre.diff { background: var(--panel); border-top: 1px solid var(--line); padding: 10px 14px; overflow-x: auto; font-family: var(--mono); font-size: 12px; line-height: 1.5; margin: 0; }
+pre.diff .add { color: var(--accent); }
+pre.diff .del { color: var(--err); }
+pre.diff .hunk { color: var(--link); }
+button.applybtn {
+  background: var(--panel-2); color: var(--warn); border: 1px solid var(--warn);
+  border-radius: 5px; padding: 8px 16px; font-size: 13px; cursor: pointer; margin-top: 10px;
+}
+button.applybtn:hover { filter: brightness(1.2); }

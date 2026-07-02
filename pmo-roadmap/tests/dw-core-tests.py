@@ -592,8 +592,9 @@ class DwCoreTest(unittest.TestCase):
             status, payload = wb.handle_mutation(self.root, "/api/mutations/preview", body)
             self.assertEqual(status, 400, body)
             self.assertIn(needle, payload["issues"][0], body)
-        status, _ = wb.handle_mutation(self.root, "/api/mutations/apply", {})
-        self.assertEqual(status, 405, "apply must not exist before WLA-5-07")
+        status, payload = wb.handle_mutation(self.root, "/api/mutations/apply", {})
+        self.assertEqual(status, 400)
+        self.assertIn("requires the fingerprint", payload["issues"][0])
 
     def test_mutation_preview_guarded_by_validation_issues(self) -> None:
         from dw_pmo import workbench as wb
@@ -610,6 +611,25 @@ class DwCoreTest(unittest.TestCase):
             self.root, "/api/mutations/preview", {**body, "acknowledge_issues": True})
         self.assertEqual(status, 200, payload)
 
+    def test_guard_lets_remediation_through(self) -> None:
+        from dw_pmo import workbench as wb
+
+        # drift: done story's evidence file deleted -> validation issue
+        (self.phase_dir / "evidence-story-01.md").unlink()
+        blocked = {"kind": "create_story", "project": "demo", "phase": "1", "title": "Unrelated"}
+        status, _ = wb.handle_mutation(self.root, "/api/mutations/preview", blocked)
+        self.assertEqual(status, 409, "an unrelated mutation stays guarded under drift")
+        healing = {"kind": "attach_evidence", "project": "demo", "phase": "1",
+                   "story": "DM-1-01", "body": "- restored proof."}
+        status, payload = wb.handle_mutation(self.root, "/api/mutations/preview", healing)
+        self.assertEqual(status, 200, "a strictly remediating mutation passes without acknowledgment")
+        self.assertEqual(payload["data"]["issues_after"], [])
+        status, result = wb.handle_mutation(
+            self.root, "/api/mutations/apply",
+            {**healing, "fingerprint": payload["data"]["fingerprint"]})
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["data"]["issues"], [], "the fix lands and validation is clean")
+
     def test_mutation_fingerprint_binds_content(self) -> None:
         from dw_pmo import workbench as wb
 
@@ -623,6 +643,99 @@ class DwCoreTest(unittest.TestCase):
         _, third = wb.handle_mutation(self.root, "/api/mutations/preview", body)
         self.assertNotEqual(first["data"]["fingerprint"], third["data"]["fingerprint"],
                             "changed target content must change the fingerprint")
+
+    # -- mutation apply workflow (WLA-5-07) ------------------------------------
+
+    def test_apply_cycle_and_stale_refusal(self) -> None:
+        from dw_pmo import workbench as wb
+
+        body = {"kind": "create_story", "project": "demo", "phase": "1", "title": "Applied story"}
+        _, preview = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+        fp = preview["data"]["fingerprint"]
+        self.assertIsInstance(preview["data"]["issues_before"], list)
+        self.assertEqual(preview["data"]["issues_after"], [],
+                         "creating a story should project no new issues")
+        self.assertTrue(any(f.get("diff") is not None for f in preview["data"]["files"]))
+
+        status, result = wb.handle_mutation(
+            self.root, "/api/mutations/apply", {**body, "fingerprint": fp})
+        self.assertEqual(status, 200, result)
+        self.assertTrue(result["data"]["applied"])
+        self.assertEqual(result["data"]["issues"], [], "post-apply revalidation should be clean")
+        new_story = self.phase_dir / "story-03-applied-story.md"
+        self.assertTrue(new_story.exists())
+
+        # the tree changed, so the same fingerprint is now stale
+        status, refusal = wb.handle_mutation(
+            self.root, "/api/mutations/apply", {**body, "fingerprint": fp})
+        self.assertEqual(status, 409)
+        self.assertIn("stale preview", refusal["data"]["error"])
+        self.assertIn("nothing was written", refusal["issues"][0])
+
+    def test_apply_refuses_tampered_intent(self) -> None:
+        from dw_pmo import workbench as wb
+
+        body = {"kind": "create_story", "project": "demo", "phase": "1", "title": "Honest title"}
+        _, preview = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+        fp = preview["data"]["fingerprint"]
+        status, _ = wb.handle_mutation(
+            self.root, "/api/mutations/apply",
+            {**body, "title": "Different title", "fingerprint": fp})
+        self.assertEqual(status, 409, "fingerprint binds the intent, not just the tree")
+
+    def test_noop_mutation_is_explicitly_idempotent(self) -> None:
+        from dw_pmo import workbench as wb
+
+        # re-attaching existing evidence without a body changes nothing
+        body = {"kind": "attach_evidence", "project": "demo", "phase": "1", "story": "DM-1-01"}
+        _, preview = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+        self.assertTrue(preview["data"]["no_op"])
+        self.assertTrue(all(not f["changed"] for f in preview["data"]["files"]))
+        before = self._tree_checksums()
+        status, result = wb.handle_mutation(
+            self.root, "/api/mutations/apply",
+            {**body, "fingerprint": preview["data"]["fingerprint"]})
+        self.assertEqual(status, 200, result)
+        self.assertEqual(self._tree_checksums(), before,
+                         "no-op apply must leave the tree byte-identical")
+
+    def test_projected_issues_sees_the_future(self) -> None:
+        from dw_pmo import workbench as wb
+
+        # attaching evidence to a non-done story projects premature-evidence
+        body = {"kind": "attach_evidence", "project": "demo", "phase": "1",
+                "story": "DM-1-02", "body": "- early proof."}
+        _, preview = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+        projected = preview["data"]["issues_after"]
+        self.assertIsNotNone(projected)
+        self.assertTrue(any("not done" in issue for issue in projected),
+                        f"projection should flag premature evidence: {projected}")
+        self.assertEqual(preview["data"]["issues_before"], [])
+
+    def test_apply_rolls_back_on_write_failure(self) -> None:
+        import os
+        from dw_pmo.mutations import MutationPlan, FileChange, apply_plan
+
+        target_ok = self.phase_dir / "story-01-first.md"
+        original = target_ok.read_text(encoding="utf-8")
+        locked_dir = self.phase_dir / "locked"
+        locked_dir.mkdir()
+        os.chmod(locked_dir, 0o500)
+        try:
+            plan = MutationPlan(kind="story-status", root=self.root, project_slug="demo")
+            plan.changes.append(FileChange(
+                path=target_ok, new_content=original + "\nEDITED\n",
+                existed=True, old_content=original))
+            plan.changes.append(FileChange(
+                path=locked_dir / "cannot-write.md", new_content="x\n",
+                existed=False, old_content=None))
+            with self.assertRaises(Exception):
+                apply_plan(plan, validate_after=False)
+            self.assertEqual(target_ok.read_text(encoding="utf-8"), original,
+                             "first write must be rolled back when a later write fails")
+        finally:
+            os.chmod(locked_dir, 0o700)
+            locked_dir.rmdir()
 
     # -- adoption bridge (WLA-6-07) -----------------------------------------
 
