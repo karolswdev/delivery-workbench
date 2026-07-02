@@ -34,11 +34,13 @@ treatment as the code.
   purpose, freshness verdict, and disposition, with four executable
   audience paths (evaluator, adopter, contributor, operating agent)
   (evidence-story-01: 15 surfaces, 12 findings F1-F12, target IA).
-- [ ] The root README orients in one screen and every quickstart
-  command runs as printed (captured verbatim in fixtures).
-- [ ] `docs/architecture.md` explains core, gate, contract v2,
+- [x] The root README orients in one screen and every quickstart
+  command runs as printed (captured verbatim in fixtures;
+  evidence-story-02).
+- [x] `docs/architecture.md` explains core, gate, contract v2,
   evidence, workbench, and work logs with accurate Mermaid diagrams,
-  each behavioral claim naming its proving test or command.
+  each behavioral claim naming its proving test or command (cited
+  test names existence-verified; evidence-story-02).
 - [ ] Canon and templates pass a line-by-line accuracy audit with
   doc-parity tests covering newly cited machine-enforced statements.
 - [ ] A Claude Code plugin (manifest, skill, commands, marketplace
@@ -63,7 +65,7 @@ treatment as the code.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-7-01 | Documentation audit and information architecture | done | [story-01-documentation-audit-and-information-architecture](./story-01-documentation-audit-and-information-architecture.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-7-02 | Core docs overhaul and architecture guide | backlog | [story-02-core-docs-overhaul-and-architecture-guide](./story-02-core-docs-overhaul-and-architecture-guide.md) | - |
+| WLA-7-02 | Core docs overhaul and architecture guide | done | [story-02-core-docs-overhaul-and-architecture-guide](./story-02-core-docs-overhaul-and-architecture-guide.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-7-03 | Canon and template accuracy pass | backlog | [story-03-canon-and-template-accuracy-pass](./story-03-canon-and-template-accuracy-pass.md) | - |
 | WLA-7-04 | Package the Claude Code plugin | backlog | [story-04-package-the-claude-code-plugin](./story-04-package-the-claude-code-plugin.md) | - |
 | WLA-7-05 | Regenerate demos diagrams and visual assets | backlog | [story-05-regenerate-demos-diagrams-and-visual-assets](./story-05-regenerate-demos-diagrams-and-visual-assets.md) | - |
@@ -87,16 +89,17 @@ treatment as the code.
 
 ## Where we are
 
-WLA-7-01 is done with evidence: fifteen documentation surfaces
-inventoried with dispositions, twelve staleness findings (F1-F12)
-quoted and mechanically verified by captured grep runs — including a
-direct self-contradiction in the framework README (mtime/delete
-claims at :31 vs the index-tree/archive reality at :355-365) and a
-broken command block in the root README's validation section. The
-target information architecture assigns one owning document per topic;
-four audience paths are defined. The audit is now the phase's
-contract: WLA-7-02 (reader docs) and WLA-7-03 (operator canon)
-implement its dispositions next.
+WLA-7-02 is done with evidence: both READMEs implement the audit's
+dispositions (F1-F9 and F11 closed — the mtime/delete fossils, the
+incomplete installer list and file map, the broken validation block,
+and the pre-P4 feature list are all gone), the gate-semantics
+paraphrase is de-duplicated into a canon link, docs/architecture.md
+explains all six subsystems with proof-citing claims and five Mermaid
+diagrams, SECURITY.md covers the workbench boundary, and the
+quickstarts were executed verbatim in fixtures with all four captures
+(three instructive refusals plus the green full lifecycle) kept in
+evidence. Next: WLA-7-03 (canon accuracy pass) and then WLA-7-04
+(the Claude Code plugin) on the stabilized vocabulary.
 
 ## Active risks
 
