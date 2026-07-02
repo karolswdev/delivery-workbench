@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 3
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-2-03
 - **Unblocks:** WLA-3-02, WLA-3-03
 - **Owner:** unassigned
@@ -20,14 +20,14 @@ developer can commit normally and get a useful daily architect log.
 
 ## Acceptance criteria
 
-- [ ] Consumer project has logging enabled through project config.
-- [ ] A consented commit writes a schema-conformant daily log entry with repo,
+- [x] Consumer project has logging enabled through project config.
+- [x] A consented commit writes a schema-conformant daily log entry with repo,
   branch, commit, reasons, files changed, verification/evidence pointers, and
   follow-ups.
-- [ ] A denied-consent commit writes no entry.
-- [ ] Any project-specific exclusions are documented.
-- [ ] Evidence captures the exact commands and resulting log excerpts.
-- [ ] Pilot review covers at least two separate work sessions or explicitly
+- [x] A denied-consent commit writes no entry.
+- [x] Any project-specific exclusions are documented.
+- [x] Evidence captures the exact commands and resulting log excerpts.
+- [x] Pilot review covers at least two separate work sessions or explicitly
   records why a longer review is deferred.
 
 ## Test plan

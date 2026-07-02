@@ -2,9 +2,9 @@
 
 - **Project:** work-log-automation
 - **Phase:** 3
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-3-01, WLA-3-02
-- **Unblocks:** none
+- **Unblocks:** WLA-4-01
 - **Owner:** unassigned
 
 ## Problem
@@ -21,10 +21,10 @@ work remains out of scope.
 
 ## Acceptance criteria
 
-- [ ] `phase-3-rollout/final-summary.md` records final state and evidence.
-- [ ] Project README marks the roadmap shipped or names any deferred work.
-- [ ] Follow-ups are explicit and scoped as future stories if material.
-- [ ] The final summary can be read without session history.
+- [x] `phase-3-rollout/final-summary.md` records final state and evidence.
+- [x] Project README marks the roadmap shipped or names any deferred work.
+- [x] Follow-ups are explicit and scoped as future stories if material.
+- [x] The final summary can be read without session history.
 
 ## Test plan
 

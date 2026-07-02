@@ -1,6 +1,6 @@
 # Phase 3 - Rollout
 
-**Last updated:** 2026-04-25.
+**Last updated:** 2026-07-01.
 
 ## Goal
 
@@ -16,29 +16,31 @@ useful, and safe by default.
 
 ## Exit criteria (evidence required)
 
-- [ ] One consumer project opts in through config and produces consented logs
+- [x] One consumer project opts in through config and produces consented logs
   matching the WLA-0-01 schema.
-- [ ] Denied-consent and excluded-path examples are documented.
-- [ ] README and snippet instructions match actual behavior.
-- [ ] A multi-day pilot review confirms the log remains readable after entries
-  accumulate.
-- [ ] Final summary names what shipped, what remains manual, and rollout risks.
+- [x] Denied-consent and excluded-path examples are documented.
+- [x] README and snippet instructions match actual behavior.
+- [x] A multi-day pilot review confirms the log remains readable after entries
+  accumulate, or a longer review is explicitly deferred with a reason.
+- [x] Final summary names what shipped, what remains manual, and rollout risks.
 
 ## Story status
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-3-01 | Pilot in one consumer project | backlog | [story-01-consumer-pilot](./story-01-consumer-pilot.md) | - |
-| WLA-3-02 | Polish operator and agent documentation | backlog | [story-02-docs-polish](./story-02-docs-polish.md) | - |
-| WLA-3-03 | Close the roadmap with final evidence | backlog | [story-03-final-summary](./story-03-final-summary.md) | - |
+| WLA-3-01 | Pilot in one consumer project | done | [story-01-consumer-pilot](./story-01-consumer-pilot.md) | [evidence-story-01](./evidence-story-01.md) |
+| WLA-3-02 | Polish operator and agent documentation | done | [story-02-docs-polish](./story-02-docs-polish.md) | [evidence-story-02](./evidence-story-02.md) |
+| WLA-3-03 | Close the roadmap with final evidence | done | [story-03-final-summary](./story-03-final-summary.md) | [evidence-story-03](./evidence-story-03.md) |
 
 ## Where we are
 
-Phase 3 waits for Phase 2 hardening. The pilot should use an existing consumer
-project, not a synthetic repo, because the feature's value is daily technical
-memory across real work. A single successful commit is necessary but not enough;
-the pilot should include a short multi-day review or explicitly defer that
-review with a reason.
+Phase 3 is complete. A temporary clone of the real Pantrybot project opted into
+work logging, produced consented entries, skipped a denied commit, and omitted
+a configured private fixture path without leaking its contents. The README and
+agent snippet now document enablement, consent, exclusions, read flow,
+summarizer behavior, and troubleshooting. Multi-day review is documented as a
+follow-up operating practice because the pilot clone was intentionally
+short-lived.
 
 ## Active risks
 
@@ -55,5 +57,5 @@ review with a reason.
 
 ## Decisions deferred
 
-- Which consumer project pilots first - trigger after Phase 2 passes - default
-  is the first active project where daily work logs would be valuable.
+- Which consumer project pilots first - resolved with a temporary clone of the
+  local Pantrybot project so the original working tree was not mutated.

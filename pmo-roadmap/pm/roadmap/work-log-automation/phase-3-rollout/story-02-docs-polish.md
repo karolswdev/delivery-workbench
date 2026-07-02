@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 3
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-3-01
 - **Unblocks:** WLA-3-03
 - **Owner:** unassigned
@@ -21,13 +21,13 @@ honest and logs remain useful.
 
 ## Acceptance criteria
 
-- [ ] README has an enablement recipe that starts from a fresh installed repo.
-- [ ] Agent snippet explains when to consent, deny, and list exclusions.
-- [ ] README has a read-flow recipe for today's log and a note on multi-day
+- [x] README has an enablement recipe that starts from a fresh installed repo.
+- [x] Agent snippet explains when to consent, deny, and list exclusions.
+- [x] README has a read-flow recipe for today's log and a note on multi-day
   review.
-- [ ] Troubleshooting covers no log entry, stale pending payload, summarizer
+- [x] Troubleshooting covers no log entry, stale pending payload, summarizer
   failure, and unexpected log path.
-- [ ] Examples match actual output from the pilot.
+- [x] Examples match actual output from the pilot.
 
 ## Test plan
 
