@@ -58,7 +58,7 @@ def parse_work_log_entry(path: Path, root: Path, project: Project, story: StoryR
 
 
 def work_log_entries(root: Path, project: Project, story: StoryRow | None = None, limit: int = 10) -> list[dict[str, str]]:
-    log_root = work_log_root()
+    log_root = work_log_root(root)
     if not log_root.is_dir():
         return []
     entries: list[dict[str, str]] = []

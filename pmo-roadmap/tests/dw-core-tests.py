@@ -260,5 +260,271 @@ class DwCoreTest(unittest.TestCase):
                 os.environ["PMO_WORK_LOG_DIR"] = old
 
 
+CONTRACT_OK = """# Commit Contract
+
+**Generated:** 2026-07-02 00:00
+**Branch:** test
+
+I certify, for this commit:
+
+- [x] one
+- [x] two
+- [x] three
+- [x] four
+- [x] five
+- [x] six
+- [x] seven
+
+## Work-log consent
+
+**Work-log consent:** yes
+
+**Work-log reasons:**
+- test
+"""
+
+
+class GateTest(unittest.TestCase):
+    """One gate unit test per fixed drift bug, plus the happy paths."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-gate-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.root.mkdir()
+        self.git("init")
+        self.git("config", "user.name", "Gate Test")
+        self.git("config", "user.email", "gate-test@example.test")
+        self.phase = self.root / "pm" / "roadmap" / "demo" / "phase-1-alpha"
+        self.phase.mkdir(parents=True)
+
+    def git(self, *args: str) -> None:
+        import subprocess
+
+        subprocess.run(
+            ["git", "-C", str(self.root), *args],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def write(self, rel_path: str, content: str) -> Path:
+        path = self.root / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def story(self, rel_path: str, status: str) -> None:
+        self.write(rel_path, f"# Story\n\n- **Status:** {status}\n")
+
+    def contract(self, text: str = CONTRACT_OK) -> None:
+        self.write(".tmp/CONTRACT.md", text)
+
+    def gate(self, **kwargs):
+        return core.run_gate(self.root, **kwargs)
+
+    def commit_all(self, msg: str) -> None:
+        self.git("add", "-A")
+        self.git("commit", "-m", msg, "--no-verify")
+
+    # -- contract checks ---------------------------------------------------
+
+    def test_missing_and_unchecked_and_count(self) -> None:
+        result = self.gate()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure.rule, "contract-missing")
+        self.contract(CONTRACT_OK.replace("- [x] seven", "- [ ] seven"))
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-unchecked")
+        self.contract(CONTRACT_OK.replace("- [x] seven\n", ""))
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-boxes")
+
+    def test_capital_x_boxes_count(self) -> None:
+        self.contract(CONTRACT_OK.replace("- [x] seven", "- [X] seven"))
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+        self.assertEqual(result.checked_boxes, 7)
+
+    def test_worklog_preconditions(self) -> None:
+        self.contract()
+        self.assertTrue(self.gate(work_log_enabled=True).worklog_capture)
+        self.assertFalse(self.gate(work_log_enabled=False).worklog_capture)
+        self.contract(CONTRACT_OK.replace("**Work-log consent:** yes", "**Work-log consent:** no"))
+        self.assertFalse(self.gate(work_log_enabled=True).worklog_capture)
+
+    # -- shipped-story detection --------------------------------------------
+
+    def test_synonym_status_counts_as_flip(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready")
+        self.commit_all("base")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "complete")
+        self.git("add", "-A")
+        self.contract()
+        result = self.gate()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure.rule, "evidence-missing")
+
+    def test_unpadded_numbers_pair_both_ways(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-1-a.md", "ready")
+        self.commit_all("base")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-1-a.md", "done")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.git("add", "-A")
+        self.contract()
+        self.assertTrue(self.gate().ok, "padded evidence must satisfy unpadded story")
+        self.git("reset")
+        self.git("checkout", "--", ".")
+        (self.phase / "evidence-story-01.md").unlink()
+        self.story("pm/roadmap/demo/phase-1-alpha/story-1-a.md", "done")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-1.md", "# proof\n")
+        self.git("add", "-A")
+        self.contract()
+        self.assertTrue(self.gate().ok, "unpadded evidence must satisfy unpadded story")
+
+    def test_rename_of_done_story_is_not_a_flip(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.commit_all("base")
+        self.git("mv", "pm/roadmap/demo/phase-1-alpha/story-01-a.md", "pm/roadmap/demo/phase-1-alpha/story-01-renamed.md")
+        self.contract()
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+        self.assertEqual(result.shipped_stories, [])
+
+    def test_paths_with_spaces(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-has space.md", "ready")
+        self.commit_all("base")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-has space.md", "done")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.git("add", "-A")
+        self.contract()
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+        self.assertEqual(len(result.shipped_stories), 1)
+
+    def test_atomicity_and_bundle_ok(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-02-b.md", "ready")
+        self.commit_all("base")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-02-b.md", "done")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-02.md", "# proof\n")
+        self.git("add", "-A")
+        self.contract()
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "atomicity")
+        self.write(".tmp/BUNDLE-OK.md", "intentional bundle\n")
+        self.assertTrue(self.gate().ok)
+
+    # -- evidence deletion handling ------------------------------------------
+
+    def test_evidence_deletion_orphaning_done_story_blocked(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.commit_all("base")
+        self.git("rm", "-q", "pm/roadmap/demo/phase-1-alpha/evidence-story-01.md")
+        self.contract()
+        result = self.gate()
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure.rule, "evidence-deletion-orphans-story")
+        self.assertIn("story-01-a.md", result.failure.message)
+
+    def test_evidence_deletion_with_regressed_story_passes(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.commit_all("base")
+        self.git("rm", "-q", "pm/roadmap/demo/phase-1-alpha/evidence-story-01.md")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "in-progress")
+        self.git("add", "-A")
+        self.contract()
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+
+    def test_orphan_evidence_deletion_passes(self) -> None:
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-09.md", "# stray\n")
+        self.commit_all("base")
+        self.git("rm", "-q", "pm/roadmap/demo/phase-1-alpha/evidence-story-09.md")
+        self.contract()
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+
+    def test_added_orphan_evidence_blocked(self) -> None:
+        self.write("pm/roadmap/demo/README.md", "# Demo\n")
+        self.commit_all("base")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-05.md", "# stray\n")
+        self.git("add", "-A")
+        self.contract()
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "orphan-evidence")
+
+    def test_modified_evidence_of_done_story_passes(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.commit_all("base")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n\namended\n")
+        self.git("add", "-A")
+        self.contract()
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+
+    # -- config precedence ----------------------------------------------------
+
+    def test_expected_boxes_config_beats_env(self) -> None:
+        self.write(".githooks/pre-commit.config", "EXPECTED_BOXES=8\n")
+        self.contract()
+        old = os.environ.get("EXPECTED_BOXES")
+        os.environ["EXPECTED_BOXES"] = "7"
+        try:
+            result = self.gate()
+        finally:
+            if old is None:
+                os.environ.pop("EXPECTED_BOXES", None)
+            else:
+                os.environ["EXPECTED_BOXES"] = old
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure.rule, "contract-boxes")
+        self.assertEqual(result.expected_boxes, 8)
+
+    def test_work_log_dir_precedence(self) -> None:
+        old = os.environ.get("PMO_WORK_LOG_DIR")
+        os.environ["PMO_WORK_LOG_DIR"] = str(self.tmp / "env-log")
+        try:
+            self.assertEqual(core.work_log_root(self.root), self.tmp / "env-log")
+            self.write(".githooks/pre-commit.config", f"PMO_WORK_LOG_DIR='{self.tmp / 'cfg-log'}'\n")
+            self.assertEqual(core.work_log_root(self.root), self.tmp / "cfg-log")
+        finally:
+            if old is None:
+                os.environ.pop("PMO_WORK_LOG_DIR", None)
+            else:
+                os.environ["PMO_WORK_LOG_DIR"] = old
+        self.assertEqual(core.work_log_root(None if old else None), Path.home() / ".work" / "log")
+
+    # -- porcelain -------------------------------------------------------------
+
+    def test_porcelain_verbatim(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready")
+        self.commit_all("base")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.git("add", "-A")
+        self.contract()
+        result = self.gate(work_log_enabled=True)
+        expected = (
+            "gate=pass\n"
+            "expected_boxes=7\n"
+            "checked_boxes=7\n"
+            "shipped_count=1\n"
+            "worklog_capture=yes\n"
+            "staged=pm/roadmap/demo/phase-1-alpha/evidence-story-01.md\n"
+            "staged=pm/roadmap/demo/phase-1-alpha/story-01-a.md\n"
+            "staged_story=pm/roadmap/demo/phase-1-alpha/story-01-a.md\n"
+            "staged_evidence=pm/roadmap/demo/phase-1-alpha/evidence-story-01.md\n"
+            "shipped_story=pm/roadmap/demo/phase-1-alpha/story-01-a.md\n"
+        )
+        self.assertEqual(core.render_gate_porcelain(result), expected)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

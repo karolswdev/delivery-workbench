@@ -48,6 +48,9 @@ try:
         plan_story_evidence,
         plan_story_status,
         read_text,
+        render_gate_failure,
+        render_gate_porcelain,
+        run_gate,
         story_num_from_file,
     )
 except ImportError as exc:  # pragma: no cover - environment failure path
@@ -240,6 +243,21 @@ def command_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_gate(args: argparse.Namespace) -> int:
+    result = run_gate(args.root)
+    if args.porcelain:
+        print(render_gate_porcelain(result), end="")
+    if not result.ok:
+        sys.stderr.write(render_gate_failure(result))
+        return 1
+    if not args.porcelain:
+        print(
+            f"dw gate: pass ({result.checked_boxes}/{result.expected_boxes} checkboxes, "
+            f"{len(result.shipped_stories)} story flip(s))"
+        )
+    return 0
+
+
 def command_check(args: argparse.Namespace) -> int:
     from dw_pmo import check_project
 
@@ -286,6 +304,11 @@ def build_parser() -> argparse.ArgumentParser:
     check = sub.add_parser("check", help="validate roadmap links and statuses")
     check.add_argument("project", nargs="?")
     check.set_defaults(func=command_check)
+
+    gate = sub.add_parser("gate", help="run the commit-gate structural checks (used by the pre-commit shim)")
+    gate.add_argument("--hook", choices=["pre-commit"], default=None, help="hook context (reserved)")
+    gate.add_argument("--porcelain", action="store_true", help="stable key=value output for machine consumers")
+    gate.set_defaults(func=command_gate)
 
     phase = sub.add_parser("phase", help="phase commands")
     phase_sub = phase.add_subparsers(dest="phase_command", required=True)

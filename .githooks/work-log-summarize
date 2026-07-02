@@ -33,7 +33,15 @@ die() {
 }
 
 DATE="$(date +%F)"
+# PMO_WORK_LOG_DIR precedence: pre-commit.config > environment > default;
+# the --log-dir flag beats all three.
 LOG_DIR="${PMO_WORK_LOG_DIR:-${HOME:-}/.work/log}"
+REPO_TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$REPO_TOPLEVEL" ] && [ -f "$REPO_TOPLEVEL/.githooks/pre-commit.config" ]; then
+  # shellcheck disable=SC1091
+  . "$REPO_TOPLEVEL/.githooks/pre-commit.config"
+  LOG_DIR="${PMO_WORK_LOG_DIR:-$LOG_DIR}"
+fi
 LOG_FILE=""
 SUMMARIZER_CMD="${PMO_WORK_LOG_SUMMARIZER:-}"
 MAX_OUTPUT_BYTES="${PMO_WORK_LOG_SUMMARY_MAX_BYTES:-20000}"

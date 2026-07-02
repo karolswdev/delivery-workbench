@@ -78,5 +78,12 @@ from .mutations import (
     write_changes,
 )
 from .api import build_context_payload, next_story, project_context, story_context
+from .gate import (
+    GateFailure,
+    GateResult,
+    render_gate_failure,
+    render_gate_porcelain,
+    run_gate,
+)
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

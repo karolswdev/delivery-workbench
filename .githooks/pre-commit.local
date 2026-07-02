@@ -1,70 +1,12 @@
-# Delivery Workbench self-hosting extension (project-owned; survives
-# update.sh). The canonical hook's structural checks are anchored at
-# ^pm/roadmap/, but this repo's own roadmap lives under
-# pmo-roadmap/pm/roadmap/, so the canonical atomicity and evidence-pairing
-# rules cannot see the framework's own stories. This file re-applies the
-# same rules for the nested prefix.
+# Delivery Workbench self-hosting extension seam (project-owned;
+# survives update.sh).
 #
-# NOTE (WLA-6-02 driver): this is a line-for-line duplication of gate
-# logic that already exists in the canonical hook and in `dw`. It exists
-# because the gate is not single-sourced and takes no roadmap-root
-# parameter. When `dw gate` lands (WLA-6-02), this file should shrink to
-# a thin invocation.
-
-DW_SELF_STORY_REGEX='^pmo-roadmap/pm/roadmap/[^/]+/phase-[^/]+/story-[0-9]+-.*\.md$'
-DW_SELF_EVIDENCE_REGEX='^pmo-roadmap/pm/roadmap/[^/]+/phase-[^/]+/evidence-story-[0-9]+\.md$'
-
-DW_SELF_STAGED_STORIES=$(printf '%s\n' "$STAGED" | grep -E "$DW_SELF_STORY_REGEX" || true)
-DW_SELF_STAGED_EVIDENCE=$(printf '%s\n' "$STAGED" | grep -E "$DW_SELF_EVIDENCE_REGEX" || true)
-
-DW_SELF_SHIPPED_STORIES=""
-DW_SELF_SHIPPED_COUNT=0
-if [ -n "$DW_SELF_STAGED_STORIES" ]; then
-  while IFS= read -r dw_story; do
-    [ -z "$dw_story" ] && continue
-    if git diff --cached -- "$dw_story" | grep -qE '^\+- \*\*Status:\*\* done([[:space:]]|$)'; then
-      DW_SELF_SHIPPED_STORIES="$DW_SELF_SHIPPED_STORIES $dw_story"
-      DW_SELF_SHIPPED_COUNT=$((DW_SELF_SHIPPED_COUNT + 1))
-    fi
-  done <<EOF
-$DW_SELF_STAGED_STORIES
-EOF
-fi
-
-if [ "$DW_SELF_SHIPPED_COUNT" -gt 1 ] && [ ! -f "$REPO_ROOT/.tmp/BUNDLE-OK.md" ]; then
-  fail "Self-host atomicity violation — $DW_SELF_SHIPPED_COUNT stories under pmo-roadmap/pm/roadmap flipped to done in one commit. Write .tmp/BUNDLE-OK.md with a one-line rationale to bundle intentionally."
-fi
-
-for dw_story in $DW_SELF_SHIPPED_STORIES; do
-  dw_phase_dir=$(dirname "$dw_story")
-  dw_story_num=$(extract_story_num "$dw_story")
-  dw_evidence_path="$dw_phase_dir/evidence-story-$dw_story_num.md"
-  if ! printf '%s\n' "$STAGED" | grep -qxF "$dw_evidence_path"; then
-    fail "Self-host evidence missing — $dw_story flipped to done but $dw_evidence_path is not staged in this commit."
-  fi
-done
-
-if [ -n "$DW_SELF_STAGED_EVIDENCE" ]; then
-  while IFS= read -r dw_ev; do
-    [ -z "$dw_ev" ] && continue
-    dw_phase_dir=$(dirname "$dw_ev")
-    dw_ev_num=$(extract_evidence_num "$dw_ev")
-    dw_matched=0
-    for dw_shipped in $DW_SELF_SHIPPED_STORIES; do
-      if [ "$(dirname "$dw_shipped")" = "$dw_phase_dir" ] && [ "$(extract_story_num "$dw_shipped")" = "$dw_ev_num" ]; then
-        dw_matched=1
-        break
-      fi
-    done
-    if [ "$dw_matched" -eq 0 ]; then
-      fail "Self-host orphan evidence — $dw_ev staged but no story-$dw_ev_num-*.md in that phase flipped to done in this commit."
-    fi
-  done <<EOF
-$DW_SELF_STAGED_EVIDENCE
-EOF
-fi
-
-if [ "$DW_SELF_SHIPPED_COUNT" -gt 0 ]; then
-  EXTRA_BANNER_LINES="${EXTRA_BANNER_LINES}  Self-host roadmap checks passed ($DW_SELF_SHIPPED_COUNT story flip(s), evidence verified).
-"
-fi
+# Until WLA-6-02, this file duplicated the structural gate checks for
+# the nested pmo-roadmap/pm/roadmap prefix because the canonical hook
+# was anchored at ^pm/roadmap/. The `dw gate` engine now derives the
+# roadmap root via dw_pmo (which understands the self-hosted layout),
+# so the duplication is gone — exactly the shrink-to-nothing predicted
+# in phase-6 evidence-story-01.
+#
+# The seam remains available for genuine project-specific rules; see
+# pmo-roadmap/templates/PMO-CONTRACT.md §"Extending".

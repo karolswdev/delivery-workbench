@@ -317,6 +317,57 @@ writing and restore already-touched files if a later write fails. The CLI treats
 generated JSON as disposable context; the markdown files remain the source of
 truth.
 
+### The commit gate (`dw gate`)
+
+Every structural commit rule lives in one place: `dw gate`, backed by
+the `dw_pmo` core. The installed `pre-commit` is a thin shim that wires
+`.githooks/pre-commit.config`, invokes the gate, exposes the
+`pre-commit.local` seam, captures the consented work-log payload, and
+cleans up on success. python3 is a hard runtime dependency of the gate;
+the shim fails closed with a clear message when it is missing.
+
+Run the gate directly for a non-consuming preflight (it never deletes
+`.tmp/CONTRACT.md`; only a successful commit does):
+
+```bash
+.githooks/dw gate              # human verdict
+.githooks/dw gate --porcelain  # stable key=value lines for machines
+```
+
+Porcelain output is one `key=value` per line, in this order — scalars,
+then repeated list keys, then failure keys (only when `gate=fail`):
+
+```text
+gate=pass|fail
+expected_boxes=<int>
+checked_boxes=<int>
+shipped_count=<int>
+worklog_capture=yes|no
+staged=<path>            # repeated, staged-diff order
+staged_story=<path>      # repeated
+staged_evidence=<path>   # repeated
+shipped_story=<path>     # repeated
+rule=<failed-rule-id>    # contract-missing | contract-stale |
+                         # contract-unchecked | contract-boxes |
+                         # atomicity | evidence-missing |
+                         # orphan-evidence | evidence-deletion-orphans-story
+message=<one line>
+remediation=<one line>
+```
+
+Gate semantics (shared vocabulary with `dw`): a story "ships" when its
+`**Status:**` header flips from a non-done value in `HEAD` to any of
+`done|complete|closed|shipped` in the index — renames and reformatting
+of already-done stories are not flips. Evidence numbers pair as
+integers (`evidence-story-1.md` matches `story-01-*`). Evidence
+deletions pass unless they orphan a story that remains done in the
+index; modified evidence is legal while its story is done; added
+evidence still requires its story to flip in the same commit. Paths
+with spaces are handled. `EXPECTED_BOXES` and work-log settings resolve
+as: simple assignments in `pre-commit.config` beat the environment,
+which beats defaults (`PMO_WORK_LOG_DIR` follows the same precedence in
+the hooks, `work-log-read`, `work-log-summarize`, and `dw context`).
+
 ## Adopt an existing project
 
 For a running project, install the mechanics first, then run session intake and
@@ -463,9 +514,10 @@ pmo-roadmap/
 
 ## Conventions
 
-- Bash 3.2 compatible (default macOS shell).
-- POSIX `stat` differences (macOS `-f %m` vs Linux `-c %Y`) handled.
-- No external runtime dependencies; the hooks are pure bash + `git` + `grep`.
+- Shell pieces are Bash 3.2 compatible (default macOS shell).
+- python3 (stdlib only) is a hard dependency of the commit gate; the
+  pre-commit shim fails closed when it is missing. Helper hooks and
+  readers remain bash + `git` + `grep`.
 - Hook never auto-stages or auto-commits anything; it only blocks or passes.
 
 ## Maintenance

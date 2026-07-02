@@ -23,6 +23,7 @@ jobs:
             pmo-roadmap/install.sh \
             pmo-roadmap/update.sh \
             pmo-roadmap/tests/adoption-discovery.sh \
+            pmo-roadmap/tests/gate-parity.sh \
             pmo-roadmap/tests/roadmap-cli.sh \
             pmo-roadmap/tests/work-log-mvp.sh \
             demos/scripts/prepare-onboarding-demo.sh \
@@ -39,6 +40,9 @@ jobs:
 
       - name: Adoption discovery smoke test
         run: pmo-roadmap/tests/adoption-discovery.sh
+
+      - name: Gate parity integration test
+        run: pmo-roadmap/tests/gate-parity.sh
 
       - name: Roadmap CLI integration test
         run: pmo-roadmap/tests/roadmap-cli.sh

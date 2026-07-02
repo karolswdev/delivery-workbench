@@ -98,7 +98,7 @@ what the framework claims and what it verifies.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-6-01 | Restore dogfood integrity and land the working tree through the rails | done | [story-01-dogfood-integrity](./story-01-dogfood-integrity.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-6-02 | Unify the commit gate into a single dw gate engine | backlog | [story-02-single-gate-engine](./story-02-single-gate-engine.md) | - |
+| WLA-6-02 | Unify the commit gate into a single dw gate engine | done | [story-02-single-gate-engine](./story-02-single-gate-engine.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-6-03 | Ship verified contract v2 with durable audit trail | backlog | [story-03-verified-contract-v2](./story-03-verified-contract-v2.md) | - |
 | WLA-6-04 | Add evidence capture tooling and content linting | backlog | [story-04-evidence-capture](./story-04-evidence-capture.md) | - |
 | WLA-6-05 | Ship the first-class agent surface | backlog | [story-05-agent-surface](./story-05-agent-surface.md) | - |
@@ -125,15 +125,20 @@ what the framework claims and what it verifies.
 
 ## Where we are
 
-WLA-6-01 is done with evidence: the rails are installed on this repo
-(hooks, work logging with consent, a self-host `pre-commit.local`
-applying the structural checks to the nested roadmap prefix), and the
-entire phase 0-5 proof layer landed as eight gated, consented, logged
-commits (690dcec..565a106 plus the WLA-6-01 closing commit). All eight
-work-log entries cryptographically match their commit trees, and the
-evidence file carries a nine-item friction log feeding WLA-6-02/03/04/07.
-The next move is WLA-5-02 (extract the `dw_pmo` core), which is the
-shared prerequisite for WLA-6-02's single gate engine.
+WLA-6-02 is done with evidence: every structural commit rule now lives
+once, in `dw_pmo/gate.py`, exposed as `dw gate [--porcelain]`;
+`hooks/pre-commit` is a fail-closed shim with zero rule logic; the
+drift-bug family is fixed (synonym bypass, padding, evidence deletions,
+rename false-flips, spaces, capital-X) with 28 unit tests and a
+16-scenario shim-vs-gate parity suite in CI; `PMO_WORK_LOG_DIR`
+precedence (config > env > default) is unified across hooks, readers,
+and `dw`; and this repo's `pre-commit.local` rule duplication shrank to
+a comment because the gate understands the nested roadmap natively.
+Next per the execution sequence: WLA-6-03 (verified contract v2 with
+index-tree freshness, trailers, and the contract archive), then
+WLA-6-04. Note: `dw next` currently surfaces WLA-5-03 because phase 5
+sorts first — the phase-6 sequencing decision overrides it until the
+gate work lands.
 
 ## Active risks
 

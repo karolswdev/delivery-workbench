@@ -11,10 +11,11 @@ if [ -z "$REPO_ROOT" ]; then
   exit 0
 fi
 
-PMO_WORK_LOG_ENABLED=0
-PMO_WORK_LOG_DIR="${HOME:-}/.work/log"
-PMO_WORK_LOG_PROJECT_SLUG=""
-PMO_WORK_LOG_ID=""
+# PMO_WORK_LOG_DIR precedence: pre-commit.config > environment > default.
+PMO_WORK_LOG_ENABLED="${PMO_WORK_LOG_ENABLED:-0}"
+PMO_WORK_LOG_DIR="${PMO_WORK_LOG_DIR:-${HOME:-}/.work/log}"
+PMO_WORK_LOG_PROJECT_SLUG="${PMO_WORK_LOG_PROJECT_SLUG:-}"
+PMO_WORK_LOG_ID="${PMO_WORK_LOG_ID:-}"
 
 if [ -f "$REPO_ROOT/.githooks/pre-commit.config" ]; then
   # shellcheck disable=SC1091

@@ -79,8 +79,35 @@ def ensure_under(path: Path, allowed_root: Path) -> None:
         die(f"refusing to write outside PMO roadmap tree: {resolved}")
 
 
-def work_log_root() -> Path:
-    return Path(os.environ.get("PMO_WORK_LOG_DIR") or Path.home() / ".work" / "log")
+_WORK_LOG_DIR_ASSIGN_RE = re.compile(
+    r"""^\s*(?:export\s+)?PMO_WORK_LOG_DIR=(["']?)(.*?)\1\s*$"""
+)
+
+
+def work_log_root(root: Path | None = None) -> Path:
+    """Resolve the work-log root.
+
+    Precedence (identical to the hooks and readers): a simple
+    ``PMO_WORK_LOG_DIR=`` assignment in ``.githooks/pre-commit.config``
+    beats the environment, which beats ``~/.work/log``. Last assignment
+    in the config wins, matching bash sourcing.
+    """
+    value = os.environ.get("PMO_WORK_LOG_DIR") or ""
+    if root is not None:
+        cfg = root / ".githooks" / "pre-commit.config"
+        if cfg.is_file():
+            try:
+                for line in cfg.read_text(encoding="utf-8").splitlines():
+                    m = _WORK_LOG_DIR_ASSIGN_RE.match(line)
+                    if m:
+                        value = m.group(2)
+            except OSError:
+                pass
+    if value:
+        home = str(Path.home())
+        value = value.replace("${HOME}", home).replace("$HOME", home)
+        return Path(value).expanduser()
+    return Path.home() / ".work" / "log"
 
 
 def template_dir() -> Path | None:
