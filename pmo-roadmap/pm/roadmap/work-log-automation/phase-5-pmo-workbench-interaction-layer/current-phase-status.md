@@ -100,7 +100,7 @@ state store.
 | WLA-5-05 | Build traceability timeline | done | [story-05-traceability-timeline](./story-05-traceability-timeline.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-5-06 | Build structured PMO editor | done | [story-06-structured-pmo-editor](./story-06-structured-pmo-editor.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-5-07 | Build safe mutation preview and diff workflow | done | [story-07-mutation-preview-diff-workflow](./story-07-mutation-preview-diff-workflow.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-5-08 | Integrate commit and work-log evidence views | backlog | [story-08-commit-worklog-evidence-views](./story-08-commit-worklog-evidence-views.md) | - |
+| WLA-5-08 | Integrate commit and work-log evidence views | done | [story-08-commit-worklog-evidence-views](./story-08-commit-worklog-evidence-views.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-5-09 | Harden permissions and local runtime model | backlog | [story-09-permissions-local-runtime-model](./story-09-permissions-local-runtime-model.md) | - |
 | WLA-5-10 | Ship documentation tests and adoption path | backlog | [story-10-docs-tests-adoption-path](./story-10-docs-tests-adoption-path.md) | - |
 
@@ -123,18 +123,15 @@ state store.
 
 ## Where we are
 
-WLA-5-07 is done with evidence: the write tier is complete. Previews
-carry unified diffs, validation before the write, and projected
-validation after it (scratch-tree simulation); apply requires the
-content-bound fingerprint and refuses stale previews and tampered
-intent; writes are rollback-protected with post-apply revalidation in
-the response. The guard gained the remediation exemption — a mutation
-whose projected issues strictly shrink the current set passes without
-acknowledgment, resolving the close-phase deadlock the suite found.
-Seven of ten exit criteria are checked. Remaining: WLA-5-08
-(commit/work-log evidence views), WLA-5-09 (permission hardening —
-after which the workbench can be distributed to consumer repos), and
-WLA-5-10 (docs, viewport tests, adoption close-out).
+WLA-5-08 is done with evidence: commit and work-log evidence are
+first-class without becoming a second source of truth. Work-log
+artifacts are served under strict log-root containment with omitted
+paths staying omitted; every story trace ends in a copyable agent
+handoff quoting the evidence file's captured runs, trailer-stamped
+commits, and supplementary work-log pointers. Two stories remain:
+WLA-5-09 (permission hardening and the local runtime model — the gate
+to distributing the workbench into consumer repos) and WLA-5-10
+(docs, viewport tests, adoption path, and the phase close-out audit).
 
 ## Active risks
 
