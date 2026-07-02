@@ -1,6 +1,6 @@
 # Phase 1 - MVP
 
-**Last updated:** 2026-04-25.
+**Last updated:** 2026-07-01.
 
 ## Goal
 
@@ -18,34 +18,33 @@ the contract, exact staged-diff capture in `pre-commit`, durable append in
 
 ## Exit criteria (evidence required)
 
-- [ ] A consented commit writes one markdown entry to
+- [x] A consented commit writes one markdown entry to
   `~/.work/log/YYYY-MM-DD/{project}-work-summary.log`.
-- [ ] A denied-consent commit writes no daily log entry.
-- [ ] A commit that aborts after `pre-commit` writes no daily log entry.
-- [ ] Pending payloads are cleaned after successful `post-commit` finalization.
-- [ ] `install.sh` and `update.sh` install/update all canonical hook files.
-- [ ] Temporary-repo tests prove consent yes/no and abort behavior.
-- [ ] The README gives a simple read-flow recipe for today's work log.
+- [x] A denied-consent commit writes no daily log entry.
+- [x] A commit that aborts after `pre-commit` writes no daily log entry.
+- [x] Pending payloads are cleaned after successful `post-commit` finalization.
+- [x] `install.sh` and `update.sh` install/update all canonical hook files.
+- [x] Temporary-repo tests prove consent yes/no and abort behavior.
+- [x] The README gives a simple read-flow recipe for today's work log.
 
 ## Story status
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-1-01 | Add work-log consent to the canonical contract | backlog | [story-01-contract-consent](./story-01-contract-consent.md) | - |
-| WLA-1-02 | Capture consented staged payloads in pre-commit | backlog | [story-02-pre-commit-capture](./story-02-pre-commit-capture.md) | - |
-| WLA-1-03 | Finalize daily log entries in post-commit | backlog | [story-03-post-commit-finalize](./story-03-post-commit-finalize.md) | - |
-| WLA-1-04 | Install, update, and document the MVP hooks | backlog | [story-04-install-update-docs](./story-04-install-update-docs.md) | - |
-| WLA-1-05 | Add temporary-repo integration coverage | backlog | [story-05-integration-tests](./story-05-integration-tests.md) | - |
-| WLA-1-06 | Add read-flow and first-run discoverability | backlog | [story-06-read-flow-discoverability](./story-06-read-flow-discoverability.md) | - |
+| WLA-1-01 | Add work-log consent to the canonical contract | done | [story-01-contract-consent](./story-01-contract-consent.md) | [evidence-story-01](./evidence-story-01.md) |
+| WLA-1-02 | Capture consented staged payloads in pre-commit | done | [story-02-pre-commit-capture](./story-02-pre-commit-capture.md) | [evidence-story-02](./evidence-story-02.md) |
+| WLA-1-03 | Finalize daily log entries in post-commit | done | [story-03-post-commit-finalize](./story-03-post-commit-finalize.md) | [evidence-story-03](./evidence-story-03.md) |
+| WLA-1-04 | Install, update, and document the MVP hooks | done | [story-04-install-update-docs](./story-04-install-update-docs.md) | [evidence-story-04](./evidence-story-04.md) |
+| WLA-1-05 | Add temporary-repo integration coverage | done | [story-05-integration-tests](./story-05-integration-tests.md) | [evidence-story-05](./evidence-story-05.md) |
+| WLA-1-06 | Add read-flow and first-run discoverability | done | [story-06-read-flow-discoverability](./story-06-read-flow-discoverability.md) | [evidence-story-06](./evidence-story-06.md) |
 
 ## Where we are
 
-Phase 1 starts after Phase 0 validates the architecture. The first
-implementation move is WLA-1-01, because the hook must not infer daily-log
-permission from the existing PMO checkbox count. WLA-1-05 should begin as a
-test-harness skeleton alongside WLA-1-02, then grow assertions as capture and
-finalization land. WLA-1-02 and WLA-1-03 should still ship separately so each
-lifecycle boundary can be evidenced.
+Phase 1 is complete. The canonical contract exposes explicit work-log consent,
+`pre-commit` captures consented staged payloads, `post-commit` appends
+deterministic daily entries, install/update copy the full hook/helper set, and
+the temporary-repo integration harness proves disabled, consented, denied,
+aborted, amend, duplicate, and hook-collision behavior.
 
 ## Active risks
 
@@ -63,6 +62,6 @@ lifecycle boundary can be evidenced.
 
 ## Decisions deferred
 
-- Exact deferred summarizer prompt and command shape - trigger in Phase 2 after
-  deterministic entry shape is stable - default is no LLM call in the commit
-  path.
+- Exact deferred summarizer prompt and command shape - resolved in Phase 2 as
+  an explicit operator-provided command with deterministic fallback and no LLM
+  call in the commit path.

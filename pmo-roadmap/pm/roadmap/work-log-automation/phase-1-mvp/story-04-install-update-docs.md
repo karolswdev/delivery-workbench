@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 1
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-1-03, WLA-0-06
 - **Unblocks:** WLA-1-05
 - **Owner:** unassigned
@@ -21,18 +21,18 @@ opt-in behavior and daily log path obvious.
 
 ## Acceptance criteria
 
-- [ ] `install.sh` copies `hooks/post-commit` to `.githooks/post-commit`.
-- [ ] `update.sh` refreshes canonical hook files and still preserves local
+- [x] `install.sh` copies `hooks/post-commit` to `.githooks/post-commit`.
+- [x] `update.sh` refreshes canonical hook files and still preserves local
   config/extensions.
-- [ ] Install/update detects an existing non-framework `.githooks/post-commit`
+- [x] Install/update detects an existing non-framework `.githooks/post-commit`
   and refuses, warns, or follows an explicit composition path rather than
   overwriting it silently.
-- [ ] README documents `PMO_WORK_LOG_ENABLED`, project slug override, log dir
+- [x] README documents `PMO_WORK_LOG_ENABLED`, project slug override, log dir
   override, and consent behavior.
-- [ ] README documents the upgrade recipe for projects with customized
+- [x] README documents the upgrade recipe for projects with customized
   `PMO-CONTRACT.md`: diff, merge the consent block manually, then update.
-- [ ] CLAUDE snippet tells agents that daily logging requires explicit consent.
-- [ ] Re-running install/update remains idempotent.
+- [x] CLAUDE snippet tells agents that daily logging requires explicit consent.
+- [x] Re-running install/update remains idempotent.
 
 ## Test plan
 

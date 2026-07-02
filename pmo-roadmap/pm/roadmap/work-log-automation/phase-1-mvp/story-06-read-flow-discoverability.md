@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 1
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-1-03, WLA-1-04
 - **Unblocks:** Phase 2 hardening
 - **Owner:** unassigned
@@ -20,11 +20,11 @@ The MVP should not be a write-only artifact hidden in `~/.work/log`.
 
 ## Acceptance criteria
 
-- [ ] Successful finalization prints the log path that received the entry.
-- [ ] README documents how to read today's log with shell commands.
-- [ ] README documents where logs live and how project identity affects
+- [x] Successful finalization prints the log path that received the entry.
+- [x] README documents how to read today's log with shell commands.
+- [x] README documents where logs live and how project identity affects
   filenames.
-- [ ] The read-flow documentation is accurate for custom `PMO_WORK_LOG_DIR`.
+- [x] The read-flow documentation is accurate for custom `PMO_WORK_LOG_DIR`.
 
 ## Test plan
 

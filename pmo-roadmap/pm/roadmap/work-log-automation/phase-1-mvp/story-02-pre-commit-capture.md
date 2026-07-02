@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 1
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-1-01, WLA-0-06
 - **Unblocks:** WLA-1-03, WLA-1-05
 - **Owner:** unassigned
@@ -21,15 +21,15 @@ leaving denied-consent commits untouched.
 
 ## Acceptance criteria
 
-- [ ] Logging is disabled unless `PMO_WORK_LOG_ENABLED=1`.
-- [ ] Consent must be explicitly `yes`; missing or `no` creates no pending
+- [x] Logging is disabled unless `PMO_WORK_LOG_ENABLED=1`.
+- [x] Consent must be explicitly `yes`; missing or `no` creates no pending
   work-log payload.
-- [ ] Pending payload includes contract text, reasons, exclusions, branch,
+- [x] Pending payload includes contract text, reasons, exclusions, branch,
   staged paths, diff stat, bounded unified diff, and capture timestamp.
-- [ ] Pending payload includes enough identity data to detect stale or mismatched
+- [x] Pending payload includes enough identity data to detect stale or mismatched
   finalization attempts: index tree, branch, repo path, and capture timestamp.
-- [ ] Capture does not mutate the index or working tree.
-- [ ] Capture failure follows the configured MVP policy and prints an actionable
+- [x] Capture does not mutate the index or working tree.
+- [x] Capture failure follows the configured MVP policy and prints an actionable
   message.
 
 ## Test plan

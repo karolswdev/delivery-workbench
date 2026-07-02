@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 1
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-0-01
 - **Unblocks:** WLA-1-02, WLA-1-03
 - **Owner:** unassigned
@@ -22,12 +22,12 @@ committer meant to create one.
 
 ## Acceptance criteria
 
-- [ ] Contract template contains `**Work-log consent:** yes|no`, reasons, and
+- [x] Contract template contains `**Work-log consent:** yes|no`, reasons, and
   exclusions outside the canonical seven checkbox list.
-- [ ] Contract text states that `yes` is required for logging and `no` is valid.
-- [ ] Agent instructions explain how to choose consent honestly.
-- [ ] Existing seven PMO rules remain intact and in order.
-- [ ] The implementation notes say the consent line is not counted by
+- [x] Contract text states that `yes` is required for logging and `no` is valid.
+- [x] Agent instructions explain how to choose consent honestly.
+- [x] Existing seven PMO rules remain intact and in order.
+- [x] The implementation notes say the consent line is not counted by
   `EXPECTED_BOXES`.
 
 ## Test plan

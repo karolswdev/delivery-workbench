@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 1
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-1-02, WLA-0-06
 - **Unblocks:** WLA-1-04, WLA-1-05
 - **Owner:** unassigned
@@ -22,16 +22,16 @@ daily log path.
 
 ## Acceptance criteria
 
-- [ ] `post-commit` reads the pending payload and current `HEAD` metadata.
-- [ ] The hook appends to `$HOME/.work/log/YYYY-MM-DD/{project}-work-summary.log`.
-- [ ] The entry includes timestamp, repo, branch, commit hash, consent reasons,
+- [x] `post-commit` reads the pending payload and current `HEAD` metadata.
+- [x] The hook appends to `$HOME/.work/log/YYYY-MM-DD/{project}-work-summary.log`.
+- [x] The entry includes timestamp, repo, branch, commit hash, consent reasons,
   files changed, deterministic technical summary, verification pointers, and
   exclusions.
-- [ ] The default log filename uses a collision-resistant identity, with a
+- [x] The default log filename uses a collision-resistant identity, with a
   documented project override.
-- [ ] The pending payload is removed after a successful append.
-- [ ] Running `post-commit` with no pending payload exits successfully.
-- [ ] Re-running `post-commit` does not duplicate the same entry.
+- [x] The pending payload is removed after a successful append.
+- [x] Running `post-commit` with no pending payload exits successfully.
+- [x] Re-running `post-commit` does not duplicate the same entry.
 
 ## Test plan
 

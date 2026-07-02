@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 1
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-1-02, WLA-1-03, WLA-1-04
 - **Unblocks:** Phase 2 hardening
 - **Owner:** unassigned
@@ -22,15 +22,15 @@ and cleanup behavior are proven together.
 
 ## Acceptance criteria
 
-- [ ] Test covers logging disabled.
-- [ ] Test covers logging enabled with consent `yes`.
-- [ ] Test covers logging enabled with consent `no`.
-- [ ] Test covers a commit aborted after `pre-commit` with no durable append.
-- [ ] Test covers no duplicate append from repeated `post-commit`.
-- [ ] Test covers `git commit --amend` according to WLA-0-06 policy.
-- [ ] Test covers install/update behavior when a non-framework
+- [x] Test covers logging disabled.
+- [x] Test covers logging enabled with consent `yes`.
+- [x] Test covers logging enabled with consent `no`.
+- [x] Test covers a commit aborted after `pre-commit` with no durable append.
+- [x] Test covers no duplicate append from repeated `post-commit`.
+- [x] Test covers `git commit --amend` according to WLA-0-06 policy.
+- [x] Test covers install/update behavior when a non-framework
   `.githooks/post-commit` already exists.
-- [ ] Test output is suitable to paste into `evidence-story-05.md`.
+- [x] Test output is suitable to paste into `evidence-story-05.md`.
 
 ## Test plan
 
