@@ -1,6 +1,6 @@
 # Phase 0 - Architecture
 
-**Last updated:** 2026-04-25.
+**Last updated:** 2026-07-01.
 
 ## Goal
 
@@ -20,36 +20,34 @@ fragile external LLM call.
 
 ## Exit criteria (evidence required)
 
-- [ ] A project roadmap exists under `pmo-roadmap/pm/roadmap/work-log-automation/`.
-- [ ] Each implementation slice has a story with acceptance criteria and test
+- [x] A project roadmap exists under `pmo-roadmap/pm/roadmap/work-log-automation/`.
+- [x] Each implementation slice has a story with acceptance criteria and test
   plan.
-- [ ] The roadmap names the architectural decisions that must hold before code
+- [x] The roadmap names the architectural decisions that must hold before code
   changes begin.
-- [ ] The log-entry schema, consent syntax, git edge-case policy, and log
+- [x] The log-entry schema, consent syntax, git edge-case policy, and log
   identity policy are pinned before Phase 1 implementation.
-- [ ] The risks table has concrete stop signals, not vague concerns.
-- [ ] The phase can hand off directly into Phase 1 MVP implementation.
+- [x] The risks table has concrete stop signals, not vague concerns.
+- [x] The phase can hand off directly into Phase 1 MVP implementation.
 
 ## Story status
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-0-01 | Define the consent and log-entry contract | backlog | [story-01-contract-and-schema](./story-01-contract-and-schema.md) | - |
-| WLA-0-02 | Design the capture/finalize hook lifecycle | backlog | [story-02-hook-lifecycle](./story-02-hook-lifecycle.md) | - |
-| WLA-0-03 | Specify the summarizer adapter and failure policy | backlog | [story-03-summarizer-adapter](./story-03-summarizer-adapter.md) | - |
-| WLA-0-04 | Plan installer, update, and project configuration rollout | backlog | [story-04-rollout-and-config](./story-04-rollout-and-config.md) | - |
-| WLA-0-05 | Prove the roadmap against the framework's own constraints | backlog | [story-05-roadmap-validation](./story-05-roadmap-validation.md) | - |
-| WLA-0-06 | Define git edge cases and log identity policy | backlog | [story-06-edge-cases-and-identity](./story-06-edge-cases-and-identity.md) | - |
+| WLA-0-01 | Define the consent and log-entry contract | done | [story-01-contract-and-schema](./story-01-contract-and-schema.md) | [evidence-story-01](./evidence-story-01.md) |
+| WLA-0-02 | Design the capture/finalize hook lifecycle | done | [story-02-hook-lifecycle](./story-02-hook-lifecycle.md) | [evidence-story-02](./evidence-story-02.md) |
+| WLA-0-03 | Specify the summarizer adapter and failure policy | done | [story-03-summarizer-adapter](./story-03-summarizer-adapter.md) | [evidence-story-03](./evidence-story-03.md) |
+| WLA-0-04 | Plan installer, update, and project configuration rollout | done | [story-04-rollout-and-config](./story-04-rollout-and-config.md) | [evidence-story-04](./evidence-story-04.md) |
+| WLA-0-05 | Prove the roadmap against the framework's own constraints | done | [story-05-roadmap-validation](./story-05-roadmap-validation.md) | [evidence-story-05](./evidence-story-05.md) |
+| WLA-0-06 | Define git edge cases and log identity policy | done | [story-06-edge-cases-and-identity](./story-06-edge-cases-and-identity.md) | [evidence-story-06](./evidence-story-06.md) |
 
 ## Where we are
 
-The feature concept is clear: add consent-gated daily work summaries to the
-existing hook framework. Claude Opus reviewed the roadmap on 2026-04-25 and
-agreed with the core architecture while identifying spec gaps that should close
-before coding. The next step is to finish Phase 0 by pinning consent syntax,
-log schema, edge-case policies, and summarization lifecycle. Implementation
-should not begin by wiring `codex` directly into `pre-commit`; that would
-create slow, brittle commits and false entries when a commit later aborts.
+Phase 0 is complete. The roadmap pins the consent syntax, two-step
+capture/finalize lifecycle, deterministic log-entry schema, deferred
+summarizer boundary, install/update policy, git edge-case policy, and
+collision-resistant log identity. Phase 1 implementation proceeded without
+moving model calls into the commit path.
 
 ## Active risks
 
@@ -86,12 +84,12 @@ create slow, brittle commits and false entries when a commit later aborts.
 
 ## Decisions deferred
 
-- Whether logging should eventually become default-on - revisit after one
-  consumer project uses it for a full day - default remains opt-in.
+- Whether logging should eventually become default-on - revisit after sustained
+  consumer use - default remains opt-in.
 - Whether to store raw captured diffs after finalization - revisit after privacy
   review - default is delete pending payload after successful append.
 - Whether deferred LLM summaries should edit entries in place or create a
-  companion digest - revisit after deterministic entries exist - default is
-  append-only deterministic entries.
+  companion digest - resolved for this roadmap as companion digest; revisit
+  only for a future major workflow.
 - Whether to retain logs forever - revisit when `~/.work/log` exceeds 1GB or
   one year of entries - default is local retention forever.

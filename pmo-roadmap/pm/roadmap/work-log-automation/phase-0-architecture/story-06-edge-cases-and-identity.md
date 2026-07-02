@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 0
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-0-01, WLA-0-02
 - **Unblocks:** WLA-1-02, WLA-1-03, WLA-1-04
 - **Owner:** unassigned
@@ -24,14 +24,14 @@ code decides these by accident.
 
 ## Acceptance criteria
 
-- [ ] A truth table documents normal commit, editor-aborted commit,
+- [x] A truth table documents normal commit, editor-aborted commit,
   concurrent commit, amend, rebase, and cherry-pick behavior.
-- [ ] MVP default for history rewrites is explicit, even if imperfect.
-- [ ] Project log identity cannot silently collide for two repos with the same
+- [x] MVP default for history rewrites is explicit, even if imperfect.
+- [x] Project log identity cannot silently collide for two repos with the same
   basename.
-- [ ] Existing project `post-commit` hooks are detected and preserved, composed,
+- [x] Existing project `post-commit` hooks are detected and preserved, composed,
   or reported before install/update overwrites anything.
-- [ ] The policies are referenced by Phase 1 implementation stories.
+- [x] The policies are referenced by Phase 1 implementation stories.
 
 ## Test plan
 

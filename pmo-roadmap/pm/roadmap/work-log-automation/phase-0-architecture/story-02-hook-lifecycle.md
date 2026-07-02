@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 0
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-0-01
 - **Unblocks:** WLA-0-03, WLA-0-04
 - **Owner:** unassigned
@@ -25,16 +25,16 @@ exists.
 
 ## Acceptance criteria
 
-- [ ] The design captures `git diff --cached --name-status`, `--stat`, and a
+- [x] The design captures `git diff --cached --name-status`, `--stat`, and a
   bounded unified diff while the index still represents the commit.
-- [ ] The pending payload includes the contract file, repo root, branch, project
+- [x] The pending payload includes the contract file, repo root, branch, project
   slug, staged paths, and capture timestamp.
-- [ ] Durable append happens in `post-commit`, after `git rev-parse HEAD`
+- [x] Durable append happens in `post-commit`, after `git rev-parse HEAD`
   returns the final commit.
-- [ ] If the commit aborts after `pre-commit`, no daily log entry is appended.
-- [ ] Pending payloads are cleaned up after successful finalization and safely
+- [x] If the commit aborts after `pre-commit`, no daily log entry is appended.
+- [x] Pending payloads are cleaned up after successful finalization and safely
   overwritten or expired on a later attempt.
-- [ ] Hook behavior is Bash 3.2 compatible on macOS and Linux.
+- [x] Hook behavior is Bash 3.2 compatible on macOS and Linux.
 
 ## Test plan
 

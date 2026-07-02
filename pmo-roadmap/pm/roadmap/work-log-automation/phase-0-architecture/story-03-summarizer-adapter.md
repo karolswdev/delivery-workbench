@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 0
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-0-01, WLA-0-02
 - **Unblocks:** WLA-0-04
 - **Owner:** unassigned
@@ -25,15 +25,15 @@ commit-path requirement.
 
 ## Acceptance criteria
 
-- [ ] The deferred summarizer can be configured with a command variable such as
+- [x] The deferred summarizer can be configured with a command variable such as
   `PMO_WORK_LOG_SUMMARIZER`.
-- [ ] The framework defines a stdin payload format that includes metadata,
+- [x] The framework defines a stdin payload format that includes metadata,
   contract consent, staged file list, diff stat, and bounded diff.
-- [ ] A no-LLM fallback writes a deterministic summary from git metadata and
+- [x] A no-LLM fallback writes a deterministic summary from git metadata and
   consent reasons.
-- [ ] Timeout behavior is explicit and configurable.
-- [ ] Summarizer failure leaves the deterministic log entry intact.
-- [ ] Summary output is bounded and appended as markdown, not raw model chatter.
+- [x] Timeout behavior is explicit and configurable.
+- [x] Summarizer failure leaves the deterministic log entry intact.
+- [x] Summary output is bounded and appended as markdown, not raw model chatter.
 
 ## Test plan
 

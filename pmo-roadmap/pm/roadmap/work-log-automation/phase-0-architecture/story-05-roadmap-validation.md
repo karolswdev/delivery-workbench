@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 0
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-0-01, WLA-0-02, WLA-0-03, WLA-0-04
 - **Unblocks:** Phase 1 MVP implementation
 - **Owner:** unassigned
@@ -23,13 +23,13 @@ extends.
 
 ## Acceptance criteria
 
-- [ ] Every Phase 0 story has a concrete acceptance checklist and test plan.
-- [ ] No story requires hidden context from the planning conversation to start.
-- [ ] The architecture names the commit-abort, privacy, latency, and update
+- [x] Every Phase 0 story has a concrete acceptance checklist and test plan.
+- [x] No story requires hidden context from the planning conversation to start.
+- [x] The architecture names the commit-abort, privacy, latency, and update
   risks with stop signals.
-- [ ] Phase 1 can begin with a single first story that does not require
+- [x] Phase 1 can begin with a single first story that does not require
   redesigning the roadmap.
-- [ ] Any unresolved decision has a default and a trigger for revisiting it.
+- [x] Any unresolved decision has a default and a trigger for revisiting it.
 
 ## Test plan
 

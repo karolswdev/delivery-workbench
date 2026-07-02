@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 0
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** none
 - **Unblocks:** WLA-0-02, WLA-0-03, WLA-0-04
 - **Owner:** unassigned
@@ -23,18 +23,18 @@ auditable.
 
 ## Acceptance criteria
 
-- [ ] `PMO-CONTRACT.md` documents a work-log consent section with a checkbox,
+- [x] `PMO-CONTRACT.md` documents a work-log consent section with a checkbox,
   explicit `**Work-log consent:** yes|no` value, reasons, and exclusions.
-- [ ] The contract explains that no daily work-log entry is produced without
+- [x] The contract explains that no daily work-log entry is produced without
   explicit `yes` consent.
-- [ ] A stable markdown log-entry schema is documented with timestamp, repo,
+- [x] A stable markdown log-entry schema is documented with timestamp, repo,
   branch, commit hash, staged files, consent reasons, technical summary,
   verification, and exclusions.
-- [ ] The schema includes stable section markers or front matter so future
+- [x] The schema includes stable section markers or front matter so future
   agents can read the log predictably.
-- [ ] The schema distinguishes roadmap evidence from daily architect log
+- [x] The schema distinguishes roadmap evidence from daily architect log
   summaries.
-- [ ] Examples cover consent granted, consent denied, and docs-only/n/a cases.
+- [x] Examples cover consent granted, consent denied, and docs-only/n/a cases.
 
 ## Test plan
 

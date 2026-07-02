@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 0
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-0-01, WLA-0-02, WLA-0-03
 - **Unblocks:** WLA-0-05
 - **Owner:** unassigned
@@ -22,18 +22,18 @@ fresh clone with unwanted logging.
 
 ## Acceptance criteria
 
-- [ ] `install.sh` installs any new canonical hook files needed for the
+- [x] `install.sh` installs any new canonical hook files needed for the
   lifecycle, including `post-commit` if selected.
-- [ ] `update.sh` refreshes canonical hook files but preserves project-owned
+- [x] `update.sh` refreshes canonical hook files but preserves project-owned
   config and local extensions.
-- [ ] Existing non-framework `post-commit` hooks are treated as project-owned
+- [x] Existing non-framework `post-commit` hooks are treated as project-owned
   and are not silently overwritten.
-- [ ] `.githooks/pre-commit.config` can opt into logging without editing the
+- [x] `.githooks/pre-commit.config` can opt into logging without editing the
   canonical hook.
-- [ ] The README documents first-use setup and the exact log path pattern.
-- [ ] The CLAUDE/AGENTS snippet tells agents how to grant or deny work-log
+- [x] The README documents first-use setup and the exact log path pattern.
+- [x] The CLAUDE/AGENTS snippet tells agents how to grant or deny work-log
   consent honestly.
-- [ ] Existing projects that do nothing keep current behavior.
+- [x] Existing projects that do nothing keep current behavior.
 
 ## Test plan
 
