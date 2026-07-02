@@ -84,10 +84,10 @@ PY
 cmp "$TMP_ROOT/context-trace-a.json" "$TMP_ROOT/context-trace-b.json" \
   || fail "read-only context should be idempotent"
 
-if "$DW" --root "$REPO" story status sample 0 SMP-0-01 done >/dev/null 2>&1; then
+if "$DW" --root "$REPO" story status sample 0 SMP-0-01 "done" >/dev/null 2>&1; then
   fail "story status done should require paired evidence"
 fi
-"$DW" --root "$REPO" story status sample 0 SMP-0-01 done \
+"$DW" --root "$REPO" story status sample 0 SMP-0-01 "done" \
   --evidence-body "- CLI integration evidence." >/dev/null
 grep -Fq -- '- **Status:** done' "$PROJECT/phase-0-setup-cli/story-01-create-first-story.md" \
   || fail "story status should update story header"
@@ -96,7 +96,7 @@ grep -Fq 'SMP-0-01 | Create first story | done' "$PROJECT/phase-0-setup-cli/curr
 [ -f "$PROJECT/phase-0-setup-cli/evidence-story-01.md" ] \
   || fail "story status done should create paired evidence when body is provided"
 before="$(cksum "$PROJECT/phase-0-setup-cli/story-01-create-first-story.md" "$PROJECT/phase-0-setup-cli/current-phase-status.md" "$PROJECT/phase-0-setup-cli/evidence-story-01.md")"
-"$DW" --root "$REPO" story status sample 0 SMP-0-01 done >/dev/null
+"$DW" --root "$REPO" story status sample 0 SMP-0-01 "done" >/dev/null
 after="$(cksum "$PROJECT/phase-0-setup-cli/story-01-create-first-story.md" "$PROJECT/phase-0-setup-cli/current-phase-status.md" "$PROJECT/phase-0-setup-cli/evidence-story-01.md")"
 [ "$before" = "$after" ] || fail "same-status write should be idempotent"
 if "$DW" --root "$REPO" check sample >/dev/null 2>&1; then
@@ -118,7 +118,7 @@ fi
 if "$DW" --root "$REPO" check sample >/dev/null 2>&1; then
   fail "check should catch evidence attached before story is done"
 fi
-"$DW" --root "$REPO" story status sample 1 SMP-1-01 done >/dev/null
+"$DW" --root "$REPO" story status sample 1 SMP-1-01 "done" >/dev/null
 if "$DW" --root "$REPO" check sample >/dev/null 2>&1; then
   fail "check should require final summary for second complete phase"
 fi
@@ -306,10 +306,11 @@ if "$DW" --root "$REPO" evidence capture sample 2 SMP-2-01 -- sh -c 'exit 7' >/d
   fail "capture should mirror the command's nonzero exit code"
 fi
 grep -q '\*\*Exit code:\*\* 7' "$EV" || fail "nonzero exit should be recorded honestly"
+# shellcheck disable=SC2016  # the $i belongs to the captured sh -c script
 "$DW" --root "$REPO" evidence capture sample 2 SMP-2-01 --max-output-bytes 16 \
   -- sh -c 'i=0; while [ $i -lt 40 ]; do echo oversized; i=$((i+1)); done' >/dev/null
 grep -q 'PMO_EVIDENCE_OUTPUT_TRUNCATED' "$EV" || fail "oversized output should carry the truncation marker"
-"$DW" --root "$REPO" story status sample 2 SMP-2-01 done >/dev/null
+"$DW" --root "$REPO" story status sample 2 SMP-2-01 "done" >/dev/null
 "$DW" --root "$REPO" phase close sample 2 --summary "Capture phase closed." >/dev/null
 "$DW" --root "$REPO" check sample | grep -q 'dw check: ok' || fail "captured evidence should lint clean"
 
@@ -317,7 +318,7 @@ grep -q 'PMO_EVIDENCE_OUTPUT_TRUNCATED' "$EV" || fail "oversized output should c
   --goal "Exercise evidence content lints." >/dev/null
 "$DW" --root "$REPO" story create sample 3 "Placeholder story" >/dev/null
 "$DW" --root "$REPO" story evidence sample 3 SMP-3-01 >/dev/null
-"$DW" --root "$REPO" story status sample 3 SMP-3-01 done >/dev/null
+"$DW" --root "$REPO" story status sample 3 SMP-3-01 "done" >/dev/null
 if "$DW" --root "$REPO" check sample >/dev/null 2>&1; then
   fail "check should reject placeholder evidence for a done story"
 fi

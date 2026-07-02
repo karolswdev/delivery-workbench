@@ -3,6 +3,11 @@
 
 set -eu
 
+# bash >= 5.2 expands & in ${var//pat/repl} replacements by default
+# (patsub_replacement); quoting the replacement breaks bash 3.2, so
+# disable the option where it exists and keep replacements unquoted.
+shopt -u patsub_replacement 2>/dev/null || true
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PMO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMPLATE="$PMO_DIR/templates/session-intake.md.tmpl"
@@ -220,12 +225,12 @@ render_template() {
       "{{AGENT_STYLE}}") render_block "$AGENT_STYLE" ;;
       "{{OPEN_QUESTIONS}}") render_block "$OPEN_QUESTIONS" ;;
       *)
-        line="${line//\{\{PROJECT_NAME\}\}/"$PROJECT_NAME"}"
-        line="${line//\{\{DATE\}\}/"$DATE"}"
-        line="${line//\{\{PROJECT_SLUG\}\}/"$PROJECT_SLUG"}"
-        line="${line//\{\{PROJECT_PREFIX\}\}/"$PROJECT_PREFIX"}"
+        line="${line//\{\{PROJECT_NAME\}\}/$PROJECT_NAME}"
+        line="${line//\{\{DATE\}\}/$DATE}"
+        line="${line//\{\{PROJECT_SLUG\}\}/$PROJECT_SLUG}"
+        line="${line//\{\{PROJECT_PREFIX\}\}/$PROJECT_PREFIX}"
         line="${line//\{\{TARGET_DIR\}\}/.}"
-        line="${line//\{\{HANDOFF_AUDIENCE\}\}/"$HANDOFF_AUDIENCE"}"
+        line="${line//\{\{HANDOFF_AUDIENCE\}\}/$HANDOFF_AUDIENCE}"
         printf '%s\n' "$line"
         ;;
     esac
@@ -445,4 +450,4 @@ DATE="$(date +%Y-%m-%d)"
 
 render_template > "$OUTPUT"
 
-echo "✓ wrote ${OUTPUT#$TARGET/}"
+echo "✓ wrote ${OUTPUT#"$TARGET"/}"

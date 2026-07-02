@@ -115,7 +115,7 @@ grep -q 'allowed: backlog, blocked' "$TMP_ROOT/status-err" \
   || fail "status rejection should name the allowed vocabulary"
 .githooks/dw evidence capture demo phase-0-setup "$STORY_ID" -- sh -c 'echo lifecycle-verified' >/dev/null \
   || fail "evidence capture failed"
-.githooks/dw story status demo phase-0-setup "$STORY_ID" done >/dev/null || fail "flip to done failed"
+.githooks/dw story status demo phase-0-setup "$STORY_ID" "done" >/dev/null || fail "flip to done failed"
 git add -A
 write_and_certify_contract --tests-capture "$(find pm/roadmap/demo -name 'evidence-story-*.md' | sed -n '1p')"
 git commit -q -m "ship agent lifecycle story" >/dev/null 2>&1 || fail "gated ship commit failed"

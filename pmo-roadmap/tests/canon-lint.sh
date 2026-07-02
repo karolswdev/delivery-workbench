@@ -28,6 +28,7 @@ $PMO_DIR/bootstrap
 
 TEMPLATE_FILES="$(find "$PMO_DIR/templates" -maxdepth 1 -type f 2>/dev/null)"
 
+# shellcheck disable=SC2088  # literal grep pattern, not a path expansion
 PATTERNS='~/.claude
 reusable-processes
 [Pp]antrybot

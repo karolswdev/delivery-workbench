@@ -60,7 +60,6 @@ DELIVERABLES="$(printf '%s\n%s' "- [x] Immediate session plan" "- [x] Validation
 PROMPT="$REPO/pm/roadmap/existing-app/adoption/adoption-discovery-prompt.md"
 INTAKE="$REPO/pm/roadmap/existing-app/adoption/session-intake.md"
 RESOLVED_REPO="$(git -C "$REPO" rev-parse --show-toplevel)"
-RESOLVED_INTAKE="$RESOLVED_REPO/pm/roadmap/existing-app/adoption/session-intake.md"
 [ -f "$INTAKE" ] || fail "session intake was not written"
 [ -f "$PROMPT" ] || fail "adoption prompt was not written"
 grep -q 'Turn repo discovery into a first actionable roadmap' "$INTAKE" || fail "session goal missing from intake"

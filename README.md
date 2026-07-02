@@ -211,7 +211,13 @@ pmo-roadmap/tests/gate-parity.sh
 pmo-roadmap/tests/roadmap-cli.sh
 pmo-roadmap/tests/work-log-mvp.sh
 pmo-roadmap/bin/dw check work-log-automation
+shellcheck pmo-roadmap/install.sh pmo-roadmap/update.sh \
+  pmo-roadmap/hooks/* pmo-roadmap/bin/work-log-* \
+  pmo-roadmap/bootstrap/*.sh pmo-roadmap/tests/*.sh demos/scripts/*.sh
 ```
+
+CI runs everything above on ubuntu and macos, plus the dw core suite on
+the declared python3 3.9 floor.
 
 ## License
 

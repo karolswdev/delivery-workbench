@@ -74,6 +74,11 @@ reset_state() {
   rm -rf .tmp
 }
 
+expect_rule() { # rule-id
+  .githooks/dw gate --porcelain 2>/dev/null | grep -q "^rule=$1\$" \
+    || fail "expected gate rule '$1' to fire"
+}
+
 check_parity() { # expected(pass|fail) name
   expected="$1"
   name="$2"
@@ -102,7 +107,13 @@ check_parity pass "single flip"
 write_story "$PHASE/story-02-second.md" "complete"
 git add -A
 write_contract
+expect_rule evidence-missing
 check_parity fail "synonym flip without evidence"
+# Documented remediation: ship the paired evidence in the same commit.
+echo "# proof" > "$PHASE/evidence-story-02.md"
+git add "$PHASE/evidence-story-02.md"
+write_contract
+check_parity pass "synonym flip unblocked by pairing evidence"
 reset_state
 
 # S3a — unpadded story number pairs with padded evidence.
@@ -140,12 +151,14 @@ check_parity pass "capital-X checkboxes"
 # S7 — unchecked box blocks (generated but not certified).
 tweak unchecked
 generate_contract
+expect_rule contract-unchecked
 check_parity fail "unchecked boxes"
 reset_state
 
 # S8 — missing contract blocks.
 tweak no-contract
 rm -rf .tmp
+expect_rule contract-missing
 check_parity fail "missing contract"
 reset_state
 
@@ -156,6 +169,7 @@ echo "# proof" > "$PHASE/evidence-story-06.md"
 echo "# proof" > "$PHASE/evidence-story-07.md"
 git add -A
 write_contract
+expect_rule atomicity
 check_parity fail "multi-flip without bundle"
 write_contract
 echo "intentional bundle for parity harness" > .tmp/BUNDLE-OK.md
@@ -167,6 +181,7 @@ BUNDLE_SHA="$(git rev-parse HEAD)"
 # S10 — deleting evidence that orphans a done story is blocked.
 git rm -q "$PHASE/evidence-story-01.md"
 write_contract
+expect_rule evidence-deletion-orphans-story
 check_parity fail "evidence deletion orphaning done story"
 reset_state
 
@@ -181,6 +196,7 @@ check_parity pass "evidence deletion with regressed story"
 echo "# stray" > "$PHASE/evidence-story-09.md"
 git add "$PHASE/evidence-story-09.md"
 write_contract
+expect_rule orphan-evidence
 check_parity fail "added orphan evidence"
 reset_state
 
@@ -205,6 +221,7 @@ tweak extension-missing
 certify x
 grep -v 'Demo extension rule' .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
 mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
+expect_rule contract-missing-box
 check_parity fail "extension seam: contract missing the extension box"
 reset_state
 mv "$TMP_ROOT/PMO-CONTRACT.md.bak" pm/roadmap/PMO-CONTRACT.md
@@ -227,6 +244,17 @@ write_contract
 git commit -q -m "local seam passes" >/dev/null 2>&1 || fail "commit should pass once local rule is satisfied"
 [ -f .local-seam-observed ] || fail "pre-commit.local should see gate context variables"
 grep -Eq '^[0-9]+$' .local-seam-observed || fail "SHIPPED_COUNT should be numeric in the local seam"
+"$PMO_DIR/update.sh" "$REPO" >/dev/null 2>&1
+grep -q 'local rule blocked' .githooks/pre-commit.local \
+  || fail "update.sh must preserve pre-commit.local"
+touch block-me
+tweak seam-after-update
+write_contract
+if git commit -q -m "seam after update" >/dev/null 2>&1; then
+  fail "local rule should still block after update.sh"
+fi
+rm -f block-me
+reset_state
 rm -f .local-seam-observed .githooks/pre-commit.local
 
 # S15 — python3 missing: the shim fails closed with a clear message.
@@ -276,6 +304,7 @@ write_contract
 sed 's|^- README.md$|- invented/ghost.txt|' .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
 mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
 grep -q '^- invented/ghost.txt$' .tmp/CONTRACT.md || fail "sample tamper fixture failed"
+expect_rule contract-sample-mismatch
 check_parity fail "invented staged sample"
 reset_state
 
@@ -283,6 +312,7 @@ reset_state
 tweak unknown-box
 write_contract
 printf -- '- [x] **Bogus invented rule.** Not part of the canon.\n' >> .tmp/CONTRACT.md
+expect_rule contract-unknown-box
 check_parity fail "unknown checkbox"
 reset_state
 

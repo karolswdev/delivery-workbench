@@ -129,10 +129,12 @@ write_contract yes
 git commit -m "excluded secret path" >/dev/null
 assert_eq "$(entry_count)" "2" "excluded-path commit should append one entry"
 grep -q 'Omitted Paths' "$LOG_FILE" || fail "log should include omitted paths section"
+# shellcheck disable=SC2016  # literal backtick markdown, not command substitution
 grep -q '`secrets/token.txt`' "$LOG_FILE" || fail "log should name omitted path"
 if grep -q 'not-for-log' "$LOG_FILE"; then
   fail "excluded file content should not appear in final log"
 fi
+# shellcheck disable=SC2016  # literal backtick markdown, not command substitution
 if grep -q '| A | `secrets/token.txt` |' "$LOG_FILE"; then
   fail "excluded path should not appear in files changed table"
 fi

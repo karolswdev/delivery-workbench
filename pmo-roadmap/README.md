@@ -597,10 +597,14 @@ pmo-roadmap/
 
 ## Conventions
 
-- Shell pieces are Bash 3.2 compatible (default macOS shell).
-- python3 (stdlib only) is a hard dependency of the commit gate; the
-  pre-commit shim fails closed when it is missing. Helper hooks and
-  readers remain bash + `git` + `grep`.
+- Shell pieces are Bash 3.2 compatible (default macOS shell) and pass
+  shellcheck; CI runs the full suite on ubuntu and macos so BSD/GNU
+  tool differences and bash-version quirks (e.g. 5.2's
+  `patsub_replacement`) are exercised on every push.
+- python3 ≥ 3.9 (stdlib only) is a hard dependency of the commit gate;
+  the pre-commit shim fails closed when it is missing, and CI verifies
+  the core on the declared 3.9 floor. Helper hooks and readers remain
+  bash + `git` + `grep`.
 - Hook never auto-stages or auto-commits anything; it only blocks or passes.
 
 ## Maintenance

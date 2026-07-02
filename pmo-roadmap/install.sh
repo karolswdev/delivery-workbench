@@ -85,10 +85,10 @@ mkdir -p "$TARGET/pm/roadmap"
 copy_template() {
   src="$1"; dst="$2"
   if [ -e "$dst" ] && [ "$FORCE" -ne 1 ]; then
-    echo "  · skip (exists, use --force to overwrite): ${dst#$TARGET/}"
+    echo "  · skip (exists, use --force to overwrite): ${dst#"$TARGET"/}"
   else
     cp "$src" "$dst"
-    echo "  ✓ wrote ${dst#$TARGET/}"
+    echo "  ✓ wrote ${dst#"$TARGET"/}"
   fi
 }
 copy_template "$SOURCE_DIR/templates/roadmap-builder.md" "$TARGET/pm/roadmap/roadmap-builder.md"

@@ -4,6 +4,11 @@
 
 set -eu
 
+# bash >= 5.2 expands & in ${var//pat/repl} replacements by default
+# (patsub_replacement); quoting the replacement breaks bash 3.2, so
+# disable the option where it exists and keep replacements unquoted.
+shopt -u patsub_replacement 2>/dev/null || true
+
 usage() {
   cat <<EOF
 Usage: $0 <target-dir> [options]
@@ -127,7 +132,7 @@ if [ ! -f "$INTAKE_FILE" ]; then
   if [ "$REQUIRE_INTAKE" -eq 1 ]; then
     die "session intake missing, run bootstrap/session-intake.sh first: $INTAKE_FILE"
   fi
-  echo "  ! session intake missing: ${INTAKE_FILE#$TARGET/}" >&2
+  echo "  ! session intake missing: ${INTAKE_FILE#"$TARGET"/}" >&2
   echo "    Discovery prompt will require the agent to flag unresolved user intent." >&2
 fi
 
@@ -136,27 +141,27 @@ render_prompt() {
   # names), and repo-relative paths only — the rendered prompt is a
   # committed artifact and must not embed absolute machine paths.
   text="$(cat "$TEMPLATE")"
-  text="${text//\{\{PROJECT_NAME\}\}/"$PROJECT_NAME"}"
-  text="${text//\{\{PROJECT_SLUG\}\}/"$PROJECT_SLUG"}"
-  text="${text//\{\{PROJECT_PREFIX\}\}/"$PROJECT_PREFIX"}"
+  text="${text//\{\{PROJECT_NAME\}\}/$PROJECT_NAME}"
+  text="${text//\{\{PROJECT_SLUG\}\}/$PROJECT_SLUG}"
+  text="${text//\{\{PROJECT_PREFIX\}\}/$PROJECT_PREFIX}"
   text="${text//\{\{TARGET_DIR\}\}/.}"
-  text="${text//\{\{OUTPUT_PATH\}\}/"${OUTPUT#$TARGET/}"}"
-  text="${text//\{\{INTAKE_PATH\}\}/"${INTAKE_FILE#$TARGET/}"}"
+  text="${text//\{\{OUTPUT_PATH\}\}/"${OUTPUT#"$TARGET"/}"}"
+  text="${text//\{\{INTAKE_PATH\}\}/"${INTAKE_FILE#"$TARGET"/}"}"
   printf '%s\n' "$text"
 }
 
 if [ -e "$PROMPT_FILE" ] && [ "$FORCE" -ne 1 ]; then
-  echo "  · prompt exists: ${PROMPT_FILE#$TARGET/}"
+  echo "  · prompt exists: ${PROMPT_FILE#"$TARGET"/}"
 else
   render_prompt > "$PROMPT_FILE"
-  echo "  ✓ wrote ${PROMPT_FILE#$TARGET/}"
+  echo "  ✓ wrote ${PROMPT_FILE#"$TARGET"/}"
 fi
 
 if [ "$AGENT" = "none" ]; then
   echo "✓ Adoption prompt ready."
-  echo "  Prompt: ${PROMPT_FILE#$TARGET/}"
-  echo "  Intake: ${INTAKE_FILE#$TARGET/}"
-  echo "  Report target: ${OUTPUT#$TARGET/}"
+  echo "  Prompt: ${PROMPT_FILE#"$TARGET"/}"
+  echo "  Intake: ${INTAKE_FILE#"$TARGET"/}"
+  echo "  Report target: ${OUTPUT#"$TARGET"/}"
   exit 0
 fi
 
@@ -191,4 +196,4 @@ case "$AGENT" in
     ;;
 esac
 
-echo "✓ Adoption discovery complete: ${OUTPUT#$TARGET/}"
+echo "✓ Adoption discovery complete: ${OUTPUT#"$TARGET"/}"
