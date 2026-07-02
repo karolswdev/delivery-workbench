@@ -105,7 +105,16 @@ from .gate import (
     render_gate_porcelain,
     run_gate,
 )
-from .model import EVIDENCE_PLACEHOLDER
+from .model import EVIDENCE_PLACEHOLDER, STORY_STATUSES
 from .validate import evidence_content_issues
+from .agentdocs import (
+    BEGIN_MARKER,
+    END_MARKER,
+    agent_docs_status,
+    canonical_block,
+    render_block,
+    write_agent_docs,
+)
+from .doctor import DoctorCheck, render_doctor, run_doctor
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"

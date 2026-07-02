@@ -108,6 +108,18 @@ cp "$SOURCE_DIR/bin/work-log-read" "$TARGET/.githooks/work-log-read"
 chmod +x "$TARGET/.githooks/work-log-read"
 echo "  ✓ .githooks/work-log-read updated"
 
+mkdir -p "$TARGET/.claude/commands"
+for cmd_file in "$SOURCE_DIR"/agent/dw-*.md; do
+  cp "$cmd_file" "$TARGET/.claude/commands/$(basename "$cmd_file")"
+done
+echo "  ✓ .claude/commands/dw-*.md updated"
+
+if command -v python3 >/dev/null 2>&1; then
+  DOCS_RESULT="$(cd "$TARGET" && ./.githooks/dw agent-docs)" \
+    && echo "  ✓ agent docs block ${DOCS_RESULT#*	} in ${DOCS_RESULT%%	*}" \
+    || echo "  ! could not refresh the agent docs block; run .githooks/dw agent-docs manually" >&2
+fi
+
 # PMO-CONTRACT.md may carry project extensions appended after the canonical
 # rules. Refuse to overwrite without --force; print a diff hint.
 TARGET_CONTRACT="$TARGET/pm/roadmap/PMO-CONTRACT.md"

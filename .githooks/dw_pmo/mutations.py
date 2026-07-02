@@ -19,7 +19,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .model import DONE_STATUSES, STORY_RE, Phase, Project, die
+from .model import DONE_STATUSES, STORY_RE, STORY_STATUSES, Phase, Project, die
+
+
+def validate_story_status(status: str) -> str:
+    status = status.strip().lower()
+    if status not in STORY_STATUSES:
+        allowed = ", ".join(sorted(STORY_STATUSES))
+        die(f"unknown story status {status!r}; allowed: {allowed}")
+    return status
 from .parse import find_story, get_project, parse_story_rows
 from .paths import ensure_under, read_text, rel, roadmap_dir, slugify, write_text
 from .render import (
@@ -168,7 +176,7 @@ def plan_story_status(
     evidence_body: str = "",
     force: bool = False,
 ) -> MutationPlan:
-    status = status.strip().lower()
+    status = validate_story_status(status)
     row, story_num, story_path = find_story(project, phase, story_selector)
     status_file = phase.path / "current-phase-status.md"
     evidence_path = phase.path / f"evidence-story-{story_num:02d}.md"
@@ -256,6 +264,7 @@ def plan_story_create(
     slug: str | None = None,
     status: str = "backlog",
 ) -> MutationPlan:
+    status = validate_story_status(status)
     existing = []
     for story in phase.path.glob("story-*.md"):
         m = STORY_RE.match(story.name)

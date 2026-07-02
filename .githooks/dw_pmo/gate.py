@@ -435,6 +435,19 @@ def render_gate_failure(result: GateResult) -> str:
     for detail in failure.details:
         lines.append(f"    {detail}")
     lines.append(f"  To proceed: {failure.remediation}")
+    if failure.rule in {"contract-missing", "contract-facts-missing"}:
+        # Copy-pasteable template with live facts and the project's
+        # actual rule set (canonical plus extensions).
+        try:
+            from .contract import build_contract
+
+            lines.append("")
+            lines.append("  Contract for this staging state (or just run `.githooks/dw contract new`):")
+            lines.append("")
+            for template_line in build_contract(result.root).splitlines():
+                lines.append(f"    {template_line}")
+        except Exception:
+            pass
     lines.append(_BAR)
     return "\n".join(lines) + "\n"
 

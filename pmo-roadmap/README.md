@@ -85,11 +85,20 @@ The installer:
    package → `target/.githooks/dw_pmo/`
 6. Copies `bin/work-log-summarize` → `target/.githooks/work-log-summarize`
 7. Copies `bin/work-log-read` → `target/.githooks/work-log-read`
-8. Sets `git config core.hooksPath .githooks` in target
-9. Adds `.tmp/` to target `.gitignore` if missing
-10. (Optional) scaffolds `pm/roadmap/{slug}/` with `README.md` + a starter
-   `phase-0-setup/` folder
-11. Prints a snippet to add to target's `CLAUDE.md` / `AGENTS.md`
+8. Copies `agent/dw-*.md` → `target/.claude/commands/` (agent slash
+   commands: `/dw-next`, `/dw-contract`, `/dw-story-done`, `/dw-adopt`)
+9. Writes the managed Delivery Workbench block into `CLAUDE.md` (or an
+   existing `AGENTS.md`) between markers; `update.sh` refreshes only
+   inside them, user content is never touched (`--no-agent-docs` to opt
+   out; `dw agent-docs` to re-run it any time)
+10. Sets `git config core.hooksPath .githooks` in target
+11. Adds `.tmp/` to target `.gitignore` if missing
+12. (Optional) scaffolds `pm/roadmap/{slug}/` with `README.md` + a starter
+    `phase-0-setup/` folder
+
+Verify any clone's wiring with `.githooks/dw doctor` — it names unset
+`core.hooksPath`, missing hooks, a missing dw/core install, a missing or
+stale agent-docs block, and a missing python3.
 
 Re-running is safe (idempotent) but will refuse to overwrite existing
 methodology/contract without `--force`.
@@ -296,10 +305,20 @@ the existing markdown files; it does not create a separate tracker.
 .githooks/dw story evidence myproject 1 PRJ-1-01 \
   --body "- Additional verification detail."
 .githooks/dw evidence capture myproject 1 PRJ-1-01 -- npm test
+.githooks/dw next myproject --json
+.githooks/dw doctor
+.githooks/dw agent-docs
 .githooks/dw phase close myproject 1 \
   --summary "Phase closed with all stories evidenced."
 .githooks/dw check myproject
 ```
+
+`next` follows a strict exit contract for agents: 0 = story found,
+2 = nothing actionable, 1 = error; `--json` emits the story as one JSON
+object (or `{"next_story": null}`). Story write commands validate the
+status vocabulary (`backlog | ready | in-progress | blocked | done`,
+plus the done synonyms `complete | closed | shipped`) and reject
+anything else with the allowed list in the error.
 
 Use `tree` to see what is in a phase, `tree --done` to see completed work, and
 `check` before a status update to catch broken links or story/table status

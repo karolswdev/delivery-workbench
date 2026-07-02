@@ -18,6 +18,8 @@ Installs the pmo-roadmap framework into <target-dir>:
   - copies lib/dw_pmo/                    → .githooks/dw_pmo/
   - copies bin/work-log-summarize         → .githooks/work-log-summarize
   - copies bin/work-log-read              → .githooks/work-log-read
+  - copies agent/dw-*.md                  → .claude/commands/ (slash commands)
+  - writes the managed Delivery Workbench block into CLAUDE.md/AGENTS.md
   - sets git config core.hooksPath .githooks
   - adds .tmp/ to .gitignore (if missing)
   - optionally scaffolds pm/roadmap/<slug>/ skeleton
@@ -27,6 +29,7 @@ Options:
   --project-slug slug       Kebab slug (e.g. "pantrybot")
   --project-prefix PFX      Story-ID prefix (e.g. "PB")
   --skip-bootstrap          Don't scaffold pm/roadmap/<slug>/
+  --no-agent-docs           Don't write the managed CLAUDE.md/AGENTS.md block
   --force                   Overwrite existing methodology/contract and
                             framework-owned hook collisions
 
@@ -43,6 +46,7 @@ PROJECT_NAME=""
 PROJECT_SLUG=""
 PROJECT_PREFIX=""
 SKIP_BOOTSTRAP=0
+AGENT_DOCS=1
 FORCE=0
 
 while [ $# -gt 0 ]; do
@@ -52,6 +56,7 @@ while [ $# -gt 0 ]; do
     --project-slug) PROJECT_SLUG="$2"; shift 2 ;;
     --project-prefix) PROJECT_PREFIX="$2"; shift 2 ;;
     --skip-bootstrap) SKIP_BOOTSTRAP=1; shift ;;
+    --no-agent-docs) AGENT_DOCS=0; shift ;;
     --force) FORCE=1; shift ;;
     --) shift; break ;;
     -*) die "unknown option: $1" ;;
@@ -144,7 +149,27 @@ else
   echo "  ✓ added .tmp/ to .gitignore"
 fi
 
-# 5. Optional bootstrap
+# 5. Agent slash commands (Claude Code) + mirrored guidance
+mkdir -p "$TARGET/.claude/commands"
+for cmd_file in "$SOURCE_DIR"/agent/dw-*.md; do
+  cp "$cmd_file" "$TARGET/.claude/commands/$(basename "$cmd_file")"
+done
+echo "  ✓ wrote .claude/commands/dw-*.md"
+
+# 6. Managed agent-docs block in CLAUDE.md / AGENTS.md
+if [ "$AGENT_DOCS" -eq 1 ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    DOCS_RESULT="$(cd "$TARGET" && ./.githooks/dw agent-docs)" \
+      && echo "  ✓ agent docs block ${DOCS_RESULT#*	} in ${DOCS_RESULT%%	*}" \
+      || echo "  ! could not write the agent docs block; run .githooks/dw agent-docs manually" >&2
+  else
+    echo "  ! python3 not found; skipped the agent docs block (the gate needs python3 anyway)" >&2
+  fi
+else
+  echo "  · agent docs block skipped (--no-agent-docs)"
+fi
+
+# 7. Optional bootstrap
 if [ -n "$PROJECT_SLUG" ] && [ "$SKIP_BOOTSTRAP" -ne 1 ]; then
   bash "$SOURCE_DIR/bootstrap/new-project.sh" \
     "$TARGET" \
@@ -153,12 +178,5 @@ if [ -n "$PROJECT_SLUG" ] && [ "$SKIP_BOOTSTRAP" -ne 1 ]; then
     "${PROJECT_PREFIX:-PRJ}"
 fi
 
-# 6. Snippet for CLAUDE.md / AGENTS.md
 echo
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Add the following to $TARGET/CLAUDE.md (or AGENTS.md):"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-cat "$SOURCE_DIR/templates/CLAUDE-snippet.md"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo
-echo "✓ pmo-roadmap installed."
+echo "✓ pmo-roadmap installed. Verify the wiring any time with: .githooks/dw doctor"

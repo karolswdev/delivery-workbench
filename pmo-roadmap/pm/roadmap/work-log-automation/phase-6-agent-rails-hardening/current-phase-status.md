@@ -77,12 +77,13 @@ what the framework claims and what it verifies.
 - [x] Reusing a contract after restaging is blocked by index-tree mismatch;
   `touch .tmp/CONTRACT.md` no longer refreshes staleness (CI-run: parity
   S17 + unit tamper matrix; evidence-story-03).
-- [ ] `dw check` errors on placeholder/empty evidence for done stories, and
+- [x] `dw check` errors on placeholder/empty evidence for done stories, and
   `dw evidence capture` output appears in at least two real Phase 6
-  evidence files.
-- [ ] A fresh temp-repo install yields an agent-completable story lifecycle
+  evidence files (evidence-story-04 + evidence-story-05, both carrying
+  the tool's own captured runs; lints CI-run in roadmap-cli.sh).
+- [x] A fresh temp-repo install yields an agent-completable story lifecycle
   using only `CLAUDE.md` guidance and shipped commands; `dw doctor` exits
-  0 there and here.
+  0 there and here (agent-surface.sh, CI-run; evidence-story-05).
 - [ ] A docs-only commit passes with the short-form contract; a
   story-flipping commit with a short-form contract is blocked (both in
   CI).
@@ -102,7 +103,7 @@ what the framework claims and what it verifies.
 | WLA-6-02 | Unify the commit gate into a single dw gate engine | done | [story-02-single-gate-engine](./story-02-single-gate-engine.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-6-03 | Ship verified contract v2 with durable audit trail | done | [story-03-verified-contract-v2](./story-03-verified-contract-v2.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-6-04 | Add evidence capture tooling and content linting | done | [story-04-evidence-capture](./story-04-evidence-capture.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-6-05 | Ship the first-class agent surface | backlog | [story-05-agent-surface](./story-05-agent-surface.md) | - |
+| WLA-6-05 | Ship the first-class agent surface | done | [story-05-agent-surface](./story-05-agent-surface.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-6-06 | Right-size ceremony and unify template canon | backlog | [story-06-ceremony-proportionality](./story-06-ceremony-proportionality.md) | - |
 | WLA-6-07 | Harden onboarding and adoption bridge | backlog | [story-07-onboarding-hardening](./story-07-onboarding-hardening.md) | - |
 | WLA-6-08 | Harden CI, parity, and portability testing | backlog | [story-08-ci-parity-hardening](./story-08-ci-parity-hardening.md) | - |
@@ -126,18 +127,20 @@ what the framework claims and what it verifies.
 
 ## Where we are
 
-WLA-6-04 is done with evidence: `dw evidence capture` appends
-machine-parseable captured-run blocks (command, exit code, index tree,
-capped output) to evidence files, `dw check` rejects
-placeholder/empty evidence and broken `assets/` references for done
-stories, narrative-only evidence is named in warnings, and
-`dw contract new --tests-capture` discharges the "Tests ran." rule
-mechanically with the gate re-verifying the staged captured run
-(exit 0) at commit time — this story's own shipping commit is the
-first mechanically-discharged contract, and evidence-story-04 carries
-the tool's own captured runs (42-test unit suite, 23-scenario parity
-suite). Next per the execution sequence: WLA-6-05 (the first-class
-agent surface: shipped commands, managed CLAUDE.md block, `dw doctor`).
+WLA-6-05 is done with evidence: the agent surface is first-class —
+four shipped slash commands under `.claude/commands/`, a managed
+CLAUDE.md/AGENTS.md block written by install and refreshed by update
+(this repo's own CLAUDE.md now exists that way), `dw doctor` naming
+every silent wiring failure, `dw next --json` with the 0/2/1 exit
+contract, hard status-vocabulary validation (with `blocked` added),
+the blocked banner embedding the live contract template, and
+`work-log-read` no longer silently truncating. The acceptance
+lifecycle runs headlessly in CI (`agent-surface.sh`), which also caught
+and fixed a scaffold bug: fresh installs used to fail `dw check` with
+the template's placeholder story row. Two more exit criteria are
+checked. Next per the execution sequence: WLA-6-06 (ceremony
+proportionality and template canon), with WLA-6-07/08 able to follow
+in either order.
 
 ## Active risks
 

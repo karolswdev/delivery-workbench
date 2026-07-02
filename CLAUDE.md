@@ -1,3 +1,5 @@
+<!-- BEGIN DELIVERY WORKBENCH (managed by pmo-roadmap install.sh/update.sh — edits inside are overwritten) -->
+
 ## Delivery Workbench (PMO rails)
 
 This repository uses Delivery Workbench: an evidence-first commit gate
@@ -56,3 +58,5 @@ Slash commands (Claude Code, under `.claude/commands/`): `/dw-next`,
 
 Canon: `pm/roadmap/PMO-CONTRACT.md` (rules),
 `pm/roadmap/roadmap-builder.md` (methodology).
+
+<!-- END DELIVERY WORKBENCH -->

@@ -53,6 +53,7 @@ render() {
     -e "s|{{PHASE_TITLE}}|Setup|g" \
     -e "s|{{STORY_ID}}|$PREFIX-0-01|g" \
     -e "s|{{STORY_TITLE}}|Bootstrap roadmap project|g" \
+    -e "s@^| $PREFIX-0-01 | … | backlog | \[story-01-…\](\./story-01-….md) | — |\$@| $PREFIX-0-01 | Bootstrap roadmap project | backlog | [story-01-bootstrap](./story-01-bootstrap.md) | - |@" \
     "$src" > "$dst"
   echo "  ✓ wrote ${dst#$TARGET/}"
 }

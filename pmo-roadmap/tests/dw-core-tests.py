@@ -339,6 +339,37 @@ class DwCoreTest(unittest.TestCase):
         self.assertNotIn("narrative-only evidence", warnings)
 
 
+    # -- agent surface (WLA-6-05) ----------------------------------------
+
+    def test_status_vocabulary_validation(self) -> None:
+        with self.assertRaises(DwError) as ctx:
+            core.plan_story_status(self.root, self.project, self.phase, "DM-1-02", "done-ish")
+        self.assertIn("allowed:", ctx.exception.message)
+        self.assertIn("blocked", ctx.exception.message)
+        plan = core.plan_story_status(self.root, self.project, self.phase, "DM-1-02", "blocked")
+        self.assertEqual(plan.summary["status"], "blocked")
+        with self.assertRaises(DwError):
+            core.plan_story_create(self.root, self.project, self.phase, "T", status="wip")
+
+    def test_agent_docs_block_lifecycle(self) -> None:
+        path, action = core.write_agent_docs(self.root)
+        self.assertEqual((path.name, action), ("CLAUDE.md", "created"))
+        _p, action = core.write_agent_docs(self.root)
+        self.assertEqual(action, "unchanged")
+        text = path.read_text(encoding="utf-8")
+        path.write_text("# Mine\n\nuser above\n\n" + text + "\nuser below\n", encoding="utf-8")
+        corrupted = path.read_text(encoding="utf-8").replace("evidence-first", "CORRUPTED")
+        path.write_text(corrupted, encoding="utf-8")
+        self.assertEqual(core.agent_docs_status(self.root)[0], "stale")
+        _p, action = core.write_agent_docs(self.root)
+        self.assertEqual(action, "refreshed")
+        self.assertEqual(core.agent_docs_status(self.root)[0], "current")
+        final = path.read_text(encoding="utf-8")
+        self.assertIn("user above", final)
+        self.assertIn("user below", final)
+        self.assertEqual(final.count(core.BEGIN_MARKER), 1)
+
+
 RULES_DOC_MIN = """# PMO Contract
 
 ## Contract template
@@ -666,6 +697,25 @@ class GateTest(unittest.TestCase):
         self.git("add", ev2_rel)
         with self.assertRaises(DwError):
             core.build_contract(self.root, tests_capture=ev2_rel)  # no passing run
+
+    # -- doctor detections -------------------------------------------------------
+
+    def test_doctor_detections_and_health(self) -> None:
+        checks = {c.name: c for c in core.run_doctor(self.root)}
+        self.assertTrue(checks["python3"].ok)
+        self.assertFalse(checks["core.hooksPath"].ok)
+        self.assertIn("core.hooksPath", checks["core.hooksPath"].detail)
+        self.assertFalse(checks["hook:pre-commit"].ok)
+        self.assertFalse(checks["agent-docs"].ok)
+        self.assertTrue(checks["roadmap"].ok)
+        self.git("config", "core.hooksPath", ".githooks")
+        for hook in ("pre-commit", "commit-msg", "post-commit"):
+            self.write(f".githooks/{hook}", "#!/bin/sh\n")
+        self.write(".githooks/dw", "#!/usr/bin/env python3\n")
+        self.write(".githooks/dw_pmo/__init__.py", "")
+        core.write_agent_docs(self.root)
+        checks = core.run_doctor(self.root)
+        self.assertTrue(all(c.ok for c in checks), [c.name for c in checks if not c.ok])
 
     # -- durable trail ---------------------------------------------------------
 

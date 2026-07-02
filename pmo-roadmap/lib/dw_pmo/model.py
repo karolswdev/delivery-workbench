@@ -11,7 +11,10 @@ PHASE_RE = re.compile(r"^phase-(\d+)-(.+)$")
 STORY_RE = re.compile(r"^story-(\d+)-(.+)\.md$")
 STORY_ID_RE = re.compile(r"^([A-Z][A-Z0-9]*)-(\d+)-(\d+)$")
 DONE_STATUSES = {"done", "complete", "closed", "shipped"}
-OPEN_STATUSES = {"backlog", "ready", "in-progress", "planned", "not-started"}
+OPEN_STATUSES = {"backlog", "ready", "in-progress", "blocked", "planned", "not-started"}
+# The single story-status vocabulary. Write commands reject anything
+# else so a typo can never strand a story outside every view.
+STORY_STATUSES = DONE_STATUSES | OPEN_STATUSES
 
 # The generator's stand-in body for evidence created without content.
 # dw check treats a done story whose evidence still carries this line
