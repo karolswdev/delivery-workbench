@@ -456,26 +456,34 @@ as: simple assignments in `pre-commit.config` beat the environment,
 which beats defaults (`PMO_WORK_LOG_DIR` follows the same precedence in
 the hooks, `work-log-read`, `work-log-summarize`, and `dw context`).
 
-## Workbench: read-only roadmap explorer
+## Workbench: the local web view
 
-Browse the roadmap as an operational surface instead of a directory
-tree (source-repo command; not yet installed into consumer repos —
-that lands with the Phase 5 permission-hardening story):
+Browse and safely edit the roadmap as an operational surface instead
+of a directory tree. `install.sh`/`update.sh` distribute it into
+consumer repos as `.githooks/dw-workbench` (with the UI under
+`.githooks/workbench/`); in this repo run it from source:
 
 ```bash
-pmo-roadmap/bin/dw-workbench --root /path/to/repo --port 8377
+pmo-roadmap/bin/dw-workbench --root /path/to/repo [--port 8377] [--quiet]
 # then open http://127.0.0.1:8377/
 ```
 
-The server binds 127.0.0.1 only, serves exactly the given repo root,
-and is strictly read-only: every response derives live from the
-Markdown through the same `dw_pmo` core the CLI uses (no cache, no
-database, GET only — other methods get 405, and the file endpoint is
-contained to the roadmap tree). Views: project overview (health, story
-counts, next actionable story), phase board (state, evidence tallies,
-final summaries), story/evidence pair with source-faithful Markdown,
-and supplemental canon as indexed read-only context. `?snapshot=1`
-switches the UI to synchronous loading for headless screenshot tools.
+The runtime boundary is deliberately boring: binds 127.0.0.1 only and
+prints the served root, URL, and write policy at startup; refuses to
+start without a `pm/roadmap` tree under the root or when the port is
+in use (with remediation in the message); serves exactly that one
+root; rejects non-local `Host` headers (DNS-rebinding guard), CORS
+preflights (no CORS headers are ever emitted), path traversal in
+every file endpoint, and slugs outside the `[a-z0-9-]` alphabet;
+writes only through preview→apply inside `pm/roadmap/**` with
+rollback protection; has no endpoint that stages or commits (the
+suite proves the git index stays empty); logs each request to stderr
+(`--quiet` to silence); and shuts down cleanly on SIGINT/SIGTERM.
+Views: project overview (health, story counts, next actionable
+story), phase board, story/evidence pair, health console, trace
+timeline with agent handoff, work-log viewer, and the guarded editor.
+`?snapshot=1` switches the UI to synchronous loading for headless
+screenshot tools.
 
 JSON API (stable envelope `delivery-workbench-workbench-response`,
 schema_version 1): `/api/context`, `/api/projects`,

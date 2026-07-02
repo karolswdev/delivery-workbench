@@ -18,6 +18,7 @@ Always overwrites (these are framework-owned):
                                     non-framework hook exists without --force
   - bin/dw                       → .githooks/dw
   - lib/dw_pmo/                  → .githooks/dw_pmo/
+  - bin/dw-workbench + workbench/ → .githooks/ (local UI)
   - bin/work-log-summarize       → .githooks/work-log-summarize
   - bin/work-log-read            → .githooks/work-log-read
 
@@ -105,6 +106,12 @@ rm -rf "$TARGET/.githooks/dw_pmo"
 mkdir -p "$TARGET/.githooks/dw_pmo"
 cp "$SOURCE_DIR/lib/dw_pmo/"*.py "$TARGET/.githooks/dw_pmo/"
 echo "  ✓ .githooks/dw_pmo updated"
+cp "$SOURCE_DIR/bin/dw-workbench" "$TARGET/.githooks/dw-workbench"
+chmod +x "$TARGET/.githooks/dw-workbench"
+rm -rf "$TARGET/.githooks/workbench"
+mkdir -p "$TARGET/.githooks/workbench"
+cp "$SOURCE_DIR/workbench/"* "$TARGET/.githooks/workbench/"
+echo "  ✓ .githooks/dw-workbench + workbench UI updated"
 
 cp "$SOURCE_DIR/bin/work-log-read" "$TARGET/.githooks/work-log-read"
 chmod +x "$TARGET/.githooks/work-log-read"

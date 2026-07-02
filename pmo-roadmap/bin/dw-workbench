@@ -27,7 +27,7 @@ def _bootstrap_core() -> None:
 _bootstrap_core()
 
 try:
-    from dw_pmo import find_root
+    from dw_pmo import DwError, find_root
     from dw_pmo.workbench import serve
 except ImportError as exc:  # pragma: no cover - environment failure path
     print(f"dw-workbench: cannot import the dw_pmo core package ({exc})", file=sys.stderr)
@@ -38,9 +38,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="dw-workbench", description="Delivery Workbench read-only roadmap explorer")
     parser.add_argument("--root", type=Path, default=None, help="repository root to serve (default: discovered from cwd)")
     parser.add_argument("--port", type=int, default=8377, help="localhost port (default 8377)")
+    parser.add_argument("--quiet", action="store_true", help="suppress the per-request access log")
     args = parser.parse_args(argv)
-    root = args.root.resolve() if args.root else find_root(Path.cwd())
-    serve(root, args.port)
+    try:
+        root = args.root.resolve() if args.root else find_root(Path.cwd())
+        serve(root, args.port, quiet=args.quiet)
+    except DwError as err:
+        print(f"dw-workbench: {err.message}", file=sys.stderr)
+        return 1
     return 0
 
 

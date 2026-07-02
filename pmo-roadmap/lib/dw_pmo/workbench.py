@@ -51,9 +51,26 @@ _CONTENT_TYPES = {
 
 
 def workbench_dir() -> Path | None:
-    """The static UI directory (source layout: pmo-roadmap/workbench)."""
-    candidate = Path(__file__).resolve().parents[2] / "workbench"
-    return candidate if candidate.is_dir() else None
+    """The static UI directory.
+
+    Source layout: pmo-roadmap/lib/dw_pmo -> pmo-roadmap/workbench.
+    Installed layout: .githooks/dw_pmo -> .githooks/workbench.
+    """
+    here = Path(__file__).resolve()
+    for candidate in (here.parents[1] / "workbench", here.parents[2] / "workbench"):
+        if (candidate / "index.html").is_file():
+            return candidate
+    return None
+
+
+def host_allowed(host_header: str) -> bool:
+    """Default-deny for non-local Host headers (DNS-rebinding guard)."""
+    raw = (host_header or "").strip().lower()
+    if raw.startswith("["):  # bracketed IPv6, e.g. [::1]:8377
+        host = raw.split("]")[0].lstrip("[")
+    else:
+        host = raw.split(":")[0]
+    return host in {"127.0.0.1", "localhost", "::1", ""}
 
 
 def envelope(data: object, ok: bool = True, issues: list[str] | None = None, warnings: list[str] | None = None) -> dict[str, object]:
@@ -392,9 +409,14 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
 def create_handler(root: Path, static_dir: Path | None):
     class WorkbenchHandler(BaseHTTPRequestHandler):
         server_version = "dw-workbench"
+        quiet = False
 
-        def log_message(self, fmt: str, *args: object) -> None:  # quiet
-            pass
+        def log_message(self, fmt: str, *args: object) -> None:
+            # Concise access log on stderr; --quiet silences it.
+            if not self.quiet:
+                import sys
+
+                print(f"dw-workbench: {self.address_string()} {fmt % args}", file=sys.stderr)
 
         def _send_json(self, status: int, payload: dict[str, object]) -> None:
             body = json.dumps(payload, sort_keys=True).encode("utf-8")
@@ -402,10 +424,20 @@ def create_handler(root: Path, static_dir: Path | None):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(body)
 
+        def _host_guard(self) -> bool:
+            if host_allowed(self.headers.get("Host", "")):
+                return True
+            self._send_json(403, envelope(
+                {"error": "non-local Host header refused (the workbench serves localhost only)"}, ok=False))
+            return False
+
         def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
+            if not self._host_guard():
+                return
             parsed = urlparse(self.path)
             if parsed.path.startswith("/api"):
                 status, payload = handle_api(root, parsed.path, parse_qs(parsed.query))
@@ -433,7 +465,13 @@ def create_handler(root: Path, static_dir: Path | None):
         def _reject(self) -> None:
             self._send_json(405, envelope({"error": "the workbench explorer is read-only (GET only)"}, ok=False))
 
+        def do_OPTIONS(self) -> None:  # noqa: N802 (stdlib naming)
+            # No CORS headers are ever emitted; preflights fail closed.
+            self._reject()
+
         def do_POST(self) -> None:  # noqa: N802 (stdlib naming)
+            if not self._host_guard():
+                return
             parsed = urlparse(self.path)
             try:
                 length = int(self.headers.get("Content-Length", "0") or "0")
@@ -454,15 +492,47 @@ def create_handler(root: Path, static_dir: Path | None):
     return WorkbenchHandler
 
 
-def serve(root: Path, port: int = 8377) -> None:
-    """Run the workbench bound to localhost until interrupted."""
+def serve(root: Path, port: int = 8377, quiet: bool = False) -> None:
+    """Run the workbench bound to localhost until interrupted.
+
+    Fails closed: refuses roots without a pm/roadmap tree, refuses
+    ports already in use (with remediation), and shuts down cleanly on
+    SIGINT/SIGTERM. Never binds beyond 127.0.0.1.
+    """
+    import signal
+    import sys
+
+    if not root.is_dir():
+        raise DwError(f"repo root does not exist: {root}")
+    try:
+        has_roadmap = roadmap_dir(root).is_dir()
+    except DwError:
+        has_roadmap = False
+    if not has_roadmap:
+        raise DwError(
+            f"no pm/roadmap tree under {root} — the workbench serves exactly one "
+            "roadmap-bearing repo root; pass --root or run dw adopt / new-project first"
+        )
     handler = create_handler(root, workbench_dir())
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+    handler.quiet = quiet
+    try:
+        httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+    except OSError as err:
+        raise DwError(
+            f"cannot bind 127.0.0.1:{port} ({err.strerror or err}); "
+            "the port is likely in use — stop the other process or pass --port <n>"
+        )
     print(f"dw-workbench: serving {root}")
-    print(f"dw-workbench: http://127.0.0.1:{port}/ (read-only; Ctrl-C to stop)")
+    print(f"dw-workbench: http://127.0.0.1:{port}/ (localhost only; Ctrl-C to stop)")
+    print("dw-workbench: writes happen only via /api/mutations preview→apply inside pm/roadmap; never commits")
+
+    def _term(_sig, _frame):  # graceful SIGTERM
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _term)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        pass
+        print("dw-workbench: shutting down", file=sys.stderr)
     finally:
         httpd.server_close()

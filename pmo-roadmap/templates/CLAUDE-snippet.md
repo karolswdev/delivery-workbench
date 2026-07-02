@@ -4,7 +4,8 @@ This repository uses Delivery Workbench: an evidence-first commit gate
 over a Markdown roadmap under `pm/roadmap/<project>/` (phases, stories,
 paired evidence files). Markdown is the source of truth; `.githooks/dw`
 is the CLI for everything below. Run `.githooks/dw doctor` if anything
-seems miswired.
+seems miswired. `.githooks/dw-workbench --root .` serves a localhost
+web view of the roadmap (browse, health, trace, guarded edit).
 
 Orient before working:
 

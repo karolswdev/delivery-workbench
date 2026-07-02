@@ -22,6 +22,17 @@ from pathlib import Path
 from .model import DONE_STATUSES, STORY_RE, STORY_STATUSES, Phase, Project, die
 
 
+_SLUG_RE_STRICT = __import__("re").compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def validate_slug(slug: str) -> str:
+    """User-supplied slugs must stay in the slugify alphabet — a slug is
+    a filename fragment, never a path."""
+    if not _SLUG_RE_STRICT.match(slug):
+        die(f"invalid slug {slug!r}: lowercase letters, digits, and hyphens only")
+    return slug
+
+
 def validate_story_status(status: str) -> str:
     status = status.strip().lower()
     if status not in STORY_STATUSES:
@@ -302,7 +313,7 @@ def plan_phase_create(
     status: str = "not-started",
     goal: str | None = None,
 ) -> MutationPlan:
-    slug = slug or slugify(title)
+    slug = validate_slug(slug) if slug else slugify(title)
     phase_dir = project.path / f"phase-{number}-{slug}"
     ensure_under(phase_dir, roadmap_dir(root))
     if phase_dir.exists():
@@ -330,6 +341,8 @@ def plan_story_create(
     status: str = "backlog",
 ) -> MutationPlan:
     status = validate_story_status(status)
+    if slug:
+        slug = validate_slug(slug)
     existing = []
     for story in phase.path.glob("story-*.md"):
         m = STORY_RE.match(story.name)

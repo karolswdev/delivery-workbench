@@ -16,6 +16,7 @@ Installs the pmo-roadmap framework into <target-dir>:
   - copies hooks/post-commit              → .githooks/post-commit (chmod +x)
   - copies bin/dw                         → .githooks/dw
   - copies lib/dw_pmo/                    → .githooks/dw_pmo/
+  - copies bin/dw-workbench + workbench/  → .githooks/ (local web UI)
   - copies bin/work-log-summarize         → .githooks/work-log-summarize
   - copies bin/work-log-read              → .githooks/work-log-read
   - copies agent/dw-*.md                  → .claude/commands/ (slash commands)
@@ -142,6 +143,12 @@ rm -rf "$TARGET/.githooks/dw_pmo"
 mkdir -p "$TARGET/.githooks/dw_pmo"
 cp "$SOURCE_DIR/lib/dw_pmo/"*.py "$TARGET/.githooks/dw_pmo/"
 echo "  ✓ wrote .githooks/dw_pmo/"
+cp "$SOURCE_DIR/bin/dw-workbench" "$TARGET/.githooks/dw-workbench"
+chmod +x "$TARGET/.githooks/dw-workbench"
+rm -rf "$TARGET/.githooks/workbench"
+mkdir -p "$TARGET/.githooks/workbench"
+cp "$SOURCE_DIR/workbench/"* "$TARGET/.githooks/workbench/"
+echo "  ✓ wrote .githooks/dw-workbench + .githooks/workbench/ (local explorer UI)"
 
 cp "$SOURCE_DIR/bin/work-log-summarize" "$TARGET/.githooks/work-log-summarize"
 chmod +x "$TARGET/.githooks/work-log-summarize"

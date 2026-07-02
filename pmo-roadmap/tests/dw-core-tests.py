@@ -810,6 +810,45 @@ class DwCoreTest(unittest.TestCase):
         self.assertIn("no evidence file exists yet — required before done", payload["data"]["text"])
         self.assertIn("shipped: no", payload["data"]["text"])
 
+    # -- runtime permission model (WLA-5-09) -----------------------------------
+
+    def test_host_header_allowlist(self) -> None:
+        from dw_pmo.workbench import host_allowed
+
+        for ok in ("127.0.0.1:8377", "localhost:9000", "127.0.0.1", "localhost", "", "[::1]:8377"):
+            self.assertTrue(host_allowed(ok), ok)
+        for evil in ("evil.example.com", "evil.example.com:8377", "192.168.1.5:8377",
+                     "attacker.test:80", "0.0.0.0:8377"):
+            self.assertFalse(host_allowed(evil), evil)
+
+    def test_mutation_slug_injection_refused(self) -> None:
+        from dw_pmo import workbench as wb
+
+        for body in (
+            {"kind": "create_phase", "project": "demo", "number": "9",
+             "title": "Evil", "slug": "../../../../tmp/escape"},
+            {"kind": "create_story", "project": "demo", "phase": "1",
+             "title": "Evil", "slug": "../../../escape"},
+        ):
+            status, payload = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+            self.assertEqual(status, 400, payload)
+            self.assertIn("invalid slug", payload["issues"][0])
+        escaped = self.root.parent / "tmp"
+        self.assertFalse((escaped / "escape").exists() if escaped.exists() else False)
+
+    def test_serve_fails_closed_without_roadmap(self) -> None:
+        from dw_pmo.workbench import serve
+        from dw_pmo.model import DwError
+
+        bare = self.root / "not-a-roadmap-repo"
+        bare.mkdir()
+        with self.assertRaises(DwError) as ctx:
+            serve(bare, port=0)
+        self.assertIn("no pm/roadmap tree", ctx.exception.message)
+        with self.assertRaises(DwError) as ctx:
+            serve(self.root / "ghost", port=0)
+        self.assertIn("does not exist", ctx.exception.message)
+
     # -- adoption bridge (WLA-6-07) -----------------------------------------
 
     GOOD_REPORT = """# New Proj - PMO Adoption Discovery

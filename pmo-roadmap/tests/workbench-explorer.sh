@@ -29,6 +29,9 @@ fail() {
 REPO="$TMP_ROOT/repo"
 PROJECT="$REPO/pm/roadmap/sample"
 mkdir -p "$PROJECT"
+git -C "$REPO" init -q
+git -C "$REPO" config user.name "Workbench Test"
+git -C "$REPO" config user.email "workbench@example.test"
 cat > "$PROJECT/README.md" <<'EOF'
 # Sample - Roadmap
 
@@ -57,7 +60,7 @@ DW="$PMO_DIR/bin/dw"
 # fixture entry is written further down.
 export PMO_WORK_LOG_DIR="$TMP_ROOT/worklog"
 PORT=$(( (RANDOM % 2000) + 18000 ))
-"$PMO_DIR/bin/dw-workbench" --root "$REPO" --port "$PORT" &
+"$PMO_DIR/bin/dw-workbench" --root "$REPO" --port "$PORT" 2>"$TMP_ROOT/access.log" &
 SERVER_PID=$!
 i=0
 until curl -sf "http://127.0.0.1:$PORT/api/projects" >/dev/null 2>&1; do
@@ -372,5 +375,72 @@ assert "evidence: pm/roadmap/sample/" in text
 assert "sample-1-work-summary.log" in text
 assert "never a substitute for evidence-story-NN.md" in text
 PY
+
+# ── runtime permission model (WLA-5-09) ───────────────────────────────
+# no endpoint stages or commits: the git index stayed empty through
+# every preview and apply above
+[ -z "$(git -C "$REPO" ls-files)" ] || fail "the workbench must never stage files"
+
+# default-deny methods and hosts
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$BASE/api/context")" = "405" ] \
+  || fail "OPTIONS (CORS preflight) must fail closed"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example.com' "$BASE/api/projects")" = "403" ] \
+  || fail "non-local Host header must be refused"
+curl -s -i "$BASE/api/projects" | grep -qi 'access-control-allow' \
+  && fail "no CORS headers may ever be emitted" || true
+
+# startup refusals fail closed with clear messages
+BARE="$TMP_ROOT/bare"; mkdir -p "$BARE"
+if OUT=$("$PMO_DIR/bin/dw-workbench" --root "$BARE" --port 19999 2>&1); then
+  fail "server must refuse a root without pm/roadmap"
+fi
+echo "$OUT" | grep -q "no pm/roadmap tree" || fail "roadmap refusal should name the problem"
+if OUT=$("$PMO_DIR/bin/dw-workbench" --root "$TMP_ROOT/ghost" --port 19999 2>&1); then
+  fail "server must refuse a nonexistent root"
+fi
+
+# port conflict: second server on the same port refuses with remediation
+if OUT=$("$PMO_DIR/bin/dw-workbench" --root "$REPO" --port "$PORT" 2>&1); then
+  fail "second server on a busy port must refuse"
+fi
+echo "$OUT" | grep -q "pass --port" || fail "port-conflict message should include remediation"
+
+# request logging: the access log recorded the refusals above
+grep -q 'GET /api/projects HTTP/1.1" 403' "$TMP_ROOT/access.log" \
+  || fail "access log should record the refused evil-Host request"
+grep -q 'POST /api/mutations/apply HTTP/1.1" 409' "$TMP_ROOT/access.log" \
+  || fail "access log should record the stale-preview refusal"
+
+# clean shutdown on SIGTERM frees the port
+kill -TERM "$SERVER_PID" 2>/dev/null || true
+wait "$SERVER_PID" 2>/dev/null || true
+SERVER_PID=""
+sleep 0.5
+"$PMO_DIR/bin/dw-workbench" --root "$REPO" --port "$PORT" --quiet &
+SERVER_PID=$!
+i=0
+until curl -sf "$BASE/api/projects" >/dev/null 2>&1; do
+  i=$((i + 1)); [ "$i" -lt 40 ] || fail "port was not freed after SIGTERM"; sleep 0.25
+done
+
+# installed layout: install.sh distributes the workbench and the UI serves
+INSTALL_REPO="$TMP_ROOT/installed"
+mkdir -p "$INSTALL_REPO"
+git -C "$INSTALL_REPO" init -q
+git -C "$INSTALL_REPO" config user.name t
+git -C "$INSTALL_REPO" config user.email t@t
+"$PMO_DIR/install.sh" "$INSTALL_REPO" --project-name Demo --project-slug demo --project-prefix DEMO >/dev/null 2>&1
+[ -x "$INSTALL_REPO/.githooks/dw-workbench" ] || fail "install should ship dw-workbench"
+[ -f "$INSTALL_REPO/.githooks/workbench/index.html" ] || fail "install should ship the workbench UI"
+IPORT=$(( PORT + 1 ))
+"$INSTALL_REPO/.githooks/dw-workbench" --root "$INSTALL_REPO" --port "$IPORT" --quiet &
+IPID=$!
+i=0
+until curl -sf "http://127.0.0.1:$IPORT/api/projects" >/dev/null 2>&1; do
+  i=$((i + 1)); [ "$i" -lt 40 ] || { kill $IPID 2>/dev/null; fail "installed workbench did not start"; }; sleep 0.25
+done
+curl -s "http://127.0.0.1:$IPORT/" | grep -q 'id="app"' \
+  || { kill $IPID 2>/dev/null; fail "installed workbench should serve the UI from .githooks/workbench"; }
+kill $IPID 2>/dev/null; wait $IPID 2>/dev/null || true
 
 echo "workbench-explorer.sh: ok"
