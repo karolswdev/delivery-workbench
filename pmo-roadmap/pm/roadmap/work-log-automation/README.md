@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
 **Last updated:** 2026-07-02.
-**Current phase:** [phase-5-pmo-workbench-interaction-layer](./phase-5-pmo-workbench-interaction-layer/current-phase-status.md).
-**Status:** active.
+**Current phase:** n/a.
+**Status:** shipped — all seven phases are closed.
 
 ## Vision
 
@@ -60,7 +60,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 2 | Harden summarization, privacy controls, and failure behavior | done | [phase-2-hardening](./phase-2-hardening/) |
 | 3 | Roll out installer/update/docs support and prove adoption on a consumer project | done | [phase-3-rollout](./phase-3-rollout/) |
 | 4 | Add CLI support for routine roadmap maintenance and inspection | done | [phase-4-cli-maintenance-tools](./phase-4-cli-maintenance-tools/) |
-| 5 | Ship the rich PMO Workbench interaction layer on top of the existing agent-safe CLI/core without creating a second source of truth. | planned | [phase-5-pmo-workbench-interaction-layer](./phase-5-pmo-workbench-interaction-layer/) |
+| 5 | Ship the rich PMO Workbench interaction layer on top of the existing agent-safe CLI/core without creating a second source of truth. | done | [phase-5-pmo-workbench-interaction-layer](./phase-5-pmo-workbench-interaction-layer/) |
 | 6 | Harden the agent rails: single machine-checked gate, durable contract audit trail, first-class agent surface, proportionate ceremony, dogfooded on this repo | done | [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/) |
 
 ## Operating cadence
@@ -94,6 +94,15 @@ behavior is:
 
 ## Active extension
 
+Phase 5 (PMO Workbench Interaction Layer) shipped: the local
+workbench serves explorer, health console, trace timeline with agent
+handoff, work-log viewer, guarded editor, and the
+preview→diff→apply mutation workflow — all through the shared
+`dw_pmo` core with Markdown as the only source of truth, behind a
+tested localhost runtime boundary, distributed to consumer repos by
+install.sh/update.sh. See
+[phase-5-pmo-workbench-interaction-layer/final-summary.md](./phase-5-pmo-workbench-interaction-layer/final-summary.md).
+
 Phase 6 (Agent Rails Hardening) shipped: the gate is single-sourced in the
 `dw_pmo` core, contracts carry gate-verified stamped facts with durable
 trailers and archives, evidence carries captured runs, the agent surface is
@@ -102,14 +111,10 @@ commands, and CI runs the full suite on two OSes with shellcheck and a
 python-floor job. See
 [phase-6-agent-rails-hardening/final-summary.md](./phase-6-agent-rails-hardening/final-summary.md).
 
-Phase 5 owns the PMO Workbench interaction layer: the local human/agent
-console, editor, trace views, validation health surface, and runtime model that
-must sit on top of the shipped `dw` CLI/core without creating a second source
-of truth. Markdown under `pm/roadmap/**` remains authoritative.
-
-Future work remains possible around default-on policy, richer redaction, remote
-sync, and hosted collaboration, but Phase 5 is deliberately local-first and
-source-of-truth-first.
+Future work remains possible around default-on policy, richer
+redaction, remote sync, hosted collaboration, and DOM-level UI tests —
+each parked deliberately in the phase final summaries. Any of it would
+open as a new phase through the same gate that shipped these seven.
 
 ## Project metadata
 

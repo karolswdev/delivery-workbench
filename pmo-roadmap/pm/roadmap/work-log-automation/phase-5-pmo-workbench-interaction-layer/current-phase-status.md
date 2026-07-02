@@ -86,10 +86,15 @@ state store.
   path traversal, arbitrary file writes, and auto-commit attempts
   (evidence-story-09: Host allowlist, slug alphabet, roadmap-tree
   containment, empty-git-index proof).
-- [ ] UI tests cover desktop and mobile viewports for explorer, health, trace,
-  editor, preview, and validation states.
-- [ ] Dogfood evidence records command output, screenshots or equivalent UI
-  artifacts, `dw check work-log-automation`, and a final Phase 5 summary.
+- [x] UI tests cover desktop and mobile viewports for explorer, health, trace,
+  editor, preview, and validation states (workbench-ui-smoke.sh: 12
+  headless-Firefox renders per run, CI-run on ubuntu, self-skipping
+  where Firefox is absent; DOM-assertion browser tests remain a named
+  residual — see final-summary.md).
+- [x] Dogfood evidence records command output, screenshots or equivalent UI
+  artifacts, `dw check work-log-automation`, and a final Phase 5 summary
+  (ten evidence files with captured runs and 15 committed screenshots
+  under assets/; evidence-story-10).
 
 ## Story status
 
@@ -104,7 +109,7 @@ state store.
 | WLA-5-07 | Build safe mutation preview and diff workflow | done | [story-07-mutation-preview-diff-workflow](./story-07-mutation-preview-diff-workflow.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-5-08 | Integrate commit and work-log evidence views | done | [story-08-commit-worklog-evidence-views](./story-08-commit-worklog-evidence-views.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-5-09 | Harden permissions and local runtime model | done | [story-09-permissions-local-runtime-model](./story-09-permissions-local-runtime-model.md) | [evidence-story-09](./evidence-story-09.md) |
-| WLA-5-10 | Ship documentation tests and adoption path | backlog | [story-10-docs-tests-adoption-path](./story-10-docs-tests-adoption-path.md) | - |
+| WLA-5-10 | Ship documentation tests and adoption path | done | [story-10-docs-tests-adoption-path](./story-10-docs-tests-adoption-path.md) | [evidence-story-10](./evidence-story-10.md) |
 
 ## Execution sequence
 
@@ -125,15 +130,14 @@ state store.
 
 ## Where we are
 
-WLA-5-09 is done with evidence: the runtime boundary is boring and
-explicit. Startup fails closed with remediation in every message;
-HTTP-layer default-deny covers Host headers, CORS, and methods; the
-security tests found and fixed a real cross-project slug-containment
-hole at the core; git-index purity is proven per suite run; and — the
-boundary proven — install/update now distribute dw-workbench and the
-UI into consumer repos, exercised end to end by the integration
-suite. One story remains: WLA-5-10 (docs, viewport tests, adoption
-path, and the phase close-out audit).
+Phase 5 is complete: all ten stories done with evidence, all ten exit
+criteria checked, and the phase closed with
+[final-summary.md](./final-summary.md) written as an audit. The
+workbench shipped whole — explorer, health console, trace timeline
+with agent handoff, work-log viewer, guarded editor, and the
+preview→diff→apply workflow — on one core, one source of truth, a
+proven runtime boundary, and distribution into consumer repos. This
+file is frozen.
 
 ## Active risks
 
