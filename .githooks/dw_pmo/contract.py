@@ -54,7 +54,9 @@ _FACT_RES = {
     "head": re.compile(r"^\*\*HEAD:\*\*\s*(.+)$", re.MULTILINE),
     "index_tree": re.compile(r"^\*\*Index-tree:\*\*\s*(.+)$", re.MULTILINE),
     "story": re.compile(r"^\*\*Story:\*\*\s*(.+)$", re.MULTILINE),
+    "tests_capture": re.compile(r"^\*\*Tests-ran capture:\*\*\s*(.+)$", re.MULTILINE),
 }
+TESTS_RAN_TITLE = "Tests ran."
 _SAMPLE_HEADER_RE = re.compile(r"^\*\*Staged files \(sample\):\*\*\s*$")
 _MORE_MARKER_RE = re.compile(r"^- … \(\+\d+ more\)$")
 _HEADING_ID_RE = re.compile(r"^#\s+(\S+)\s+[-—]")
@@ -208,11 +210,36 @@ Rules canon: {{RULES_DOC}}
 """
 
 
+def resolve_tests_capture(root: Path, reference: str) -> str:
+    """Resolve a Tests-ran capture reference against the staged index.
+
+    Accepts ``<evidence-path>`` (newest passing run) or
+    ``<evidence-path>#<timestamp>``; returns the canonical
+    ``path#timestamp`` form. Dies when the evidence is not staged, the
+    run is absent, or its exit code is nonzero — the same checks the
+    gate re-runs at commit time.
+    """
+    from .evidence import find_captured_run, latest_passing_capture
+
+    path_part, _, ts_part = reference.partition("#")
+    blob = index_blob(root, path_part)
+    if blob is None:
+        die(f"tests capture reference is not in the staged index: {path_part} (stage the evidence first)")
+    run = find_captured_run(blob, ts_part) if ts_part else latest_passing_capture(blob)
+    if run is None:
+        detail = f" with timestamp {ts_part}" if ts_part else " with exit code 0"
+        die(f"no captured run{detail} found in staged {path_part}")
+    if run["exit_code"] != 0:
+        die(f"captured run {path_part}#{run['timestamp']} exited {run['exit_code']}, not 0")
+    return f"{path_part}#{run['timestamp']}"
+
+
 def build_contract(
     root: Path,
     story_ids: list[str] | None = None,
     consent: str = "no",
     reasons: list[str] | None = None,
+    tests_capture: str | None = None,
 ) -> str:
     facts = collect_facts(root)
     declared = list(story_ids) if story_ids else []
@@ -250,6 +277,24 @@ def build_contract(
     }
     for token, value in replacements.items():
         text = text.replace(token, value)
+
+    if tests_capture:
+        canonical = resolve_tests_capture(root, tests_capture)
+        marker = "**Staged files (sample):**"
+        text = text.replace(marker, f"**Tests-ran capture:** {canonical}\n{marker}", 1)
+        discharged = False
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if line.startswith(f"- [ ] **{TESTS_RAN_TITLE}**"):
+                lines[i] = (
+                    f"- [x] **{TESTS_RAN_TITLE}** Discharged mechanically: captured run "
+                    f"{canonical} (exit 0), re-verified by the gate at commit time."
+                )
+                discharged = True
+                break
+        if not discharged:
+            die(f"cannot discharge tests-ran mechanically: no box titled {TESTS_RAN_TITLE!r} in the rule set")
+        text = "\n".join(lines) + "\n"
     return text
 
 
@@ -259,12 +304,13 @@ def write_contract(
     consent: str = "no",
     reasons: list[str] | None = None,
     force: bool = False,
+    tests_capture: str | None = None,
 ) -> Path:
     path = root / CONTRACT_REL
     if path.exists() and not force:
         die(f"contract already exists; pass --force to replace: {CONTRACT_REL}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_text(path, build_contract(root, story_ids, consent, reasons))
+    write_text(path, build_contract(root, story_ids, consent, reasons, tests_capture))
     return path
 
 

@@ -321,4 +321,36 @@ fi
 git commit -q -m "retry after abort" >/dev/null 2>&1 \
   || fail "retry after abort should pass without re-authoring the contract"
 
+# S22 — mechanical tests-ran discharge via a captured run.
+cat > "$PHASE/current-phase-status.md" <<'EOF'
+## Story status
+
+| ID | Story | Status | Story file | Evidence |
+|---|---|---|---|---|
+| DEMO-1-09 | Capture story | ready | [story-09-capture](./story-09-capture.md) | - |
+EOF
+printf '# DEMO-1-09 - Capture story\n\n- **Status:** done\n' > "$PHASE/story-09-capture.md"
+.githooks/dw evidence capture demo 1 DEMO-1-09 -- sh -c 'echo parity-tests-pass' >/dev/null \
+  || fail "evidence capture should succeed"
+git add -A
+.githooks/dw contract new --force --tests-capture "$PHASE/evidence-story-09.md" >/dev/null 2>&1 \
+  || fail "contract new --tests-capture should resolve the staged captured run"
+grep -q '^\*\*Tests-ran capture:\*\* ' .tmp/CONTRACT.md \
+  || fail "contract should stamp the tests-capture fact"
+grep -q '^- \[x\] \*\*Tests ran\.\*\* Discharged mechanically' .tmp/CONTRACT.md \
+  || fail "tests-ran box should be discharged mechanically"
+certify x
+check_parity pass "tests-ran discharged via captured run"
+
+# S23 — tampered tests-capture reference is refused.
+tweak capture-tamper
+.githooks/dw contract new --force --tests-capture "$PHASE/evidence-story-09.md" >/dev/null 2>&1
+certify x
+sed 's|^\(\*\*Tests-ran capture:\*\* .*\)#.*$|\1#1999-01-01T00:00:00Z|' .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
+mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
+.githooks/dw gate --porcelain 2>/dev/null | grep -q '^rule=contract-tests-capture-mismatch$' \
+  || fail "tampered capture timestamp should trip contract-tests-capture-mismatch"
+check_parity fail "tampered tests-capture reference"
+reset_state
+
 echo "gate-parity.sh: ok"

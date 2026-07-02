@@ -193,6 +193,35 @@ def run_gate(
                 "The sample must reflect reality. Re-run `dw contract new --force` after staging.",
             )
 
+    # Mechanical tests-ran discharge: the referenced captured run must
+    # exist in the staged evidence with exit code 0.
+    tests_capture = facts.get("tests_capture")
+    if tests_capture:
+        from .evidence import find_captured_run, latest_passing_capture
+
+        ref = str(tests_capture)
+        cap_path, _, cap_ts = ref.partition("#")
+        blob = index_blob(root, cap_path)
+        if blob is None:
+            return failed(
+                "contract-tests-capture-mismatch",
+                f"Tests-ran capture references {cap_path!r}, which is not in the staged index.",
+                "Stage the evidence file carrying the captured run, or regenerate the contract.",
+            )
+        run = find_captured_run(blob, cap_ts) if cap_ts else latest_passing_capture(blob)
+        if run is None:
+            return failed(
+                "contract-tests-capture-mismatch",
+                f"No captured run {cap_ts or '(passing)'} found in staged {cap_path}.",
+                "Re-run `dw evidence capture`, stage the evidence, and regenerate the contract.",
+            )
+        if run["exit_code"] != 0:
+            return failed(
+                "contract-tests-capture-mismatch",
+                f"Referenced captured run {cap_path}#{run['timestamp']} exited {run['exit_code']}, not 0.",
+                "Tests must pass to discharge the rule mechanically; fix them and re-capture.",
+            )
+
     # 3. No unchecked boxes.
     unchecked = [
         f"{i}: {line}"

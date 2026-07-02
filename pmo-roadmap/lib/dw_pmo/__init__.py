@@ -89,6 +89,15 @@ from .contract import (
     rules_doc_path,
     write_contract,
 )
+from .evidence import (
+    CAPTURE_HEADING_RE,
+    TRUNCATION_MARKER,
+    find_captured_run,
+    latest_passing_capture,
+    parse_captured_runs,
+    render_capture_block,
+    run_capture,
+)
 from .gate import (
     GateFailure,
     GateResult,
@@ -96,5 +105,7 @@ from .gate import (
     render_gate_porcelain,
     run_gate,
 )
+from .model import EVIDENCE_PLACEHOLDER
+from .validate import evidence_content_issues
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"

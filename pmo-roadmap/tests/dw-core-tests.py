@@ -260,6 +260,85 @@ class DwCoreTest(unittest.TestCase):
                 os.environ["PMO_WORK_LOG_DIR"] = old
 
 
+    # -- evidence capture and content lints (WLA-6-04) ------------------
+
+    def test_capture_appends_and_records(self) -> None:
+        before_others = {
+            k: v for k, v in self.snapshot().items() if "evidence-story-02" not in k
+        }
+        code, path, ts = core.run_capture(
+            self.root, self.project, self.phase, "DM-1-02", ["sh", "-c", "echo captured-ok"]
+        )
+        self.assertEqual(code, 0)
+        text = path.read_text(encoding="utf-8")
+        self.assertIn(f"### Captured run — {ts}", text)
+        self.assertIn("- **Exit code:** 0", text)
+        self.assertIn("captured-ok", text)
+        code2, path2, _ts2 = core.run_capture(
+            self.root, self.project, self.phase, "DM-1-02", ["sh", "-c", "echo boom; exit 5"]
+        )
+        self.assertEqual(code2, 5, "capture must mirror the command's exit code")
+        self.assertEqual(path2, path)
+        runs = core.parse_captured_runs(path.read_text(encoding="utf-8"))
+        self.assertEqual([r["exit_code"] for r in runs], [0, 5])
+        passing = core.latest_passing_capture(path.read_text(encoding="utf-8"))
+        self.assertEqual(passing["timestamp"], ts)
+        after_others = {
+            k: v for k, v in self.snapshot().items() if "evidence-story-02" not in k
+        }
+        self.assertEqual(before_others, after_others, "capture must touch only the evidence file")
+
+    def test_capture_truncation_marker(self) -> None:
+        block = core.render_capture_block(
+            "cmd", ".", 0, "x" * 500, "2026-07-02T12:00:00Z", "tree", max_output_bytes=16
+        )
+        self.assertIn(core.TRUNCATION_MARKER, block)
+        small = core.render_capture_block(
+            "cmd", ".", 0, "tiny", "2026-07-02T12:00:00Z", "tree", max_output_bytes=16
+        )
+        self.assertNotIn(core.TRUNCATION_MARKER, small)
+
+    def test_evidence_content_lints(self) -> None:
+        placeholder = self.phase_dir / "evidence-story-07.md"
+        placeholder.write_text(
+            f"# Evidence\n\n## Proof\n\n- {core.EVIDENCE_PLACEHOLDER}\n", encoding="utf-8"
+        )
+        issues = core.evidence_content_issues(placeholder, self.phase_dir, self.root)
+        self.assertTrue(any("generator placeholder" in i for i in issues))
+        empty = self.phase_dir / "evidence-story-08.md"
+        empty.write_text(
+            "# Evidence - X\n\n- **Story:** X\n- **Status:** done\n\n## Proof\n", encoding="utf-8"
+        )
+        issues = core.evidence_content_issues(empty, self.phase_dir, self.root)
+        self.assertTrue(any("evidence body is empty" in i for i in issues))
+        with_asset = self.phase_dir / "evidence-story-09.md"
+        with_asset.write_text(
+            "# Evidence\n\n## Proof\n\n- see ![shot](./assets/shot.png)\n", encoding="utf-8"
+        )
+        issues = core.evidence_content_issues(with_asset, self.phase_dir, self.root)
+        self.assertTrue(any("broken asset reference" in i for i in issues))
+        (self.phase_dir / "assets").mkdir()
+        (self.phase_dir / "assets" / "shot.png").write_bytes(b"png")
+        self.assertEqual(core.evidence_content_issues(with_asset, self.phase_dir, self.root), [])
+
+    def test_check_flags_placeholder_evidence_for_done_story(self) -> None:
+        (self.phase_dir / "evidence-story-01.md").write_text(
+            f"# Evidence - DM-1-01\n\n## Proof\n\n- {core.EVIDENCE_PLACEHOLDER}\n", encoding="utf-8"
+        )
+        issues = "\n".join(core.check_project(self.project, self.root))
+        self.assertIn("generator placeholder", issues)
+
+    def test_narrative_only_warning(self) -> None:
+        warnings = "\n".join(core.project_warnings(self.project, self.root))
+        self.assertIn("narrative-only evidence", warnings)
+        self.assertIn("evidence-story-01.md", warnings)
+        evidence = self.phase_dir / "evidence-story-01.md"
+        block = core.render_capture_block("cmd", ".", 0, "ok", "2026-07-02T12:00:00Z", "tree")
+        evidence.write_text(evidence.read_text(encoding="utf-8") + "\n" + block, encoding="utf-8")
+        warnings = "\n".join(core.project_warnings(self.project, self.root))
+        self.assertNotIn("narrative-only evidence", warnings)
+
+
 RULES_DOC_MIN = """# PMO Contract
 
 ## Contract template
@@ -555,6 +634,38 @@ class GateTest(unittest.TestCase):
         self.contract()
         result = self.gate()
         self.assertTrue(result.ok, result.failure and result.failure.message)
+
+    # -- mechanical tests-ran discharge ----------------------------------------
+
+    def test_tests_capture_discharge_and_tamper(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready", story_id="DM-1-01")
+        self.commit_all("base")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done", story_id="DM-1-01")
+        ts = "2026-07-02T12:00:00Z"
+        block = core.render_capture_block("run-tests", ".", 0, "all green", ts, "tree")
+        ev_rel = "pm/roadmap/demo/phase-1-alpha/evidence-story-01.md"
+        self.write(ev_rel, "# Evidence - DM-1-01\n\n## Proof\n\n" + block)
+        with self.assertRaises(DwError):
+            core.build_contract(self.root, tests_capture=ev_rel)  # not staged yet
+        self.git("add", "-A")
+        text = core.build_contract(self.root, tests_capture=ev_rel)
+        self.assertIn(f"**Tests-ran capture:** {ev_rel}#{ts}", text)
+        self.assertIn("- [x] **Tests ran.** Discharged mechanically", text)
+        certified = text.replace("- [ ]", "- [x]")
+        self.write(".tmp/CONTRACT.md", certified)
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+        tampered = certified.replace(f"#{ts}", "#1999-01-01T00:00:00Z")
+        self.write(".tmp/CONTRACT.md", tampered)
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-tests-capture-mismatch")
+        failing_block = core.render_capture_block("run-tests", ".", 1, "boom", "2026-07-02T13:00:00Z", "tree")
+        ev2_rel = "pm/roadmap/demo/phase-1-alpha/evidence-story-09.md"
+        self.write(ev2_rel, "# stray\n\n" + failing_block)
+        self.git("add", "-N", ev2_rel)
+        self.git("add", ev2_rel)
+        with self.assertRaises(DwError):
+            core.build_contract(self.root, tests_capture=ev2_rel)  # no passing run
 
     # -- durable trail ---------------------------------------------------------
 

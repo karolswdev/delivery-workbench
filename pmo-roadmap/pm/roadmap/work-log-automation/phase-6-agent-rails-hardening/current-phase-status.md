@@ -101,7 +101,7 @@ what the framework claims and what it verifies.
 | WLA-6-01 | Restore dogfood integrity and land the working tree through the rails | done | [story-01-dogfood-integrity](./story-01-dogfood-integrity.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-6-02 | Unify the commit gate into a single dw gate engine | done | [story-02-single-gate-engine](./story-02-single-gate-engine.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-6-03 | Ship verified contract v2 with durable audit trail | done | [story-03-verified-contract-v2](./story-03-verified-contract-v2.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-6-04 | Add evidence capture tooling and content linting | backlog | [story-04-evidence-capture](./story-04-evidence-capture.md) | - |
+| WLA-6-04 | Add evidence capture tooling and content linting | done | [story-04-evidence-capture](./story-04-evidence-capture.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-6-05 | Ship the first-class agent surface | backlog | [story-05-agent-surface](./story-05-agent-surface.md) | - |
 | WLA-6-06 | Right-size ceremony and unify template canon | backlog | [story-06-ceremony-proportionality](./story-06-ceremony-proportionality.md) | - |
 | WLA-6-07 | Harden onboarding and adoption bridge | backlog | [story-07-onboarding-hardening](./story-07-onboarding-hardening.md) | - |
@@ -126,20 +126,18 @@ what the framework claims and what it verifies.
 
 ## Where we are
 
-WLA-6-03 is done with evidence: contracts are generated
-(`dw contract new`) with stamped facts the gate re-derives — index-tree
-freshness killed the `touch` bypass, boxes verify by rule title with
-project extensions picked up automatically, and flipped stories must be
-declared. The trail is durable: `commit-msg` stamps `PMO-Story` +
-`PMO-Contract-Digest` trailers, `post-commit` archives the exact
-contract (digest-matched) plus bundle rationales under
-`.git/pmo-contract-archive/<sha>`, aborted commits keep their
-contracts, and `dw context --trace` surfaces the digests — the full
-story -> evidence -> commit -> contract -> work-log chain now resolves
-(faa7de6). 36 unit tests and the extended parity suite are in CI. Next
-per the execution sequence: WLA-6-04 (evidence capture tooling and
-content linting), which can also mechanically discharge the
-"tests ran" rule against captured runs.
+WLA-6-04 is done with evidence: `dw evidence capture` appends
+machine-parseable captured-run blocks (command, exit code, index tree,
+capped output) to evidence files, `dw check` rejects
+placeholder/empty evidence and broken `assets/` references for done
+stories, narrative-only evidence is named in warnings, and
+`dw contract new --tests-capture` discharges the "Tests ran." rule
+mechanically with the gate re-verifying the staged captured run
+(exit 0) at commit time — this story's own shipping commit is the
+first mechanically-discharged contract, and evidence-story-04 carries
+the tool's own captured runs (42-test unit suite, 23-scenario parity
+suite). Next per the execution sequence: WLA-6-05 (the first-class
+agent surface: shipped commands, managed CLAUDE.md block, `dw doctor`).
 
 ## Active risks
 

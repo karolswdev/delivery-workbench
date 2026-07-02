@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from .model import Phase, Project, StoryRow, die
+from .model import EVIDENCE_PLACEHOLDER, Phase, Project, StoryRow, die
 from .parse import split_table_row
 from .paths import read_text, template_dir
 
@@ -116,7 +116,7 @@ def render_evidence(row: StoryRow, story_num: int, body: str) -> str:
     today = date.today().isoformat()
     body = body.strip()
     if not body:
-        body = "- Evidence body intentionally left for the operator to complete before commit."
+        body = f"- {EVIDENCE_PLACEHOLDER}"
     return f"""# Evidence - {row.story_id}
 
 - **Story:** {row.story_id} - {row.title}

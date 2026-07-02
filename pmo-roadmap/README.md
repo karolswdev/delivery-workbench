@@ -295,6 +295,7 @@ the existing markdown files; it does not create a separate tracker.
   --evidence-body "- Test output and implementation notes."
 .githooks/dw story evidence myproject 1 PRJ-1-01 \
   --body "- Additional verification detail."
+.githooks/dw evidence capture myproject 1 PRJ-1-01 -- npm test
 .githooks/dw phase close myproject 1 \
   --summary "Phase closed with all stories evidenced."
 .githooks/dw check myproject
@@ -376,12 +377,52 @@ rule=<failed-rule-id>    # contract-missing | contract-facts-missing |
                          # contract-sample-mismatch |
                          # contract-unchecked | contract-unknown-box |
                          # contract-missing-box | contract-boxes |
-                         # contract-story-mismatch | atomicity |
+                         # contract-story-mismatch |
+                         # contract-tests-capture-mismatch | atomicity |
                          # evidence-missing | orphan-evidence |
                          # evidence-deletion-orphans-story
 message=<one line>
 remediation=<one line>
 ```
+
+### Evidence capture (`dw evidence capture`)
+
+Evidence should carry proof, not prose. After running a verification
+command through:
+
+```bash
+.githooks/dw evidence capture <project> <phase> <story> -- <command…>
+```
+
+the story's evidence file gains an appended, machine-parseable block —
+`### Captured run — <UTC timestamp>` with the exact command, cwd, exit
+code, `git write-tree` index tree, and fenced combined output
+(byte-capped via `--max-output-bytes`, default 20000, with an explicit
+`[PMO_EVIDENCE_OUTPUT_TRUNCATED]` marker). Nonzero exits are recorded
+honestly and mirrored as the CLI's exit code. Capture touches only the
+evidence file (creating it when missing); linking it in the phase table
+remains `dw story status`'s job.
+
+`dw check` enforces evidence content for done stories: an ERROR when
+the evidence still carries the generator placeholder or has no body,
+and an ERROR for broken asset references — screenshots and binary
+artifacts belong under `assets/` next to the evidence file and are
+referenced relatively (`![shot](./assets/shot.png)`), so `dw check`
+can existence-check them. Done stories whose evidence has no captured
+run are named in a `narrative-only evidence` warning (visible in
+`dw context`), not an error.
+
+A passing captured run can discharge the "Tests ran." contract rule
+mechanically:
+
+```bash
+.githooks/dw contract new --tests-capture <evidence-path>[#timestamp]
+```
+
+stamps a `**Tests-ran capture:**` fact and pre-checks the box; the gate
+re-verifies at commit time that the referenced block exists in the
+**staged** evidence with exit code 0
+(`contract-tests-capture-mismatch` otherwise).
 
 Gate semantics (shared vocabulary with `dw`): a story "ships" when its
 `**Status:**` header flips from a non-done value in `HEAD` to any of

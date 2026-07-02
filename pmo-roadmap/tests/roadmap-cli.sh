@@ -287,4 +287,58 @@ if "$DW" --root "$REPO" check sample >/dev/null 2>&1; then
   fail "check should catch header/table status mismatch"
 fi
 
+# ── Evidence capture and content lints (WLA-6-04) ────────────────────
+
+# Undo the deliberate header/table mismatch from the previous assertion.
+sed -i.bak 's/- \*\*Status:\*\* backlog/- **Status:** done/' \
+  "$PROJECT/phase-0-setup-cli/story-01-create-first-story.md"
+rm -f "$PROJECT/phase-0-setup-cli/story-01-create-first-story.md.bak"
+
+"$DW" --root "$REPO" phase create sample 2 "Capture" \
+  --goal "Exercise evidence capture." >/dev/null
+"$DW" --root "$REPO" story create sample 2 "Capture a run" >/dev/null
+"$DW" --root "$REPO" evidence capture sample 2 SMP-2-01 -- sh -c 'echo captured-ok' >/dev/null
+EV="$PROJECT/phase-2-capture/evidence-story-01.md"
+grep -q '^### Captured run — ' "$EV" || fail "capture should append a captured-run block"
+grep -q '\*\*Exit code:\*\* 0' "$EV" || fail "capture should record exit code 0"
+grep -q 'captured-ok' "$EV" || fail "capture should record command output"
+if "$DW" --root "$REPO" evidence capture sample 2 SMP-2-01 -- sh -c 'exit 7' >/dev/null; then
+  fail "capture should mirror the command's nonzero exit code"
+fi
+grep -q '\*\*Exit code:\*\* 7' "$EV" || fail "nonzero exit should be recorded honestly"
+"$DW" --root "$REPO" evidence capture sample 2 SMP-2-01 --max-output-bytes 16 \
+  -- sh -c 'i=0; while [ $i -lt 40 ]; do echo oversized; i=$((i+1)); done' >/dev/null
+grep -q 'PMO_EVIDENCE_OUTPUT_TRUNCATED' "$EV" || fail "oversized output should carry the truncation marker"
+"$DW" --root "$REPO" story status sample 2 SMP-2-01 done >/dev/null
+"$DW" --root "$REPO" phase close sample 2 --summary "Capture phase closed." >/dev/null
+"$DW" --root "$REPO" check sample | grep -q 'dw check: ok' || fail "captured evidence should lint clean"
+
+"$DW" --root "$REPO" phase create sample 3 "Lint" \
+  --goal "Exercise evidence content lints." >/dev/null
+"$DW" --root "$REPO" story create sample 3 "Placeholder story" >/dev/null
+"$DW" --root "$REPO" story evidence sample 3 SMP-3-01 >/dev/null
+"$DW" --root "$REPO" story status sample 3 SMP-3-01 done >/dev/null
+if "$DW" --root "$REPO" check sample >/dev/null 2>&1; then
+  fail "check should reject placeholder evidence for a done story"
+fi
+"$DW" --root "$REPO" check sample 2>/dev/null | grep -q 'generator placeholder' \
+  || fail "check should name the placeholder lint"
+cat > "$PROJECT/phase-3-lint/evidence-story-01.md" <<'EOF'
+# Evidence - SMP-3-01
+
+- **Story:** SMP-3-01 - Placeholder story
+- **Status:** done
+- **Date:** 2026-07-01
+
+## Proof
+
+- proof line with a screenshot: ![shot](./assets/shot.png)
+EOF
+"$DW" --root "$REPO" check sample 2>/dev/null | grep -q 'broken asset reference' \
+  || fail "check should flag missing asset references"
+mkdir -p "$PROJECT/phase-3-lint/assets"
+printf 'png' > "$PROJECT/phase-3-lint/assets/shot.png"
+"$DW" --root "$REPO" phase close sample 3 --summary "Lint phase closed." >/dev/null
+"$DW" --root "$REPO" check sample | grep -q 'dw check: ok' || fail "check should pass once the asset exists"
+
 echo "roadmap-cli.sh: ok"

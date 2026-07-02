@@ -77,6 +77,13 @@ scripts, bash scripts, etc.). You read the output. You did not just
 author the test file. Failed tests are either fixed or named in the
 commit message as a known regression with a follow-up plan.
 
+Prefer discharging this rule mechanically: run the tests through
+`dw evidence capture <project> <phase> <story> -- <command>` and
+generate the contract with `dw contract new --tests-capture
+<evidence-path>`. The gate then verifies the captured run exists in
+the staged evidence with exit code 0, instead of trusting the
+checkbox.
+
 ### 4. Greenfield discipline (where applicable)
 
 If the project is in a pre-launch / greenfield state (the project

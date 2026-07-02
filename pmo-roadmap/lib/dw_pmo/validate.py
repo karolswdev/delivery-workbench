@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .model import DONE_STATUSES, OPEN_STATUSES, Project
+from .model import DONE_STATUSES, EVIDENCE_PLACEHOLDER, OPEN_STATUSES, Project
 from .parse import (
     current_phase_status_path,
     discover_phases,
@@ -16,18 +16,72 @@ from .parse import (
     parse_story_rows,
     story_num_from_file,
 )
-from .paths import rel
+from .paths import read_text, rel
+from .evidence import CAPTURE_HEADING_RE
+
+_ASSET_REF_RE = re.compile(r"\]\(((?:\./)?assets/[^)]+)\)")
+_HEADER_BULLET_RE = re.compile(r"^- \*\*(Story|Status|Date):\*\*")
+
+
+def _evidence_body_is_empty(text: str) -> bool:
+    """True when nothing but scaffold (headings, header bullets) remains."""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if _HEADER_BULLET_RE.match(stripped):
+            continue
+        return False
+    return True
+
+
+def evidence_content_issues(evidence_path: Path, phase_path: Path, root: Path) -> list[str]:
+    """ERROR-level content lints for a done story's evidence file."""
+    issues: list[str] = []
+    try:
+        text = read_text(evidence_path)
+    except OSError:
+        return [f"{rel(evidence_path, root)}: evidence file could not be read"]
+    if EVIDENCE_PLACEHOLDER in text:
+        issues.append(f"{rel(evidence_path, root)}: evidence still contains the generator placeholder")
+    elif _evidence_body_is_empty(text):
+        issues.append(f"{rel(evidence_path, root)}: evidence body is empty (no proof content)")
+    for m in _ASSET_REF_RE.finditer(text):
+        target = m.group(1)
+        if not (phase_path / target).exists():
+            issues.append(f"{rel(evidence_path, root)}: broken asset reference: {target}")
+    return issues
 
 
 def project_warnings(project: Project, root: Path) -> list[str]:
     warnings: list[str] = []
     active = []
+    uncaptured: list[str] = []
     for phase in discover_phases(project):
         rows = parse_story_rows(phase.path / "current-phase-status.md")
         if any(row.status in OPEN_STATUSES for row in rows):
             active.append(phase.path.name)
+        for row in rows:
+            if row.status not in DONE_STATUSES:
+                continue
+            target = link_target(row.evidence)
+            if not target or target in {"-", "—"}:
+                continue
+            path = (phase.path / target).resolve()
+            if not path.exists():
+                continue
+            try:
+                text = read_text(path)
+            except OSError:
+                continue
+            if not any(CAPTURE_HEADING_RE.match(line) for line in text.splitlines()):
+                uncaptured.append(rel(path, root))
     if len(active) > 1:
         warnings.append(f"multiple open phases detected: {', '.join(active)}")
+    if uncaptured:
+        shown = ", ".join(uncaptured[:8])
+        more = f" (+{len(uncaptured) - 8} more)" if len(uncaptured) > 8 else ""
+        warnings.append(f"narrative-only evidence (no captured runs): {shown}{more}")
     snapshot = hook_snapshot(root)
     if snapshot["appears_older_snapshot"]:
         warnings.append("installed pre-commit hook appears older than current Delivery Workbench seams")
@@ -66,14 +120,19 @@ def check_project(project: Project, root: Path) -> list[str]:
                 )
             evidence_target = link_target(row.evidence)
             if row.status in DONE_STATUSES:
+                evidence_file: Path | None = None
                 if row.evidence in {"-", "—", ""}:
                     issues.append(f"{status_file.relative_to(root)}: done story {row.story_id} has no evidence link")
                 elif evidence_target and evidence_target not in {"-", "—"}:
                     evidence_path = (phase.path / evidence_target).resolve()
                     if not evidence_path.exists():
                         issues.append(f"{status_file.relative_to(root)}: broken evidence link for {row.story_id}: {evidence_target}")
+                    else:
+                        evidence_file = evidence_path
                 elif story_num is not None and not (phase.path / f"evidence-story-{story_num:02d}.md").exists():
                     issues.append(f"{status_file.relative_to(root)}: done story {row.story_id} missing evidence-story-{story_num:02d}.md")
+                if evidence_file is not None:
+                    issues.extend(evidence_content_issues(evidence_file, phase.path, root))
         for evidence in sorted(phase.path.glob("evidence-story-*.md")):
             m = re.match(r"^evidence-story-(\d+)\.md$", evidence.name)
             if not m:

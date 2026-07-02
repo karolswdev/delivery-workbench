@@ -13,6 +13,13 @@ STORY_ID_RE = re.compile(r"^([A-Z][A-Z0-9]*)-(\d+)-(\d+)$")
 DONE_STATUSES = {"done", "complete", "closed", "shipped"}
 OPEN_STATUSES = {"backlog", "ready", "in-progress", "planned", "not-started"}
 
+# The generator's stand-in body for evidence created without content.
+# dw check treats a done story whose evidence still carries this line
+# as unproven.
+EVIDENCE_PLACEHOLDER = (
+    "Evidence body intentionally left for the operator to complete before commit."
+)
+
 
 class DwError(Exception):
     """A refusal or failure the caller can handle.
