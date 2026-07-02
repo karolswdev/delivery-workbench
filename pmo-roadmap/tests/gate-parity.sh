@@ -42,28 +42,21 @@ cd "$REPO"
 PHASE="pm/roadmap/demo/phase-1-alpha"
 mkdir -p "$PHASE"
 
-write_contract() { # [boxes] [mark] [consent]
-  boxes="${1:-7}"
-  mark="${2:-x}"
-  consent="${3:-no}"
-  mkdir -p .tmp
-  {
-    echo "# Commit Contract"
-    echo
-    i=1
-    while [ "$i" -le "$boxes" ]; do
-      echo "- [$mark] rule $i"
-      i=$((i + 1))
-    done
-    echo
-    echo "**Work-log consent:** $consent"
-    echo
-    echo "**Work-log reasons:**"
-    echo "- parity harness"
-    echo
-    echo "**Work-log exclusions:**"
-    echo "- none"
-  } > .tmp/CONTRACT.md
+generate_contract() { # [consent]
+  .githooks/dw contract new --force --consent "${1:-no}" \
+    --reasons "parity harness" >/dev/null 2>&1 \
+    || fail "dw contract new should generate a contract"
+}
+
+certify() { # [mark]
+  mark="${1:-x}"
+  sed "s/^- \[ \]/- [$mark]/" .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
+  mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
+}
+
+write_contract() { # [consent]
+  generate_contract "${1:-no}"
+  certify x
 }
 
 write_story() { # path status
@@ -140,12 +133,13 @@ check_parity pass "path with spaces"
 
 # S6 — capital-X checkboxes count as checked.
 tweak capital-x
-write_contract 7 X
+generate_contract
+certify X
 check_parity pass "capital-X checkboxes"
 
-# S7 — unchecked box blocks.
+# S7 — unchecked box blocks (generated but not certified).
 tweak unchecked
-write_contract 7 " "
+generate_contract
 check_parity fail "unchecked boxes"
 reset_state
 
@@ -166,6 +160,9 @@ check_parity fail "multi-flip without bundle"
 write_contract
 echo "intentional bundle for parity harness" > .tmp/BUNDLE-OK.md
 check_parity pass "multi-flip with BUNDLE-OK"
+BUNDLE_SHA="$(git rev-parse HEAD)"
+[ -f ".git/pmo-contract-archive/$BUNDLE_SHA/BUNDLE-OK.md" ] \
+  || fail "bundle rationale should be archived with the contract"
 
 # S10 — deleting evidence that orphans a done story is blocked.
 git rm -q "$PHASE/evidence-story-01.md"
@@ -187,16 +184,28 @@ write_contract
 check_parity fail "added orphan evidence"
 reset_state
 
-# S13 — pre-commit.config seam: EXPECTED_BOXES=8 applies to shim AND gate.
-cat > .githooks/pre-commit.config <<'EOF'
-EXPECTED_BOXES=8
-EOF
-tweak config-seam-under
-write_contract 7
-check_parity fail "config seam: 7 boxes under EXPECTED_BOXES=8"
-write_contract 8
-check_parity pass "config seam: 8 boxes"
-rm -f .githooks/pre-commit.config
+# S13 — project extension seam: an 8th rule added to the PMO-CONTRACT.md
+# template fence is required by generator and gate alike (EXPECTED_BOXES
+# count-checking is retired when a rules doc exists).
+cp pm/roadmap/PMO-CONTRACT.md "$TMP_ROOT/PMO-CONTRACT.md.bak"
+awk '
+  { print }
+  /^- \[ \] \*\*One PR per story\.\*\*/ {
+    print "- [ ] **Demo extension rule.** Project-specific parity rule."
+  }
+' pm/roadmap/PMO-CONTRACT.md > "$TMP_ROOT/PMO-CONTRACT.md.ext"
+mv "$TMP_ROOT/PMO-CONTRACT.md.ext" pm/roadmap/PMO-CONTRACT.md
+tweak extension-full
+write_contract
+grep -q 'Demo extension rule' .tmp/CONTRACT.md || fail "generator should pick up the project extension box"
+check_parity pass "extension seam: generated contract carries the extension box"
+tweak extension-missing
+write_contract
+grep -v 'Demo extension rule' .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
+mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
+check_parity fail "extension seam: contract missing the extension box"
+reset_state
+mv "$TMP_ROOT/PMO-CONTRACT.md.bak" pm/roadmap/PMO-CONTRACT.md
 
 # S14 — pre-commit.local seam: local rules still block and see gate context.
 cat > .githooks/pre-commit.local <<'EOF'
@@ -234,7 +243,7 @@ PMO_WORK_LOG_PROJECT_SLUG=demo
 EOF
 ENV_LOG="$TMP_ROOT/env-log"
 tweak env-log-dir
-write_contract 7 x yes
+write_contract yes
 PMO_WORK_LOG_DIR="$ENV_LOG" git commit -q -m "env log dir" >/dev/null 2>&1 \
   || fail "consented commit with env log dir should pass"
 LOG_FILE="$(find "$ENV_LOG/$(date +%F)" -type f -name '*-work-summary.log' 2>/dev/null | sed -n '1p')"
@@ -244,5 +253,72 @@ PMO_WORK_LOG_DIR="$ENV_LOG" .githooks/work-log-read --date "$(date +%F)" --list 
 PMO_WORK_LOG_DIR="$ENV_LOG" .githooks/dw context --compact 2>/dev/null \
   | grep -q "env-log" || fail "dw context should read work logs from the env PMO_WORK_LOG_DIR"
 rm -f .githooks/pre-commit.config
+
+# S17 — restaging invalidates the contract; touch cannot refresh it.
+tweak stale-tree
+write_contract
+echo "extra" > extra-file.txt
+git add extra-file.txt
+.githooks/dw gate --porcelain 2>/dev/null | grep -q '^rule=contract-index-tree-mismatch$' \
+  || fail "restaged index should trip contract-index-tree-mismatch"
+touch .tmp/CONTRACT.md
+if git commit -q -m "stale tree" >/dev/null 2>&1; then
+  fail "touch must not refresh a stale contract"
+fi
+write_contract
+check_parity pass "regenerated contract after restage"
+
+# S18 — invented staged sample is refused.
+tweak sample-tamper
+write_contract
+sed 's|^- README.md$|- invented/ghost.txt|' .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
+mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
+grep -q '^- invented/ghost.txt$' .tmp/CONTRACT.md || fail "sample tamper fixture failed"
+check_parity fail "invented staged sample"
+reset_state
+
+# S19 — a checked box outside the known rule set is refused.
+tweak unknown-box
+write_contract
+printf -- '- [x] **Bogus invented rule.** Not part of the canon.\n' >> .tmp/CONTRACT.md
+check_parity fail "unknown checkbox"
+reset_state
+
+# S20 — story declaration feeds the durable trail: trailer + archive.
+printf '# DEMO-1-08 - Parity story\n\n- **Status:** done\n' > "$PHASE/story-08-trailered.md"
+echo "# proof" > "$PHASE/evidence-story-08.md"
+git add -A
+write_contract
+grep -q '^\*\*Story:\*\* DEMO-1-08$' .tmp/CONTRACT.md \
+  || fail "generator should auto-declare the flipped story"
+sed 's/^\*\*Story:\*\* DEMO-1-08$/**Story:** none/' .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
+mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
+if .githooks/dw gate >/dev/null 2>&1; then
+  fail "undeclared story flip should be refused"
+fi
+write_contract
+check_parity pass "story flip with declared story"
+TRAIL_SHA="$(git rev-parse HEAD)"
+STORY_TRAILER="$(git log -1 --format='%(trailers:key=PMO-Story,valueonly)' | tr -d '\n')"
+[ "$STORY_TRAILER" = "DEMO-1-08" ] || fail "PMO-Story trailer should be stamped (got '$STORY_TRAILER')"
+DIGEST_TRAILER="$(git log -1 --format='%(trailers:key=PMO-Contract-Digest,valueonly)' | tr -d '\n')"
+[ -n "$DIGEST_TRAILER" ] || fail "PMO-Contract-Digest trailer should be stamped"
+[ -f ".git/pmo-contract-archive/$TRAIL_SHA/CONTRACT.md" ] \
+  || fail "contract should be archived under the commit sha"
+ARCHIVED_DIGEST="$(python3 -c "import hashlib,sys;print('sha256:'+hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" ".git/pmo-contract-archive/$TRAIL_SHA/CONTRACT.md")"
+[ "$DIGEST_TRAILER" = "$ARCHIVED_DIGEST" ] || fail "archived contract digest should match the trailer"
+[ ! -f .tmp/CONTRACT.md ] || fail "contract should be cleared after archiving"
+
+# S21 — an aborted commit no longer consumes the contract.
+tweak aborted-survival
+write_contract
+CONTRACT_SUM="$(cksum < .tmp/CONTRACT.md)"
+if GIT_EDITOR=false git commit >/dev/null 2>&1; then
+  fail "editor-aborted commit unexpectedly succeeded"
+fi
+[ -f .tmp/CONTRACT.md ] || fail "aborted commit must leave the contract in place"
+[ "$(cksum < .tmp/CONTRACT.md)" = "$CONTRACT_SUM" ] || fail "aborted commit must not alter the contract"
+git commit -q -m "retry after abort" >/dev/null 2>&1 \
+  || fail "retry after abort should pass without re-authoring the contract"
 
 echo "gate-parity.sh: ok"

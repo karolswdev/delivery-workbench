@@ -34,8 +34,10 @@ _bootstrap_core()
 try:
     from dw_pmo import (
         DwError,
+        append_trailers,
         apply_plan,
         build_context_payload,
+        contract_digest,
         discover_phases,
         discover_projects,
         find_root,
@@ -48,10 +50,12 @@ try:
         plan_story_evidence,
         plan_story_status,
         read_text,
+        parse_contract_facts,
         render_gate_failure,
         render_gate_porcelain,
         run_gate,
         story_num_from_file,
+        write_contract,
     )
 except ImportError as exc:  # pragma: no cover - environment failure path
     print(
@@ -243,6 +247,48 @@ def command_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_contract_new(args: argparse.Namespace) -> int:
+    story_ids = []
+    for raw in args.story or []:
+        story_ids.extend(s.strip() for s in raw.split(",") if s.strip())
+    reasons = list(args.reasons or [])
+    path = write_contract(
+        args.root,
+        story_ids=story_ids or None,
+        consent=args.consent,
+        reasons=reasons or None,
+        force=args.force,
+    )
+    text = read_text(path)
+    facts = parse_contract_facts(text) or {}
+    print(f".tmp/CONTRACT.md\t{facts.get('index_tree', 'unknown')}\t{facts.get('story', 'none')}")
+    print(
+        "dw contract new: facts stamped. Verify each rule, flip every '- [ ]' to '- [x]', "
+        "then commit. Restaging invalidates the contract (re-run with --force).",
+        file=sys.stderr,
+    )
+    return 0
+
+
+def command_contract_digest(args: argparse.Namespace) -> int:
+    path = args.root / ".tmp" / "CONTRACT.md"
+    if not path.is_file():
+        die("no contract at .tmp/CONTRACT.md")
+    print(contract_digest(read_text(path)))
+    return 0
+
+
+def command_contract_trailers(args: argparse.Namespace) -> int:
+    path = args.root / ".tmp" / "CONTRACT.md"
+    if not path.is_file():
+        die("no contract at .tmp/CONTRACT.md")
+    text = read_text(path)
+    facts = parse_contract_facts(text)
+    story_ids = list(facts["story_ids"]) if facts else []
+    append_trailers(args.root, args.message_file, story_ids, contract_digest(text))
+    return 0
+
+
 def command_gate(args: argparse.Namespace) -> int:
     result = run_gate(args.root)
     if args.porcelain:
@@ -309,6 +355,20 @@ def build_parser() -> argparse.ArgumentParser:
     gate.add_argument("--hook", choices=["pre-commit"], default=None, help="hook context (reserved)")
     gate.add_argument("--porcelain", action="store_true", help="stable key=value output for machine consumers")
     gate.set_defaults(func=command_gate)
+
+    contract = sub.add_parser("contract", help="commit-contract commands")
+    contract_sub = contract.add_subparsers(dest="contract_command", required=True)
+    contract_new = contract_sub.add_parser("new", help="generate .tmp/CONTRACT.md with stamped, gate-verified facts")
+    contract_new.add_argument("--story", action="append", help="story ID(s) this commit works under (repeatable or comma-separated)")
+    contract_new.add_argument("--consent", choices=["yes", "no"], default="no", help="work-log consent")
+    contract_new.add_argument("--reasons", action="append", help="work-log reason line (repeatable; used with --consent yes)")
+    contract_new.add_argument("--force", action="store_true", help="replace an existing contract")
+    contract_new.set_defaults(func=command_contract_new)
+    contract_digest_cmd = contract_sub.add_parser("digest", help="print the sha256 digest of the current contract")
+    contract_digest_cmd.set_defaults(func=command_contract_digest)
+    contract_trailers = contract_sub.add_parser("trailers", help="stamp PMO trailers onto a commit message file (used by the commit-msg shim)")
+    contract_trailers.add_argument("--message-file", type=Path, required=True)
+    contract_trailers.set_defaults(func=command_contract_trailers)
 
     phase = sub.add_parser("phase", help="phase commands")
     phase_sub = phase.add_subparsers(dest="phase_command", required=True)

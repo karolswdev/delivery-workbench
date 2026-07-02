@@ -99,7 +99,7 @@ what the framework claims and what it verifies.
 |---|---|---|---|---|
 | WLA-6-01 | Restore dogfood integrity and land the working tree through the rails | done | [story-01-dogfood-integrity](./story-01-dogfood-integrity.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-6-02 | Unify the commit gate into a single dw gate engine | done | [story-02-single-gate-engine](./story-02-single-gate-engine.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-6-03 | Ship verified contract v2 with durable audit trail | backlog | [story-03-verified-contract-v2](./story-03-verified-contract-v2.md) | - |
+| WLA-6-03 | Ship verified contract v2 with durable audit trail | in-progress | [story-03-verified-contract-v2](./story-03-verified-contract-v2.md) | - |
 | WLA-6-04 | Add evidence capture tooling and content linting | backlog | [story-04-evidence-capture](./story-04-evidence-capture.md) | - |
 | WLA-6-05 | Ship the first-class agent surface | backlog | [story-05-agent-surface](./story-05-agent-surface.md) | - |
 | WLA-6-06 | Right-size ceremony and unify template canon | backlog | [story-06-ceremony-proportionality](./story-06-ceremony-proportionality.md) | - |

@@ -12,6 +12,8 @@ Usage: $0 <target-dir> [--force]
 Always overwrites (these are framework-owned):
   - templates/roadmap-builder.md → pm/roadmap/roadmap-builder.md
   - hooks/pre-commit             → .githooks/pre-commit
+  - hooks/commit-msg             → .githooks/commit-msg, unless a
+                                    non-framework hook exists without --force
   - hooks/post-commit            → .githooks/post-commit, unless a
                                     non-framework hook exists without --force
   - bin/dw                       → .githooks/dw
@@ -75,6 +77,18 @@ else
   cp "$POST_COMMIT_SRC" "$POST_COMMIT_DST"
   chmod +x "$POST_COMMIT_DST"
   echo "  ✓ .githooks/post-commit updated$([ "$FORCE" -eq 1 ] && echo ' (forced)')"
+fi
+
+COMMIT_MSG_DST="$TARGET/.githooks/commit-msg"
+COMMIT_MSG_SRC="$SOURCE_DIR/hooks/commit-msg"
+if [ -e "$COMMIT_MSG_DST" ] && ! cmp -s "$COMMIT_MSG_DST" "$COMMIT_MSG_SRC" && [ "$FORCE" -ne 1 ] \
+  && ! grep -q "pmo-roadmap commit-msg shim" "$COMMIT_MSG_DST" 2>/dev/null; then
+  echo "  ! .githooks/commit-msg differs from canonical — NOT overwriting." >&2
+  echo "    Reconcile manually or re-run with --force." >&2
+else
+  cp "$COMMIT_MSG_SRC" "$COMMIT_MSG_DST"
+  chmod +x "$COMMIT_MSG_DST"
+  echo "  ✓ .githooks/commit-msg updated$([ "$FORCE" -eq 1 ] && echo ' (forced)')"
 fi
 
 cp "$SOURCE_DIR/bin/work-log-summarize" "$TARGET/.githooks/work-log-summarize"

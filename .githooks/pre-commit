@@ -316,13 +316,13 @@ fi
 
 capture_work_log_payload
 
-# Pass — clean up and reinforce.
-rm -f "$CONTRACT_FILE" "$BUNDLE_OK_FILE"
+# Pass — clean up project sentinel files and reinforce. The contract
+# and BUNDLE-OK survive here: commit-msg stamps trailers from them and
+# post-commit archives then clears them, so an aborted commit no longer
+# consumes the contract.
 for f in $EXTRA_CLEANUP_FILES; do
   rm -f "$f"
 done
-# If .tmp/ is now empty, remove it too (best-effort).
-rmdir "$REPO_ROOT/.tmp" 2>/dev/null || true
 
 bar
 echo "✓ The system accepted your understanding of the project management framework."

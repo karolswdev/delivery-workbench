@@ -9,18 +9,32 @@ pre-commit hook.
 
 ## What this is
 
-Every commit in this repo passes through a `pre-commit` hook that
-requires you (agent or human) to write `.tmp/CONTRACT.md` with all
-checkboxes set to `[x]`. The hook verifies, deletes the file on success,
-and prints a confirmation. A stale contract (older than `HEAD`) is
-rejected. An unchecked contract is rejected.
+Every commit in this repo passes through a `pre-commit` gate (`dw
+gate`) that requires you (agent or human) to hold a fresh
+`.tmp/CONTRACT.md` with all checkboxes set to `[x]`. Generate it with
+`dw contract new` after staging: it stamps machine-verified facts —
+branch, HEAD, `git write-tree` index tree, the staged file sample, and
+the story ID(s) it covers — and the gate re-derives each fact at
+commit time. The index tree is the freshness proof: a contract written
+for a different staging state is stale by definition, and touching the
+file cannot refresh it. Checked boxes are verified against the rule
+titles in this document's contract template (canonical plus project
+extensions), not merely counted.
+
+On success the trail is durable: the `commit-msg` hook stamps
+`PMO-Story:` and `PMO-Contract-Digest:` (sha256) trailers onto the
+commit message, and `post-commit` archives the exact contract — plus
+any `BUNDLE-OK.md` rationale — under `.git/pmo-contract-archive/<sha>`
+before clearing the working files. An aborted commit leaves the
+contract in place for the retry.
 
 The certification has two purposes:
 
 1. Force a re-read of the rules at commit time, when context is
    sharpest and stakes are highest.
 2. Make every commit auditable — if an agent ever ships shoddy work,
-   they did so having explicitly certified otherwise.
+   they did so having explicitly certified otherwise, and the archived
+   contract plus digest trailer prove exactly what was certified.
 
 The hook will not lecture you about the rules. They live here.
 
@@ -113,16 +127,28 @@ your stories.
 
 ## Contract template
 
-When the hook blocks you, write **exactly this** to `.tmp/CONTRACT.md`,
-flipping every `[ ]` to `[x]` only after honestly verifying each rule.
+Generate the contract — do not hand-type it. After staging, run:
+
+```bash
+.githooks/dw gate                 # optional non-consuming preflight
+.githooks/dw contract new         # stamps the facts, writes .tmp/CONTRACT.md
+```
+
+then flip every `[ ]` to `[x]` only after honestly verifying each
+rule. The generated file looks like this (the facts block is stamped,
+re-derived, and enforced by the gate; the box lines below are the
+rule set the gate verifies by title):
 
 ```markdown
 # Commit Contract
 
-**Generated:** YYYY-MM-DD HH:MM (your timestamp)
+**Generated:** {UTC timestamp}
 **Branch:** {branch}
+**HEAD:** {commit sha, or "none" on the first commit}
+**Index-tree:** {git write-tree of the staged index — the freshness proof}
+**Story:** {story ID(s) detected in the staged diff, or "none"}
 **Staged files (sample):**
-- {a few staged file paths — gives the agent a moment to look at what's actually about to ship}
+- {staged paths — must be a truthful subset of the real staged index}
 
 I certify, for this commit:
 
@@ -148,12 +174,14 @@ Rules canon: pm/roadmap/PMO-CONTRACT.md
 - none
 ```
 
-The canonical hook expects **at least 7** `[x]` checkboxes (it
-checks `actual < expected`, not equality). Projects that add
-rules above #7 simply add their checkboxes to this template;
-filling them satisfies the canonical count automatically. To
-enforce a project-specific rule mechanically, see "Extending"
-below.
+The gate verifies boxes **by rule title**, against this fenced
+template: every checked box must match a known rule title, and every
+known rule must be checked. Projects that add rules simply add their
+`- [ ] **Rule title.** …` lines to this template fence; `dw contract
+new` and the gate pick them up automatically. The legacy
+`EXPECTED_BOXES` count check applies only when no `PMO-CONTRACT.md`
+is present. Restaging after generation invalidates the contract
+(index-tree mismatch); re-run `dw contract new --force`.
 
 The work-log consent block is not an eighth PMO checkbox and is not
 counted by `EXPECTED_BOXES`. Projects that enable work logging through
@@ -221,12 +249,11 @@ the canonical hook.
    structural check with a one-line rationale. Add the sentinel
    path to `$EXTRA_CLEANUP_FILES` so it auto-deletes on success
    (same pattern as `BUNDLE-OK.md`).
-5. **Bump the success-banner count** by overriding `EXPECTED_BOXES`
-   in `.githooks/pre-commit.config`. The canonical hook sources that
-   file before the box-count check, so the project's actual rule
-   count drives the `Contract acknowledged (N/N checkboxes)` banner.
-   For one project rule (#8), set `EXPECTED_BOXES=8` in the config
-   file. The canonical default remains 7.
+5. **(Legacy) `EXPECTED_BOXES`** in `.githooks/pre-commit.config` is
+   no longer required: the gate derives the required box set from this
+   document's contract-template fence, so adding the checkbox in step 2
+   is authoritative. The count-based override only matters for repos
+   without a `PMO-CONTRACT.md`.
 
 `update.sh` never touches `.githooks/pre-commit.local` or
 `.githooks/pre-commit.config`. Both survive framework updates.

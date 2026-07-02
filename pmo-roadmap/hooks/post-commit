@@ -66,6 +66,29 @@ escape_table_cell() {
 gd=$(git_dir_abs 2>/dev/null || true)
 [ -n "$gd" ] || exit 0
 
+commit_sha=$(git rev-parse HEAD 2>/dev/null || true)
+
+# Archive the consumed, gate-verified contract (plus any BUNDLE-OK
+# rationale) under .git/pmo-contract-archive/<sha>, then clear the
+# working files. Runs for every gated commit, independent of work
+# logging — this is the durable audit trail the trailers point at.
+CONTRACT_FILE="$REPO_ROOT/.tmp/CONTRACT.md"
+BUNDLE_OK_FILE="$REPO_ROOT/.tmp/BUNDLE-OK.md"
+if [ -n "$commit_sha" ] && [ -f "$CONTRACT_FILE" ]; then
+  archive_dir="$gd/pmo-contract-archive/$commit_sha"
+  if mkdir -p "$archive_dir" 2>/dev/null \
+    && cp "$CONTRACT_FILE" "$archive_dir/CONTRACT.md" 2>/dev/null; then
+    if [ -f "$BUNDLE_OK_FILE" ]; then
+      cp "$BUNDLE_OK_FILE" "$archive_dir/BUNDLE-OK.md" 2>/dev/null || true
+    fi
+    rm -f "$CONTRACT_FILE" "$BUNDLE_OK_FILE"
+    rmdir "$REPO_ROOT/.tmp" 2>/dev/null || true
+    echo "pmo-roadmap post-commit: contract archived to .git/pmo-contract-archive/$commit_sha"
+  else
+    echo "pmo-roadmap post-commit: warning: could not archive the contract; leaving .tmp/CONTRACT.md in place." >&2
+  fi
+fi
+
 PENDING_FILE="$gd/pmo-work-log/pending"
 [ -f "$PENDING_FILE" ] || exit 0
 
@@ -73,7 +96,6 @@ if ! enabled "$PMO_WORK_LOG_ENABLED"; then
   exit 0
 fi
 
-commit_sha=$(git rev-parse HEAD 2>/dev/null || true)
 [ -n "$commit_sha" ] || exit 0
 
 log_identity=$(payload_value log_identity)

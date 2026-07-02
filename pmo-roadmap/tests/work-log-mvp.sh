@@ -35,39 +35,14 @@ entry_count() {
 }
 
 write_contract() {
+  # Contract v2: generate with stamped facts (after staging), then
+  # certify by flipping every rule box.
   consent="$1"
-  mkdir -p .tmp
-  cat > .tmp/CONTRACT.md <<EOF
-# Commit Contract
-
-**Generated:** 2026-04-25 00:00
-**Branch:** test
-**Staged files (sample):**
-- app.txt
-
-I certify, for this commit:
-
-- [x] **Evidence, not vibes.** Test harness evidence.
-- [x] **Master docs updated.** n/a - harness commit.
-- [x] **Tests ran.** work-log-mvp.sh is the test.
-- [x] **Greenfield discipline (if applicable).** n/a - harness repo.
-- [x] **No bypasses.** No bypass.
-- [x] **Story → evidence pairing.** n/a - no story done flip.
-- [x] **One PR per story.** n/a - harness commit.
-
-Methodology: pm/roadmap/roadmap-builder.md
-Rules canon: pm/roadmap/PMO-CONTRACT.md
-
-## Work-log consent
-
-**Work-log consent:** $consent
-
-**Work-log reasons:**
-- Harness commit with consent $consent.
-
-**Work-log exclusions:**
-- none
-EOF
+  .githooks/dw contract new --force --consent "$consent" \
+    --reasons "Harness commit with consent $consent." >/dev/null 2>&1 \
+    || fail "dw contract new should generate the harness contract"
+  sed 's/^- \[ \]/- [x]/' .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
+  mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
 }
 
 REPO="$TMP_ROOT/repo"

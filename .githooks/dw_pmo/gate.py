@@ -1,54 +1,64 @@
 """The commit gate engine.
 
 Single implementation of every structural rule the pre-commit hook
-enforces: contract presence/freshness/checkboxes, shipped-story
-detection, one-story-per-commit atomicity, forward and reverse
-evidence pairing, and work-log capture preconditions. The bash
-pre-commit shim only wires configuration and invokes this engine; the
-verdict here is the verdict everywhere.
+enforces: contract presence, stamped-fact verification, checkbox
+validation, shipped-story detection, one-story-per-commit atomicity,
+forward and reverse evidence pairing, and work-log capture
+preconditions. The bash pre-commit shim only wires configuration and
+invokes this engine; the verdict here is the verdict everywhere.
 
-Design decisions that fix the historical bash/python drift:
+Contract v2 semantics (WLA-6-03): the contract must carry stamped
+facts (branch, HEAD, index tree, staged sample, story). The gate
+re-derives each fact and refuses on mismatch — the index tree IS the
+freshness proof, so ``touch`` cannot refresh a stale contract and an
+aborted commit's contract survives for the retry (post-commit, not
+pre-commit, consumes it). Checkbox lines are verified against the rule
+titles in the project's rules doc (canonical plus extensions); count-
+only checking survives only as a fallback when no rules doc exists.
 
-- Shipped-story detection compares the story's **Status** header in the
-  HEAD blob against the index blob, using the shared ``DONE_STATUSES``
-  vocabulary. Renames and reformatting of already-done stories are not
-  flips; a flip to any done synonym (``done|complete|closed|shipped``)
-  is a flip.
-- Evidence numbers are compared as integers, so ``evidence-story-1.md``
-  and ``evidence-story-01.md`` pair with ``story-1-*`` and
-  ``story-01-*`` alike.
-- Staged paths are read NUL-separated (``-z``), so spaces never split.
-- Checkboxes accept ``[x]`` and ``[X]``.
-- The roadmap prefix comes from ``roadmap_dir(root)``, so a self-hosted
-  layout (``pmo-roadmap/pm/roadmap``) is enforced exactly like the
-  standard ``pm/roadmap``.
-- Evidence deletions are legal unless they orphan a story that remains
-  done in the index; modified evidence is legal while its story is done
-  in the index; added evidence still requires its story to flip in the
-  same commit.
-
-Configuration precedence for ``EXPECTED_BOXES`` / ``PMO_WORK_LOG_ENABLED``:
-simple assignments in ``.githooks/pre-commit.config`` beat the
-environment, which beats the default. (The shim sources the config as
-bash and exports the result, so computed assignments still reach the
-gate via the environment.)
+Structural semantics carried over from WLA-6-02: a story "ships" when
+its ``**Status:**`` header flips from not-done in HEAD to any
+``DONE_STATUSES`` synonym in the index (renames/reformats are not
+flips); evidence numbers pair as integers; staged paths parse
+NUL-separated; evidence deletions pass unless they orphan a story that
+remains done in the index.
 """
 
 from __future__ import annotations
 
 import os
 import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .model import DONE_STATUSES, DwError
-from .paths import read_text, rel, roadmap_dir
+from .model import DONE_STATUSES
+from .contract import (
+    CONTRACT_REL,
+    box_title,
+    contract_digest,
+    contract_rule_titles,
+    parse_contract_facts,
+    rules_doc_path,
+    story_id_from_blob,
+)
+from .gitio import (
+    config_value,
+    current_branch,
+    enabled_flag,
+    head_blob,
+    head_sha,
+    in_rewrite_state,
+    index_blob,
+    roadmap_prefix,
+    run_git,
+    staged_entries,
+    status_of,
+    write_tree,
+)
+from .paths import read_text
 
-CONTRACT_REL = ".tmp/CONTRACT.md"
 BUNDLE_OK_REL = ".tmp/BUNDLE-OK.md"
 
-_STATUS_LINE_RE = re.compile(r"^- \*\*Status:\*\*\s*(.+)$")
 _CHECKED_BOX_RE = re.compile(r"^- \[[xX]\]")
 _UNCHECKED_BOX_RE = re.compile(r"^- \[ \]")
 _CONSENT_RE = re.compile(r"^\*\*Work-log consent:\*\*[ \t]*yes([ \t]|$)", re.IGNORECASE | re.MULTILINE)
@@ -69,6 +79,8 @@ class GateResult:
     failure: GateFailure | None
     expected_boxes: int
     checked_boxes: int
+    contract_digest: str = ""
+    declared_stories: list[str] = field(default_factory=list)
     staged: list[str] = field(default_factory=list)
     staged_stories: list[str] = field(default_factory=list)
     staged_evidence: list[str] = field(default_factory=list)
@@ -76,120 +88,9 @@ class GateResult:
     worklog_capture: bool = False
 
 
-def _git(root: Path, *args: str) -> str | None:
-    try:
-        return subprocess.check_output(
-            ["git", "-C", str(root), *args],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return None
-
-
-def _config_value(root: Path, key: str) -> str | None:
-    """Parse a simple KEY=value assignment from .githooks/pre-commit.config.
-
-    Only plain (optionally quoted) assignments are recognized; computed
-    bash still reaches the gate through the environment via the shim.
-    The last assignment wins, matching bash sourcing.
-    """
-    cfg = root / ".githooks" / "pre-commit.config"
-    if not cfg.is_file():
-        return None
-    pattern = re.compile(r"^\s*(?:export\s+)?" + re.escape(key) + r"=([\"']?)(.*?)\1\s*$")
-    value: str | None = None
-    try:
-        for line in read_text(cfg).splitlines():
-            m = pattern.match(line)
-            if m:
-                value = m.group(2)
-    except OSError:
-        return None
-    return value
-
-
-def _enabled(value: str | None) -> bool:
-    return (value or "").strip().lower() in {"1", "yes", "true", "on"}
-
-
-def _status_of(content: str | None) -> str | None:
-    if content is None:
-        return None
-    for line in content.splitlines():
-        m = _STATUS_LINE_RE.match(line)
-        if m:
-            return m.group(1).strip().lower()
-    return None
-
-
-def _index_blob(root: Path, path: str) -> str | None:
-    return _git(root, "show", f":0:{path}")
-
-
-def _head_blob(root: Path, path: str) -> str | None:
-    return _git(root, "show", f"HEAD:{path}")
-
-
-def _staged_entries(root: Path) -> list[tuple[str, str, str | None]]:
-    """Return (status, path, old_path) tuples from the staged diff.
-
-    Renames yield ('R', new_path, old_path). NUL-separated parsing keeps
-    paths with spaces intact.
-    """
-    out = _git(root, "diff", "--cached", "--name-status", "-z", "-M")
-    if out is None:
-        return []
-    tokens = out.split("\0")
-    entries: list[tuple[str, str, str | None]] = []
-    i = 0
-    while i < len(tokens):
-        status = tokens[i]
-        if not status:
-            i += 1
-            continue
-        kind = status[0]
-        if kind in {"R", "C"} and i + 2 < len(tokens) + 1:
-            old_path = tokens[i + 1] if i + 1 < len(tokens) else ""
-            new_path = tokens[i + 2] if i + 2 < len(tokens) else ""
-            if new_path:
-                entries.append((kind, new_path, old_path))
-            i += 3
-        else:
-            path = tokens[i + 1] if i + 1 < len(tokens) else ""
-            if path:
-                entries.append((kind, path, None))
-            i += 2
-    return entries
-
-
-def _in_rewrite_state(root: Path) -> bool:
-    git_dir = (_git(root, "rev-parse", "--git-dir") or "").strip()
-    if not git_dir:
-        return False
-    gd = Path(git_dir)
-    if not gd.is_absolute():
-        gd = root / gd
-    return (
-        (gd / "rebase-merge").is_dir()
-        or (gd / "rebase-apply").is_dir()
-        or (gd / "CHERRY_PICK_HEAD").is_file()
-        or (gd / "REVERT_HEAD").is_file()
-    )
-
-
-def _roadmap_prefix(root: Path) -> str | None:
-    try:
-        rd = roadmap_dir(root)
-    except DwError:
-        return None
-    prefix = rel(rd, root).replace(os.sep, "/")
-    return prefix.rstrip("/") + "/"
-
-
 def _index_story_status_for(root: Path, phase_dir: str, num: int, story_re: re.Pattern[str]) -> tuple[str | None, str | None]:
     """Find the story file for (phase_dir, num) in the index; return (path, status)."""
-    out = _git(root, "ls-files", "-z", "--", phase_dir)
+    out = run_git(root, "ls-files", "-z", "--", phase_dir)
     if out is None:
         return None, None
     for path in out.split("\0"):
@@ -197,7 +98,7 @@ def _index_story_status_for(root: Path, phase_dir: str, num: int, story_re: re.P
             continue
         m = story_re.match(path)
         if m and Path(path).parent.as_posix() == phase_dir and int(m.group(1)) == num:
-            return path, _status_of(_index_blob(root, path))
+            return path, status_of(index_blob(root, path))
     return None, None
 
 
@@ -207,16 +108,16 @@ def run_gate(
     work_log_enabled: bool | None = None,
 ) -> GateResult:
     if expected_boxes is None:
-        raw = _config_value(root, "EXPECTED_BOXES") or os.environ.get("EXPECTED_BOXES") or "7"
+        raw = config_value(root, "EXPECTED_BOXES") or os.environ.get("EXPECTED_BOXES") or "7"
         try:
             expected_boxes = int(raw)
         except ValueError:
             expected_boxes = 7
     if work_log_enabled is None:
-        raw_enabled = _config_value(root, "PMO_WORK_LOG_ENABLED")
+        raw_enabled = config_value(root, "PMO_WORK_LOG_ENABLED")
         if raw_enabled is None:
             raw_enabled = os.environ.get("PMO_WORK_LOG_ENABLED")
-        work_log_enabled = _enabled(raw_enabled)
+        work_log_enabled = enabled_flag(raw_enabled)
 
     result = GateResult(
         ok=True,
@@ -239,25 +140,57 @@ def run_gate(
         return failed(
             "contract-missing",
             "Missing .tmp/CONTRACT.md — commit blocked.",
-            f"Write {CONTRACT_REL} per the contract template with all "
-            f"{expected_boxes} checkboxes set to [x]; it is deleted on successful commit.",
+            f"Run `dw contract new` after staging, verify each rule, and flip every box to [x]. "
+            f"The contract is archived and cleared after the commit is created.",
         )
 
     contract_text = read_text(contract_path)
+    result.contract_digest = contract_digest(contract_text)
 
-    # 2. Freshness — mtime must not be older than HEAD's committer time.
-    head_epoch_raw = (_git(root, "log", "-1", "--format=%ct", "HEAD") or "").strip()
-    if head_epoch_raw:
-        head_epoch = int(head_epoch_raw)
-        contract_epoch = int(contract_path.stat().st_mtime)
-        # Strictly older than HEAD = stale. Equality is allowed: the
-        # previous commit's hook deleted any prior contract, so a
-        # same-second contract is necessarily for this commit.
-        if contract_epoch < head_epoch:
+    # 2. Stamped facts present and true. The index tree is the freshness
+    #    proof; mtime plays no role.
+    facts = parse_contract_facts(contract_text)
+    if facts is None:
+        return failed(
+            "contract-facts-missing",
+            ".tmp/CONTRACT.md carries no stamped facts block (Branch / HEAD / Index-tree).",
+            "Regenerate the contract with `dw contract new` after staging.",
+        )
+
+    result.declared_stories = list(facts["story_ids"])  # type: ignore[arg-type]
+
+    actual_tree = write_tree(root) or "unknown"
+    if facts["index_tree"] != actual_tree:
+        return failed(
+            "contract-index-tree-mismatch",
+            f"Stale contract — stamped index tree {facts['index_tree']} does not match the staged index {actual_tree}.",
+            "The staged index changed since the contract was written (touching the file cannot "
+            "refresh it). Re-run `dw contract new --force` after finalizing the stage.",
+        )
+
+    actual_head = head_sha(root) or "none"
+    if facts["head"] != actual_head:
+        return failed(
+            "contract-head-mismatch",
+            f"Stale contract — stamped HEAD {facts['head']} does not match current HEAD {actual_head}.",
+            "History moved since the contract was written. Re-run `dw contract new --force` and re-certify.",
+        )
+
+    actual_branch = current_branch(root)
+    if facts["branch"] != actual_branch:
+        return failed(
+            "contract-branch-mismatch",
+            f"Contract was written for branch {facts['branch']!r} but the commit is on {actual_branch!r}.",
+            "Re-run `dw contract new --force` on the branch that will carry this commit.",
+        )
+
+    staged_set = {path for _s, path, _o in staged_entries(root)}
+    for sample_path in facts["staged_sample"]:  # type: ignore[union-attr]
+        if sample_path not in staged_set:
             return failed(
-                "contract-stale",
-                ".tmp/CONTRACT.md is stale (older than last commit).",
-                "Re-write .tmp/CONTRACT.md for this commit.",
+                "contract-sample-mismatch",
+                f"Contract staged-file sample names {sample_path!r}, which is not in the staged index.",
+                "The sample must reflect reality. Re-run `dw contract new --force` after staging.",
             )
 
     # 3. No unchecked boxes.
@@ -274,11 +207,34 @@ def run_gate(
             details=unchecked,
         )
 
-    # 4. Enough checked boxes ([x] or [X]).
-    result.checked_boxes = sum(
-        1 for line in contract_text.splitlines() if _CHECKED_BOX_RE.match(line)
-    )
-    if result.checked_boxes < expected_boxes:
+    # 4. Checkbox verification. With a rules doc: every checked box must
+    #    match a known rule title and every known rule must be checked.
+    #    Without one: legacy count check.
+    checked_lines = [line for line in contract_text.splitlines() if _CHECKED_BOX_RE.match(line)]
+    result.checked_boxes = len(checked_lines)
+    known_titles = contract_rule_titles(root)
+    if known_titles:
+        result.expected_boxes = len(known_titles)
+        expected_boxes = len(known_titles)
+        seen: list[str] = []
+        for line in checked_lines:
+            title = box_title(line)
+            if title is None or title not in known_titles:
+                return failed(
+                    "contract-unknown-box",
+                    f"Checked box does not correspond to any known rule: {line.strip()!r}",
+                    f"Boxes must match the rule titles in {rules_doc_path(root).relative_to(root)}"  # type: ignore[union-attr]
+                    " §\"Contract template\" (canonical plus project extensions).",
+                )
+            seen.append(title)
+        missing = [title for title in known_titles if title not in seen]
+        if missing:
+            return failed(
+                "contract-missing-box",
+                f"Contract is missing required rule box(es): {', '.join(missing)}",
+                "Regenerate with `dw contract new --force` to pick up the full rule set, then certify each box.",
+            )
+    elif result.checked_boxes < expected_boxes:
         return failed(
             "contract-boxes",
             f".tmp/CONTRACT.md has only {result.checked_boxes}/{expected_boxes} required [x] checkboxes.",
@@ -287,14 +243,14 @@ def run_gate(
 
     # Work-log capture preconditions (reported even when no stories staged).
     result.worklog_capture = bool(
-        work_log_enabled and _CONSENT_RE.search(contract_text) and not _in_rewrite_state(root)
+        work_log_enabled and _CONSENT_RE.search(contract_text) and not in_rewrite_state(root)
     )
 
     # Structural checks are scoped to the actual roadmap tree.
-    entries = _staged_entries(root)
+    entries = staged_entries(root)
     result.staged = [path for _status, path, _old in entries]
 
-    prefix = _roadmap_prefix(root)
+    prefix = roadmap_prefix(root)
     if prefix is None:
         return result
 
@@ -318,16 +274,21 @@ def run_gate(
                 evidence_entries.append(("D", old_path, int(m_old.group(1))))
 
     # 5. Shipped-story detection: HEAD status vs index status, shared vocabulary.
+    shipped_ids: list[str] = []
     for status, path, old_path, _num in story_entries:
         if status == "D":
             continue
-        new_status = _status_of(_index_blob(root, path))
+        blob = index_blob(root, path)
+        new_status = status_of(blob)
         if new_status not in DONE_STATUSES:
             continue
         head_source = old_path if (status == "R" and old_path) else path
-        old_status = _status_of(_head_blob(root, head_source))
+        old_status = status_of(head_blob(root, head_source))
         if old_status not in DONE_STATUSES:
             result.shipped_stories.append(path)
+            sid = story_id_from_blob(blob)
+            if sid:
+                shipped_ids.append(sid)
 
     shipped_keys = {
         (Path(p).parent.as_posix(), int(story_re.match(p).group(1)))  # type: ignore[union-attr]
@@ -340,11 +301,21 @@ def run_gate(
             "atomicity",
             f"Atomicity violation — {len(result.shipped_stories)} stories flipped to done in one commit.",
             "Rule: one PR per story. To bundle intentionally, write .tmp/BUNDLE-OK.md "
-            "with a one-line rationale (auto-deleted on successful commit).",
+            "with a one-line rationale (archived and cleared after the commit is created).",
             details=[f"shipped: {p}" for p in result.shipped_stories],
         )
 
-    # 7. Forward pairing: each shipped story ships its evidence in this commit.
+    # 7. Story declaration: every flipped story ID must be declared in the
+    #    contract's Story fact (it feeds the PMO-Story trailer).
+    undeclared = [sid for sid in shipped_ids if sid not in result.declared_stories]
+    if undeclared:
+        return failed(
+            "contract-story-mismatch",
+            f"Story flip(s) not declared in the contract's Story fact: {', '.join(undeclared)}.",
+            "Re-run `dw contract new --force` (it detects flipped stories) or pass --story explicitly.",
+        )
+
+    # 8. Forward pairing: each shipped story ships its evidence in this commit.
     staged_evidence_present = {
         (Path(p).parent.as_posix(), num)
         for status, p, num in evidence_entries
@@ -362,7 +333,7 @@ def run_gate(
                 "(unpadded numbering is accepted).",
             )
 
-    # 8. Reverse pairing: evidence appears/disappears only in legal states.
+    # 9. Reverse pairing: evidence appears/disappears only in legal states.
     for status, path, num in evidence_entries:
         phase_dir = Path(path).parent.as_posix()
         story_path, story_status = _index_story_status_for(root, phase_dir, num, story_re)
@@ -409,14 +380,16 @@ _RULES_REMINDER = """Before this commit lands, certify in .tmp/CONTRACT.md that 
   4. Greenfield discipline (no migrations / shims, where applicable).
   5. No --no-verify, no unauthorized Co-Authored-By, no scope creep.
   6. If a story flipped to "done", evidence-story-*.md ships with it.
-  7. One PR per story (or bundling documented)."""
+  7. One PR per story (or bundling documented).
+
+Generate the contract with stamped facts after staging:
+
+  .githooks/dw contract new"""
 
 
 def _rules_doc(root: Path) -> str:
-    for candidate in ("pm/roadmap/PMO-CONTRACT.md", "pmo-roadmap/templates/PMO-CONTRACT.md"):
-        if (root / candidate).is_file():
-            return candidate
-    return "pm/roadmap/PMO-CONTRACT.md"
+    doc = rules_doc_path(root)
+    return str(doc.relative_to(root)) if doc else "pm/roadmap/PMO-CONTRACT.md"
 
 
 def render_gate_failure(result: GateResult) -> str:
@@ -444,7 +417,9 @@ def render_gate_porcelain(result: GateResult) -> str:
         f"checked_boxes={result.checked_boxes}",
         f"shipped_count={len(result.shipped_stories)}",
         f"worklog_capture={'yes' if result.worklog_capture else 'no'}",
+        f"contract_digest={result.contract_digest or 'none'}",
     ]
+    lines.extend(f"declared_story={sid}" for sid in result.declared_stories)
     lines.extend(f"staged={p}" for p in result.staged)
     lines.extend(f"staged_story={p}" for p in result.staged_stories)
     lines.extend(f"staged_evidence={p}" for p in result.staged_evidence)

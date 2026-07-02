@@ -78,6 +78,17 @@ from .mutations import (
     write_changes,
 )
 from .api import build_context_payload, next_story, project_context, story_context
+from .contract import (
+    append_trailers,
+    build_contract,
+    contract_box_lines,
+    contract_digest,
+    contract_rule_titles,
+    detect_story_ids,
+    parse_contract_facts,
+    rules_doc_path,
+    write_contract,
+)
 from .gate import (
     GateFailure,
     GateResult,
@@ -86,4 +97,4 @@ from .gate import (
     run_gate,
 )
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"

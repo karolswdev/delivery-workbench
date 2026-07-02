@@ -182,6 +182,7 @@ bash -n pmo-roadmap/bin/work-log-read \
   pmo-roadmap/bootstrap/new-project.sh \
   pmo-roadmap/bootstrap/session-intake.sh \
   pmo-roadmap/hooks/pre-commit \
+  pmo-roadmap/hooks/commit-msg \
   pmo-roadmap/hooks/post-commit \
   pmo-roadmap/install.sh \
   pmo-roadmap/update.sh \

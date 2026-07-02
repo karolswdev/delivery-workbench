@@ -317,17 +317,37 @@ writing and restore already-touched files if a later write fails. The CLI treats
 generated JSON as disposable context; the markdown files remain the source of
 truth.
 
-### The commit gate (`dw gate`)
+### The commit gate (`dw gate`) and contract v2
 
 Every structural commit rule lives in one place: `dw gate`, backed by
 the `dw_pmo` core. The installed `pre-commit` is a thin shim that wires
 `.githooks/pre-commit.config`, invokes the gate, exposes the
-`pre-commit.local` seam, captures the consented work-log payload, and
-cleans up on success. python3 is a hard runtime dependency of the gate;
-the shim fails closed with a clear message when it is missing.
+`pre-commit.local` seam, and captures the consented work-log payload.
+python3 is a hard runtime dependency of the gate; the shim fails closed
+with a clear message when it is missing.
 
-Run the gate directly for a non-consuming preflight (it never deletes
-`.tmp/CONTRACT.md`; only a successful commit does):
+The contract is generated, not hand-typed. After staging:
+
+```bash
+.githooks/dw contract new [--story ID] [--consent yes --reasons "…"]
+```
+
+stamps machine-verified facts — branch, HEAD, `git write-tree` index
+tree, staged sample, detected story IDs — and the gate re-derives each
+one at commit time. The index tree is the freshness proof: restaging
+invalidates the contract and `touch` cannot refresh it. Checked boxes
+are verified by rule title against the project's `PMO-CONTRACT.md`
+template fence (canonical plus extensions).
+
+The trail is durable: the `commit-msg` shim stamps `PMO-Story:` and
+`PMO-Contract-Digest:` trailers from the live contract, and
+`post-commit` archives the exact contract (plus any `BUNDLE-OK.md`
+rationale) under `.git/pmo-contract-archive/<sha>` before clearing the
+working files — so an aborted commit leaves the contract in place for
+the retry.
+
+Run the gate directly for a non-consuming preflight (only a completed
+commit archives and clears `.tmp/CONTRACT.md`):
 
 ```bash
 .githooks/dw gate              # human verdict
@@ -343,14 +363,22 @@ expected_boxes=<int>
 checked_boxes=<int>
 shipped_count=<int>
 worklog_capture=yes|no
+contract_digest=sha256:<hex>|none
+declared_story=<id>      # repeated, from the contract's Story fact
 staged=<path>            # repeated, staged-diff order
 staged_story=<path>      # repeated
 staged_evidence=<path>   # repeated
 shipped_story=<path>     # repeated
-rule=<failed-rule-id>    # contract-missing | contract-stale |
-                         # contract-unchecked | contract-boxes |
-                         # atomicity | evidence-missing |
-                         # orphan-evidence | evidence-deletion-orphans-story
+rule=<failed-rule-id>    # contract-missing | contract-facts-missing |
+                         # contract-index-tree-mismatch |
+                         # contract-head-mismatch |
+                         # contract-branch-mismatch |
+                         # contract-sample-mismatch |
+                         # contract-unchecked | contract-unknown-box |
+                         # contract-missing-box | contract-boxes |
+                         # contract-story-mismatch | atomicity |
+                         # evidence-missing | orphan-evidence |
+                         # evidence-deletion-orphans-story
 message=<one line>
 remediation=<one line>
 ```

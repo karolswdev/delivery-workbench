@@ -12,6 +12,7 @@ Installs the pmo-roadmap framework into <target-dir>:
   - copies templates/roadmap-builder.md   → pm/roadmap/roadmap-builder.md
   - copies templates/PMO-CONTRACT.md      → pm/roadmap/PMO-CONTRACT.md
   - copies hooks/pre-commit               → .githooks/pre-commit (chmod +x)
+  - copies hooks/commit-msg               → .githooks/commit-msg (chmod +x)
   - copies hooks/post-commit              → .githooks/post-commit (chmod +x)
   - copies bin/dw                         → .githooks/dw
   - copies lib/dw_pmo/                    → .githooks/dw_pmo/
@@ -102,6 +103,15 @@ fi
 cp "$POST_COMMIT_SRC" "$POST_COMMIT_DST"
 chmod +x "$POST_COMMIT_DST"
 echo "  ✓ wrote .githooks/post-commit"
+
+COMMIT_MSG_DST="$TARGET/.githooks/commit-msg"
+COMMIT_MSG_SRC="$SOURCE_DIR/hooks/commit-msg"
+if [ -e "$COMMIT_MSG_DST" ] && ! cmp -s "$COMMIT_MSG_DST" "$COMMIT_MSG_SRC" && [ "$FORCE" -ne 1 ]; then
+  die "existing .githooks/commit-msg differs from pmo-roadmap; refusing to overwrite without --force"
+fi
+cp "$COMMIT_MSG_SRC" "$COMMIT_MSG_DST"
+chmod +x "$COMMIT_MSG_DST"
+echo "  ✓ wrote .githooks/commit-msg"
 
 cp "$SOURCE_DIR/bin/dw" "$TARGET/.githooks/dw"
 chmod +x "$TARGET/.githooks/dw"

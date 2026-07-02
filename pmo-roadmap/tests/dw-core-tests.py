@@ -260,32 +260,23 @@ class DwCoreTest(unittest.TestCase):
                 os.environ["PMO_WORK_LOG_DIR"] = old
 
 
-CONTRACT_OK = """# Commit Contract
+RULES_DOC_MIN = """# PMO Contract
 
-**Generated:** 2026-07-02 00:00
-**Branch:** test
+## Contract template
 
-I certify, for this commit:
+```markdown
+- [ ] **Alpha rule.** First fixture rule.
+- [ ] **Beta rule.** Second fixture rule.
+```
 
-- [x] one
-- [x] two
-- [x] three
-- [x] four
-- [x] five
-- [x] six
-- [x] seven
+## Extending
 
-## Work-log consent
-
-**Work-log consent:** yes
-
-**Work-log reasons:**
-- test
+- [ ] **Decoy rule.** Lives outside the template fence and must be ignored.
 """
 
 
 class GateTest(unittest.TestCase):
-    """One gate unit test per fixed drift bug, plus the happy paths."""
+    """Gate v2: stamped-fact verification plus the structural rule set."""
 
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp(prefix="dw-gate-test.")).resolve()
@@ -297,6 +288,8 @@ class GateTest(unittest.TestCase):
         self.git("config", "user.email", "gate-test@example.test")
         self.phase = self.root / "pm" / "roadmap" / "demo" / "phase-1-alpha"
         self.phase.mkdir(parents=True)
+        # Match real installs: the contract scratch dir is never tracked.
+        self.write(".gitignore", ".tmp/\n")
 
     def git(self, *args: str) -> None:
         import subprocess
@@ -314,11 +307,16 @@ class GateTest(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
-    def story(self, rel_path: str, status: str) -> None:
-        self.write(rel_path, f"# Story\n\n- **Status:** {status}\n")
+    def story(self, rel_path: str, status: str, story_id: str | None = None) -> None:
+        heading = f"# {story_id} - Fixture story" if story_id else "# Story"
+        self.write(rel_path, f"{heading}\n\n- **Status:** {status}\n")
 
-    def contract(self, text: str = CONTRACT_OK) -> None:
+    def contract(self, consent: str = "no", certify: bool = True, mark: str = "x") -> str:
+        text = core.build_contract(self.root, consent=consent)
+        if certify:
+            text = text.replace("- [ ]", f"- [{mark}]")
         self.write(".tmp/CONTRACT.md", text)
+        return text
 
     def gate(self, **kwargs):
         return core.run_gate(self.root, **kwargs)
@@ -327,33 +325,111 @@ class GateTest(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-m", msg, "--no-verify")
 
-    # -- contract checks ---------------------------------------------------
+    # -- contract facts ------------------------------------------------------
 
-    def test_missing_and_unchecked_and_count(self) -> None:
+    def test_missing_unchecked_and_count_fallback(self) -> None:
         result = self.gate()
-        self.assertFalse(result.ok)
         self.assertEqual(result.failure.rule, "contract-missing")
-        self.contract(CONTRACT_OK.replace("- [x] seven", "- [ ] seven"))
-        result = self.gate()
-        self.assertEqual(result.failure.rule, "contract-unchecked")
-        self.contract(CONTRACT_OK.replace("- [x] seven\n", ""))
+        self.contract(certify=False)
+        self.assertEqual(self.gate().failure.rule, "contract-unchecked")
+        text = self.contract()
+        lines = [l for l in text.splitlines() if not l.startswith("- [x] **One PR per story.**")]
+        self.write(".tmp/CONTRACT.md", "\n".join(lines) + "\n")
         result = self.gate()
         self.assertEqual(result.failure.rule, "contract-boxes")
 
+    def test_facts_missing_on_v1_style_contract(self) -> None:
+        self.write(".tmp/CONTRACT.md", "# Commit Contract\n\n" + "- [x] rule\n" * 7)
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-facts-missing")
+
+    def test_index_tree_mismatch_and_touch_bypass_dead(self) -> None:
+        self.write("a.txt", "a\n")
+        self.git("add", "-A")
+        self.contract()
+        self.write("b.txt", "b\n")
+        self.git("add", "b.txt")
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-index-tree-mismatch")
+        contract_path = self.root / ".tmp" / "CONTRACT.md"
+        os.utime(contract_path, None)
+        self.assertEqual(self.gate().failure.rule, "contract-index-tree-mismatch")
+
+    def test_head_mismatch_after_history_moves(self) -> None:
+        self.write("a.txt", "a\n")
+        self.git("add", "-A")
+        self.contract()
+        self.commit_all("moves head")
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-head-mismatch")
+
+    def test_branch_mismatch(self) -> None:
+        self.write("a.txt", "a\n")
+        self.commit_all("base")
+        self.contract()
+        self.git("checkout", "-b", "other-branch")
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-branch-mismatch")
+
+    def test_invented_staged_sample_refused(self) -> None:
+        self.write("real.txt", "real\n")
+        self.git("add", "-A")
+        text = self.contract()
+        tampered = text.replace("- real.txt", "- invented/ghost.txt")
+        self.assertNotEqual(text, tampered)
+        self.write(".tmp/CONTRACT.md", tampered)
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-sample-mismatch")
+        self.assertIn("invented/ghost.txt", result.failure.message)
+
     def test_capital_x_boxes_count(self) -> None:
-        self.contract(CONTRACT_OK.replace("- [x] seven", "- [X] seven"))
+        self.contract(mark="X")
         result = self.gate()
         self.assertTrue(result.ok, result.failure and result.failure.message)
         self.assertEqual(result.checked_boxes, 7)
 
     def test_worklog_preconditions(self) -> None:
-        self.contract()
+        self.contract(consent="yes")
         self.assertTrue(self.gate(work_log_enabled=True).worklog_capture)
         self.assertFalse(self.gate(work_log_enabled=False).worklog_capture)
-        self.contract(CONTRACT_OK.replace("**Work-log consent:** yes", "**Work-log consent:** no"))
+        self.contract(consent="no")
         self.assertFalse(self.gate(work_log_enabled=True).worklog_capture)
 
-    # -- shipped-story detection --------------------------------------------
+    # -- rule-title verification against the rules doc -----------------------
+
+    def test_rules_doc_titles_extension_and_tampering(self) -> None:
+        self.write("pm/roadmap/PMO-CONTRACT.md", RULES_DOC_MIN)
+        self.assertEqual(core.contract_rule_titles(self.root), ["Alpha rule.", "Beta rule."])
+        text = self.contract()
+        self.assertIn("**Alpha rule.**", text)
+        self.assertNotIn("Decoy rule", text)
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+        self.assertEqual(result.expected_boxes, 2)
+        self.write(".tmp/CONTRACT.md", text + "- [x] **Bogus rule.** Invented.\n")
+        self.assertEqual(self.gate().failure.rule, "contract-unknown-box")
+        lines = [l for l in text.splitlines() if "Beta rule" not in l]
+        self.write(".tmp/CONTRACT.md", "\n".join(lines) + "\n")
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-missing-box")
+        self.assertIn("Beta rule.", result.failure.message)
+
+    def test_expected_boxes_config_fallback_beats_env(self) -> None:
+        self.write(".githooks/pre-commit.config", "EXPECTED_BOXES=8\n")
+        self.contract()
+        old = os.environ.get("EXPECTED_BOXES")
+        os.environ["EXPECTED_BOXES"] = "7"
+        try:
+            result = self.gate()
+        finally:
+            if old is None:
+                os.environ.pop("EXPECTED_BOXES", None)
+            else:
+                os.environ["EXPECTED_BOXES"] = old
+        self.assertEqual(result.failure.rule, "contract-boxes")
+        self.assertEqual(result.expected_boxes, 8)
+
+    # -- shipped-story detection ----------------------------------------------
 
     def test_synonym_status_counts_as_flip(self) -> None:
         self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready")
@@ -361,9 +437,7 @@ class GateTest(unittest.TestCase):
         self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "complete")
         self.git("add", "-A")
         self.contract()
-        result = self.gate()
-        self.assertFalse(result.ok)
-        self.assertEqual(result.failure.rule, "evidence-missing")
+        self.assertEqual(self.gate().failure.rule, "evidence-missing")
 
     def test_unpadded_numbers_pair_both_ways(self) -> None:
         self.story("pm/roadmap/demo/phase-1-alpha/story-1-a.md", "ready")
@@ -413,10 +487,25 @@ class GateTest(unittest.TestCase):
         self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-02.md", "# proof\n")
         self.git("add", "-A")
         self.contract()
-        result = self.gate()
-        self.assertEqual(result.failure.rule, "atomicity")
+        self.assertEqual(self.gate().failure.rule, "atomicity")
         self.write(".tmp/BUNDLE-OK.md", "intentional bundle\n")
         self.assertTrue(self.gate().ok)
+
+    def test_story_declaration_enforced_for_flips(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready", story_id="DM-1-01")
+        self.commit_all("base")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done", story_id="DM-1-01")
+        self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
+        self.git("add", "-A")
+        text = self.contract()
+        self.assertIn("**Story:** DM-1-01", text)
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+        self.assertEqual(result.declared_stories, ["DM-1-01"])
+        self.write(".tmp/CONTRACT.md", text.replace("**Story:** DM-1-01", "**Story:** none"))
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-story-mismatch")
+        self.assertIn("DM-1-01", result.failure.message)
 
     # -- evidence deletion handling ------------------------------------------
 
@@ -427,7 +516,6 @@ class GateTest(unittest.TestCase):
         self.git("rm", "-q", "pm/roadmap/demo/phase-1-alpha/evidence-story-01.md")
         self.contract()
         result = self.gate()
-        self.assertFalse(result.ok)
         self.assertEqual(result.failure.rule, "evidence-deletion-orphans-story")
         self.assertIn("story-01-a.md", result.failure.message)
 
@@ -456,8 +544,7 @@ class GateTest(unittest.TestCase):
         self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-05.md", "# stray\n")
         self.git("add", "-A")
         self.contract()
-        result = self.gate()
-        self.assertEqual(result.failure.rule, "orphan-evidence")
+        self.assertEqual(self.gate().failure.rule, "orphan-evidence")
 
     def test_modified_evidence_of_done_story_passes(self) -> None:
         self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done")
@@ -469,23 +556,18 @@ class GateTest(unittest.TestCase):
         result = self.gate()
         self.assertTrue(result.ok, result.failure and result.failure.message)
 
-    # -- config precedence ----------------------------------------------------
+    # -- durable trail ---------------------------------------------------------
 
-    def test_expected_boxes_config_beats_env(self) -> None:
-        self.write(".githooks/pre-commit.config", "EXPECTED_BOXES=8\n")
-        self.contract()
-        old = os.environ.get("EXPECTED_BOXES")
-        os.environ["EXPECTED_BOXES"] = "7"
-        try:
-            result = self.gate()
-        finally:
-            if old is None:
-                os.environ.pop("EXPECTED_BOXES", None)
-            else:
-                os.environ["EXPECTED_BOXES"] = old
-        self.assertFalse(result.ok)
-        self.assertEqual(result.failure.rule, "contract-boxes")
-        self.assertEqual(result.expected_boxes, 8)
+    def test_digest_and_trailers(self) -> None:
+        text = "contract body\n"
+        digest = core.contract_digest(text)
+        self.assertTrue(digest.startswith("sha256:"))
+        self.assertEqual(len(digest), len("sha256:") + 64)
+        msg = self.write("msg.txt", "subject line\n\nbody text\n")
+        core.append_trailers(self.root, msg, ["DM-1-01"], digest)
+        stamped = msg.read_text(encoding="utf-8")
+        self.assertIn("PMO-Story: DM-1-01", stamped)
+        self.assertIn(f"PMO-Contract-Digest: {digest}", stamped)
 
     def test_work_log_dir_precedence(self) -> None:
         old = os.environ.get("PMO_WORK_LOG_DIR")
@@ -499,17 +581,17 @@ class GateTest(unittest.TestCase):
                 os.environ.pop("PMO_WORK_LOG_DIR", None)
             else:
                 os.environ["PMO_WORK_LOG_DIR"] = old
-        self.assertEqual(core.work_log_root(None if old else None), Path.home() / ".work" / "log")
+        self.assertEqual(core.work_log_root(None), Path.home() / ".work" / "log")
 
-    # -- porcelain -------------------------------------------------------------
+    # -- porcelain ---------------------------------------------------------------
 
     def test_porcelain_verbatim(self) -> None:
-        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready", story_id="DM-1-01")
         self.commit_all("base")
-        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done", story_id="DM-1-01")
         self.write("pm/roadmap/demo/phase-1-alpha/evidence-story-01.md", "# proof\n")
         self.git("add", "-A")
-        self.contract()
+        text = self.contract(consent="yes")
         result = self.gate(work_log_enabled=True)
         expected = (
             "gate=pass\n"
@@ -517,6 +599,8 @@ class GateTest(unittest.TestCase):
             "checked_boxes=7\n"
             "shipped_count=1\n"
             "worklog_capture=yes\n"
+            f"contract_digest={core.contract_digest(text)}\n"
+            "declared_story=DM-1-01\n"
             "staged=pm/roadmap/demo/phase-1-alpha/evidence-story-01.md\n"
             "staged=pm/roadmap/demo/phase-1-alpha/story-01-a.md\n"
             "staged_story=pm/roadmap/demo/phase-1-alpha/story-01-a.md\n"
