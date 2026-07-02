@@ -84,11 +84,12 @@ what the framework claims and what it verifies.
 - [x] A fresh temp-repo install yields an agent-completable story lifecycle
   using only `CLAUDE.md` guidance and shipped commands; `dw doctor` exits
   0 there and here (agent-surface.sh, CI-run; evidence-story-05).
-- [ ] A docs-only commit passes with the short-form contract; a
+- [x] A docs-only commit passes with the short-form contract; a
   story-flipping commit with a short-form contract is blocked (both in
-  CI).
-- [ ] No canonical template contains personal paths, private memory
-  references, Pantrybot content, or dead links (canon lint green in CI).
+  CI: parity S24/S25 + unit tier tests; evidence-story-06).
+- [x] No canonical template contains personal paths, private memory
+  references, Pantrybot content, or dead links (canon-lint.sh green in
+  CI; evidence-story-06).
 - [ ] Three-command adoption on a temp clone ends with `dw doctor` healthy;
   the hostile-name injection test passes.
 - [ ] `.github/workflows/validation.yml` runs the full suite green on
