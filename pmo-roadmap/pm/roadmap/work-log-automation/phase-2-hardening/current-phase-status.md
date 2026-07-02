@@ -1,6 +1,6 @@
 # Phase 2 - Hardening
 
-**Last updated:** 2026-04-25.
+**Last updated:** 2026-07-01.
 
 ## Goal
 
@@ -18,27 +18,28 @@ local MVP lifecycle is proven.
 
 ## Exit criteria (evidence required)
 
-- [ ] A fake deferred summarizer can produce a bounded summary from a captured
+- [x] A fake deferred summarizer can produce a bounded summary from a captured
   payload or deterministic entry.
-- [ ] Timeout, nonzero exit, and empty-output paths are tested.
-- [ ] Redaction or exclusion policy is documented and testable.
-- [ ] Deterministic fallback remains available when the summarizer is disabled.
-- [ ] Commit hooks remain fast and do not require network/model availability.
+- [x] Timeout, nonzero exit, and empty-output paths are tested.
+- [x] Redaction or exclusion policy is documented and testable.
+- [x] Deterministic fallback remains available when the summarizer is disabled.
+- [x] Commit hooks remain fast and do not require network/model availability.
 
 ## Story status
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-2-01 | Add configurable deferred summarizer command support | backlog | [story-01-summarizer-command](./story-01-summarizer-command.md) | - |
-| WLA-2-02 | Add timeout, fallback, and output bounds | backlog | [story-02-timeout-fallback-bounds](./story-02-timeout-fallback-bounds.md) | - |
-| WLA-2-03 | Add redaction and diff-size controls | backlog | [story-03-redaction-diff-controls](./story-03-redaction-diff-controls.md) | - |
+| WLA-2-01 | Add configurable deferred summarizer command support | done | [story-01-summarizer-command](./story-01-summarizer-command.md) | [evidence-story-01](./evidence-story-01.md) |
+| WLA-2-02 | Add timeout, fallback, and output bounds | done | [story-02-timeout-fallback-bounds](./story-02-timeout-fallback-bounds.md) | [evidence-story-02](./evidence-story-02.md) |
+| WLA-2-03 | Add redaction and diff-size controls | done | [story-03-redaction-diff-controls](./story-03-redaction-diff-controls.md) | [evidence-story-03](./evidence-story-03.md) |
 
 ## Where we are
 
-Phase 2 should not start until the deterministic MVP has shipped and produced
-at least one correct local log entry. The summarizer adapter is a quality layer,
-not the foundation of the lifecycle, and should not make ordinary commits wait
-on a model.
+Phase 2 is complete. Deferred summarization is an explicit helper command with
+timeout and output bounds, empty-output fallback, nonzero/timeout diagnostics,
+and companion digest output. Exclusion and diff-size controls are documented
+and covered by integration tests, while commit hooks remain deterministic and
+model-free.
 
 ## Active risks
 
@@ -56,5 +57,6 @@ on a model.
 
 ## Decisions deferred
 
-- Exact default `codex` command - trigger after fake-command tests pass -
-  default remains deterministic fallback.
+- Exact default `codex` command - intentionally left project-owned; the
+  framework documents the command shape and keeps deterministic fallback as the
+  default.

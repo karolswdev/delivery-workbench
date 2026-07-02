@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 2
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-2-01, WLA-2-02
 - **Unblocks:** Phase 3 rollout
 - **Owner:** unassigned
@@ -21,13 +21,13 @@ redaction, and large diffs.
 
 ## Acceptance criteria
 
-- [ ] Diff capture respects `PMO_WORK_LOG_MAX_DIFF_BYTES`.
-- [ ] Excluded paths are omitted from summarizer payloads and named as omitted.
-- [ ] Redaction behavior is documented prominently as best effort, not a
+- [x] Diff capture respects `PMO_WORK_LOG_MAX_DIFF_BYTES`.
+- [x] Excluded paths are omitted from summarizer payloads and named as omitted.
+- [x] Redaction behavior is documented prominently as best effort, not a
   security boundary.
-- [ ] Docs name categories redaction cannot reliably catch, such as base64
+- [x] Docs name categories redaction cannot reliably catch, such as base64
   blobs, JWT payloads, and env-expanded values.
-- [ ] Tests prove excluded files do not appear in pending payload or final log.
+- [x] Tests prove excluded files do not appear in pending payload or final log.
 
 ## Test plan
 

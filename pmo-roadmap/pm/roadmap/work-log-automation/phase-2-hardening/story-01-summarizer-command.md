@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 2
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-1-05
 - **Unblocks:** WLA-2-02, WLA-2-03
 - **Owner:** unassigned
@@ -22,13 +22,13 @@ and returns bounded markdown.
 
 ## Acceptance criteria
 
-- [ ] The commit hooks do not synchronously call the LLM summarizer.
-- [ ] When configured and invoked, the deferred summarizer receives a stable
+- [x] The commit hooks do not synchronously call the LLM summarizer.
+- [x] When configured and invoked, the deferred summarizer receives a stable
   payload or deterministic entry on stdin.
-- [ ] Command stdout can become a replacement technical summary or companion
+- [x] Command stdout can become a replacement technical summary or companion
   digest after validation.
-- [ ] Empty or invalid output falls back to deterministic summary.
-- [ ] Tests use fake summarizer scripts, not a real network/model dependency.
+- [x] Empty or invalid output falls back to deterministic summary.
+- [x] Tests use fake summarizer scripts, not a real network/model dependency.
 
 ## Test plan
 

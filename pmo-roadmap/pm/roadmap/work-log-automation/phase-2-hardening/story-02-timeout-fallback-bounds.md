@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 2
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-2-01
 - **Unblocks:** WLA-2-03
 - **Owner:** unassigned
@@ -21,11 +21,11 @@ ordinary commits must not depend on the summarizer being available.
 
 ## Acceptance criteria
 
-- [ ] Timeout is configurable.
-- [ ] Failure leaves the deterministic entry intact and reports a clear warning.
-- [ ] No failure mode rewrites or deletes the original deterministic entry.
-- [ ] Summary output is capped with a truncation marker.
-- [ ] Tests cover slow, failing, and oversized summarizer output.
+- [x] Timeout is configurable.
+- [x] Failure leaves the deterministic entry intact and reports a clear warning.
+- [x] No failure mode rewrites or deletes the original deterministic entry.
+- [x] Summary output is capped with a truncation marker.
+- [x] Tests cover slow, failing, and oversized summarizer output.
 
 ## Test plan
 
