@@ -339,6 +339,24 @@ class DwCoreTest(unittest.TestCase):
         self.assertNotIn("narrative-only evidence", warnings)
 
 
+    # -- canon/constant parity (WLA-6-06) ----------------------------------
+
+    def test_story_vocabulary_doc_parity(self) -> None:
+        """roadmap-builder §2.3 declares the vocabulary; the constants must match."""
+        import re as _re
+
+        builder = (TESTS_DIR.parent / "templates" / "roadmap-builder.md").read_text(encoding="utf-8")
+        m = _re.search(
+            r"- \*\*Status:\*\* ([a-z| -]+)\n\s+\(the canonical story-status vocabulary[^)]*done-synonyms\n\s+accepted by tooling: ([a-z| ]+)\.",
+            builder,
+        )
+        self.assertIsNotNone(m, "canonical vocabulary declaration missing from roadmap-builder §2.3")
+        declared = {s.strip() for s in m.group(1).split("|")}
+        synonyms = {s.strip() for s in m.group(2).split("|")}
+        self.assertEqual(declared | synonyms, core.STORY_STATUSES,
+                         "doc vocabulary and STORY_STATUSES constant have drifted")
+
+
     # -- agent surface (WLA-6-05) ----------------------------------------
 
     def test_status_vocabulary_validation(self) -> None:
@@ -421,8 +439,8 @@ class GateTest(unittest.TestCase):
         heading = f"# {story_id} - Fixture story" if story_id else "# Story"
         self.write(rel_path, f"{heading}\n\n- **Status:** {status}\n")
 
-    def contract(self, consent: str = "no", certify: bool = True, mark: str = "x") -> str:
-        text = core.build_contract(self.root, consent=consent)
+    def contract(self, consent: str = "no", certify: bool = True, mark: str = "x", tier: str = "full") -> str:
+        text = core.build_contract(self.root, consent=consent, tier=tier)
         if certify:
             text = text.replace("- [ ]", f"- [{mark}]")
         self.write(".tmp/CONTRACT.md", text)
@@ -698,6 +716,40 @@ class GateTest(unittest.TestCase):
         with self.assertRaises(DwError):
             core.build_contract(self.root, tests_capture=ev2_rel)  # no passing run
 
+    # -- contract tiers (WLA-6-06) -----------------------------------------------
+
+    def test_short_tier_docs_only_passes(self) -> None:
+        self.write("README.md", "docs change\n")
+        self.git("add", "README.md")
+        text = self.contract(tier="auto")
+        self.assertIn("**Tier:** short", text)
+        self.assertEqual(text.count("- [x]"), 1, "short form carries only the no-bypass box")
+        result = self.gate()
+        self.assertTrue(result.ok, result.failure and result.failure.message)
+        self.assertEqual(result.tier, "short")
+        self.assertEqual(result.expected_boxes, 1)
+
+    def test_short_tier_blocked_for_roadmap_commits(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready")
+        self.git("add", "-A")
+        with self.assertRaises(DwError):
+            core.build_contract(self.root, tier="short")
+        text = self.contract(tier="auto")
+        self.assertIn("**Tier:** full", text, "auto must pick full for roadmap commits")
+        # Hand-tampering the tier down must be refused by the gate.
+        self.write(".tmp/CONTRACT.md", text.replace("**Tier:** full", "**Tier:** short"))
+        result = self.gate()
+        self.assertEqual(result.failure.rule, "contract-tier-mismatch")
+
+    def test_forced_full_tier_config(self) -> None:
+        self.write(".githooks/pre-commit.config", "PMO_CONTRACT_TIER=full\n")
+        self.write("README.md", "docs change\n")
+        self.git("add", "README.md")
+        text = self.contract(tier="auto")
+        self.assertIn("**Tier:** full", text, "config must force the full tier")
+        with self.assertRaises(DwError):
+            core.build_contract(self.root, tier="short")
+
     # -- doctor detections -------------------------------------------------------
 
     def test_doctor_detections_and_health(self) -> None:
@@ -760,6 +812,7 @@ class GateTest(unittest.TestCase):
             "checked_boxes=7\n"
             "shipped_count=1\n"
             "worklog_capture=yes\n"
+            "tier=full\n"
             f"contract_digest={core.contract_digest(text)}\n"
             "declared_story=DM-1-01\n"
             "staged=pm/roadmap/demo/phase-1-alpha/evidence-story-01.md\n"

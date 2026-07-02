@@ -81,7 +81,9 @@ BANNER="$TMP_ROOT/banner.txt"
 if git commit -q -m "no contract" >/dev/null 2>"$BANNER"; then
   fail "commit without a contract should be blocked"
 fi
-grep -q -- '- \[ \] \*\*Evidence, not vibes\.\*\*' "$BANNER" \
+# The docs-only staging makes auto-tier pick the short form, so the
+# inline template carries the no-bypass box; the facts are still live.
+grep -q -- '- \[ \] \*\*No bypasses\.\*\*' "$BANNER" \
   || fail "blocked banner should include the inline contract template boxes"
 grep -q '\*\*Index-tree:\*\*' "$BANNER" \
   || fail "inline template should carry live stamped facts"

@@ -25,9 +25,9 @@ Installs the pmo-roadmap framework into <target-dir>:
   - optionally scaffolds pm/roadmap/<slug>/ skeleton
 
 Options:
-  --project-name "Name"     Human project name (e.g. "Pantrybot")
-  --project-slug slug       Kebab slug (e.g. "pantrybot")
-  --project-prefix PFX      Story-ID prefix (e.g. "PB")
+  --project-name "Name"     Human project name (e.g. "My Project")
+  --project-slug slug       Kebab slug (e.g. "myproject")
+  --project-prefix PFX      Story-ID prefix (e.g. "MP")
   --skip-bootstrap          Don't scaffold pm/roadmap/<slug>/
   --no-agent-docs           Don't write the managed CLAUDE.md/AGENTS.md block
   --force                   Overwrite existing methodology/contract and

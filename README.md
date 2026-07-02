@@ -188,6 +188,7 @@ bash -n pmo-roadmap/bin/work-log-read \
   pmo-roadmap/update.sh \
   pmo-roadmap/tests/adoption-discovery.sh \
   pmo-roadmap/tests/agent-surface.sh \
+  pmo-roadmap/tests/canon-lint.sh \
   pmo-roadmap/tests/gate-parity.sh \
   pmo-roadmap/tests/roadmap-cli.sh \
   pmo-roadmap/tests/work-log-mvp.sh
@@ -197,6 +198,7 @@ python3 -m compileall -q pmo-roadmap/lib/dw_pmo
 python3 pmo-roadmap/tests/dw-core-tests.py
 pmo-roadmap/tests/adoption-discovery.sh
 pmo-roadmap/tests/agent-surface.sh
+pmo-roadmap/tests/canon-lint.sh
 pmo-roadmap/tests/gate-parity.sh
 pmo-roadmap/tests/roadmap-cli.sh
 pmo-roadmap/tests/work-log-mvp.sh

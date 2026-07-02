@@ -302,6 +302,7 @@ def command_contract_new(args: argparse.Namespace) -> int:
         reasons=reasons or None,
         force=args.force,
         tests_capture=args.tests_capture,
+        tier=args.tier,
     )
     text = read_text(path)
     facts = parse_contract_facts(text) or {}
@@ -417,6 +418,12 @@ def build_parser() -> argparse.ArgumentParser:
     contract_new.add_argument(
         "--tests-capture",
         help="discharge the 'Tests ran.' rule mechanically: <staged-evidence-path>[#timestamp] of a passing captured run",
+    )
+    contract_new.add_argument(
+        "--tier",
+        choices=["auto", "full", "short"],
+        default="auto",
+        help="contract tier; auto picks short only for commits that do not touch the roadmap tree (full is always accepted)",
     )
     contract_new.add_argument("--force", action="store_true", help="replace an existing contract")
     contract_new.set_defaults(func=command_contract_new)

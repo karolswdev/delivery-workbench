@@ -62,15 +62,15 @@ flowchart TD
 ## Install into a target project
 
 ```bash
-cd ~/dev/reusable-processes/pmo-roadmap
+cd /path/to/delivery-workbench/pmo-roadmap
 ./install.sh /path/to/target-project
 ```
 
 Optional flags:
 
-- `--project-name "Pantrybot"` — human name (used in scaffold)
-- `--project-slug pantrybot` — kebab slug (used in `pm/roadmap/{slug}/`)
-- `--project-prefix PB` — story-ID prefix (`PB-0-01`, …)
+- `--project-name "My Project"` — human name (used in scaffold)
+- `--project-slug myproject` — kebab slug (used in `pm/roadmap/{slug}/`)
+- `--project-prefix MP` — story-ID prefix (`MP-0-01`, …)
 - `--skip-bootstrap` — install methodology + hook only; don't scaffold
   `pm/roadmap/{slug}/`
 - `--force` — overwrite existing methodology/contract files
@@ -123,7 +123,7 @@ flowchart TD
 ## Update an installed project
 
 ```bash
-cd ~/dev/reusable-processes/pmo-roadmap
+cd /path/to/delivery-workbench/pmo-roadmap
 ./update.sh /path/to/target-project
 ```
 
@@ -595,10 +595,6 @@ pmo-roadmap/
     ├── phase-status.md.tmpl      ← stub for current-phase-status.md
     └── story.md.tmpl             ← stub for story-{n}-*.md
 ```
-
-## First real consumer
-
-`~/dev/projects/pantrybot/` — installed 2026-04-25.
 
 ## Conventions
 

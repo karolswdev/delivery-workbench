@@ -25,6 +25,7 @@ jobs:
             pmo-roadmap/update.sh \
             pmo-roadmap/tests/adoption-discovery.sh \
             pmo-roadmap/tests/agent-surface.sh \
+            pmo-roadmap/tests/canon-lint.sh \
             pmo-roadmap/tests/gate-parity.sh \
             pmo-roadmap/tests/roadmap-cli.sh \
             pmo-roadmap/tests/work-log-mvp.sh \
@@ -42,6 +43,9 @@ jobs:
 
       - name: Adoption discovery smoke test
         run: pmo-roadmap/tests/adoption-discovery.sh
+
+      - name: Canon lint
+        run: pmo-roadmap/tests/canon-lint.sh
 
       - name: Agent surface integration test
         run: pmo-roadmap/tests/agent-surface.sh

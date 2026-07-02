@@ -11,7 +11,7 @@ usage() {
 Usage: $0 <target-dir> <project-slug> <project-name> <project-prefix>
 
 Examples:
-  $0 ~/dev/projects/pantrybot pantrybot "Pantrybot" PB
+  $0 /path/to/myproject myproject "My Project" MP
   $0 . myapp "My App" MA
 
 Creates:

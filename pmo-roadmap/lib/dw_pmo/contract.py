@@ -16,6 +16,7 @@ rules doc exists the embedded canonical set applies.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ from pathlib import Path
 
 from .model import DONE_STATUSES, STORY_ID_RE, die
 from .gitio import (
+    config_value,
     current_branch,
     head_blob,
     head_sha,
@@ -55,8 +57,10 @@ _FACT_RES = {
     "index_tree": re.compile(r"^\*\*Index-tree:\*\*\s*(.+)$", re.MULTILINE),
     "story": re.compile(r"^\*\*Story:\*\*\s*(.+)$", re.MULTILINE),
     "tests_capture": re.compile(r"^\*\*Tests-ran capture:\*\*\s*(.+)$", re.MULTILINE),
+    "tier": re.compile(r"^\*\*Tier:\*\*\s*(.+)$", re.MULTILINE),
 }
 TESTS_RAN_TITLE = "Tests ran."
+NO_BYPASSES_TITLE = "No bypasses."
 _SAMPLE_HEADER_RE = re.compile(r"^\*\*Staged files \(sample\):\*\*\s*$")
 _MORE_MARKER_RE = re.compile(r"^- … \(\+\d+ more\)$")
 _HEADING_ID_RE = re.compile(r"^#\s+(\S+)\s+[-—]")
@@ -181,6 +185,41 @@ def _template_header() -> str:
     return DEFAULT_TEMPLATE
 
 
+def roadmap_paths_staged(root: Path) -> bool:
+    prefix = roadmap_prefix(root)
+    if prefix is None:
+        return False
+    for _status, path, old_path in staged_entries(root):
+        if path.startswith(prefix) or (old_path and old_path.startswith(prefix)):
+            return True
+    return False
+
+
+def forced_full_tier(root: Path) -> bool:
+    raw = config_value(root, "PMO_CONTRACT_TIER")
+    if raw is None:
+        raw = os.environ.get("PMO_CONTRACT_TIER")
+    return (raw or "").strip().lower() == "full"
+
+
+def resolve_tier(root: Path, tier: str = "auto") -> str:
+    """auto → short only for non-roadmap commits in projects that allow it."""
+    tier = tier.strip().lower()
+    if tier == "full":
+        return "full"
+    touches_roadmap = roadmap_paths_staged(root)
+    if tier == "short":
+        if touches_roadmap:
+            die("short-form contract not allowed: staged changes touch the roadmap tree")
+        if forced_full_tier(root):
+            die("short-form contract not allowed: this project requires the full contract (PMO_CONTRACT_TIER=full)")
+        return "short"
+    # auto
+    if touches_roadmap or forced_full_tier(root):
+        return "full"
+    return "short"
+
+
 DEFAULT_TEMPLATE = """# Commit Contract
 
 **Generated:** {{GENERATED}}
@@ -188,6 +227,7 @@ DEFAULT_TEMPLATE = """# Commit Contract
 **HEAD:** {{HEAD}}
 **Index-tree:** {{INDEX_TREE}}
 **Story:** {{STORY}}
+**Tier:** {{TIER}}
 **Staged files (sample):**
 {{STAGED_SAMPLE}}
 
@@ -240,7 +280,12 @@ def build_contract(
     consent: str = "no",
     reasons: list[str] | None = None,
     tests_capture: str | None = None,
+    tier: str = "auto",
 ) -> str:
+    resolved_tier = resolve_tier(root, tier)
+    if tests_capture and resolved_tier == "short":
+        # Discharging "Tests ran." only exists in the full rule set.
+        resolved_tier = "full"
     facts = collect_facts(root)
     declared = list(story_ids) if story_ids else []
     for sid in facts["flipped_story_ids"]:  # type: ignore[union-attr]
@@ -259,15 +304,26 @@ def build_contract(
         sample_lines = ["- (no files staged)"]
 
     boxes = contract_box_lines(root) or list(CANONICAL_BOXES)
+    if resolved_tier == "short":
+        # Short form: stamped facts plus the no-bypass rule only.
+        short = [line for line in boxes if box_title(line) == NO_BYPASSES_TITLE]
+        boxes = short or [
+            f"- [ ] **{NO_BYPASSES_TITLE}** No `--no-verify`, no unauthorized "
+            "`Co-Authored-By`, no scope creep beyond what the user asked."
+        ]
     doc = rules_doc_path(root)
     reason_lines = [f"- {reason}" for reason in (reasons or [])] or ["- n/a"]
 
     text = _template_header()
+    if "{{TIER}}" not in text:
+        # Older custom template: keep the tier fact machine-readable anyway.
+        text = text.replace("{{STORY}}", "{{STORY}}\n**Tier:** {{TIER}}", 1) if "{{STORY}}" in text else text
     replacements = {
         "{{GENERATED}}": str(facts["generated"]),
         "{{BRANCH}}": str(facts["branch"]),
         "{{HEAD}}": str(facts["head"]),
         "{{INDEX_TREE}}": str(facts["index_tree"]),
+        "{{TIER}}": resolved_tier,
         "{{STORY}}": ", ".join(declared) if declared else "none",
         "{{STAGED_SAMPLE}}": "\n".join(sample_lines),
         "{{BOXES}}": "\n".join(boxes),
@@ -305,12 +361,13 @@ def write_contract(
     reasons: list[str] | None = None,
     force: bool = False,
     tests_capture: str | None = None,
+    tier: str = "auto",
 ) -> Path:
     path = root / CONTRACT_REL
     if path.exists() and not force:
         die(f"contract already exists; pass --force to replace: {CONTRACT_REL}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_text(path, build_contract(root, story_ids, consent, reasons, tests_capture))
+    write_text(path, build_contract(root, story_ids, consent, reasons, tests_capture, tier))
     return path
 
 

@@ -11,10 +11,15 @@ PHASE_RE = re.compile(r"^phase-(\d+)-(.+)$")
 STORY_RE = re.compile(r"^story-(\d+)-(.+)\.md$")
 STORY_ID_RE = re.compile(r"^([A-Z][A-Z0-9]*)-(\d+)-(\d+)$")
 DONE_STATUSES = {"done", "complete", "closed", "shipped"}
-OPEN_STATUSES = {"backlog", "ready", "in-progress", "blocked", "planned", "not-started"}
-# The single story-status vocabulary. Write commands reject anything
-# else so a typo can never strand a story outside every view.
-STORY_STATUSES = DONE_STATUSES | OPEN_STATUSES
+# The single story-status vocabulary (declared for humans in
+# roadmap-builder §2.3; a unit test asserts doc/constant parity).
+# Write commands reject anything else so a typo can never strand a
+# story outside every view.
+STORY_OPEN_STATUSES = {"backlog", "ready", "in-progress", "blocked"}
+STORY_STATUSES = DONE_STATUSES | STORY_OPEN_STATUSES
+# Phase-activity detection tolerates the looser phase-index vocabulary
+# (planned/not-started) that may appear in legacy story tables.
+OPEN_STATUSES = STORY_OPEN_STATUSES | {"planned", "not-started"}
 
 # The generator's stand-in body for evidence created without content.
 # dw check treats a done story whose evidence still carries this line

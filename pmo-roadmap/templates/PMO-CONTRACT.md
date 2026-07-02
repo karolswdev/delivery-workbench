@@ -62,7 +62,8 @@ Type-check passing is not validation.
 If this commit ships a story, the relevant tracking docs are updated
 in the same commit:
 
-- the story-file header status (`backlog → ready → in-progress → done`)
+- the story-file header status (moving through the canonical
+  story-status vocabulary declared in `roadmap-builder.md` §2.3)
 - `pm/roadmap/{slug}/phase-{n}-*/current-phase-status.md` story table
 - `pm/roadmap/{slug}/README.md` "Last updated"
 - any project-canon doc the story explicitly mentions
@@ -154,6 +155,7 @@ rule set the gate verifies by title):
 **HEAD:** {commit sha, or "none" on the first commit}
 **Index-tree:** {git write-tree of the staged index — the freshness proof}
 **Story:** {story ID(s) detected in the staged diff, or "none"}
+**Tier:** {full | short — decided mechanically; see "Contract tiers"}
 **Staged files (sample):**
 - {staged paths — must be a truthful subset of the real staged index}
 
@@ -265,67 +267,34 @@ the canonical hook.
 `update.sh` never touches `.githooks/pre-commit.local` or
 `.githooks/pre-commit.config`. Both survive framework updates.
 
-### Worked example: Pantrybot's "design handoff" rule
+### Worked example
 
-Pantrybot adds a rule #8: every UI-facing change must update the
-design handoff inputs that feed `design.pantrybot.app`, OR the
-agent writes `.tmp/DESIGN-HANDOFF-OK.md` to explain the exception.
+A complete project-extension example (rule text, template checkbox, and
+the `pre-commit.local` structural check) lives at
+[`templates/examples/project-extension-example.md`](./examples/project-extension-example.md)
+in the framework repository. The pattern: the canonical framework stays
+unchanged; the project's rule is mechanically enforced; `update.sh`
+refreshes canonical files without clobbering the local extension.
 
-The implementation:
+---
 
-**`pm/roadmap/PMO-CONTRACT.md`** — adds, after the canonical 7:
+## Contract tiers
 
-```markdown
-<!-- Project extensions (Pantrybot) -->
+The gate decides the required tier mechanically:
 
-### 8. Design handoff for UI-facing changes (project-specific)
+- **Full contract** — required whenever staged changes touch the
+  roadmap tree (`pm/roadmap/**`), which includes every story flip. The
+  full rule set above applies.
+- **Short form** — commits that do not touch the roadmap tree may use
+  `dw contract new --tier short` (or rely on `auto`, which picks it):
+  the same stamped facts plus only the **No bypasses.** rule. A
+  short-form contract on a roadmap-touching commit is rejected
+  (`contract-tier-mismatch`).
 
-If this commit changes anything a user or designer can see, it also
-updates the graphic-design handoff infrastructure in the same commit
-(`docs/user-journeys/`, `graphic-design-handoff/`,
-`frontend/public/handoff-data.json` from `npm run handoff:build`,
-etc.). If the UI-facing path genuinely doesn't need new artifacts,
-write `.tmp/DESIGN-HANDOFF-OK.md` with a one-line rationale.
-```
-
-**Contract template** — adds an 8th checkbox after the canonical 7:
-
-```markdown
-- [ ] **Design handoff updated.** UI-facing changes update the
-  design handoff inputs, or `.tmp/DESIGN-HANDOFF-OK.md` explains why not.
-```
-
-**`.githooks/pre-commit.config`** — bump the count:
-
-```bash
-EXPECTED_BOXES=8     # 7 canonical + 1 project rule
-```
-
-**`.githooks/pre-commit.local`** — the structural check:
-
-```bash
-DESIGN_HANDOFF_OK_FILE="$REPO_ROOT/.tmp/DESIGN-HANDOFF-OK.md"
-UI_FACING_REGEX='^frontend/(app|components|lib/(brand|icons)|public/|.*\.css$)'
-DESIGN_HANDOFF_REGEX='^(docs/user-journeys/|graphic-design-handoff/|frontend/public/handoff-data\.json$)'
-
-STAGED_UI=$(printf '%s\n' "$STAGED" | grep -E "$UI_FACING_REGEX" || true)
-STAGED_HANDOFF=$(printf '%s\n' "$STAGED" | grep -E "$DESIGN_HANDOFF_REGEX" || true)
-
-if [ -n "$STAGED_UI" ] && [ -z "$STAGED_HANDOFF" ] && [ ! -f "$DESIGN_HANDOFF_OK_FILE" ]; then
-  bar
-  echo "✗ Design handoff missing — UI-facing files staged but no handoff updates." >&2
-  echo "  Update docs/user-journeys/ + run npm run handoff:build, OR write" >&2
-  echo "  .tmp/DESIGN-HANDOFF-OK.md with a one-line rationale." >&2
-  bar
-  exit 1
-fi
-
-EXTRA_CLEANUP_FILES="$EXTRA_CLEANUP_FILES $DESIGN_HANDOFF_OK_FILE"
-```
-
-The result: the canonical framework is unchanged; the project gets
-its rule mechanically enforced; `update.sh` can refresh the canonical
-files freely without clobbering the local extension.
+Projects that want full ceremony everywhere set `PMO_CONTRACT_TIER=full`
+in `.githooks/pre-commit.config`; the generator and the gate both honor
+it. The conservative default: `auto` — full for anything roadmap-shaped,
+short available for docs-and-code-only commits.
 
 ---
 

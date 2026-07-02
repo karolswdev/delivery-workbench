@@ -196,11 +196,13 @@ awk '
 ' pm/roadmap/PMO-CONTRACT.md > "$TMP_ROOT/PMO-CONTRACT.md.ext"
 mv "$TMP_ROOT/PMO-CONTRACT.md.ext" pm/roadmap/PMO-CONTRACT.md
 tweak extension-full
-write_contract
+.githooks/dw contract new --force --tier full >/dev/null 2>&1 || fail "full-tier contract failed"
+certify x
 grep -q 'Demo extension rule' .tmp/CONTRACT.md || fail "generator should pick up the project extension box"
 check_parity pass "extension seam: generated contract carries the extension box"
 tweak extension-missing
-write_contract
+.githooks/dw contract new --force --tier full >/dev/null 2>&1
+certify x
 grep -v 'Demo extension rule' .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
 mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
 check_parity fail "extension seam: contract missing the extension box"
@@ -352,5 +354,37 @@ mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
   || fail "tampered capture timestamp should trip contract-tests-capture-mismatch"
 check_parity fail "tampered tests-capture reference"
 reset_state
+
+# S24 — short-form contract passes a docs-only commit.
+tweak short-tier-docs
+.githooks/dw contract new --force --tier auto >/dev/null 2>&1 || fail "auto-tier contract failed"
+grep -q '^\*\*Tier:\*\* short$' .tmp/CONTRACT.md || fail "auto tier should pick short for docs-only commits"
+[ "$(grep -c '^- \[ \]' .tmp/CONTRACT.md)" = "1" ] || fail "short form should carry exactly one box"
+certify x
+check_parity pass "short-form docs-only commit"
+
+# S25 — short-form contract on a roadmap commit is blocked.
+printf '# DEMO-1-10 - Tier story\n\n- **Status:** ready\n' > "$PHASE/story-10-tier.md"
+git add "$PHASE/story-10-tier.md"
+.githooks/dw contract new --force >/dev/null 2>&1 || fail "contract for roadmap commit failed"
+grep -q '^\*\*Tier:\*\* full$' .tmp/CONTRACT.md || fail "auto tier should pick full for roadmap commits"
+sed 's/^\*\*Tier:\*\* full$/**Tier:** short/' .tmp/CONTRACT.md > .tmp/CONTRACT.md.new
+mv .tmp/CONTRACT.md.new .tmp/CONTRACT.md
+certify x
+.githooks/dw gate --porcelain 2>/dev/null | grep -q '^rule=contract-tier-mismatch$' \
+  || fail "short tier on a roadmap commit should trip contract-tier-mismatch"
+check_parity fail "short-form contract with roadmap changes"
+reset_state
+
+# S26 — PMO_CONTRACT_TIER=full forces the full contract everywhere.
+cat > .githooks/pre-commit.config <<'EOF'
+PMO_CONTRACT_TIER=full
+EOF
+tweak forced-full
+.githooks/dw contract new --force --tier auto >/dev/null 2>&1
+grep -q '^\*\*Tier:\*\* full$' .tmp/CONTRACT.md || fail "PMO_CONTRACT_TIER=full should force the full tier"
+certify x
+check_parity pass "forced-full docs-only commit"
+rm -f .githooks/pre-commit.config
 
 echo "gate-parity.sh: ok"
