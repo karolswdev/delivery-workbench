@@ -340,6 +340,165 @@ async function viewTrace(slug, storyId) {
   });
 }
 
+
+/* ── structured editor (WLA-5-06) ───────────────────────────────────
+ * The editor constructs structured intent and POSTs it to
+ * /api/mutations/preview. It never applies: the apply/diff workflow
+ * is WLA-5-07. Client-side checks catch the obvious before the
+ * server's authoritative refusals. */
+
+const EDIT_ACTIONS = {
+  create_phase: "create phase",
+  create_story: "create story",
+  update_story_status: "update story status",
+  attach_evidence: "attach evidence",
+  close_phase: "close phase",
+};
+
+const STATUS_VOCAB = ["backlog", "ready", "in-progress", "blocked", "done"];
+
+function field(label, inner, err) {
+  return `<label><b>${esc(label)}</b>${inner}
+    <span class="fielderr" data-err="${esc(label)}">${err ? esc(err) : ""}</span></label>`;
+}
+
+function selectHtml(name, options, selected) {
+  return `<select name="${name}">` + options.map((o) =>
+    `<option value="${esc(o)}"${o === selected ? " selected" : ""}>${esc(o)}</option>`).join("") + "</select>";
+}
+
+async function viewEdit(action) {
+  action = action || "create_story";
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "edit" }, { label: EDIT_ACTIONS[action] || action }]);
+  const ctx = await api("/api/projects");
+  const projects = ctx.data.projects;
+  if (!projects.length) {
+    app.innerHTML = stateHtml("No projects to edit.");
+    return;
+  }
+  const proj = projects[0];
+  const guarded = proj.issue_count > 0;
+  const projDetail = await api(`/api/projects/${encodeURIComponent(proj.slug)}`);
+  const phases = projDetail.data.phases;
+  const phaseOpts = phases.map((ph) => String(ph.number));
+  const stories = phases.flatMap((ph) => ph.stories.map((s) => s.story_id));
+
+  const tabs = Object.keys(EDIT_ACTIONS).map((a) =>
+    `<a href="#/edit/${a}" class="${a === action ? "active" : ""}">${esc(EDIT_ACTIONS[a])}</a>`).join("");
+
+  let formFields = "";
+  if (action === "create_phase") {
+    formFields = [
+      field("phase number", '<input type="number" name="number" min="0" step="1" required>'),
+      field("title", '<input type="text" name="title" required>'),
+      field("slug (optional)", '<input type="text" name="slug" pattern="[a-z0-9-]*" title="lowercase, digits, hyphens">'),
+      field("goal (one line)", '<input type="text" name="goal">'),
+    ].join("");
+  } else if (action === "create_story") {
+    formFields = [
+      field("phase", selectHtml("phase", phaseOpts)),
+      field("title", '<input type="text" name="title" required>'),
+      field("initial status", selectHtml("status", STATUS_VOCAB.filter((s) => s !== "done"), "backlog")),
+    ].join("");
+  } else if (action === "update_story_status") {
+    formFields = [
+      field("phase", selectHtml("phase", phaseOpts)),
+      field("story", selectHtml("story", stories)),
+      field("new status", selectHtml("status", STATUS_VOCAB)),
+      field("evidence body (required for done when no evidence exists)",
+        '<textarea name="evidence_body" placeholder="- proof line…"></textarea>'),
+      `<div class="checkline"><input type="checkbox" name="force" id="f-force">
+        <label for="f-force">force: replace existing evidence</label></div>`,
+    ].join("");
+  } else if (action === "attach_evidence") {
+    formFields = [
+      field("phase", selectHtml("phase", phaseOpts)),
+      field("story", selectHtml("story", stories)),
+      field("evidence body", '<textarea name="body" placeholder="- proof line…"></textarea>'),
+      `<div class="checkline"><input type="checkbox" name="force" id="f-force">
+        <label for="f-force">force: replace existing evidence</label></div>`,
+    ].join("");
+  } else if (action === "close_phase") {
+    formFields = [
+      field("phase", selectHtml("phase", phaseOpts)),
+      field("final summary body", '<textarea name="summary_body" placeholder="## Outcome vs exit criteria…"></textarea>'),
+      `<div class="checkline"><input type="checkbox" name="force" id="f-force">
+        <label for="f-force">force: close with open stories / replace an existing summary (core force semantics)</label></div>`,
+    ].join("");
+  }
+
+  app.innerHTML = `
+    <div class="tabs">${tabs}</div>
+    ${guarded ? `<div class="guard">mutations guarded — <a href="#/health">${proj.issue_count} validation issue${proj.issue_count === 1 ? "" : "s"}</a>.
+      Preview requires explicit acknowledgment below.</div>` : ""}
+    <form class="edit" id="edit-form">
+      ${field("project", selectHtml("project", projects.map((x) => x.slug), proj.slug))}
+      ${formFields}
+      ${guarded ? `<div class="checkline"><input type="checkbox" name="acknowledge_issues" id="f-ack">
+        <label for="f-ack">I acknowledge the validation issues and still want a preview</label></div>` : ""}
+      <button type="submit">preview — no files are written</button>
+      <div class="hint">The editor constructs structured intent only. Apply (with diff and
+        stale-preview refusal) arrives with the WLA-5-07 workflow; committing stays with you.</div>
+    </form>
+    <div id="preview-out"></div>`;
+
+  document.getElementById("edit-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const out = document.getElementById("preview-out");
+    const body = { kind: action };
+    for (const el of form.elements) {
+      if (!el.name) continue;
+      if (el.type === "checkbox") body[el.name] = el.checked;
+      else body[el.name] = el.value.trim();
+    }
+    // client-side refusals before the server's authoritative ones
+    if (action === "update_story_status" && body.status === "done" && !body.evidence_body) {
+      const st = phases.flatMap((ph) => ph.stories).find((s) => s.story_id === body.story);
+      if (st && !st.evidence_exists) {
+        out.innerHTML = `<div class="guard">refused client-side: marking ${esc(body.story)} done requires
+          evidence — none exists and no evidence body was provided.</div>`;
+        return;
+      }
+    }
+    out.innerHTML = stateHtml("Previewing…");
+    try {
+      const res = await fetch("/api/mutations/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await res.json();
+      if (!res.ok || payload.ok === false) {
+        const msg = (payload.data && payload.data.error) || (payload.issues && payload.issues[0]) || `error ${res.status}`;
+        out.innerHTML = `<div class="guard">${esc(msg)}</div>` +
+          (payload.data && payload.data.issues
+            ? `<ul class="plain">${payload.data.issues.map((i) => `<li class="issue">${esc(i)}</li>`).join("")}</ul>` : "");
+        return;
+      }
+      const d = payload.data;
+      out.innerHTML = `
+        <div class="section"><h2>Preview — ${esc(d.kind)} ${badge("nothing written", "ok")}</h2>
+          <div class="meta">
+            ${Object.entries(d.summary).map(([k, v]) =>
+              `<div class="kv"><div class="k">${esc(k)}</div><div class="v">${esc(String(v))}</div></div>`).join("")}
+            <div class="kv"><div class="k">fingerprint</div><div class="v">${esc(d.fingerprint.slice(0, 24))}…</div></div>
+          </div>
+          ${d.create_dirs.length ? `<p class="hint">creates directory: <code>${d.create_dirs.map(esc).join(", ")}</code></p>` : ""}
+          ${d.files.map((f) => `
+            <details class="filepreview">
+              <summary>${badge(f.action, f.action === "create" ? "ok" : "in-progress")}
+                <code>${esc(f.path)}</code> ${f.changed ? "" : badge("no-op", "warn")}
+                <span class="hint">${f.bytes_before} → ${f.bytes_after} bytes</span></summary>
+              <pre class="src">${esc(f.new_content || "")}</pre>
+            </details>`).join("")}
+        </div>`;
+    } catch (err) {
+      out.innerHTML = `<div class="guard">${esc(err.message)}</div>`;
+    }
+  });
+}
+
 /* ── router ─────────────────────────────────────────────────────────── */
 
 async function route() {
@@ -352,6 +511,7 @@ async function route() {
     if (parts[0] === "p" && parts[2] === "ph") return await viewPhase(parts[1], parts[3]);
     if (parts[0] === "p" && parts[2] === "s") return await viewStory(parts[1], parts[3]);
     if (parts[0] === "p" && parts[2] === "t") return await viewTrace(parts[1], parts[3]);
+    if (parts[0] === "edit") return await viewEdit(parts[1]);
     if (parts[0] === "health") return await viewHealth();
     if (parts[0] === "f") return await viewFile(parts.slice(1).join("/"));
     app.innerHTML = stateHtml(`Unknown view: ${hash}`, true);

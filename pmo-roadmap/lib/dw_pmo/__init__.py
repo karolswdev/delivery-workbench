@@ -69,6 +69,7 @@ from .mutations import (
     FileChange,
     MutationPlan,
     apply_plan,
+    plan_fingerprint,
     plan_phase_close,
     plan_phase_create,
     plan_story_create,

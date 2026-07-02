@@ -486,7 +486,15 @@ drift/validation report with the `mutation_safe` flag),
 chain hops with explicit absent states, plus commit events carrying
 `PMO-Story`/`PMO-Contract-Digest` trailers merged with work-log
 entries — this endpoint IS the agent-facing JSON export),
-`/api/projects/{slug}/phases/{n}/events`, `/api/file?path=…`.
+`/api/projects/{slug}/phases/{n}/events`, `/api/file?path=…`, and
+one write-tier intent endpoint: `POST /api/mutations/preview` accepts
+structured mutation requests (`create_phase`, `create_story`,
+`update_story_status`, `attach_evidence`, `close_phase` — one-to-one
+with the core plan builders), returns the planned file contents plus a
+deterministic fingerprint, and writes nothing; previews are refused
+with 409 while the project has validation issues unless the request
+acknowledges them. Apply, diffs, and stale-preview refusal arrive with
+the WLA-5-07 workflow; the server never commits.
 
 ## Adopt an existing project
 

@@ -540,6 +540,90 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(event["commit"], "abc1234")
         self.assertEqual(event["sort_key"], "2026-07-01T10:00:00Z")
 
+    # -- structured editor / mutation preview (WLA-5-06) -----------------------
+
+    def test_mutation_preview_maps_one_to_one_and_writes_nothing(self) -> None:
+        from dw_pmo import workbench as wb
+
+        before = self._tree_checksums()
+        requests = {
+            "create_phase": {"kind": "create_phase", "project": "demo", "number": "2",
+                             "title": "Next Phase", "goal": "Ship more."},
+            "create_story": {"kind": "create_story", "project": "demo", "phase": "1",
+                             "title": "Editor story"},
+            "update_story_status": {"kind": "update_story_status", "project": "demo",
+                                    "phase": "1", "story": "DM-1-02", "status": "in-progress"},
+            "attach_evidence": {"kind": "attach_evidence", "project": "demo", "phase": "1",
+                                "story": "DM-1-02", "body": "- editor proof."},
+            "close_phase": {"kind": "close_phase", "project": "demo", "phase": "1",
+                            "summary_body": "Closed.", "force": True},
+        }
+        plan_kinds = {"create_phase": "phase-create", "create_story": "story-create",
+                      "update_story_status": "story-status", "attach_evidence": "story-evidence",
+                      "close_phase": "phase-close"}
+        for kind, body in requests.items():
+            status, payload = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+            self.assertEqual(status, 200, f"{kind}: {payload}")
+            data = payload["data"]
+            self.assertEqual(data["kind"], plan_kinds[kind])
+            self.assertTrue(data["fingerprint"].startswith("sha256:"))
+            self.assertTrue(data["files"], kind)
+            self.assertTrue(all("new_content" in f for f in data["files"]))
+        self.assertEqual(self._tree_checksums(), before,
+                         "previews must never write")
+
+    def test_mutation_preview_refusals(self) -> None:
+        from dw_pmo import workbench as wb
+
+        cases = [
+            ({"kind": "nope", "project": "demo"}, "unknown mutation kind"),
+            ({"kind": "create_story", "project": "demo", "phase": "1"}, "missing required field: title"),
+            ({"kind": "create_phase", "project": "demo", "number": "x", "title": "T"}, "must be an integer"),
+            ({"kind": "create_phase", "project": "demo", "number": "1", "title": "Alpha"}, "already exists"),
+            ({"kind": "update_story_status", "project": "demo", "phase": "1",
+              "story": "DM-1-02", "status": "done"}, "without evidence"),
+            ({"kind": "update_story_status", "project": "demo", "phase": "1",
+              "story": "DM-1-02", "status": "done-ish"}, "unknown story status"),
+            ({"kind": "close_phase", "project": "demo", "phase": "1"}, "non-done stories"),
+            ({"kind": "attach_evidence", "project": "demo", "phase": "1",
+              "story": "DM-1-01", "body": "- new."}, "pass --force"),
+        ]
+        for body, needle in cases:
+            status, payload = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+            self.assertEqual(status, 400, body)
+            self.assertIn(needle, payload["issues"][0], body)
+        status, _ = wb.handle_mutation(self.root, "/api/mutations/apply", {})
+        self.assertEqual(status, 405, "apply must not exist before WLA-5-07")
+
+    def test_mutation_preview_guarded_by_validation_issues(self) -> None:
+        from dw_pmo import workbench as wb
+
+        readme = self.root / "pm" / "roadmap" / "demo" / "README.md"
+        readme.write_text(readme.read_text(encoding="utf-8").replace(
+            "phase-1-alpha/current-phase-status.md", "phase-9-ghost/current-phase-status.md"), encoding="utf-8")
+        body = {"kind": "create_story", "project": "demo", "phase": "1", "title": "Guarded"}
+        status, payload = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+        self.assertEqual(status, 409)
+        self.assertIn("guarded", payload["data"]["error"])
+        self.assertTrue(payload["data"]["issues"])
+        status, payload = wb.handle_mutation(
+            self.root, "/api/mutations/preview", {**body, "acknowledge_issues": True})
+        self.assertEqual(status, 200, payload)
+
+    def test_mutation_fingerprint_binds_content(self) -> None:
+        from dw_pmo import workbench as wb
+
+        body = {"kind": "create_story", "project": "demo", "phase": "1", "title": "Stable"}
+        _, first = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+        _, second = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+        self.assertEqual(first["data"]["fingerprint"], second["data"]["fingerprint"],
+                         "same intent on same tree must fingerprint identically")
+        status_file = self.phase_dir / "current-phase-status.md"
+        status_file.write_text(status_file.read_text(encoding="utf-8") + "\n<!-- drift -->\n", encoding="utf-8")
+        _, third = wb.handle_mutation(self.root, "/api/mutations/preview", body)
+        self.assertNotEqual(first["data"]["fingerprint"], third["data"]["fingerprint"],
+                            "changed target content must change the fingerprint")
+
     # -- adoption bridge (WLA-6-07) -----------------------------------------
 
     GOOD_REPORT = """# New Proj - PMO Adoption Discovery

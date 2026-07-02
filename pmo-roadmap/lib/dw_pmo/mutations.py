@@ -115,22 +115,44 @@ def _change(path: Path, new_content: str) -> FileChange:
     )
 
 
-def preview_plan(plan: MutationPlan) -> dict[str, object]:
+def plan_fingerprint(plan: MutationPlan) -> str:
+    """Deterministic digest over the plan's inputs and outputs.
+
+    Binds the previewed intent to the exact before/after content of
+    every target, so an apply can refuse a preview that no longer
+    matches the working tree (WLA-5-07 consumes this).
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+    h.update(plan.kind.encode("utf-8"))
+    h.update(plan.project_slug.encode("utf-8"))
+    for change in sorted(plan.changes, key=lambda c: str(c.path)):
+        h.update(rel(change.path, plan.root).encode("utf-8"))
+        h.update(b"1" if change.existed else b"0")
+        h.update((change.old_content or "").encode("utf-8"))
+        h.update(change.new_content.encode("utf-8"))
+    return f"sha256:{h.hexdigest()}"
+
+
+def preview_plan(plan: MutationPlan, include_content: bool = False) -> dict[str, object]:
     """Render a plan without writing anything."""
     files = []
     for change in plan.changes:
-        files.append(
-            {
-                "path": rel(change.path, plan.root),
-                "action": "update" if change.existed else "create",
-                "changed": change.new_content != (change.old_content or ""),
-                "bytes_before": len(change.old_content.encode("utf-8")) if change.old_content is not None else 0,
-                "bytes_after": len(change.new_content.encode("utf-8")),
-            }
-        )
+        entry = {
+            "path": rel(change.path, plan.root),
+            "action": "update" if change.existed else "create",
+            "changed": change.new_content != (change.old_content or ""),
+            "bytes_before": len(change.old_content.encode("utf-8")) if change.old_content is not None else 0,
+            "bytes_after": len(change.new_content.encode("utf-8")),
+        }
+        if include_content:
+            entry["new_content"] = change.new_content
+        files.append(entry)
     return {
         "kind": plan.kind,
         "project": plan.project_slug,
+        "fingerprint": plan_fingerprint(plan),
         "create_dirs": [rel(d, plan.root) for d in plan.create_dirs],
         "files": files,
         "summary": plan.summary,

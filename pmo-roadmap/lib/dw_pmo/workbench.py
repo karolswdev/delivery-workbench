@@ -25,6 +25,14 @@ from .api import build_context_payload, next_story, phase_events, project_contex
 from .model import DwError, OPEN_STATUSES
 from .parse import discover_phases, discover_projects, get_phase, get_project, parse_story_rows
 from .paths import read_text, rel, roadmap_dir
+from .mutations import (
+    plan_phase_close,
+    plan_phase_create,
+    plan_story_create,
+    plan_story_evidence,
+    plan_story_status,
+    preview_plan,
+)
 from .validate import check_project, health_report, project_warnings
 
 SCHEMA_KIND = "delivery-workbench-workbench-response"
@@ -168,6 +176,114 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
         return _error(400, err.message)
 
 
+
+# ── mutation intent (WLA-5-06) ───────────────────────────────────────
+#
+# The editor constructs structured intent; this dispatcher maps each
+# request kind one-to-one onto a core plan builder. Preview is pure:
+# plan builders only read, so the read-only tree guarantee holds across
+# any number of previews. Apply arrives with WLA-5-07.
+
+MUTATION_KINDS = (
+    "create_phase",
+    "create_story",
+    "update_story_status",
+    "attach_evidence",
+    "close_phase",
+)
+
+
+def _require(body: dict[str, object], *names: str) -> list[str]:
+    values = []
+    for name in names:
+        value = str(body.get(name, "") or "").strip()
+        if not value:
+            raise DwError(f"missing required field: {name}")
+        values.append(value)
+    return values
+
+
+def build_mutation_plan(root: Path, body: dict[str, object]):
+    kind = str(body.get("kind", "") or "")
+    if kind not in MUTATION_KINDS:
+        allowed = ", ".join(MUTATION_KINDS)
+        raise DwError(f"unknown mutation kind {kind!r}; allowed: {allowed}")
+    (project_slug,) = _require(body, "project")
+    project = get_project(root, project_slug)
+    force = bool(body.get("force", False))
+
+    if kind == "create_phase":
+        number_raw, title = _require(body, "number", "title")
+        try:
+            number = int(number_raw)
+        except ValueError:
+            raise DwError(f"phase number must be an integer, got {number_raw!r}")
+        if number < 0:
+            raise DwError("phase number must not be negative")
+        return plan_phase_create(
+            root, project, number, title,
+            slug=str(body.get("slug", "") or "") or None,
+            goal=str(body.get("goal", "") or "") or None,
+        )
+    if kind == "create_story":
+        phase_sel, title = _require(body, "phase", "title")
+        phase = get_phase(project, phase_sel)
+        return plan_story_create(
+            root, project, phase, title,
+            slug=str(body.get("slug", "") or "") or None,
+            status=str(body.get("status", "") or "backlog"),
+        )
+    if kind == "update_story_status":
+        phase_sel, story, status = _require(body, "phase", "story", "status")
+        phase = get_phase(project, phase_sel)
+        return plan_story_status(
+            root, project, phase, story, status,
+            evidence_body=str(body.get("evidence_body", "") or ""),
+            force=force,
+        )
+    if kind == "attach_evidence":
+        phase_sel, story = _require(body, "phase", "story")
+        phase = get_phase(project, phase_sel)
+        return plan_story_evidence(
+            root, project, phase, story,
+            body=str(body.get("body", "") or ""),
+            force=force,
+        )
+    # close_phase
+    (phase_sel,) = _require(body, "phase")
+    phase = get_phase(project, phase_sel)
+    return plan_phase_close(
+        root, project, phase,
+        summary_body=str(body.get("summary_body", "") or ""),
+        status=str(body.get("status", "") or "done"),
+        force=force,
+    )
+
+
+def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
+    """POST routes. Only /api/mutations/preview exists in this slice."""
+    if path.rstrip("/") != "/api/mutations/preview":
+        return _error(405, "the workbench explorer is read-only (GET only)")
+    try:
+        project_slug = str(body.get("project", "") or "")
+        if project_slug:
+            project = get_project(root, project_slug)
+            issues = check_project(project, root)
+            if issues and not bool(body.get("acknowledge_issues", False)):
+                return 409, envelope(
+                    {
+                        "error": "project has validation issues; mutations are guarded",
+                        "issues": issues,
+                        "hint": "resolve them in the source Markdown (see /api/health) or resend with acknowledge_issues: true",
+                    },
+                    ok=False,
+                    issues=issues,
+                )
+        plan = build_mutation_plan(root, body)
+        return 200, envelope(preview_plan(plan, include_content=True))
+    except DwError as err:
+        return _error(400, err.message)
+
 def create_handler(root: Path, static_dir: Path | None):
     class WorkbenchHandler(BaseHTTPRequestHandler):
         server_version = "dw-workbench"
@@ -212,7 +328,20 @@ def create_handler(root: Path, static_dir: Path | None):
         def _reject(self) -> None:
             self._send_json(405, envelope({"error": "the workbench explorer is read-only (GET only)"}, ok=False))
 
-        do_POST = _reject  # noqa: N815
+        def do_POST(self) -> None:  # noqa: N802 (stdlib naming)
+            parsed = urlparse(self.path)
+            try:
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                raw = self.rfile.read(length) if length else b"{}"
+                body = json.loads(raw.decode("utf-8"))
+                if not isinstance(body, dict):
+                    raise ValueError("body must be a JSON object")
+            except (ValueError, UnicodeDecodeError) as err:
+                self._send_json(400, envelope({"error": f"invalid JSON body: {err}"}, ok=False))
+                return
+            status, payload = handle_mutation(root, parsed.path, body)
+            self._send_json(status, payload)
+
         do_PUT = _reject  # noqa: N815
         do_DELETE = _reject  # noqa: N815
         do_PATCH = _reject  # noqa: N815

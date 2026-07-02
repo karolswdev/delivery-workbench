@@ -242,4 +242,43 @@ curl -s "$BASE/api/projects/sample/phases/0/events" \
   | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['ok'] and d['data']['events'] == []" \
   || fail "phase events should degrade cleanly without git"
 
+# ── structured editor: mutation preview (WLA-5-06) ───────────────────
+PRE_EDIT="$(sum_tree)"
+curl -s -X POST -H 'Content-Type: application/json' \
+  -d '{"kind":"create_story","project":"sample","phase":"0","title":"Editor made me"}' \
+  "$BASE/api/mutations/preview" > "$TMP_ROOT/preview.json"
+python3 - "$TMP_ROOT/preview.json" <<'PY' || fail "preview payload wrong"
+import json, sys
+body = json.load(open(sys.argv[1]))
+assert body["ok"] is True
+d = body["data"]
+assert d["kind"] == "story-create"
+assert d["fingerprint"].startswith("sha256:")
+assert any(f["action"] == "create" and "Editor made me" in f.get("new_content", "") for f in d["files"])
+assert any(f["action"] == "update" and f["path"].endswith("current-phase-status.md") for f in d["files"])
+PY
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+    -d '{"kind":"update_story_status","project":"sample","phase":"0","story":"SMP-0-02","status":"done"}' \
+    "$BASE/api/mutations/preview")" = "400" ] \
+  || fail "done-without-evidence must be refused server-side"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -d 'not json' "$BASE/api/mutations/preview")" = "400" ] \
+  || fail "malformed JSON body should 400"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' \
+    "$BASE/api/mutations/apply")" = "405" ] \
+  || fail "apply must not exist before WLA-5-07"
+[ "$PRE_EDIT" = "$(sum_tree)" ] || fail "previews must never write files"
+
+# guard: a project with validation issues refuses preview without acknowledgment
+PHASE_DIR="$(find "$PROJECT" -maxdepth 1 -type d -name 'phase-0-*' | sed -n '1p')"
+printf '# stray\n' > "$PHASE_DIR/evidence-story-09.md"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+    -d '{"kind":"create_story","project":"sample","phase":"0","title":"Guarded"}' \
+    "$BASE/api/mutations/preview")" = "409" ] \
+  || fail "preview should be guarded while validation issues exist"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+    -d '{"kind":"create_story","project":"sample","phase":"0","title":"Guarded","acknowledge_issues":true}' \
+    "$BASE/api/mutations/preview")" = "200" ] \
+  || fail "explicit acknowledgment should unlock the preview"
+rm -f "$PHASE_DIR/evidence-story-09.md"
+
 echo "workbench-explorer.sh: ok"
