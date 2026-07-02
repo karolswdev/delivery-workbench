@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
 **Last updated:** 2026-07-02.
-**Current phase:** n/a.
-**Status:** shipped — all seven phases are closed.
+**Current phase:** [phase-7-documentation-mastery](./phase-7-documentation-mastery/current-phase-status.md).
+**Status:** active — core framework shipped (phases 0-6); Phase 7 makes it teachable.
 
 ## Vision
 
@@ -62,6 +62,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 4 | Add CLI support for routine roadmap maintenance and inspection | done | [phase-4-cli-maintenance-tools](./phase-4-cli-maintenance-tools/) |
 | 5 | Ship the rich PMO Workbench interaction layer on top of the existing agent-safe CLI/core without creating a second source of truth. | done | [phase-5-pmo-workbench-interaction-layer](./phase-5-pmo-workbench-interaction-layer/) |
 | 6 | Harden the agent rails: single machine-checked gate, durable contract audit trail, first-class agent surface, proportionate ceremony, dogfooded on this repo | done | [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/) |
+| 7 | Make the framework teachable: audited docs, a Claude Code plugin, first-class assets, and OSS-grade repo hygiene with a versioned release. | not-started | [phase-7-documentation-mastery](./phase-7-documentation-mastery/) |
 
 ## Operating cadence
 
@@ -93,6 +94,13 @@ behavior is:
   updates, phase closing, drift reporting, and checks.
 
 ## Active extension
+
+Phase 7 (Documentation Mastery) is the open phase: audit-first
+documentation overhaul, a Claude Code plugin packaging the agent
+surface, reproducible visual assets, docs CI, and OSS release
+preparation ending in a versioned v1.x release. The phase was created
+through the workbench's own mutation workflow — see
+[phase-7-documentation-mastery](./phase-7-documentation-mastery/current-phase-status.md).
 
 Phase 5 (PMO Workbench Interaction Layer) shipped: the local
 workbench serves explorer, health console, trace timeline with agent
