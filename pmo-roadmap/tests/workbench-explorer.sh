@@ -386,8 +386,9 @@ PY
   || fail "OPTIONS (CORS preflight) must fail closed"
 [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example.com' "$BASE/api/projects")" = "403" ] \
   || fail "non-local Host header must be refused"
-curl -s -i "$BASE/api/projects" | grep -qi 'access-control-allow' \
-  && fail "no CORS headers may ever be emitted" || true
+if curl -s -i "$BASE/api/projects" | grep -qi 'access-control-allow'; then
+  fail "no CORS headers may ever be emitted"
+fi
 
 # startup refusals fail closed with clear messages
 BARE="$TMP_ROOT/bare"; mkdir -p "$BARE"
