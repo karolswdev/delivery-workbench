@@ -67,15 +67,16 @@ what the framework claims and what it verifies.
 - [ ] `git config core.hooksPath` is `.githooks` in this repo,
   `git status --porcelain` is empty, and every Phase 6 commit carries
   `PMO-Story:` and `PMO-Contract-Digest:` trailers.
-- [ ] `dw context work-log-automation --trace` resolves at least one story
+- [x] `dw context work-log-automation --trace` resolves at least one story
   through the full chain: story -> evidence -> commit -> contract digest ->
-  work-log entry.
-- [ ] `hooks/pre-commit` contains no structural rule logic;
+  work-log entry (WLA-6-03 via faa7de6; evidence-story-03).
+- [x] `hooks/pre-commit` contains no structural rule logic;
   `pmo-roadmap/tests/gate-parity.sh` proves shim and `dw gate` agree on
   the drift-bug fixture set (synonyms, padding, deletions, renames,
-  spaces, capital-X).
-- [ ] Reusing a contract after restaging is blocked by index-tree mismatch;
-  `touch .tmp/CONTRACT.md` no longer refreshes staleness (CI-run test).
+  spaces, capital-X) (evidence-story-02).
+- [x] Reusing a contract after restaging is blocked by index-tree mismatch;
+  `touch .tmp/CONTRACT.md` no longer refreshes staleness (CI-run: parity
+  S17 + unit tamper matrix; evidence-story-03).
 - [ ] `dw check` errors on placeholder/empty evidence for done stories, and
   `dw evidence capture` output appears in at least two real Phase 6
   evidence files.
@@ -99,7 +100,7 @@ what the framework claims and what it verifies.
 |---|---|---|---|---|
 | WLA-6-01 | Restore dogfood integrity and land the working tree through the rails | done | [story-01-dogfood-integrity](./story-01-dogfood-integrity.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-6-02 | Unify the commit gate into a single dw gate engine | done | [story-02-single-gate-engine](./story-02-single-gate-engine.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-6-03 | Ship verified contract v2 with durable audit trail | in-progress | [story-03-verified-contract-v2](./story-03-verified-contract-v2.md) | - |
+| WLA-6-03 | Ship verified contract v2 with durable audit trail | done | [story-03-verified-contract-v2](./story-03-verified-contract-v2.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-6-04 | Add evidence capture tooling and content linting | backlog | [story-04-evidence-capture](./story-04-evidence-capture.md) | - |
 | WLA-6-05 | Ship the first-class agent surface | backlog | [story-05-agent-surface](./story-05-agent-surface.md) | - |
 | WLA-6-06 | Right-size ceremony and unify template canon | backlog | [story-06-ceremony-proportionality](./story-06-ceremony-proportionality.md) | - |
@@ -125,20 +126,20 @@ what the framework claims and what it verifies.
 
 ## Where we are
 
-WLA-6-02 is done with evidence: every structural commit rule now lives
-once, in `dw_pmo/gate.py`, exposed as `dw gate [--porcelain]`;
-`hooks/pre-commit` is a fail-closed shim with zero rule logic; the
-drift-bug family is fixed (synonym bypass, padding, evidence deletions,
-rename false-flips, spaces, capital-X) with 28 unit tests and a
-16-scenario shim-vs-gate parity suite in CI; `PMO_WORK_LOG_DIR`
-precedence (config > env > default) is unified across hooks, readers,
-and `dw`; and this repo's `pre-commit.local` rule duplication shrank to
-a comment because the gate understands the nested roadmap natively.
-Next per the execution sequence: WLA-6-03 (verified contract v2 with
-index-tree freshness, trailers, and the contract archive), then
-WLA-6-04. Note: `dw next` currently surfaces WLA-5-03 because phase 5
-sorts first — the phase-6 sequencing decision overrides it until the
-gate work lands.
+WLA-6-03 is done with evidence: contracts are generated
+(`dw contract new`) with stamped facts the gate re-derives — index-tree
+freshness killed the `touch` bypass, boxes verify by rule title with
+project extensions picked up automatically, and flipped stories must be
+declared. The trail is durable: `commit-msg` stamps `PMO-Story` +
+`PMO-Contract-Digest` trailers, `post-commit` archives the exact
+contract (digest-matched) plus bundle rationales under
+`.git/pmo-contract-archive/<sha>`, aborted commits keep their
+contracts, and `dw context --trace` surfaces the digests — the full
+story -> evidence -> commit -> contract -> work-log chain now resolves
+(faa7de6). 36 unit tests and the extended parity suite are in CI. Next
+per the execution sequence: WLA-6-04 (evidence capture tooling and
+content linting), which can also mechanically discharge the
+"tests ran" rule against captured runs.
 
 ## Active risks
 

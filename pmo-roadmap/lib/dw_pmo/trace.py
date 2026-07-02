@@ -13,9 +13,15 @@ def recent_commits(root: Path, paths: list[Path], limit: int = 5) -> list[dict[s
     rel_paths = [rel(path, root) for path in paths if path and path.exists()]
     if not rel_paths:
         return []
+    fmt = (
+        "%H%x09%cs"
+        "%x09%(trailers:key=PMO-Story,valueonly,separator=%x20)"
+        "%x09%(trailers:key=PMO-Contract-Digest,valueonly,separator=%x20)"
+        "%x09%s"
+    )
     try:
         out = subprocess.check_output(
-            ["git", "-C", str(root), "log", f"--max-count={limit}", "--format=%H%x09%cs%x09%s", "--", *rel_paths],
+            ["git", "-C", str(root), "log", f"--max-count={limit}", f"--format={fmt}", "--", *rel_paths],
             stderr=subprocess.DEVNULL,
             text=True,
         )
@@ -23,9 +29,17 @@ def recent_commits(root: Path, paths: list[Path], limit: int = 5) -> list[dict[s
         return []
     commits = []
     for line in out.splitlines():
-        parts = line.split("\t", 2)
-        if len(parts) == 3:
-            commits.append({"sha": parts[0], "date": parts[1], "subject": parts[2]})
+        parts = line.split("\t", 4)
+        if len(parts) == 5:
+            commits.append(
+                {
+                    "sha": parts[0],
+                    "date": parts[1],
+                    "pmo_story": parts[2],
+                    "contract_digest": parts[3],
+                    "subject": parts[4],
+                }
+            )
     return commits
 
 
