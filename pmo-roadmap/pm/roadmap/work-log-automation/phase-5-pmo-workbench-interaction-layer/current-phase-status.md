@@ -93,7 +93,7 @@ state store.
 | WLA-5-01 | Define Workbench product contract and UX architecture | done | [story-01-product-contract-ux-architecture](./story-01-product-contract-ux-architecture.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-5-02 | Extract reusable PMO core API boundary | done | [story-02-reusable-core-api-boundary](./story-02-reusable-core-api-boundary.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-5-03 | Build read-only roadmap explorer | done | [story-03-read-only-roadmap-explorer](./story-03-read-only-roadmap-explorer.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-5-04 | Build health drift and validation console | backlog | [story-04-health-drift-validation-console](./story-04-health-drift-validation-console.md) | - |
+| WLA-5-04 | Build health drift and validation console | done | [story-04-health-drift-validation-console](./story-04-health-drift-validation-console.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-5-05 | Build traceability timeline | backlog | [story-05-traceability-timeline](./story-05-traceability-timeline.md) | - |
 | WLA-5-06 | Build structured PMO editor | backlog | [story-06-structured-pmo-editor](./story-06-structured-pmo-editor.md) | - |
 | WLA-5-07 | Build safe mutation preview and diff workflow | backlog | [story-07-mutation-preview-diff-workflow](./story-07-mutation-preview-diff-workflow.md) | - |
@@ -120,16 +120,16 @@ state store.
 
 ## Where we are
 
-WLA-5-03 is done with evidence: the read-only explorer is live —
-`dw-workbench --root PATH` serves a localhost-only JSON API and static
-UI computed entirely through the `dw_pmo` core (no second parser, no
-cache, GET-only with containment-checked reads), with overview, phase
-board, story/evidence pair, and canon views proven by unit view-model
-tests, a CI-run integration suite (including the checksum read-only
-guarantee), and real desktop/mobile screenshots in `assets/`. Four
-phase exit criteria are now checked. Next per the execution sequence:
-WLA-5-04 (health/drift validation console), then WLA-5-05 (trace
-timeline) to finish the read-only tier before mutation work.
+WLA-5-04 is done with evidence: the health console makes drift
+first-class — structured classification in the core (kind, category,
+severity, explanation, parsed phase folders), `/api/health` with the
+`mutation_safe` refusal-state handoff the editor stories will consume,
+and a console view that groups issues with source links, explains the
+drift-prone kinds, panels the hook seams and work-log config, and
+offers copyable `dw check` output. Project views show a
+"mutations guarded" banner whenever issues exist. Next per the
+execution sequence: WLA-5-05 (traceability timeline) closes the
+read-only tier, riding the trailer/digest chain Phase 6 built.
 
 ## Active risks
 
