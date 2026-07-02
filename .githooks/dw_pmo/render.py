@@ -103,7 +103,7 @@ Describe why this story exists and what it unlocks.
 ## Test plan
 
 - **Unit:** n/a.
-- **Integration / Cypress:** n/a.
+- **Integration:** n/a.
 - **Manual / device:** n/a.
 
 ## Notes / open questions

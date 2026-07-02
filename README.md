@@ -82,6 +82,14 @@ Run adoption discovery for an existing project:
   --require-intake
 ```
 
+Then turn the discovery report into the roadmap and verify the wiring:
+
+```bash
+cd /path/to/project
+.githooks/dw adopt --from-report pm/roadmap/myproject/adoption/adoption-discovery.md --apply
+.githooks/dw doctor
+```
+
 `session-intake.sh` runs as a guided terminal interview when attached to a TTY:
 it shows a compact banner, offers numbered choices, captures checkbox-style
 priorities, and asks for the goal, direction, constraints, and handoff. In

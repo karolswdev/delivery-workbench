@@ -20,15 +20,20 @@ Options:
   --with-intake               Run session-intake.sh before rendering discovery
   --intake-file FILE          Override session intake path
   --require-intake            Refuse discovery if intake file is missing
-  --dangerous                 Give the chosen agent full local repo access
+  --dangerous                 EXCEPTION ONLY: bypass the agent sandbox
+                              (codex: --dangerously-bypass-approvals-and-sandbox,
+                              claude: --dangerously-skip-permissions).
+                              Discovery is read-only by design; the default
+                              sandboxed modes are almost always enough.
   --output FILE               Override report output path
   --force                     Overwrite existing prompt/report
   -h, --help                  Show this help
 
-Examples:
-  $0 ~/dev/project --project-name "My App" --project-slug myapp --project-prefix MA
-  $0 . --project-slug api --project-prefix API --agent codex --model gpt-5.5 --dangerous
-  $0 . --project-slug api --project-prefix API --agent claude --model opus --dangerous
+Examples (safe defaults — codex runs read-only sandboxed, claude runs
+non-interactive with its permission gate):
+  $0 /path/to/project --project-name "My App" --project-slug myapp --project-prefix MA
+  $0 . --project-slug api --project-prefix API --agent codex
+  $0 . --project-slug api --project-prefix API --agent claude --model opus
 EOF
 }
 
@@ -127,14 +132,17 @@ if [ ! -f "$INTAKE_FILE" ]; then
 fi
 
 render_prompt() {
-  sed \
-    -e "s|{{PROJECT_NAME}}|$PROJECT_NAME|g" \
-    -e "s|{{PROJECT_SLUG}}|$PROJECT_SLUG|g" \
-    -e "s|{{PROJECT_PREFIX}}|$PROJECT_PREFIX|g" \
-    -e "s|{{TARGET_DIR}}|$TARGET|g" \
-    -e "s|{{OUTPUT_PATH}}|$OUTPUT|g" \
-    -e "s|{{INTAKE_PATH}}|$INTAKE_FILE|g" \
-    "$TEMPLATE"
+  # Literal substitution (no sed metacharacter surprises from hostile
+  # names), and repo-relative paths only — the rendered prompt is a
+  # committed artifact and must not embed absolute machine paths.
+  text="$(cat "$TEMPLATE")"
+  text="${text//\{\{PROJECT_NAME\}\}/$PROJECT_NAME}"
+  text="${text//\{\{PROJECT_SLUG\}\}/$PROJECT_SLUG}"
+  text="${text//\{\{PROJECT_PREFIX\}\}/$PROJECT_PREFIX}"
+  text="${text//\{\{TARGET_DIR\}\}/.}"
+  text="${text//\{\{OUTPUT_PATH\}\}/${OUTPUT#$TARGET/}}"
+  text="${text//\{\{INTAKE_PATH\}\}/${INTAKE_FILE#$TARGET/}}"
+  printf '%s\n' "$text"
 }
 
 if [ -e "$PROMPT_FILE" ] && [ "$FORCE" -ne 1 ]; then

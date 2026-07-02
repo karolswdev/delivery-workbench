@@ -27,9 +27,11 @@ Refuses to overwrite WITHOUT --force (these may be project-customized):
 
 Never touches:
   - pm/roadmap/<slug>/                   (your phases, stories, evidence)
-  - .githooks/pre-commit.config          (your EXPECTED_BOXES override etc.)
+  - .githooks/pre-commit.config          (your project config)
   - .githooks/pre-commit.local           (your project-specific rule checks)
-  - .gitignore                            (managed by install.sh, not this)
+
+Also keeps the .tmp/ entry present in .gitignore (append-only; existing
+entries and spellings are respected).
 
 Use install.sh for first-time installs. Use --force only after manually
 reconciling local PMO-CONTRACT.md changes against the canonical version.
@@ -142,6 +144,14 @@ fi
 
 # Re-assert hooksPath in case it drifted.
 git -C "$TARGET" config core.hooksPath .githooks
+
+# Keep the .tmp/ gitignore entry present (accepting common spellings).
+GITIGNORE="$TARGET/.gitignore"
+touch "$GITIGNORE"
+if ! grep -qxE '/?\.tmp/?' "$GITIGNORE" 2>/dev/null; then
+  printf '\n# pmo-roadmap pre-commit contract scratch\n.tmp/\n' >> "$GITIGNORE"
+  echo "  ✓ added .tmp/ to .gitignore"
+fi
 
 if [ -f "$TARGET/.githooks/pre-commit.config" ]; then
   echo "  · .githooks/pre-commit.config present — preserved (project-owned)."

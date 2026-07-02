@@ -339,6 +339,69 @@ class DwCoreTest(unittest.TestCase):
         self.assertNotIn("narrative-only evidence", warnings)
 
 
+    # -- adoption bridge (WLA-6-07) -----------------------------------------
+
+    GOOD_REPORT = """# New Proj - PMO Adoption Discovery
+
+## PMO Adoption Recommendation
+- **Roadmap root:** `pm/roadmap/newproj/`
+
+## Proposed Phase Index
+| Phase | Title | Goal | Why now |
+|---|---|---|---|
+| 0 | Stabilize Build | Get CI green | Broken today |
+| 1 | Ship Slice | Deliver the first slice | Next value |
+
+## Proposed First Stories
+| ID | Title | Acceptance evidence | Notes |
+|---|---|---|---|
+| NP-0-01 | Fix the flaky suite | CI run output | - |
+| NP-0-02 | Pin toolchain | lockfile diff | - |
+| NP-1-01 | Build the slice | demo capture | - |
+"""
+
+    def test_parse_adoption_report(self) -> None:
+        report = core.parse_adoption_report(self.GOOD_REPORT)
+        self.assertEqual(report.slug, "newproj")
+        self.assertEqual(report.prefix, "NP")
+        self.assertEqual([p["number"] for p in report.phases], [0, 1])
+        self.assertEqual([s["id"] for s in report.stories], ["NP-0-01", "NP-0-02", "NP-1-01"])
+
+    def test_parse_adoption_report_malformed(self) -> None:
+        bad_cols = self.GOOD_REPORT.replace(
+            "| 1 | Ship Slice | Deliver the first slice | Next value |",
+            "| 1 | Ship Slice | Deliver the first slice |",
+        )
+        with self.assertRaises(DwError) as ctx:
+            core.parse_adoption_report(bad_cols)
+        self.assertIn("line", ctx.exception.message)
+        bad_id = self.GOOD_REPORT.replace("NP-0-02", "banana")
+        with self.assertRaises(DwError) as ctx:
+            core.parse_adoption_report(bad_id)
+        self.assertIn("banana", ctx.exception.message)
+        orphan_phase = self.GOOD_REPORT.replace("NP-1-01", "NP-7-01")
+        with self.assertRaises(DwError) as ctx:
+            core.parse_adoption_report(orphan_phase)
+        self.assertIn("phase 7", ctx.exception.message)
+
+    def test_run_adoption_preview_and_apply(self) -> None:
+        report_path = self.tmp / "adoption-discovery.md"
+        report_path.write_text(self.GOOD_REPORT, encoding="utf-8")
+        before = self.snapshot()
+        preview = core.run_adoption(self.root, report_path)
+        self.assertEqual(preview["mode"], "preview")
+        self.assertEqual(self.snapshot(), before, "preview must not write")
+        self.assertTrue(any("NP-0-01" in item for item in preview["planned"]))
+        result = core.run_adoption(self.root, report_path, apply=True)
+        self.assertEqual(result["mode"], "applied")
+        self.assertEqual(result["issues"], [], result["issues"])
+        newproj = core.get_project(self.root, "newproj")
+        self.assertEqual(newproj.prefix, "NP")
+        rows = core.parse_story_rows(
+            newproj.path / "phase-0-stabilize-build" / "current-phase-status.md"
+        )
+        self.assertEqual([r.story_id for r in rows], ["NP-0-01", "NP-0-02"])
+
     # -- canon/constant parity (WLA-6-06) ----------------------------------
 
     def test_story_vocabulary_doc_parity(self) -> None:

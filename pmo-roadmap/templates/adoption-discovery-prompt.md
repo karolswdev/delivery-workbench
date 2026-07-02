@@ -96,12 +96,18 @@ handoff expectations, constraints, and unresolved questions.}
 - **How this serves the user's session goal:** ...
 
 ## Proposed Phase Index
-| Phase | Goal | Why now |
-|---|---|---|
+| Phase | Title | Goal | Why now |
+|---|---|---|---|
 
 ## Proposed First Stories
 | ID | Title | Acceptance evidence | Notes |
 |---|---|---|---|
+
+These two tables are machine-consumed: `dw adopt --from-report` turns
+them directly into the roadmap scaffold. Keep the column layout exactly
+as above; phase numbers are integers, story IDs are
+`{{PROJECT_PREFIX}}-{phase}-{number}`, and every story's phase must
+appear in the phase index.
 
 ## Proposed Immediate Session Plan
 | Step | Action | Evidence / handoff artifact |

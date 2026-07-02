@@ -505,31 +505,17 @@ pm/roadmap/myproject/adoption/session-intake.md
 pm/roadmap/myproject/adoption/adoption-discovery-prompt.md
 ```
 
-To have an agent perform the read-only discovery:
-
-```bash
-./bootstrap/adopt-project.sh /path/to/target-project \
-  --project-name "My Project" \
-  --project-slug myproject \
-  --project-prefix MP \
-  --with-intake \
-  --agent codex \
-  --model gpt-5.5 \
-  --dangerous \
-  --force
-```
-
-or:
+To have an agent perform the read-only discovery (safe by default:
+codex runs in a read-only sandbox, claude runs non-interactively behind
+its permission gate — `--dangerous` exists but is the exception and
+bypasses those protections):
 
 ```bash
 ./bootstrap/adopt-project.sh /path/to/target-project \
   --project-slug myproject \
   --project-prefix MP \
   --with-intake \
-  --agent claude \
-  --model opus \
-  --dangerous \
-  --force
+  --agent claude
 ```
 
 The report is written to:
@@ -538,9 +524,22 @@ The report is written to:
 pm/roadmap/myproject/adoption/adoption-discovery.md
 ```
 
-Use that report to decide whether to run `bootstrap/new-project.sh`, how to
-name the current phase, which source canon matters, which tests prove health,
-and whether the project needs local PMO contract extensions.
+Its "Proposed Phase Index" and "Proposed First Stories" tables are
+machine-consumed — close the loop with the third command:
+
+```bash
+cd /path/to/target-project
+.githooks/dw adopt --from-report pm/roadmap/myproject/adoption/adoption-discovery.md
+.githooks/dw adopt --from-report pm/roadmap/myproject/adoption/adoption-discovery.md --apply
+.githooks/dw doctor
+```
+
+`dw adopt` previews the exact files it will create (project README if
+missing, phase folders, story stubs) and writes nothing until
+`--apply`; malformed tables are refused with line-numbered errors, not
+partial scaffolds. Finish with `dw doctor` to prove the rails are live,
+then pick up work with `dw next`. The whole adoption is three commands:
+install → intake+discovery → adopt.
 
 ## Roadmap Lifecycle
 

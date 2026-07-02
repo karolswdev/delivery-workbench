@@ -37,10 +37,19 @@ Options:
   --force                     Overwrite existing intake
   --yes                       Skip interactive confirmation
   --no-prompt                 Do not ask interactive questions for blanks
+  --extended                  Interactive mode asks the full question set
+                              (default core interview: goal, direction,
+                              constraints, handoff — 4 questions)
+  --list-questions            Print the core and extended question sets
+                              and exit (no target required)
   -h, --help                  Show this help
 
-If stdin is a TTY and --no-prompt is not set, blank fields are prompted
-interactively. In automation, pass fields as flags or accept placeholders.
+If stdin is a TTY and --no-prompt is not set, blank CORE fields (goal,
+direction, constraints, handoff) are prompted interactively; pass
+--extended for the full interview. In automation, pass fields as flags
+or accept placeholders. An intake whose core answers are mostly blank
+gets a visible "mostly unanswered" note so discovery treats intent as
+unresolved.
 EOF
 }
 
@@ -192,6 +201,11 @@ render_block() {
 render_template() {
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
+      "{{INTAKE_BANNER}}")
+        if [ -n "$INTAKE_BANNER" ]; then
+          printf '%s\n' "$INTAKE_BANNER"
+        fi
+        ;;
       "{{SESSION_MODE}}") render_block "$SESSION_MODE" ;;
       "{{SESSION_PRIORITIES}}") render_block "$SESSION_PRIORITIES" ;;
       "{{RISK_POSTURE}}") render_block "$RISK_POSTURE" ;;
@@ -210,7 +224,7 @@ render_template() {
         line="${line//\{\{DATE\}\}/$DATE}"
         line="${line//\{\{PROJECT_SLUG\}\}/$PROJECT_SLUG}"
         line="${line//\{\{PROJECT_PREFIX\}\}/$PROJECT_PREFIX}"
-        line="${line//\{\{TARGET_DIR\}\}/$TARGET}"
+        line="${line//\{\{TARGET_DIR\}\}/.}"
         line="${line//\{\{HANDOFF_AUDIENCE\}\}/$HANDOFF_AUDIENCE}"
         printf '%s\n' "$line"
         ;;
@@ -268,6 +282,8 @@ OUTPUT=""
 FORCE=0
 YES=0
 NO_PROMPT=0
+EXTENDED=0
+LIST_QUESTIONS=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -293,6 +309,8 @@ while [ $# -gt 0 ]; do
     --force) FORCE=1; shift ;;
     --yes) YES=1; shift ;;
     --no-prompt) NO_PROMPT=1; shift ;;
+    --extended) EXTENDED=1; shift ;;
+    --list-questions) LIST_QUESTIONS=1; shift ;;
     --) shift; break ;;
     -*) die "unknown option: $1" ;;
     *)
@@ -301,6 +319,28 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+if [ "$LIST_QUESTIONS" -eq 1 ]; then
+  cat <<'EOF'
+core (asked interactively by default):
+  1. What do you want done in this session?
+  2. What direction should the roadmap steer toward?
+  3. Any constraints or non-goals?
+  4. What should a good handoff include?
+extended (asked interactively only with --extended):
+  5. What kind of session is this?
+  6. What should this session optimize for?
+  7. How cautious should the agent be?
+  8. How deep should discovery go before proposing work?
+  9. What handoff artifacts should exist by the end?
+  10. Who is the handoff primarily for?
+  11. What evidence would make this session successful?
+  12. Any context the agent must not miss?
+  13. Preferred agent/execution style?
+  14. Questions to resolve before roadmapping?
+EOF
+  exit 0
+fi
 
 [ -n "$TARGET" ] || { usage; exit 1; }
 [ -d "$TARGET" ] || die "target directory does not exist: $TARGET"
@@ -326,7 +366,15 @@ fi
 print_banner
 if interactive; then
   printf 'Project: %s  |  slug: %s  |  prefix: %s\n' "$PROJECT_NAME" "$PROJECT_SLUG" "$PROJECT_PREFIX" >&2
+  if [ "$EXTENDED" -eq 0 ]; then
+    printf 'Core intake (4 questions) — pass --extended for the full interview.\n' >&2
+  fi
 fi
+
+# Non-core questions only prompt in --extended mode; flags or
+# placeholders apply otherwise.
+SAVED_NO_PROMPT="$NO_PROMPT"
+if [ "$EXTENDED" -eq 0 ]; then NO_PROMPT=1; fi
 
 SESSION_MODE=$(prompt_choice "What kind of session is this?" "$SESSION_MODE" "- not provided" \
   "Discovery first: understand the repo before changing direction" \
@@ -356,20 +404,39 @@ EXPECTED_DELIVERABLES=$(prompt_checkboxes "What handoff artifacts should exist b
   "First story backlog" \
   "Validation command list" \
   "Contract extension recommendations")
+NO_PROMPT="$SAVED_NO_PROMPT"
 SESSION_GOAL=$(prompt_if_blank "What do you want done in this session?" "$SESSION_GOAL" "- not provided")
 DIRECTION=$(prompt_if_blank "What direction should the roadmap steer toward?" "$DIRECTION" "- not provided")
+if [ "$EXTENDED" -eq 0 ]; then NO_PROMPT=1; fi
 HANDOFF_AUDIENCE=$(prompt_choice "Who is the handoff primarily for?" "$HANDOFF_AUDIENCE" "- not provided" \
   "Future agent" \
   "Human maintainer" \
   "Architect / tech lead" \
   "Open-source reader" \
   "Mixed audience")
+NO_PROMPT="$SAVED_NO_PROMPT"
 HANDOFF=$(prompt_if_blank "What should a good handoff include?" "$HANDOFF" "- not provided")
-SUCCESS_CRITERIA=$(prompt_if_blank "What evidence would make this session successful?" "$SUCCESS_CRITERIA" "- not provided")
 CONSTRAINTS=$(prompt_if_blank "Any constraints or non-goals?" "$CONSTRAINTS" "- not provided")
+if [ "$EXTENDED" -eq 0 ]; then NO_PROMPT=1; fi
+SUCCESS_CRITERIA=$(prompt_if_blank "What evidence would make this session successful?" "$SUCCESS_CRITERIA" "- not provided")
 KNOWN_CONTEXT=$(prompt_if_blank "Any context the agent must not miss?" "$KNOWN_CONTEXT" "- not provided")
 AGENT_STYLE=$(prompt_if_blank "Preferred agent/execution style?" "$AGENT_STYLE" "- not provided")
 OPEN_QUESTIONS=$(prompt_if_blank "Questions to resolve before roadmapping?" "$OPEN_QUESTIONS" "- not provided")
+NO_PROMPT="$SAVED_NO_PROMPT"
+
+# Blank-heavy core answers get a visible note so discovery treats
+# intent as unresolved instead of trusting an Enter-through intake.
+core_blank=0
+for core_value in "$SESSION_GOAL" "$DIRECTION" "$CONSTRAINTS" "$HANDOFF"; do
+  if [ "$core_value" = "- not provided" ]; then
+    core_blank=$((core_blank + 1))
+  fi
+done
+INTAKE_BANNER=""
+if [ "$core_blank" -ge 3 ]; then
+  INTAKE_BANNER="> **Note:** most core intake answers were not provided. Treat user
+> intent as unresolved and confirm direction before roadmapping."
+fi
 
 confirm_intake
 

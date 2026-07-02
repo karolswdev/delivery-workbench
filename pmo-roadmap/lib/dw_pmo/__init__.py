@@ -116,5 +116,6 @@ from .agentdocs import (
     write_agent_docs,
 )
 from .doctor import DoctorCheck, render_doctor, run_doctor
+from .adopt import AdoptionReport, parse_adoption_report, run_adoption
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"

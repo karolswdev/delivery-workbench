@@ -26,7 +26,7 @@ git -C "$DEMO_REPO" commit -m "initial app" >/dev/null
 mkdir -p "$DEMO_REPO/.demo"
 cat > "$DEMO_REPO/.demo/session-intake" <<EOF
 #!/usr/bin/env bash
-exec "$ROOT/pmo-roadmap/bootstrap/session-intake.sh" "\$@"
+exec "$ROOT/pmo-roadmap/bootstrap/session-intake.sh" --extended "\$@"
 EOF
 cat > "$DEMO_REPO/.demo/adopt-project" <<EOF
 #!/usr/bin/env bash

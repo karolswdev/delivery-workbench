@@ -94,10 +94,26 @@ copy_template() {
 copy_template "$SOURCE_DIR/templates/roadmap-builder.md" "$TARGET/pm/roadmap/roadmap-builder.md"
 copy_template "$SOURCE_DIR/templates/PMO-CONTRACT.md"    "$TARGET/pm/roadmap/PMO-CONTRACT.md"
 
-# 2. Hooks
+# 2. Hooks — refuse to clobber a foreign hook manager silently.
+EXISTING_HOOKS_PATH="$(git -C "$TARGET" config core.hooksPath 2>/dev/null || true)"
+if [ -n "$EXISTING_HOOKS_PATH" ] && [ "$EXISTING_HOOKS_PATH" != ".githooks" ] && [ "$FORCE" -ne 1 ]; then
+  die "core.hooksPath is already '$EXISTING_HOOKS_PATH' (another hook manager?); re-run with --force to take over, after deciding how to preserve that behavior"
+fi
+ACTIVE_LOCAL_HOOKS="$(find "$TARGET/.git/hooks" -maxdepth 1 -type f ! -name '*.sample' 2>/dev/null | sed "s|^$TARGET/||" || true)"
+if [ -n "$ACTIVE_LOCAL_HOOKS" ]; then
+  echo "  ! note: .git/hooks contains active hooks that core.hooksPath=.githooks will disable:" >&2
+  printf '%s\n' "$ACTIVE_LOCAL_HOOKS" | sed 's/^/      /' >&2
+fi
+
 mkdir -p "$TARGET/.githooks"
-cp "$SOURCE_DIR/hooks/pre-commit" "$TARGET/.githooks/pre-commit"
-chmod +x "$TARGET/.githooks/pre-commit"
+PRE_COMMIT_DST="$TARGET/.githooks/pre-commit"
+PRE_COMMIT_SRC="$SOURCE_DIR/hooks/pre-commit"
+if [ -e "$PRE_COMMIT_DST" ] && ! cmp -s "$PRE_COMMIT_DST" "$PRE_COMMIT_SRC" && [ "$FORCE" -ne 1 ] \
+  && ! grep -q "pmo-roadmap pre-commit" "$PRE_COMMIT_DST" 2>/dev/null; then
+  die "existing .githooks/pre-commit is not a pmo-roadmap hook; refusing to overwrite without --force"
+fi
+cp "$PRE_COMMIT_SRC" "$PRE_COMMIT_DST"
+chmod +x "$PRE_COMMIT_DST"
 echo "  ✓ wrote .githooks/pre-commit"
 
 POST_COMMIT_DST="$TARGET/.githooks/post-commit"
@@ -139,11 +155,11 @@ echo "  ✓ wrote .githooks/work-log-read"
 git -C "$TARGET" config core.hooksPath .githooks
 echo "  ✓ git config core.hooksPath = .githooks"
 
-# 4. .gitignore — add .tmp/
+# 4. .gitignore — add .tmp/ (accepting common existing spellings)
 GITIGNORE="$TARGET/.gitignore"
 touch "$GITIGNORE"
-if grep -qxF '.tmp/' "$GITIGNORE" 2>/dev/null; then
-  echo "  · .gitignore already has .tmp/"
+if grep -qxE '/?\.tmp/?' "$GITIGNORE" 2>/dev/null; then
+  echo "  · .gitignore already covers .tmp/"
 else
   printf '\n# pmo-roadmap pre-commit contract scratch\n.tmp/\n' >> "$GITIGNORE"
   echo "  ✓ added .tmp/ to .gitignore"

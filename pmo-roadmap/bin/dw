@@ -52,6 +52,7 @@ try:
         read_text,
         next_story,
         parse_contract_facts,
+        run_adoption,
         render_doctor,
         render_gate_failure,
         render_gate_porcelain,
@@ -255,6 +256,29 @@ def command_agent_docs(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_adopt(args: argparse.Namespace) -> int:
+    result = run_adoption(
+        args.root,
+        args.from_report,
+        slug=args.project,
+        name=args.project_name,
+        prefix=args.project_prefix,
+        apply=args.apply,
+    )
+    if result["mode"] == "preview":
+        print(f"dw adopt preview for project '{result['project']}' (nothing written):")
+        for item in result["planned"]:
+            print(f"  - {item}")
+        print("Re-run with --apply to scaffold.", file=sys.stderr)
+        return 0
+    print(f"dw adopt applied for project '{result['project']}':")
+    for item in result["applied"]:
+        print(f"  - {item}")
+    for issue in result["issues"]:
+        print(f"ERROR {issue}")
+    return 1 if result["issues"] else 0
+
+
 def command_doctor(args: argparse.Namespace) -> int:
     checks = run_doctor(args.root)
     print(render_doctor(checks), end="")
@@ -386,6 +410,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = sub.add_parser("doctor", help="verify the rails are wired in this clone (hooksPath, hooks, core, agent docs)")
     doctor.set_defaults(func=command_doctor)
+
+    adopt = sub.add_parser("adopt", help="scaffold the roadmap from an adoption discovery report (preview by default)")
+    adopt.add_argument("--from-report", type=Path, required=True, help="path to adoption-discovery.md")
+    adopt.add_argument("--project", help="project slug (default: the report's Roadmap root line)")
+    adopt.add_argument("--project-name", help="human project name for a new README")
+    adopt.add_argument("--project-prefix", help="story-ID prefix for a new README (default: from the report's story IDs)")
+    adopt.add_argument("--apply", action="store_true", help="write the scaffold (default is a dry-run preview)")
+    adopt.set_defaults(func=command_adopt)
 
     agent_docs = sub.add_parser("agent-docs", help="write or refresh the managed Delivery Workbench block in CLAUDE.md/AGENTS.md")
     agent_docs.add_argument("--file", type=Path, help="explicit target file (default: existing CLAUDE.md, then AGENTS.md, else new CLAUDE.md)")

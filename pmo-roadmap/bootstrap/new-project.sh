@@ -37,24 +37,28 @@ PHASE_DIR="$PROJECT_DIR/phase-0-setup"
 
 mkdir -p "$PHASE_DIR"
 
-# Render a template file with simple {{KEY}} substitution.
+# Render a template file with literal {{KEY}} substitution (bash
+# pattern replacement, not sed — hostile characters like | & \ in
+# project names must not corrupt the output).
 render() {
   src="$1"; dst="$2"
   if [ -e "$dst" ]; then
     echo "  · skip (exists): ${dst#$TARGET/}"
     return 0
   fi
-  sed \
-    -e "s|{{PROJECT_NAME}}|$NAME|g" \
-    -e "s|{{PROJECT_SLUG}}|$SLUG|g" \
-    -e "s|{{PROJECT_PREFIX}}|$PREFIX|g" \
-    -e "s|{{DATE}}|$DATE|g" \
-    -e "s|{{PHASE_N}}|0|g" \
-    -e "s|{{PHASE_TITLE}}|Setup|g" \
-    -e "s|{{STORY_ID}}|$PREFIX-0-01|g" \
-    -e "s|{{STORY_TITLE}}|Bootstrap roadmap project|g" \
-    -e "s@^| $PREFIX-0-01 | … | backlog | \[story-01-…\](\./story-01-….md) | — |\$@| $PREFIX-0-01 | Bootstrap roadmap project | backlog | [story-01-bootstrap](./story-01-bootstrap.md) | - |@" \
-    "$src" > "$dst"
+  text="$(cat "$src")"
+  text="${text//\{\{PROJECT_NAME\}\}/$NAME}"
+  text="${text//\{\{PROJECT_SLUG\}\}/$SLUG}"
+  text="${text//\{\{PROJECT_PREFIX\}\}/$PREFIX}"
+  text="${text//\{\{DATE\}\}/$DATE}"
+  text="${text//\{\{PHASE_N\}\}/0}"
+  text="${text//\{\{PHASE_TITLE\}\}/Setup}"
+  text="${text//\{\{STORY_ID\}\}/$PREFIX-0-01}"
+  text="${text//\{\{STORY_TITLE\}\}/Bootstrap roadmap project}"
+  placeholder_row="| $PREFIX-0-01 | … | backlog | [story-01-…](./story-01-….md) | — |"
+  bootstrap_row="| $PREFIX-0-01 | Bootstrap roadmap project | backlog | [story-01-bootstrap](./story-01-bootstrap.md) | - |"
+  text="${text/"$placeholder_row"/$bootstrap_row}"
+  printf '%s\n' "$text" > "$dst"
   echo "  ✓ wrote ${dst#$TARGET/}"
 }
 

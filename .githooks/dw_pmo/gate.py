@@ -34,10 +34,13 @@ from pathlib import Path
 from .model import DONE_STATUSES
 from .contract import (
     CONTRACT_REL,
+    NO_BYPASSES_TITLE,
     box_title,
     contract_digest,
     contract_rule_titles,
+    forced_full_tier,
     parse_contract_facts,
+    roadmap_paths_staged,
     rules_doc_path,
     story_id_from_blob,
 )
@@ -79,6 +82,7 @@ class GateResult:
     failure: GateFailure | None
     expected_boxes: int
     checked_boxes: int
+    tier: str = "full"
     contract_digest: str = ""
     declared_stories: list[str] = field(default_factory=list)
     staged: list[str] = field(default_factory=list)
@@ -158,6 +162,31 @@ def run_gate(
         )
 
     result.declared_stories = list(facts["story_ids"])  # type: ignore[arg-type]
+
+    # Tier: the gate decides the required tier mechanically. A commit
+    # that touches the roadmap tree (which includes every story flip)
+    # requires the full contract; projects can force full everywhere
+    # with PMO_CONTRACT_TIER=full.
+    result.tier = str(facts.get("tier", "full")).strip().lower() or "full"
+    if result.tier not in {"full", "short"}:
+        return failed(
+            "contract-tier-mismatch",
+            f"Unknown contract tier {result.tier!r} (expected full or short).",
+            "Regenerate with `dw contract new --force`.",
+        )
+    if result.tier == "short":
+        if roadmap_paths_staged(root):
+            return failed(
+                "contract-tier-mismatch",
+                "Short-form contract rejected — staged changes touch the roadmap tree, which requires the full contract.",
+                "Re-run `dw contract new --force` (auto-tier picks full) and certify the full rule set.",
+            )
+        if forced_full_tier(root):
+            return failed(
+                "contract-tier-mismatch",
+                "Short-form contract rejected — this project requires the full contract (PMO_CONTRACT_TIER=full).",
+                "Re-run `dw contract new --force --tier full` and certify the full rule set.",
+            )
 
     actual_tree = write_tree(root) or "unknown"
     if facts["index_tree"] != actual_tree:
@@ -242,7 +271,27 @@ def run_gate(
     checked_lines = [line for line in contract_text.splitlines() if _CHECKED_BOX_RE.match(line)]
     result.checked_boxes = len(checked_lines)
     known_titles = contract_rule_titles(root)
-    if known_titles:
+    if result.tier == "short":
+        # Short form: the no-bypass rule is the whole checked surface.
+        result.expected_boxes = 1
+        allowed = set(known_titles or []) | {NO_BYPASSES_TITLE}
+        seen_titles = []
+        for line in checked_lines:
+            title = box_title(line)
+            if title is None or title not in allowed:
+                return failed(
+                    "contract-unknown-box",
+                    f"Checked box does not correspond to any known rule: {line.strip()!r}",
+                    "Short-form contracts carry the No bypasses. rule; regenerate with `dw contract new --force`.",
+                )
+            seen_titles.append(title)
+        if NO_BYPASSES_TITLE not in seen_titles:
+            return failed(
+                "contract-missing-box",
+                f"Short-form contract is missing the required box: {NO_BYPASSES_TITLE}",
+                "Regenerate with `dw contract new --force` and certify the no-bypass rule.",
+            )
+    elif known_titles:
         result.expected_boxes = len(known_titles)
         expected_boxes = len(known_titles)
         seen: list[str] = []
@@ -459,6 +508,7 @@ def render_gate_porcelain(result: GateResult) -> str:
         f"checked_boxes={result.checked_boxes}",
         f"shipped_count={len(result.shipped_stories)}",
         f"worklog_capture={'yes' if result.worklog_capture else 'no'}",
+        f"tier={result.tier}",
         f"contract_digest={result.contract_digest or 'none'}",
     ]
     lines.extend(f"declared_story={sid}" for sid in result.declared_stories)
