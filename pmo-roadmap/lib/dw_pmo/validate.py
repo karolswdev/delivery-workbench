@@ -145,3 +145,134 @@ def check_project(project: Project, root: Path) -> list[str]:
         if rows and all(row.status in DONE_STATUSES for row in rows) and not (phase.path / "final-summary.md").exists():
             issues.append(f"{rel(phase.path, root)}: all stories are done but final-summary.md is missing")
     return issues
+
+# ── structured health classification (WLA-5-04) ──────────────────────
+#
+# `check_project` / `project_warnings` speak in human strings; the
+# workbench health console needs structure. Classification is by the
+# exact phrases those functions emit — a unit test guards the coupling.
+
+_ISSUE_KINDS = [
+    ("current phase pointer is stale", "stale-pointer", "project"),
+    ("missing current-phase-status.md", "missing-status-file", "phase"),
+    ("all stories are done but final-summary.md is missing", "missing-final-summary", "phase"),
+    ("broken story link", "broken-story-link", "story-evidence"),
+    ("header status", "status-mismatch", "story-evidence"),
+    ("has no evidence link", "missing-evidence-link", "story-evidence"),
+    ("broken evidence link", "broken-evidence-link", "story-evidence"),
+    ("missing evidence-story", "missing-evidence-file", "story-evidence"),
+    ("orphan evidence has no matching story row", "orphan-evidence", "story-evidence"),
+    ("evidence exists but matching story is not done", "premature-evidence", "story-evidence"),
+    ("generator placeholder", "placeholder-evidence", "story-evidence"),
+    ("evidence body is empty", "empty-evidence", "story-evidence"),
+    ("broken asset reference", "broken-asset", "story-evidence"),
+    ("could not be read", "unreadable-evidence", "story-evidence"),
+]
+
+_WARNING_KINDS = [
+    ("multiple open phases detected", "multiple-open-phases", "phase"),
+    ("narrative-only evidence", "narrative-only-evidence", "story-evidence"),
+    ("appears older than current Delivery Workbench seams", "older-hook-snapshot", "hook-runtime"),
+]
+
+_EXPLANATIONS = {
+    "stale-pointer": "The project README's Current phase link targets a file that does not exist; repoint it at the real current phase.",
+    "multiple-open-phases": "More than one phase has open stories; agents cannot tell which phase is current. Close or re-sequence.",
+    "older-hook-snapshot": "The installed pre-commit hook predates current framework seams; run update.sh (never edit hooks in place).",
+    "broken-story-link": "The phase story table links a story file that does not exist on disk.",
+    "broken-evidence-link": "The phase story table links an evidence file that does not exist on disk.",
+    "status-mismatch": "The story header and the phase table disagree about the status; fix with dw story status.",
+    "orphan-evidence": "An evidence file exists with no matching story row.",
+    "premature-evidence": "Evidence exists but its story is not done; flip the story or remove the file.",
+    "narrative-only-evidence": "Done stories whose evidence has no captured run; legal but unverifiable — prefer dw evidence capture.",
+}
+
+
+def _classify(text: str, table: list[tuple[str, str, str]], default_kind: str) -> dict[str, str]:
+    kind, category = default_kind, "project"
+    for needle, k, c in table:
+        if needle in text:
+            kind, category = k, c
+            break
+    path, _, message = text.partition(": ")
+    if not message:
+        path, message = "", text
+    entry = {
+        "kind": kind,
+        "category": category,
+        "path": path,
+        "message": message or text,
+        "text": text,
+    }
+    if kind in _EXPLANATIONS:
+        entry["explanation"] = _EXPLANATIONS[kind]
+    if kind == "multiple-open-phases":
+        _, _, folders = text.partition(": ")
+        entry["phase_folders"] = [f.strip() for f in folders.split(",") if f.strip()]
+    return entry
+
+
+def classify_issue(text: str) -> dict[str, str]:
+    entry = _classify(text, _ISSUE_KINDS, "other-issue")
+    entry["severity"] = "error"
+    return entry
+
+
+def classify_warning(text: str) -> dict[str, str]:
+    entry = _classify(text, _WARNING_KINDS, "other-warning")
+    entry["severity"] = "warning"
+    return entry
+
+
+def hook_seam_explanations(snapshot: dict[str, object]) -> list[str]:
+    notes: list[str] = []
+    if not snapshot.get("pre_commit_exists"):
+        notes.append("no .githooks/pre-commit installed — the commit gate is not active in this clone")
+        return notes
+    if not snapshot.get("has_config_seam"):
+        notes.append("pre-commit lacks the pre-commit.config seam (project variable overrides will be ignored)")
+    if not snapshot.get("has_local_seam"):
+        notes.append("pre-commit lacks the pre-commit.local seam (project-specific rules will not run)")
+    if not snapshot.get("has_work_log_capture"):
+        notes.append("pre-commit lacks work-log capture (consented commits will not produce log entries)")
+    if notes:
+        notes.append("run update.sh against this repo to refresh the framework-owned hooks")
+    return notes
+
+
+def health_report(root: Path, projects: list[Project]) -> dict[str, object]:
+    """Structured drift/validation snapshot for the health console."""
+    from .gitio import config_value
+    from .paths import work_log_root
+    from .parse import hook_snapshot
+
+    project_entries = []
+    check_lines: list[str] = []
+    for project in projects:
+        issues = [classify_issue(i) for i in check_project(project, root)]
+        warnings = [classify_warning(w) for w in project_warnings(project, root)]
+        check_lines.extend(f"ERROR {i['text']}" for i in issues)
+        project_entries.append(
+            {
+                "slug": project.slug,
+                "issues": issues,
+                "warnings": warnings,
+                "mutation_safe": not issues,
+            }
+        )
+    snapshot = hook_snapshot(root)
+    return {
+        "projects": project_entries,
+        "total_issues": sum(len(p["issues"]) for p in project_entries),
+        "total_warnings": sum(len(p["warnings"]) for p in project_entries),
+        "mutation_safe": all(p["mutation_safe"] for p in project_entries),
+        "hook_snapshot": snapshot,
+        "hook_explanations": hook_seam_explanations(snapshot),
+        "work_log_config": {
+            "enabled": (config_value(root, "PMO_WORK_LOG_ENABLED") or "0"),
+            "dir": str(work_log_root(root)),
+            "project_slug": config_value(root, "PMO_WORK_LOG_PROJECT_SLUG") or "(inferred)",
+            "exclude_regex": config_value(root, "PMO_WORK_LOG_EXCLUDE_REGEX") or "(none)",
+        },
+        "check_output": "\n".join(check_lines) if check_lines else "dw check: ok",
+    }

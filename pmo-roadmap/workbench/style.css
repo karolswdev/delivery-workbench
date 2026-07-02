@@ -147,3 +147,25 @@ pre.src {
   font-size: 11px;
   text-align: center;
 }
+
+.navlink { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+.navlink:hover { color: var(--link); }
+
+.guard {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--warn);
+  border-radius: 6px;
+  color: var(--warn);
+  font-size: 13px;
+  background: rgba(217, 164, 65, 0.07);
+}
+.guard.ok { border-color: var(--accent); color: var(--accent); background: rgba(76, 195, 138, 0.06); }
+
+.hitem { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; flex-wrap: wrap; }
+.hitem .msg { flex: 1; min-width: 200px; }
+.hitem .why { flex-basis: 100%; color: var(--muted); font-size: 12px; padding-left: 2px; }
+
+.copybar { display: flex; justify-content: flex-end; margin-bottom: -30px; position: relative; z-index: 1; padding-right: 8px; padding-top: 6px; }
+.copybar button { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 2px 9px; font-size: 11px; cursor: pointer; }
+.copybar button:hover { color: var(--text); border-color: var(--accent); }

@@ -25,7 +25,7 @@ from .api import build_context_payload, next_story, project_context
 from .model import DwError, OPEN_STATUSES
 from .parse import discover_phases, discover_projects, get_project, parse_story_rows
 from .paths import read_text, rel, roadmap_dir
-from .validate import check_project, project_warnings
+from .validate import check_project, health_report, project_warnings
 
 SCHEMA_KIND = "delivery-workbench-workbench-response"
 SCHEMA_VERSION = 1
@@ -143,6 +143,9 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
                         detail["phase_number"] = phase["number"]
                         return 200, envelope(detail)
             return _error(404, f"story not found: {parts[4]}")
+
+        if parts == ["api", "health"]:
+            return 200, envelope(health_report(root, discover_projects(root)))
 
         if parts == ["api", "file"]:
             return _contained_read(root, query.get("path", [""])[0])

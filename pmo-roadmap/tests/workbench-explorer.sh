@@ -129,4 +129,61 @@ done
 AFTER="$(sum_tree)"
 [ "$BEFORE" = "$AFTER" ] || fail "repeated API loads must not modify the roadmap tree"
 
+# ── health console (WLA-5-04): drift fixture renders all issue kinds ──
+DRIFT="$REPO/pm/roadmap/drifty"
+mkdir -p "$DRIFT/phase-0-open-a" "$DRIFT/phase-1-open-b"
+cat > "$DRIFT/README.md" <<'EOF'
+# Drifty - Roadmap
+
+**Current phase:** [phase-9-ghost](./phase-9-ghost/current-phase-status.md)
+
+## Project metadata
+
+- **Slug:** `drifty`
+- **Story ID prefix:** `DR`
+EOF
+cat > "$DRIFT/phase-0-open-a/current-phase-status.md" <<'EOF'
+## Story status
+
+| ID | Story | Status | Story file | Evidence |
+|---|---|---|---|---|
+| DR-0-01 | Broken evidence link | done | [story-01-real](./story-01-real.md) | [evidence-story-01](./evidence-story-01.md) |
+| DR-0-02 | No evidence | done | [story-02-real](./story-02-real.md) | - |
+| DR-0-03 | Broken story link | done | [story-03-gone](./story-03-gone.md) | - |
+| DR-0-04 | Still open here | backlog | [story-04-open](./story-04-open.md) | - |
+EOF
+printf '# DR-0-01 - Broken evidence link\n\n- **Status:** done\n' > "$DRIFT/phase-0-open-a/story-01-real.md"
+printf '# DR-0-04 - Still open here\n\n- **Status:** backlog\n' > "$DRIFT/phase-0-open-a/story-04-open.md"
+printf '# DR-0-02 - No evidence\n\n- **Status:** done\n' > "$DRIFT/phase-0-open-a/story-02-real.md"
+printf '# stray\n' > "$DRIFT/phase-0-open-a/evidence-story-07.md"
+cat > "$DRIFT/phase-1-open-b/current-phase-status.md" <<'EOF'
+## Story status
+
+| ID | Story | Status | Story file | Evidence |
+|---|---|---|---|---|
+| DR-1-01 | Second open phase | backlog | [story-01-b](./story-01-b.md) | - |
+EOF
+printf '# DR-1-01 - Second open phase\n\n- **Status:** backlog\n' > "$DRIFT/phase-1-open-b/story-01-b.md"
+
+curl -s "$BASE/api/health" > "$TMP_ROOT/health.json"
+python3 - "$TMP_ROOT/health.json" <<'PY' || fail "health payload wrong"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["mutation_safe"] is False
+drifty = [p for p in d["projects"] if p["slug"] == "drifty"][0]
+kinds = {i["kind"] for i in drifty["issues"]}
+for expected in ("stale-pointer", "broken-story-link", "missing-evidence-link",
+                 "broken-evidence-link", "orphan-evidence"):
+    assert expected in kinds, f"missing issue kind {expected}: {kinds}"
+warns = {w["kind"]: w for w in drifty["warnings"]}
+assert "multiple-open-phases" in warns
+assert warns["multiple-open-phases"]["phase_folders"] == ["phase-0-open-a", "phase-1-open-b"]
+assert any(i["kind"] == "stale-pointer" and "explanation" in i for i in drifty["issues"])
+assert "ERROR" in d["check_output"]
+assert "hook_explanations" in d and "work_log_config" in d
+sample = [p for p in d["projects"] if p["slug"] == "sample"][0]
+assert sample["mutation_safe"] is True
+PY
+rm -rf "$DRIFT"
+
 echo "workbench-explorer.sh: ok"

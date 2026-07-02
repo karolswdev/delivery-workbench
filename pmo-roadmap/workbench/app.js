@@ -127,7 +127,8 @@ async function viewProject(slug) {
         <tr><th>Phase</th><th>State</th><th>Stories</th><th>Evidence</th><th>Summary</th></tr>
         ${phases || '<tr><td colspan="5">no phases yet</td></tr>'}
       </table></div></div>
-    ${p.issues.length ? `<div class="section"><h2>Validation issues</h2>
+    ${p.issues.length ? `<div class="guard">mutations guarded — <a href="#/health">${p.issues.length} validation issue${p.issues.length === 1 ? "" : "s"}</a> must be resolved first</div>
+    <div class="section"><h2>Validation issues (<a href="#/health">health console</a>)</h2>
       <ul class="plain">${p.issues.map((i) => `<li class="issue">${esc(i)}</li>`).join("")}</ul></div>` : ""}
     ${p.warnings.length ? `<div class="section"><h2>Warnings</h2>
       <ul class="plain">${p.warnings.map((w) => `<li class="warn">${esc(w)}</li>`).join("")}</ul></div>` : ""}
@@ -197,6 +198,74 @@ async function viewFile(path) {
       <pre class="src">${esc(body.data.content)}</pre></div>`;
 }
 
+
+const CATEGORY_LABELS = {
+  "project": "Project pointers",
+  "phase": "Phases",
+  "story-evidence": "Stories & evidence",
+  "hook-runtime": "Hooks & runtime",
+  "supplemental-canon": "Supplemental canon",
+};
+
+function healthItem(item) {
+  const kindCls = item.kind === "stale-pointer" ? "issue" : (item.severity === "error" ? "issue" : "warn");
+  const folders = item.phase_folders
+    ? `<div class="why">phase folders: ${item.phase_folders.map((f) => `<code>${esc(f)}</code>`).join(", ")}</div>` : "";
+  return `<div class="hitem">
+    ${badge(item.severity, item.severity === "error" ? "issue" : "warn")}
+    ${badge(item.kind, kindCls)}
+    <span class="msg">${item.path ? `<a href="#/f/${encodeURIComponent(item.path)}"><code>${esc(item.path)}</code></a> — ` : ""}${esc(item.message)}</span>
+    ${item.explanation ? `<div class="why">${esc(item.explanation)}</div>` : ""}
+    ${folders}
+  </div>`;
+}
+
+async function viewHealth() {
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "health" }]);
+  const body = await api("/api/health");
+  const h = body.data;
+  const sections = [];
+  for (const proj of h.projects) {
+    const byCat = {};
+    proj.issues.concat(proj.warnings).forEach((item) => {
+      (byCat[item.category] = byCat[item.category] || []).push(item);
+    });
+    const cats = Object.keys(byCat).map((cat) => `
+      <div class="section"><h2>${esc(proj.slug)} · ${esc(CATEGORY_LABELS[cat] || cat)} (${byCat[cat].length})</h2>
+        ${byCat[cat].map(healthItem).join("")}</div>`).join("");
+    sections.push(cats || `<div class="section"><h2>${esc(proj.slug)}</h2>
+      <div class="guard ok">no validation issues or warnings — mutations safe</div></div>`);
+  }
+  const hook = h.hook_snapshot;
+  const hookRows = [
+    ["pre-commit installed", hook.pre_commit_exists],
+    ["post-commit installed", hook.post_commit_exists],
+    ["config seam (pre-commit.config)", hook.has_config_seam],
+    ["local rule seam (pre-commit.local)", hook.has_local_seam],
+    ["work-log capture", hook.has_work_log_capture],
+  ].map(([k, v]) => `<div class="hitem">${badge(v ? "ok" : "missing", v ? "ok" : "issue")}<span class="msg">${esc(k)}</span></div>`).join("");
+  app.innerHTML = `
+    <div class="guard ${h.mutation_safe ? "ok" : ""}">${h.mutation_safe
+      ? "mutation-safe: no validation issues; editor operations (future) are unguarded"
+      : `mutations guarded: ${h.total_issues} validation issue${h.total_issues === 1 ? "" : "s"} must be resolved in the source Markdown first`}</div>
+    ${sections.join("")}
+    <div class="section"><h2>Hook snapshot</h2>${hookRows}
+      ${h.hook_explanations.length ? `<ul class="plain">${h.hook_explanations.map((e) => `<li class="warn">${esc(e)}</li>`).join("")}</ul>` : ""}</div>
+    <div class="section"><h2>Work-log configuration (read-only)</h2>
+      <div class="meta">
+        <div class="kv"><div class="k">enabled</div><div class="v">${esc(h.work_log_config.enabled)}</div></div>
+        <div class="kv"><div class="k">directory</div><div class="v">${esc(h.work_log_config.dir)}</div></div>
+        <div class="kv"><div class="k">project slug</div><div class="v">${esc(h.work_log_config.project_slug)}</div></div>
+        <div class="kv"><div class="k">exclude regex</div><div class="v">${esc(h.work_log_config.exclude_regex)}</div></div>
+      </div></div>
+    <div class="section"><h2>dw check (copyable)</h2>
+      <div class="copybar"><button id="copy-check" type="button">copy</button></div>
+      <pre class="src" id="check-output">${esc(h.check_output)}</pre></div>`;
+  document.getElementById("copy-check").addEventListener("click", () => {
+    navigator.clipboard.writeText(document.getElementById("check-output").textContent);
+  });
+}
+
 /* ── router ─────────────────────────────────────────────────────────── */
 
 async function route() {
@@ -208,6 +277,7 @@ async function route() {
     if (parts[0] === "p" && parts.length === 2) return await viewProject(parts[1]);
     if (parts[0] === "p" && parts[2] === "ph") return await viewPhase(parts[1], parts[3]);
     if (parts[0] === "p" && parts[2] === "s") return await viewStory(parts[1], parts[3]);
+    if (parts[0] === "health") return await viewHealth();
     if (parts[0] === "f") return await viewFile(parts.slice(1).join("/"));
     app.innerHTML = stateHtml(`Unknown view: ${hash}`, true);
   } catch (err) {

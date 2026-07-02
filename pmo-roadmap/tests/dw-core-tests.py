@@ -339,6 +339,68 @@ class DwCoreTest(unittest.TestCase):
         self.assertNotIn("narrative-only evidence", warnings)
 
 
+    # -- health console (WLA-5-04) --------------------------------------------
+
+    def test_health_classifier_kinds(self) -> None:
+        cases = {
+            "pm/x/README.md: current phase pointer is stale: phase-9": ("stale-pointer", "project"),
+            "pm/x/phase-1: missing current-phase-status.md": ("missing-status-file", "phase"),
+            "pm/x/s.md: broken story link for X-1-01: story-9.md": ("broken-story-link", "story-evidence"),
+            "pm/x/story.md: header status 'ready' differs from phase table 'done'": ("status-mismatch", "story-evidence"),
+            "pm/x/s.md: done story X-1-01 has no evidence link": ("missing-evidence-link", "story-evidence"),
+            "pm/x/s.md: broken evidence link for X-1-01: e.md": ("broken-evidence-link", "story-evidence"),
+            "pm/x/s.md: done story X-1-01 missing evidence-story-01.md": ("missing-evidence-file", "story-evidence"),
+            "pm/x/evidence-story-09.md: orphan evidence has no matching story row": ("orphan-evidence", "story-evidence"),
+            "pm/x/evidence-story-01.md: evidence exists but matching story is not done": ("premature-evidence", "story-evidence"),
+            "pm/x/e.md: evidence still contains the generator placeholder": ("placeholder-evidence", "story-evidence"),
+            "pm/x/e.md: evidence body is empty (no proof content)": ("empty-evidence", "story-evidence"),
+            "pm/x/e.md: broken asset reference: assets/x.png": ("broken-asset", "story-evidence"),
+            "pm/x/phase-1: all stories are done but final-summary.md is missing": ("missing-final-summary", "phase"),
+        }
+        for text_case, (kind, category) in cases.items():
+            entry = core.classify_issue(text_case)
+            self.assertEqual((entry["kind"], entry["category"]), (kind, category), text_case)
+            self.assertEqual(entry["severity"], "error")
+        warn = core.classify_warning("multiple open phases detected: phase-0-a, phase-1-b")
+        self.assertEqual(warn["kind"], "multiple-open-phases")
+        self.assertEqual(warn["phase_folders"], ["phase-0-a", "phase-1-b"])
+        self.assertIn("explanation", warn)
+        hook_warn = core.classify_warning("installed pre-commit hook appears older than current Delivery Workbench seams")
+        self.assertEqual((hook_warn["kind"], hook_warn["category"]), ("older-hook-snapshot", "hook-runtime"))
+
+    def test_health_report_shape_and_guard(self) -> None:
+        from dw_pmo import workbench as wb
+
+        report = core.health_report(self.root, core.discover_projects(self.root))
+        self.assertTrue(report["mutation_safe"])
+        self.assertEqual(report["total_issues"], 0)
+        self.assertEqual(report["check_output"], "dw check: ok")
+        self.assertIn("work_log_config", report)
+        # introduce drift: stale pointer + orphan evidence
+        readme = self.root / "pm" / "roadmap" / "demo" / "README.md"
+        readme.write_text(readme.read_text(encoding="utf-8").replace(
+            "phase-1-alpha/current-phase-status.md", "phase-9-ghost/current-phase-status.md"), encoding="utf-8")
+        (self.phase_dir / "evidence-story-09.md").write_text("# stray\n", encoding="utf-8")
+        report = core.health_report(self.root, core.discover_projects(self.root))
+        self.assertFalse(report["mutation_safe"])
+        kinds = {i["kind"] for i in report["projects"][0]["issues"]}
+        self.assertIn("stale-pointer", kinds)
+        self.assertIn("orphan-evidence", kinds)
+        self.assertIn("ERROR", report["check_output"])
+        status, body = wb.handle_api(self.root, "/api/health", {})
+        self.assertEqual(status, 200)
+        self.assertFalse(body["data"]["mutation_safe"])
+
+    def test_hook_seam_explanations(self) -> None:
+        empty = core.hook_seam_explanations({"pre_commit_exists": False})
+        self.assertTrue(any("not active" in n for n in empty))
+        partial = core.hook_seam_explanations({
+            "pre_commit_exists": True, "has_config_seam": True,
+            "has_local_seam": False, "has_work_log_capture": True,
+        })
+        self.assertTrue(any("pre-commit.local" in n for n in partial))
+        self.assertTrue(any("update.sh" in n for n in partial))
+
     # -- workbench explorer API (WLA-5-03) -----------------------------------
 
     def _tree_checksums(self):

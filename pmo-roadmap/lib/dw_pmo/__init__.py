@@ -106,7 +106,7 @@ from .gate import (
     run_gate,
 )
 from .model import EVIDENCE_PLACEHOLDER, STORY_STATUSES
-from .validate import evidence_content_issues
+from .validate import classify_issue, classify_warning, evidence_content_issues, health_report, hook_seam_explanations
 from .agentdocs import (
     BEGIN_MARKER,
     END_MARKER,
