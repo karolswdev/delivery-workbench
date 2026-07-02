@@ -76,10 +76,12 @@ state store.
 - [x] The trace UI links README, phase status, story, evidence, final summary,
   recent commits, and work-log entries where available
   (evidence-story-05 with screenshots).
-- [ ] The editor supports create phase, create story, update story status,
-  attach evidence, and close phase through core mutation plans only.
-- [ ] Every write operation has preview, diff, validation, apply, and
-  post-apply revalidation states.
+- [x] The editor supports create phase, create story, update story status,
+  attach evidence, and close phase through core mutation plans only
+  (evidence-story-06; loop closed by evidence-story-07).
+- [x] Every write operation has preview, diff, validation, apply, and
+  post-apply revalidation states (evidence-story-07 with screenshots
+  and captured cycles).
 - [ ] Permission tests prove the runtime refuses non-allowlisted repo roots,
   path traversal, arbitrary file writes, and auto-commit attempts.
 - [ ] UI tests cover desktop and mobile viewports for explorer, health, trace,
@@ -97,7 +99,7 @@ state store.
 | WLA-5-04 | Build health drift and validation console | done | [story-04-health-drift-validation-console](./story-04-health-drift-validation-console.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-5-05 | Build traceability timeline | done | [story-05-traceability-timeline](./story-05-traceability-timeline.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-5-06 | Build structured PMO editor | done | [story-06-structured-pmo-editor](./story-06-structured-pmo-editor.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-5-07 | Build safe mutation preview and diff workflow | backlog | [story-07-mutation-preview-diff-workflow](./story-07-mutation-preview-diff-workflow.md) | - |
+| WLA-5-07 | Build safe mutation preview and diff workflow | done | [story-07-mutation-preview-diff-workflow](./story-07-mutation-preview-diff-workflow.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-5-08 | Integrate commit and work-log evidence views | backlog | [story-08-commit-worklog-evidence-views](./story-08-commit-worklog-evidence-views.md) | - |
 | WLA-5-09 | Harden permissions and local runtime model | backlog | [story-09-permissions-local-runtime-model](./story-09-permissions-local-runtime-model.md) | - |
 | WLA-5-10 | Ship documentation tests and adoption path | backlog | [story-10-docs-tests-adoption-path](./story-10-docs-tests-adoption-path.md) | - |
@@ -121,16 +123,18 @@ state store.
 
 ## Where we are
 
-WLA-5-06 is done with evidence: the write tier is open at the intent
-level. The editor's five forms map one-to-one onto core mutation plans,
-POST /api/mutations/preview returns planned contents plus a
-deterministic content-bound fingerprint while writing nothing
-(checksum-proved), refusals are the core's own (done-without-evidence,
-collisions, force semantics), and the health console's mutation_safe
-guard gates previews behind explicit acknowledgment. Apply, diffs, and
-stale-preview refusal are next: WLA-5-07 completes the
-preview → diff → apply → revalidate loop on the fingerprint this story
-minted. The editor exit criterion stays open until that loop closes.
+WLA-5-07 is done with evidence: the write tier is complete. Previews
+carry unified diffs, validation before the write, and projected
+validation after it (scratch-tree simulation); apply requires the
+content-bound fingerprint and refuses stale previews and tampered
+intent; writes are rollback-protected with post-apply revalidation in
+the response. The guard gained the remediation exemption — a mutation
+whose projected issues strictly shrink the current set passes without
+acknowledgment, resolving the close-phase deadlock the suite found.
+Seven of ten exit criteria are checked. Remaining: WLA-5-08
+(commit/work-log evidence views), WLA-5-09 (permission hardening —
+after which the workbench can be distributed to consumer repos), and
+WLA-5-10 (docs, viewport tests, adoption close-out).
 
 ## Active risks
 
