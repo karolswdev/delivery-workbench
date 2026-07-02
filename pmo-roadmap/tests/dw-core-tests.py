@@ -339,6 +339,86 @@ class DwCoreTest(unittest.TestCase):
         self.assertNotIn("narrative-only evidence", warnings)
 
 
+    # -- workbench explorer API (WLA-5-03) -----------------------------------
+
+    def _tree_checksums(self):
+        import hashlib
+        sums = {}
+        for f in sorted((self.root / "pm" / "roadmap").rglob("*")):
+            if f.is_file():
+                sums[str(f)] = hashlib.sha256(f.read_bytes()).hexdigest()
+        return sums
+
+    def test_workbench_api_view_models(self) -> None:
+        from dw_pmo import workbench as wb
+
+        status, body = wb.handle_api(self.root, "/api/projects", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["kind"], "delivery-workbench-workbench-response")
+        self.assertEqual(body["schema_version"], 1)
+        self.assertTrue(body["ok"])
+        summary = body["data"]["projects"][0]
+        self.assertEqual(summary["slug"], "demo")
+        self.assertEqual(summary["phase_count"], 1)
+        self.assertEqual(summary["active_phase_count"], 1)
+        self.assertEqual(summary["story_status_counts"], {"done": 1, "ready": 1})
+        self.assertEqual(summary["next_story"]["story_id"], "DM-1-02")
+        self.assertEqual(summary["issue_count"], 0)
+
+        status, body = wb.handle_api(self.root, "/api/projects/demo", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["slug"], "demo")
+        self.assertEqual(len(body["data"]["phases"]), 1)
+
+        status, body = wb.handle_api(self.root, "/api/projects/demo/phases/1", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["number"], 1)
+        self.assertEqual(len(body["data"]["stories"]), 2)
+        self.assertIn("final_summary_content", body["data"])
+
+        status, body = wb.handle_api(self.root, "/api/projects/demo/stories/DM-1-01", {})
+        self.assertEqual(status, 200)
+        detail = body["data"]
+        self.assertEqual(detail["story_id"], "DM-1-01")
+        self.assertEqual(detail["phase_number"], 1)
+        self.assertIn("Fixture story", detail["story_markdown"])
+        self.assertIn("fixture proof line", detail["evidence_markdown"])
+
+        status, body = wb.handle_api(self.root, "/api/projects/demo/stories/DM-9-99", {})
+        self.assertEqual(status, 404)
+        self.assertFalse(body["ok"])
+
+        status, body = wb.handle_api(self.root, "/api/nope", {})
+        self.assertEqual(status, 404)
+
+    def test_workbench_file_endpoint_containment(self) -> None:
+        from dw_pmo import workbench as wb
+
+        rel_story = "pm/roadmap/demo/phase-1-alpha/story-01-first.md"
+        status, body = wb.handle_api(self.root, "/api/file", {"path": [rel_story]})
+        self.assertEqual(status, 200)
+        self.assertIn("Fixture story", body["data"]["content"])
+        outside = self.root / "secret.txt"
+        outside.write_text("nope", encoding="utf-8")
+        for evil in ["secret.txt", "../secret.txt", "pm/roadmap/../../secret.txt"]:
+            status, body = wb.handle_api(self.root, "/api/file", {"path": [evil]})
+            self.assertEqual(status, 403, evil)
+        status, _ = wb.handle_api(self.root, "/api/file", {"path": ["pm/roadmap/demo/ghost.md"]})
+        self.assertEqual(status, 404)
+
+    def test_workbench_is_read_only(self) -> None:
+        from dw_pmo import workbench as wb
+
+        before = self._tree_checksums()
+        for _ in range(3):
+            wb.handle_api(self.root, "/api/context", {"trace": ["0"]})
+            wb.handle_api(self.root, "/api/projects", {})
+            wb.handle_api(self.root, "/api/projects/demo", {})
+            wb.handle_api(self.root, "/api/projects/demo/phases/1", {})
+            wb.handle_api(self.root, "/api/projects/demo/stories/DM-1-01", {})
+        self.assertEqual(self._tree_checksums(), before,
+                         "repeated API loads must not modify the roadmap tree")
+
     # -- adoption bridge (WLA-6-07) -----------------------------------------
 
     GOOD_REPORT = """# New Proj - PMO Adoption Discovery

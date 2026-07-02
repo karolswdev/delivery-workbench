@@ -42,6 +42,7 @@ jobs:
             pmo-roadmap/tests/gate-parity.sh \
             pmo-roadmap/tests/roadmap-cli.sh \
             pmo-roadmap/tests/work-log-mvp.sh \
+            pmo-roadmap/tests/workbench-explorer.sh \
             demos/scripts/prepare-onboarding-demo.sh \
             demos/scripts/prepare-commit-demo.sh \
             demos/scripts/write-demo-contract.sh
@@ -58,7 +59,7 @@ jobs:
       - name: Core compiles and passes on the declared floor
         run: |
           python3 --version
-          python3 -m py_compile pmo-roadmap/bin/dw
+          python3 -m py_compile pmo-roadmap/bin/dw pmo-roadmap/bin/dw-workbench
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
           python3 pmo-roadmap/tests/dw-core-tests.py
 
@@ -90,13 +91,14 @@ jobs:
             pmo-roadmap/tests/gate-parity.sh \
             pmo-roadmap/tests/roadmap-cli.sh \
             pmo-roadmap/tests/work-log-mvp.sh \
+            pmo-roadmap/tests/workbench-explorer.sh \
             demos/scripts/prepare-onboarding-demo.sh \
             demos/scripts/prepare-commit-demo.sh \
             demos/scripts/write-demo-contract.sh
 
       - name: Python syntax check
         run: |
-          python3 -m py_compile pmo-roadmap/bin/dw
+          python3 -m py_compile pmo-roadmap/bin/dw pmo-roadmap/bin/dw-workbench
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
 
       - name: dw core unit tests
@@ -116,6 +118,9 @@ jobs:
 
       - name: Roadmap CLI integration test
         run: pmo-roadmap/tests/roadmap-cli.sh
+
+      - name: Workbench explorer integration test
+        run: pmo-roadmap/tests/workbench-explorer.sh
 
       - name: Roadmap self-validation (dogfood)
         run: pmo-roadmap/bin/dw check work-log-automation

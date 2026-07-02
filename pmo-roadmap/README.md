@@ -456,6 +456,32 @@ as: simple assignments in `pre-commit.config` beat the environment,
 which beats defaults (`PMO_WORK_LOG_DIR` follows the same precedence in
 the hooks, `work-log-read`, `work-log-summarize`, and `dw context`).
 
+## Workbench: read-only roadmap explorer
+
+Browse the roadmap as an operational surface instead of a directory
+tree (source-repo command; not yet installed into consumer repos —
+that lands with the Phase 5 permission-hardening story):
+
+```bash
+pmo-roadmap/bin/dw-workbench --root /path/to/repo --port 8377
+# then open http://127.0.0.1:8377/
+```
+
+The server binds 127.0.0.1 only, serves exactly the given repo root,
+and is strictly read-only: every response derives live from the
+Markdown through the same `dw_pmo` core the CLI uses (no cache, no
+database, GET only — other methods get 405, and the file endpoint is
+contained to the roadmap tree). Views: project overview (health, story
+counts, next actionable story), phase board (state, evidence tallies,
+final summaries), story/evidence pair with source-faithful Markdown,
+and supplemental canon as indexed read-only context. `?snapshot=1`
+switches the UI to synchronous loading for headless screenshot tools.
+
+JSON API (stable envelope `delivery-workbench-workbench-response`,
+schema_version 1): `/api/context`, `/api/projects`,
+`/api/projects/{slug}`, `/api/projects/{slug}/phases/{n}`,
+`/api/projects/{slug}/stories/{id}`, `/api/file?path=…`.
+
 ## Adopt an existing project
 
 For a running project, install the mechanics first, then run session intake and
