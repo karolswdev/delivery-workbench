@@ -41,8 +41,10 @@ treatment as the code.
   evidence, workbench, and work logs with accurate Mermaid diagrams,
   each behavioral claim naming its proving test or command (cited
   test names existence-verified; evidence-story-02).
-- [ ] Canon and templates pass a line-by-line accuracy audit with
-  doc-parity tests covering newly cited machine-enforced statements.
+- [x] Canon and templates pass a line-by-line accuracy audit with
+  doc-parity tests covering newly cited machine-enforced statements
+  (evidence-story-03: rule-id citations, fence/template/generator
+  parity, byte-identical scaffolds).
 - [ ] A Claude Code plugin (manifest, skill, commands, marketplace
   entry) installs from this repo and passes a parity check against
   the managed agent-docs block; install.sh remains the non-plugin
@@ -66,7 +68,7 @@ treatment as the code.
 |---|---|---|---|---|
 | WLA-7-01 | Documentation audit and information architecture | done | [story-01-documentation-audit-and-information-architecture](./story-01-documentation-audit-and-information-architecture.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-7-02 | Core docs overhaul and architecture guide | done | [story-02-core-docs-overhaul-and-architecture-guide](./story-02-core-docs-overhaul-and-architecture-guide.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-7-03 | Canon and template accuracy pass | backlog | [story-03-canon-and-template-accuracy-pass](./story-03-canon-and-template-accuracy-pass.md) | - |
+| WLA-7-03 | Canon and template accuracy pass | done | [story-03-canon-and-template-accuracy-pass](./story-03-canon-and-template-accuracy-pass.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-7-04 | Package the Claude Code plugin | backlog | [story-04-package-the-claude-code-plugin](./story-04-package-the-claude-code-plugin.md) | - |
 | WLA-7-05 | Regenerate demos diagrams and visual assets | backlog | [story-05-regenerate-demos-diagrams-and-visual-assets](./story-05-regenerate-demos-diagrams-and-visual-assets.md) | - |
 | WLA-7-06 | Wire documentation CI checks | backlog | [story-06-wire-documentation-ci-checks](./story-06-wire-documentation-ci-checks.md) | - |
@@ -89,17 +91,14 @@ treatment as the code.
 
 ## Where we are
 
-WLA-7-02 is done with evidence: both READMEs implement the audit's
-dispositions (F1-F9 and F11 closed — the mtime/delete fossils, the
-incomplete installer list and file map, the broken validation block,
-and the pre-P4 feature list are all gone), the gate-semantics
-paraphrase is de-duplicated into a canon link, docs/architecture.md
-explains all six subsystems with proof-citing claims and five Mermaid
-diagrams, SECURITY.md covers the workbench boundary, and the
-quickstarts were executed verbatim in fixtures with all four captures
-(three instructive refusals plus the green full lifecycle) kept in
-evidence. Next: WLA-7-03 (canon accuracy pass) and then WLA-7-04
-(the Claude Code plugin) on the stabilized vocabulary.
+WLA-7-03 is done with evidence: the canon now describes the machine
+exactly — rule ids cited and parity-tested, pre-v2 mechanics
+corrected, the final-summary spec aligned with the generator, the
+legacy project reference gone and lint-blocked — and a real
+divergence died: dw story create, the bootstrap, and the documented
+story template now render byte-identical scaffolds from one source.
+The vocabulary is stable; WLA-7-04 (the Claude Code plugin) builds on
+it next, then assets (7-05), docs CI (7-06), and the release (7-07).
 
 ## Active risks
 
