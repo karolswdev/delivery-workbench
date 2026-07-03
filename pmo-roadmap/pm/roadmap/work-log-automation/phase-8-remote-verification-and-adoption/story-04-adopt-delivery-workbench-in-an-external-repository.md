@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 8
-- **Status:** backlog
+- **Status:** in-progress
 - **Depends on:** none
 - **Unblocks:** WLA-8-05
 - **Owner:** unassigned

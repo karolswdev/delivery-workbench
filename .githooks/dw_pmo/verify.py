@@ -204,14 +204,21 @@ def _check_commit(root: Path, commit: CommitFacts) -> tuple[bool, list[Violation
     """(in_scope, violations) for one post-epoch commit."""
     sha = commit.sha
     short = sha[:7]
-    is_merge = len(commit.parents) > 1
 
-    entries = [] if is_merge else _changed(root, sha, commit.parents)
+    # Merge commits are out of scope: their constituent commits are
+    # walked individually, and synthetic merges (GitHub's PR merge
+    # ref, merge-button commits) carry no trailers by construction.
+    # Evil merges that smuggle roadmap content into the merge commit
+    # itself are a documented limitation of v1.
+    if len(commit.parents) > 1:
+        return False, []
+
+    entries = _changed(root, sha, commit.parents)
     touches_roadmap = any(
         _ROADMAP_SEG_RE.search(p) or (old and _ROADMAP_SEG_RE.search(old))
         for _s, p, old in entries
     )
-    if not is_merge and not touches_roadmap:
+    if not touches_roadmap:
         return False, []
 
     violations: list[Violation] = []
@@ -228,9 +235,6 @@ def _check_commit(root: Path, commit: CommitFacts) -> tuple[bool, list[Violation
     for sid in commit.story_trailer:
         if not STORY_ID_RE.match(sid):
             bad("trailer-format", f"malformed PMO-Story id {sid!r}")
-
-    if is_merge:
-        return True, violations
 
     # Story flips: not-done in first parent → done-synonym in commit.
     story_entries: list[tuple[str, str, str | None, str, int]] = []

@@ -1778,6 +1778,23 @@ class VerifyTest(unittest.TestCase):
         self.assertEqual(result.pre_epoch_skipped, 2)
         self.assertEqual(result.verified, 1)
 
+    def test_merge_commits_are_out_of_scope(self) -> None:
+        # Synthetic merges (GitHub PR merge ref) carry no trailers by
+        # construction; they must be skipped, not flagged.
+        self.story(1, "backlog")
+        self.commit("plan", self.stamped())
+        self.git("switch", "-q", "-c", "feature")
+        self.story(1, "done")
+        self.evidence(1)
+        self.commit("ship on branch", self.stamped())
+        self.git("switch", "-q", "main")
+        self.write("unrelated.txt", "x\n")
+        self.commit("mainline drift")
+        self.git("merge", "--no-ff", "-q", "-m", "merge feature (no trailers)", "feature")
+        result = self.verify(all_history=True)
+        self.assertTrue(result.ok, result.violations)
+        self.assertGreaterEqual(result.out_of_scope, 2)  # merge + drift
+
     def test_non_roadmap_commits_are_out_of_scope(self) -> None:
         self.story(1, "backlog")
         self.commit("plan", self.stamped())

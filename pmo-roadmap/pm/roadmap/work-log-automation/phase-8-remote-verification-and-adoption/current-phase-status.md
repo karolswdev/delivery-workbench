@@ -41,7 +41,7 @@ Make the gate's guarantees hold beyond the local clone: a range verifier that re
 | WLA-8-01 | Define the remote verification contract | done | [story-01-define-the-remote-verification-contract](./story-01-define-the-remote-verification-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-8-02 | Implement dw verify for commit ranges | done | [story-02-implement-dw-verify-for-commit-ranges](./story-02-implement-dw-verify-for-commit-ranges.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-8-03 | Wire remote verification into CI | done | [story-03-wire-remote-verification-into-ci](./story-03-wire-remote-verification-into-ci.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-8-04 | Adopt Delivery Workbench in an external repository | backlog | [story-04-adopt-delivery-workbench-in-an-external-repository](./story-04-adopt-delivery-workbench-in-an-external-repository.md) | - |
+| WLA-8-04 | Adopt Delivery Workbench in an external repository | in-progress | [story-04-adopt-delivery-workbench-in-an-external-repository](./story-04-adopt-delivery-workbench-in-an-external-repository.md) | - |
 | WLA-8-05 | Fold adoption friction back into the framework | backlog | [story-05-fold-adoption-friction-back-into-the-framework](./story-05-fold-adoption-friction-back-into-the-framework.md) | - |
 
 ## Where we are

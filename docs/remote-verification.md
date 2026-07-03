@@ -94,9 +94,13 @@ Which commits `dw verify` examines, and with which rules:
    rejected; if real history fails a rule, either the rule
    classification or the epoch is wrong, and the design must be
    revisited rather than patched around.
-3. **Merge commits** are checked for trailer rules only; content
-   rules apply to the first-parent diff of non-merge commits (the
-   commits a merge introduces are themselves walked). Rebase-style
+3. **Merge commits are out of scope.** The commits a merge
+   introduces are themselves walked and verified individually, and
+   synthetic merges — GitHub's PR merge ref (what `pull_request` CI
+   checks out), merge-button commits — carry no trailers by
+   construction, so checking them would make every PR red. The
+   accepted v1 limitation: an "evil merge" that smuggles roadmap
+   content into the merge commit itself is not examined. Rebase-style
    linear history is the norm on this repository.
 
 ## Bundle visibility: the `PMO-Bundle:` trailer
