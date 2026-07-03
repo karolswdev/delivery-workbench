@@ -78,6 +78,7 @@ jobs:
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
             pmo-roadmap/tests/package-smoke.sh \
+            pmo-roadmap/tests/brew-formula-smoke.sh \
             pmo-roadmap/tests/upgrade-path.sh \
             pmo-roadmap/tests/verify-range.sh \
             pmo-roadmap/tests/docs-lint.sh \
@@ -136,6 +137,7 @@ jobs:
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
             pmo-roadmap/tests/package-smoke.sh \
+            pmo-roadmap/tests/brew-formula-smoke.sh \
             pmo-roadmap/tests/upgrade-path.sh \
             pmo-roadmap/tests/verify-range.sh \
             pmo-roadmap/tests/docs-lint.sh \
@@ -183,6 +185,10 @@ jobs:
 
       - name: Claude Code plugin validation
         run: pmo-roadmap/tests/plugin-validate.sh
+
+      - name: Homebrew formula smoke (macOS only)
+        if: runner.os == 'macOS'
+        run: pmo-roadmap/tests/brew-formula-smoke.sh
 
       - name: Roadmap self-validation (dogfood)
         run: pmo-roadmap/bin/dw check work-log-automation

@@ -966,6 +966,13 @@ class DwCoreTest(unittest.TestCase):
         self.assertIn("dependencies = []", text,
                       "runtime must stay stdlib-only (distribution contract)")
 
+    def test_formula_version_single_source(self) -> None:
+        # The Homebrew formula's release-artifact url embeds the
+        # version; it must track the single source.
+        text = self._repo_file("Formula/delivery-workbench.rb")
+        self.assertIn(f"delivery_workbench-{core.__version__}-py3-none-any.whl", text)
+        self.assertIn(f"v{core.__version__}/", text)
+
     def test_plugin_version_single_source(self) -> None:
         import json
         manifest = json.loads(self._repo_file("plugin/.claude-plugin/plugin.json"))

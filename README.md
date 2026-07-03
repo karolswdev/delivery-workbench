@@ -30,6 +30,31 @@ contexts; when stdin is not a TTY, `--with-intake` records a
 placeholder intake and discovery flags intent as unresolved (fill the
 intake, or pass answers as flags, to get a directed roadmap).
 
+## Install without cloning
+
+The framework also builds as the `delivery-workbench` package: a
+global `dw` carrying the bootstrap verbs (`install`, `update`,
+`adopt-project`, `new-project`, `intake`) plus the full vendorable
+payload. Inside an adopted repository the global `dw` always defers
+to the repo's own `.githooks/dw` — the vendored rails remain the
+only gating authority (see
+[docs/distribution.md](./docs/distribution.md)).
+
+Until PyPI/tap publication lands, both channels install from a local
+build of this repository:
+
+```bash
+# pipx / pip
+pipx run build && pipx install dist/*.whl
+
+# Homebrew (from the tracked formula; the smoke test wires a local tap)
+pmo-roadmap/tests/brew-formula-smoke.sh
+```
+
+Then adopt any repo with `dw install /path/to/repo` and keep it
+fresh with `dw update /path/to/repo` (`--check` reports staleness
+without writing).
+
 ## What you get
 
 - **A Markdown roadmap** under `pm/roadmap/<project>/` — phases,
