@@ -90,7 +90,7 @@ git add -A
 git commit -q --no-verify -m "pre-epoch: still without rails"
 
 # ── Epoch begins: clean gated flip (real hooks stamp trailers) ─────
-write_story 1 done
+write_story 1 "done"
 write_evidence 1
 git add -A
 gated_commit "Complete DM-1-01"
@@ -103,7 +103,7 @@ echo "$OUT" | grep -q "1 commits verified, 2 pre-epoch skipped" \
 write_story 2 backlog
 git add -A
 gated_commit "Plan DM-1-02"
-write_story 2 done
+write_story 2 "done"
 git add -A
 git commit -q --no-verify -m "smuggled: flip without gate"
 
@@ -117,9 +117,9 @@ write_story 3 backlog
 write_story 4 backlog
 git add -A
 gated_commit "Plan DM-1-03 DM-1-04"
-write_story 3 done
+write_story 3 "done"
 write_evidence 3
-write_story 4 done
+write_story 4 "done"
 write_evidence 4
 git add -A
 git commit -q --no-verify -m "smuggled: double flip
@@ -132,9 +132,9 @@ expect_rule "atomicity" "double flip without bundle"
 git reset -q --hard HEAD~1
 
 # ── Same double flip, bundled via BUNDLE-OK → PMO-Bundle trailer ───
-write_story 3 done
+write_story 3 "done"
 write_evidence 3
-write_story 4 done
+write_story 4 "done"
 write_evidence 4
 git add -A
 mkdir -p .tmp
@@ -149,7 +149,7 @@ expect_verify 0 "bundled double flip" --all
 write_story 5 backlog
 git add -A
 gated_commit "Plan DM-1-05"
-write_story 5 done
+write_story 5 "done"
 write_evidence 5
 git add -A
 git commit -q --no-verify -m "smuggled: flip declaring the wrong story

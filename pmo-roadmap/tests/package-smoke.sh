@@ -64,7 +64,8 @@ BUILD_VENV="$TMP_ROOT/buildenv"
   || fail "python -m build failed"
 WHEEL="$(ls "$TMP_ROOT"/dist/*.whl)"
 SDIST="$(ls "$TMP_ROOT"/dist/*.tar.gz)"
-[ -f "$WHEEL" ] && [ -f "$SDIST" ] || fail "expected both sdist and wheel in dist/"
+[ -f "$WHEEL" ] || fail "expected a wheel in dist/"
+[ -f "$SDIST" ] || fail "expected an sdist in dist/"
 note "built $(basename "$WHEEL") and $(basename "$SDIST")"
 
 # ── install the wheel: pipx preferred, venv+pip fallback ───────────
