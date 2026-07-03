@@ -45,7 +45,7 @@ Give agents a first-class programmatic surface: a stdlib-only MCP stdio server e
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-10-01 | Define the MCP surface contract | backlog | [story-01-define-the-mcp-surface-contract](./story-01-define-the-mcp-surface-contract.md) | - |
+| WLA-10-01 | Define the MCP surface contract | done | [story-01-define-the-mcp-surface-contract](./story-01-define-the-mcp-surface-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-10-02 | Implement the stdio MCP server skeleton with orientation tools | backlog | [story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools](./story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools.md) | - |
 | WLA-10-03 | Expose guarded mutation tools | backlog | [story-03-expose-guarded-mutation-tools](./story-03-expose-guarded-mutation-tools.md) | - |
 | WLA-10-04 | Vendor and wire the server for repos agents and the plugin | backlog | [story-04-vendor-and-wire-the-server-for-repos-agents-and-the-plugin](./story-04-vendor-and-wire-the-server-for-repos-agents-and-the-plugin.md) | - |
@@ -53,9 +53,10 @@ Give agents a first-class programmatic surface: a stdlib-only MCP stdio server e
 
 ## Where we are
 
-Phase scaffolded with full story specs. Strictly sequential:
-contract → skeleton+orientation → mutations → wiring → proof and
-release.
+WLA-10-01 shipped: `docs/mcp.md` locks nine tools mapped one-to-one
+onto core functions, the certify/commit/bundle exclusions as tested
+properties, and the pinned stdio protocol subset. Next: WLA-10-02
+implements the server skeleton with the orientation tools.
 
 ## Active risks
 
