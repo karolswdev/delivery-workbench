@@ -76,8 +76,11 @@ treatment as the code.
   linked final summaries; dw --version + plugin.json + changelog
   heading locked by three unit tests; annotated v1.5.0 tag + release
   on 712beaa, captured gh release view).
-- [ ] `dw check work-log-automation` and the full validation matrix
-  are green at phase close, with a final summary written as an audit.
+- [x] `dw check work-log-automation` and the full validation matrix
+  are green at phase close, with a final summary written as an audit
+  (final-summary.md: outcome vs all ten criteria, evidence index with
+  landing commits, surprises, residual risks; captured battery in
+  evidence-story-07; CI green at the release commit).
 
 ## Story status
 
@@ -108,14 +111,10 @@ treatment as the code.
 
 ## Where we are
 
-WLA-7-07 is done with evidence: the repo is OSS-ready and released —
-CONTRIBUTING teaches the rails using the rails with its command
-blocks CI-executed as printed, templates ask for evidence in
-framework vocabulary, CHANGELOG derives v1.5.0 from the seven phase
-final summaries, the version is single-sourced with three test
-locks, and the annotated v1.5.0 tag + GitHub release were cut on a
-fully green CI run. All seven stories are done; the only remaining
-step is the phase close itself (final summary + criterion 10).
+Phase 7 is closed. All seven stories shipped with evidence, all ten
+exit criteria are checked, v1.5.0 is tagged and released on a green
+CI run, and final-summary.md carries the audit. The roadmap has no
+active phase — the project is fully shipped through its own gate.
 
 ## Active risks
 
