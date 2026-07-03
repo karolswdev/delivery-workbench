@@ -403,12 +403,25 @@ def contract_digest(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def append_trailers(root: Path, message_file: Path, story_ids: list[str], digest: str) -> None:
-    """Stamp PMO trailers onto the commit message (idempotent)."""
+def append_trailers(
+    root: Path,
+    message_file: Path,
+    story_ids: list[str],
+    digest: str,
+    bundle: str | None = None,
+) -> None:
+    """Stamp PMO trailers onto the commit message (idempotent).
+
+    ``bundle`` is the BUNDLE-OK rationale's first line; stamping it as
+    a PMO-Bundle trailer makes the atomicity rule re-derivable from
+    pushed history (docs/remote-verification.md).
+    """
     trailers: list[str] = []
     if story_ids:
         trailers.extend(["--trailer", f"PMO-Story: {', '.join(story_ids)}"])
     trailers.extend(["--trailer", f"PMO-Contract-Digest: {digest}"])
+    if bundle:
+        trailers.extend(["--trailer", f"PMO-Bundle: {bundle}"])
     try:
         subprocess.check_call(
             [
@@ -428,5 +441,7 @@ def append_trailers(root: Path, message_file: Path, story_ids: list[str], digest
     if story_ids:
         block.append(f"PMO-Story: {', '.join(story_ids)}")
     block.append(f"PMO-Contract-Digest: {digest}")
+    if bundle:
+        block.append(f"PMO-Bundle: {bundle}")
     body = text + "\n\n" + "\n".join(line for line in block if line not in text) + "\n"
     write_text(message_file, body)

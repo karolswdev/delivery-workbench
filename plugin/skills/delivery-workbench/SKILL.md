@@ -59,6 +59,9 @@ with `.tmp/BUNDLE-OK.md` + one-line rationale), the flipped story's
 `evidence-story-NN.md` ships in the same commit, and evidence never
 appears or disappears orphaned. Preflight any time with
 `.githooks/dw gate [--porcelain]` — it never consumes the contract.
+`.githooks/dw verify [<base>..<head> | --all]` re-derives the
+structural rules from pushed history alone — audit any range,
+no local contract needed.
 
 **Never use `--no-verify`.** When blocked, read the banner — it names
 the failed rule id and the remediation, and includes the exact

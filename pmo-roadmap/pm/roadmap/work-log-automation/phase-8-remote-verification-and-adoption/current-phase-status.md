@@ -39,19 +39,21 @@ Make the gate's guarantees hold beyond the local clone: a range verifier that re
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-8-01 | Define the remote verification contract | done | [story-01-define-the-remote-verification-contract](./story-01-define-the-remote-verification-contract.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-8-02 | Implement dw verify for commit ranges | backlog | [story-02-implement-dw-verify-for-commit-ranges](./story-02-implement-dw-verify-for-commit-ranges.md) | - |
+| WLA-8-02 | Implement dw verify for commit ranges | done | [story-02-implement-dw-verify-for-commit-ranges](./story-02-implement-dw-verify-for-commit-ranges.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-8-03 | Wire remote verification into CI | backlog | [story-03-wire-remote-verification-into-ci](./story-03-wire-remote-verification-into-ci.md) | - |
 | WLA-8-04 | Adopt Delivery Workbench in an external repository | backlog | [story-04-adopt-delivery-workbench-in-an-external-repository](./story-04-adopt-delivery-workbench-in-an-external-repository.md) | - |
 | WLA-8-05 | Fold adoption friction back into the framework | backlog | [story-05-fold-adoption-friction-back-into-the-framework](./story-05-fold-adoption-friction-back-into-the-framework.md) | - |
 
 ## Where we are
 
-WLA-8-01 shipped: `docs/remote-verification.md` classifies all gate
-rule ids for remote verifiability, specifies the `dw verify` CLI, and
-locks the `PMO-Bundle:` trailer, local-only-archives, and epoch
-decisions, kept honest by the doc-parity test. Next: WLA-8-02
-implements the verifier; WLA-8-04 (external adoption) remains
-independently startable.
+WLA-8-02 shipped: `dw verify` re-derives the structural rules over
+commit ranges (rule ids shared with the gate, epoch scoping, exit
+0/1/2, porcelain), the commit-msg hook stamps `PMO-Bundle:` from
+BUNDLE-OK, and the claim is held by 13 new unit cases plus the
+verify-range.sh fixture suite — the repo's own history verifies
+clean (27 commits, 17 pre-epoch skipped). Next: WLA-8-03 wires the
+verifier into CI; WLA-8-04 (external adoption) remains independently
+startable.
 
 ## Active risks
 

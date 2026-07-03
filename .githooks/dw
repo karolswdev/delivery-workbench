@@ -57,9 +57,12 @@ try:
         render_doctor,
         render_gate_failure,
         render_gate_porcelain,
+        render_verify,
+        render_verify_porcelain,
         run_capture,
         run_doctor,
         run_gate,
+        run_verify,
         story_num_from_file,
         write_agent_docs,
         write_contract,
@@ -355,7 +358,14 @@ def command_contract_trailers(args: argparse.Namespace) -> int:
     text = read_text(path)
     facts = parse_contract_facts(text)
     story_ids = list(facts["story_ids"]) if facts else []
-    append_trailers(args.root, args.message_file, story_ids, contract_digest(text))
+    bundle = None
+    bundle_path = args.root / ".tmp" / "BUNDLE-OK.md"
+    if bundle_path.is_file():
+        for line in read_text(bundle_path).splitlines():
+            if line.strip():
+                bundle = line.strip().lstrip("#").strip()
+                break
+    append_trailers(args.root, args.message_file, story_ids, contract_digest(text), bundle=bundle)
     return 0
 
 
@@ -372,6 +382,22 @@ def command_gate(args: argparse.Namespace) -> int:
             f"{len(result.shipped_stories)} story flip(s))"
         )
     return 0
+
+
+def command_verify(args: argparse.Namespace) -> int:
+    result = run_verify(
+        args.root,
+        range_spec=args.range,
+        all_history=args.all,
+        epoch=args.epoch,
+    )
+    if args.porcelain:
+        print(render_verify_porcelain(result), end="")
+    else:
+        print(render_verify(result), end="")
+    if result.error:
+        return 2
+    return 0 if result.ok else 1
 
 
 def command_check(args: argparse.Namespace) -> int:
@@ -442,6 +468,19 @@ def build_parser() -> argparse.ArgumentParser:
     gate.add_argument("--hook", choices=["pre-commit"], default=None, help="hook context (reserved)")
     gate.add_argument("--porcelain", action="store_true", help="stable key=value output for machine consumers")
     gate.set_defaults(func=command_gate)
+
+    verify = sub.add_parser(
+        "verify",
+        help="re-derive gate rules over pushed history (exit 0 clean / 1 violations / 2 usage or git error)",
+    )
+    verify.add_argument(
+        "range", nargs="?", default=None, metavar="<base>..<head>",
+        help="commit range to verify (default: merge-base of the default branch and HEAD, to HEAD)",
+    )
+    verify.add_argument("--all", action="store_true", help="verify the full history from the epoch to HEAD")
+    verify.add_argument("--epoch", default=None, help="rev where remote rules begin (default: auto-detect first digest-trailer commit; PMO_VERIFY_EPOCH config)")
+    verify.add_argument("--porcelain", action="store_true", help="stable key=value output for machine consumers")
+    verify.set_defaults(func=command_verify)
 
     contract = sub.add_parser("contract", help="commit-contract commands")
     contract_sub = contract.add_subparsers(dest="contract_command", required=True)

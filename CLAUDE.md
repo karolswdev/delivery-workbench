@@ -51,6 +51,9 @@ Gate rules the machinery enforces: one story flips done per commit
 flipped story's `evidence-story-NN.md` ships in the same commit, and
 evidence never appears or disappears orphaned. Preflight any time with
 `.githooks/dw gate [--porcelain]` — it never consumes the contract.
+`.githooks/dw verify [<base>..<head> | --all]` re-derives the
+structural rules from pushed history alone — audit any range,
+no local contract needed.
 Never use `--no-verify`; when blocked, read the banner — it names the
 rule and the remediation, and includes the exact contract template.
 

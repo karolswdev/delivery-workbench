@@ -107,6 +107,13 @@ from .gate import (
     render_gate_porcelain,
     run_gate,
 )
+from .verify import (
+    VerifyResult,
+    Violation,
+    render_verify,
+    render_verify_porcelain,
+    run_verify,
+)
 from .model import EVIDENCE_PLACEHOLDER, STORY_STATUSES
 from .validate import classify_issue, classify_warning, evidence_content_issues, health_report, hook_seam_explanations
 from .agentdocs import (

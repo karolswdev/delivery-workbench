@@ -1701,5 +1701,207 @@ class DocsLintTest(unittest.TestCase):
             self.docslint.extract_snippets(self.tmp)
 
 
+class VerifyTest(unittest.TestCase):
+    """Range verifier: re-derived rules match docs/remote-verification.md."""
+
+    GOOD_DIGEST = "sha256:" + "a" * 64
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-verify-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.root.mkdir()
+        self.git("init", "-b", "main")
+        self.git("config", "user.name", "Verify Test")
+        self.git("config", "user.email", "verify-test@example.test")
+        self.phase = "pm/roadmap/demo/phase-1-alpha"
+
+    def git(self, *args: str) -> None:
+        import subprocess
+
+        subprocess.run(
+            ["git", "-C", str(self.root), *args],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def write(self, rel_path: str, content: str) -> None:
+        path = self.root / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def story(self, num: int, status: str) -> None:
+        self.write(
+            f"{self.phase}/story-0{num}-thing-{num}.md",
+            f"# DM-1-0{num} - Thing {num}\n\n- **Status:** {status}\n",
+        )
+
+    def evidence(self, num: int) -> None:
+        self.write(f"{self.phase}/evidence-story-0{num}.md", f"# Evidence - DM-1-0{num}\n")
+
+    def commit(self, title: str, trailers: str | None = None) -> None:
+        self.git("add", "-A")
+        args = ["commit", "-m", title]
+        if trailers:
+            args += ["-m", trailers]
+        self.git(*args)
+
+    def verify(self, **kwargs):
+        return core.run_verify(self.root, **kwargs)
+
+    def stamped(self, story: str = "DM-1-01") -> str:
+        return f"PMO-Story: {story}\nPMO-Contract-Digest: {self.GOOD_DIGEST}"
+
+    # -- green paths ---------------------------------------------------------
+
+    def test_clean_flip_with_trailers_passes(self) -> None:
+        self.story(1, "backlog")
+        self.commit("plan", self.stamped())
+        self.story(1, "done")
+        self.evidence(1)
+        self.commit("ship", self.stamped())
+        result = self.verify(all_history=True)
+        self.assertTrue(result.ok, result.violations)
+        self.assertEqual(result.verified, 2)
+        self.assertEqual(result.pre_epoch_skipped, 0)
+
+    def test_pre_epoch_commits_are_skipped_not_flagged(self) -> None:
+        self.story(1, "backlog")
+        self.commit("pre-epoch scaffold")  # no trailers: before the rails
+        self.story(1, "done")  # even a naked flip is pre-epoch here
+        self.commit("pre-epoch flip without evidence")
+        self.story(2, "backlog")
+        self.commit("epoch begins", self.stamped("DM-1-02"))
+        result = self.verify(all_history=True)
+        self.assertTrue(result.ok, result.violations)
+        self.assertEqual(result.pre_epoch_skipped, 2)
+        self.assertEqual(result.verified, 1)
+
+    def test_non_roadmap_commits_are_out_of_scope(self) -> None:
+        self.story(1, "backlog")
+        self.commit("plan", self.stamped())
+        self.write("src/app.py", "print('hi')\n")
+        self.commit("app change, no trailers needed")
+        result = self.verify(all_history=True)
+        self.assertTrue(result.ok, result.violations)
+        self.assertEqual(result.out_of_scope, 1)
+
+    def test_bundled_double_flip_with_trailer_passes(self) -> None:
+        self.story(1, "backlog")
+        self.story(2, "backlog")
+        self.commit("plan", self.stamped("DM-1-01, DM-1-02"))
+        self.story(1, "done")
+        self.evidence(1)
+        self.story(2, "done")
+        self.evidence(2)
+        self.commit(
+            "bundled ship",
+            f"PMO-Story: DM-1-01, DM-1-02\nPMO-Contract-Digest: {self.GOOD_DIGEST}\nPMO-Bundle: twin stories, one proof run",
+        )
+        result = self.verify(all_history=True)
+        self.assertTrue(result.ok, result.violations)
+
+    # -- violations ----------------------------------------------------------
+
+    def rules_of(self, result) -> set:
+        return {v.rule for v in result.violations}
+
+    def test_smuggled_flip_names_missing_trailer_and_evidence(self) -> None:
+        self.story(1, "backlog")
+        self.commit("plan", self.stamped())
+        self.story(1, "done")
+        self.commit("smuggled flip")  # no evidence, no trailers
+        result = self.verify(all_history=True)
+        self.assertFalse(result.ok)
+        self.assertIn("trailer-missing", self.rules_of(result))
+        self.assertIn("evidence-missing", self.rules_of(result))
+
+    def test_double_flip_without_bundle_fails_atomicity(self) -> None:
+        self.story(1, "backlog")
+        self.story(2, "backlog")
+        self.commit("plan", self.stamped("DM-1-01, DM-1-02"))
+        self.story(1, "done")
+        self.evidence(1)
+        self.story(2, "done")
+        self.evidence(2)
+        self.commit("double flip", self.stamped("DM-1-01, DM-1-02"))
+        result = self.verify(all_history=True)
+        self.assertIn("atomicity", self.rules_of(result))
+
+    def test_flip_not_declared_in_story_trailer(self) -> None:
+        self.story(1, "backlog")
+        self.commit("plan", self.stamped())
+        self.story(1, "done")
+        self.evidence(1)
+        self.commit("ship declaring the wrong story", self.stamped("DM-1-99"))
+        result = self.verify(all_history=True)
+        self.assertIn("contract-story-mismatch", self.rules_of(result))
+
+    def test_orphan_evidence_added_without_flip(self) -> None:
+        self.story(1, "backlog")
+        self.commit("plan", self.stamped())
+        self.evidence(2)
+        self.commit("orphan evidence", self.stamped())
+        result = self.verify(all_history=True)
+        self.assertIn("orphan-evidence", self.rules_of(result))
+
+    def test_evidence_deletion_orphans_done_story(self) -> None:
+        self.story(1, "done")
+        self.evidence(1)
+        self.commit("epoch with done story", self.stamped())
+        (self.root / self.phase / "evidence-story-01.md").unlink()
+        self.commit("delete evidence", self.stamped())
+        result = self.verify(all_history=True)
+        self.assertIn("evidence-deletion-orphans-story", self.rules_of(result))
+
+    def test_malformed_digest_and_story_id(self) -> None:
+        self.story(1, "backlog")
+        self.commit("bad trailers", "PMO-Story: not-an-id\nPMO-Contract-Digest: sha256:short")
+        result = self.verify(all_history=True)
+        self.assertEqual(self.rules_of(result), {"trailer-format"})
+
+    # -- CLI contract --------------------------------------------------------
+
+    def test_errors_exit_via_error_field(self) -> None:
+        self.story(1, "backlog")
+        self.commit("plan", self.stamped())
+        result = self.verify(range_spec="nope..HEAD")
+        self.assertIsNotNone(result.error)
+        result = self.verify(range_spec="HEAD~1..HEAD", all_history=True)
+        self.assertIsNotNone(result.error)
+        result = self.verify(all_history=True, epoch="not-a-rev")
+        self.assertIsNotNone(result.error)
+
+    def test_render_grammar(self) -> None:
+        self.story(1, "backlog")
+        self.commit("plan", self.stamped())
+        self.story(1, "done")
+        self.commit("smuggled")
+        result = self.verify(all_history=True)
+        text = core.render_verify(result)
+        self.assertRegex(text, r"ERROR [0-9a-f]{7}: [a-z-]+: ")
+        porcelain = core.render_verify_porcelain(result)
+        self.assertIn("verify=fail", porcelain)
+        self.assertIn("epoch=", porcelain)
+
+    def test_every_rederivable_rule_id_is_a_gate_rule_or_remote_only(self) -> None:
+        import re as _re
+
+        gate_src = (TESTS_DIR.parent / "lib" / "dw_pmo" / "gate.py").read_text(encoding="utf-8")
+        verify_src = (TESTS_DIR.parent / "lib" / "dw_pmo" / "verify.py").read_text(encoding="utf-8")
+        gate_ids = set(_re.findall(r'failed\(\s*"([a-z-]+)"', gate_src))
+        verify_ids = set(_re.findall(r'bad\(\s*\n?\s*"([a-z-]+)"', verify_src))
+        remote_only = {"trailer-missing", "trailer-format"}
+        self.assertTrue(verify_ids, "extraction regex drifted")
+        unknown = verify_ids - gate_ids - remote_only
+        self.assertFalse(unknown, f"verify emits rule ids the gate does not own: {unknown}")
+        doc = TESTS_DIR.parent.parent / "docs" / "remote-verification.md"
+        if doc.is_file():  # consumer installs ship without repo docs
+            doc_text = doc.read_text(encoding="utf-8")
+            for rule_id in sorted(verify_ids | gate_ids | remote_only):
+                self.assertIn(f"`{rule_id}`", doc_text, f"{rule_id} unclassified in remote-verification.md")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
