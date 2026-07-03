@@ -3,23 +3,21 @@
 ![Pixel-art delivery workbench: a desk with a retro computer showing a green checkmark, stamped contract papers, a rubber stamp, and a cargo cart carrying a sealed package](./pmo-roadmap/assets/delivery-workbench-icon.png)
 
 Delivery Workbench is a planning and commit gate system for Git
-repositories where AI agents do much of the work. The problem it
-solves is simple to state: agents claim things are done that are not
-done, and three months later nobody can tell what a commit shipped or
-what tested it.
+repositories where AI agents do much of the work. It addresses two
+problems: agents claim work is done when it is not, and months later
+nobody can tell what a commit shipped or what tested it.
 
-It works like this. Plans are Markdown files in the repo, organized
-as phases and stories. A story cannot be marked done until a real
-command run is recorded in its evidence file. A commit cannot land
-until a pre-commit hook checks a contract whose facts (branch, HEAD,
-staged tree) are stamped and re-verified mechanically. Every commit
-that lands carries trailers naming the story it shipped and the
-contract that certified it. There is no database and no server you
-must run. Everything is files in the repo, so it survives as long as
-the repo does.
+Plans are Markdown files in the repo, organized as phases and
+stories. A story cannot be marked done until a command run is
+recorded in its evidence file. A commit cannot land until a
+pre-commit hook checks a contract whose facts (branch, HEAD, staged
+tree) are stamped and re-verified. Each commit carries trailers
+naming the story it shipped and the contract that certified it.
+State is Markdown files and git data; there is no database or
+server.
 
-Both humans and agents use the same commands. Agents additionally get
-an MCP server exposing the same operations as tools.
+Humans and agents use the same commands. Agents can also use the
+included MCP server.
 
 ## Install
 
@@ -36,11 +34,10 @@ dw install /path/to/repo --skip-bootstrap
 ```
 
 This copies the hooks, the CLI, and the MCP server into the repo's
-`.githooks/` directory and points `core.hooksPath` at it. The copy in
-the repo is the one that gates commits, so the gate travels with the
-repo history instead of depending on whatever version is installed
-globally. `dw update /path/to/repo` refreshes the copy later, and
-`dw update /path/to/repo --check` tells you if it is stale.
+`.githooks/` directory and points `core.hooksPath` at it. Commits
+are gated by the copy inside the repo, not by the global install.
+`dw update /path/to/repo` refreshes the copy;
+`dw update /path/to/repo --check` reports if it is stale.
 
 For a project with existing history, there is an adoption flow that
 inspects the repo and drafts a roadmap for you. See the
@@ -60,15 +57,43 @@ git add -A
 git commit                              # the hook re-verifies everything
 ```
 
-The one step that stays manual on purpose: checking the contract's
-boxes. That is you (or your agent) attesting "I verified this rule
-holds." No command does it for you, and the MCP server refuses to
-expose it as a tool.
+Checking the contract's boxes is deliberately manual: it is the
+attestation that each rule was verified. No command or tool does it.
 
-## What traceability means here, concretely
+```mermaid
+sequenceDiagram
+  participant Dev as Human or agent
+  participant DW as dw CLI
+  participant Git as git commit
+  participant Gate as pre-commit gate
 
-This repository is built with its own gate, so you can inspect the
-trail directly. Take one commit:
+  Dev->>DW: dw story status ... in-progress
+  Dev->>Dev: do the work
+  Dev->>DW: dw evidence capture ... -- <verify command>
+  Dev->>DW: dw story status ... done (refuses without evidence)
+  Dev->>DW: dw contract new (stamps verified facts)
+  Dev->>Dev: verify each rule, check its boxes
+  Dev->>Git: git commit
+  Git->>Gate: re-derive every stamped fact
+  Gate-->>Git: pass, or block naming the failed rule
+  Git->>Git: stamp PMO trailers, archive the contract
+```
+
+## Tracing a commit
+
+The artifact chain:
+
+```mermaid
+flowchart LR
+  C[commit + PMO trailers] --> S[story file]
+  S --> E[evidence file with captured runs]
+  C --> A[archived contract in .git]
+  P[current-phase-status] --> S
+  E -.proves.-> S
+```
+
+This repository uses its own gate, so the chain can be inspected
+here. One commit:
 
 ```text
 $ git log -1 --format='%h %s%n%(trailers:key=PMO-Story)%(trailers:key=PMO-Contract-Digest)' ec1fb4a
@@ -90,19 +115,15 @@ and staged-tree hash at capture time:
 - **Index-tree:** b1c5aaa6e7845d8143d9f3cf24c039d491e7e1fd
 ```
 
-The certified contract itself is archived under
-`.git/pmo-contract-archive/<sha>`. And because hooks only run where
-they are installed, `dw verify` re-checks the structural rules from
-pushed history alone, so CI catches commits that bypassed a local
-gate:
+The certified contract is archived under
+`.git/pmo-contract-archive/<sha>`. Because hooks only run where they
+are installed, `dw verify` re-checks the structural rules from
+pushed history, and CI catches commits that bypassed a local gate:
 
 ```text
 $ .githooks/dw verify --all
 dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 ```
-
-That is the whole promise: commit → story → evidence → contract, each
-link machine-checked, all of it plain files and git data.
 
 ## The CLI
 
@@ -119,9 +140,8 @@ link machine-checked, all of it plain files and git data.
 | `dw phase create`, `dw story create` | Scaffolding for new roadmap work. |
 | `dw doctor` | Checks the wiring in this clone. |
 
-All commands have stable exit codes, and the orientation commands
-have `--json` or `--porcelain` output, because scripts and agents
-consume them as much as people do.
+All commands have stable exit codes. The orientation commands
+support `--json` or `--porcelain` output.
 
 ## The MCP server
 
@@ -134,9 +154,8 @@ code as the CLI: `dw_context`, `dw_next`, `dw_check`, `dw_doctor`,
 
 An agent can take a story from backlog to done through tool calls
 alone, with the same refusals the CLI gives. Two operations are
-deliberately missing from the tool list: nothing certifies a contract
-and nothing creates a commit. Those stay deliberate acts. The design
-and full schemas are in [docs/mcp.md](./docs/mcp.md).
+deliberately absent: certifying a contract and creating a commit.
+Schemas and design are in [docs/mcp.md](./docs/mcp.md).
 
 ## The web view
 
@@ -151,22 +170,20 @@ preview-then-apply flow. It never stages or commits.
 More screenshots and two terminal recordings are in
 [demos/](./demos/README.md).
 
-## What else is in the box
+## Other components
 
-Optional local work logs (consent-gated daily notes of what each
-commit delivered), a Claude Code plugin with slash commands and a
-skill that teaches agents the operating loop, a managed `CLAUDE.md`
-block installed into adopted repos, and a `verify-history` CI job you
-can copy so pushed history gets re-checked on every pull request.
+- Local work logs: consent-gated daily notes of what each commit delivered.
+- A Claude Code plugin with slash commands and a skill covering the operating loop.
+- A managed `CLAUDE.md` block installed into adopted repos.
+- A copyable `verify-history` CI job that re-checks pushed history on every pull request.
 
 ## This repo runs on it
 
 Every phase and story of the framework was shipped through its own
 gate: ten phases, each story with evidence, every commit with
 trailers and an archived contract, the full history passing
-`dw verify --all`. The complete trail is in
-[pmo-roadmap/pm/roadmap/work-log-automation/](./pmo-roadmap/pm/roadmap/work-log-automation/)
-if you want to judge whether the discipline holds up in practice.
+`dw verify --all`. The trail is in
+[pmo-roadmap/pm/roadmap/work-log-automation/](./pmo-roadmap/pm/roadmap/work-log-automation/).
 
 ## Documentation
 
@@ -180,17 +197,10 @@ if you want to judge whether the discipline holds up in practice.
 
 ## Tests
 
-The suites live in `pmo-roadmap/tests/`. CI runs all of them on
-ubuntu and macos, plus the unit suite on python 3.9 (the floor) and
-a history verification job on every push. `pmo-roadmap/tests/`
-scripts run standalone if you want to check locally.
-
-## Status
-
-Version 1.7.0, MIT licensed. Young but used in earnest: the tool has
-shipped its own roadmap through its own gate since the first commit.
-Expect opinionated defaults and honest error messages.
+The suites live in `pmo-roadmap/tests/` and run standalone. CI runs
+all of them on ubuntu and macos, the unit suite on python 3.9 (the
+floor), and history verification on every push.
 
 ## License
 
-[MIT](./LICENSE).
+[MIT](./LICENSE). Current version: 1.7.0.
