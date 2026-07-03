@@ -29,6 +29,11 @@ jobs:
         # docs/remote-verification.md.
         run: python3 pmo-roadmap/bin/dw verify --all
 
+      - name: Consumer upgrade path (v1.5.0 → current)
+        # Lives in this job because it needs the full clone: the
+        # fixture adopts from the real v1.5.0 tag.
+        run: pmo-roadmap/tests/upgrade-path.sh
+
   package-smoke:
     runs-on: ubuntu-latest
     steps:
@@ -73,6 +78,7 @@ jobs:
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
             pmo-roadmap/tests/package-smoke.sh \
+            pmo-roadmap/tests/upgrade-path.sh \
             pmo-roadmap/tests/verify-range.sh \
             pmo-roadmap/tests/docs-lint.sh \
             pmo-roadmap/tests/docs-snippet-smoke.sh \
@@ -130,6 +136,7 @@ jobs:
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
             pmo-roadmap/tests/package-smoke.sh \
+            pmo-roadmap/tests/upgrade-path.sh \
             pmo-roadmap/tests/verify-range.sh \
             pmo-roadmap/tests/docs-lint.sh \
             pmo-roadmap/tests/docs-snippet-smoke.sh \

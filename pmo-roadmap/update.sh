@@ -7,7 +7,10 @@ set -eu
 
 usage() {
   cat <<EOF
-Usage: $0 <target-dir> [--force]
+Usage: $0 <target-dir> [--force] [--check]
+
+  --check   Report whether the target's vendored rails match this
+            source's version (exit 0 fresh / 3 stale); writes nothing.
 
 Always overwrites (these are framework-owned):
   - templates/roadmap-builder.md → pm/roadmap/roadmap-builder.md
@@ -40,11 +43,13 @@ EOF
 }
 
 FORCE=0
+CHECK=0
 TARGET=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --force) FORCE=1; shift ;;
+    --check) CHECK=1; shift ;;
     *)
       if [ -z "$TARGET" ]; then TARGET="$1"; else echo "update.sh: unexpected arg $1" >&2; exit 1; fi
       shift ;;
@@ -59,6 +64,32 @@ SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
 git -C "$TARGET" rev-parse --show-toplevel >/dev/null 2>&1 \
   || { echo "update.sh: not a git repo: $TARGET" >&2; exit 1; }
 TARGET="$(git -C "$TARGET" rev-parse --show-toplevel)"
+
+vendored_version() { # dir
+  sed -n 's/^__version__ = "\(.*\)"$/\1/p' "$1/lib/dw_pmo/__init__.py" 2>/dev/null \
+    || sed -n 's/^__version__ = "\(.*\)"$/\1/p' "$1/dw_pmo/__init__.py" 2>/dev/null
+}
+
+if [ "$CHECK" -eq 1 ]; then
+  # Staleness report only — never writes. Content is the signal
+  # (version strings match between releases while code moves), so the
+  # vendored core and CLI are diffed against this source; versions are
+  # printed as context. Exit 0 fresh / 3 stale.
+  SRC_VERSION="$(vendored_version "$SOURCE_DIR")"
+  TGT_VERSION="$(vendored_version "$TARGET/.githooks")"
+  [ -n "$SRC_VERSION" ] || { echo "update.sh: cannot read source version" >&2; exit 1; }
+  [ -n "$TGT_VERSION" ] || { echo "update.sh: no vendored rails found in $TARGET/.githooks" >&2; exit 1; }
+  STALE=0
+  diff -r -q -x '__pycache__' -x '*.pyc'     "$SOURCE_DIR/lib/dw_pmo" "$TARGET/.githooks/dw_pmo" >/dev/null 2>&1 || STALE=1
+  cmp -s "$SOURCE_DIR/bin/dw" "$TARGET/.githooks/dw" || STALE=1
+  cmp -s "$SOURCE_DIR/hooks/pre-commit" "$TARGET/.githooks/pre-commit" || STALE=1
+  if [ "$STALE" -eq 0 ]; then
+    echo "update.sh: up to date (vendored rails match source v$SRC_VERSION)"
+    exit 0
+  fi
+  echo "update.sh: STALE — vendored rails (v$TGT_VERSION) differ from source (v$SRC_VERSION). Refresh with: update.sh $TARGET"
+  exit 3
+fi
 
 echo "→ Updating pmo-roadmap in $TARGET"
 

@@ -93,7 +93,11 @@ Upgrades flow one direction: **source → package → per-repo
 snapshot.** A new release produces new artifacts; `dw update
 <repo>` (the packaged `update.sh`) refreshes the vendored rails;
 the repo's own gate then certifies the refresh commit like any
-other change. Consumer roadmap content (`pm/roadmap/<slug>/`),
+other change. Staleness is content-based, not version-string-based —
+`dw update <repo> --check` diffs the vendored core, CLI, and
+pre-commit hook against the distributing source (exit 0 fresh / 3
+stale) and prints both versions as context, because version strings
+match between releases while code moves. Consumer roadmap content (`pm/roadmap/<slug>/`),
 `pre-commit.config`, and `pre-commit.local` are never touched by
 updates — that contract predates this phase and WLA-9-03 proves it
 against real v1.5.0 rails.
