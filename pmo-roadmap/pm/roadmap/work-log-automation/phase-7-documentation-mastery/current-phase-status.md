@@ -51,9 +51,13 @@ treatment as the code.
   path and the docs say when to use which (evidence-story-04:
   captured live install at v1.5.0, three parity tests,
   plugin-validate.sh in CI).
-- [ ] All demos, screenshots, and diagrams are regenerated from
+- [x] All demos, screenshots, and diagrams are regenerated from
   current sources by checked-in scripts; the workbench appears in the
-  root README; every image has alt text; a social preview is set.
+  root README; every image has alt text; a social preview is set
+  (evidence-story-05: captured regeneration runs for both VHS tapes,
+  the new workbench tour + README stills, and the social preview;
+  10/10 Mermaid blocks render; alt-text audit; the GitHub-side
+  preview upload is a documented one-time manual step).
 - [ ] Docs CI fails on broken internal links, missing images, or
   failing runnable snippets, wired into validation.yml and green.
 - [ ] CONTRIBUTING.md, CODE_OF_CONDUCT.md, and issue/PR templates
@@ -72,7 +76,7 @@ treatment as the code.
 | WLA-7-02 | Core docs overhaul and architecture guide | done | [story-02-core-docs-overhaul-and-architecture-guide](./story-02-core-docs-overhaul-and-architecture-guide.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-7-03 | Canon and template accuracy pass | done | [story-03-canon-and-template-accuracy-pass](./story-03-canon-and-template-accuracy-pass.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-7-04 | Package the Claude Code plugin | done | [story-04-package-the-claude-code-plugin](./story-04-package-the-claude-code-plugin.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-7-05 | Regenerate demos diagrams and visual assets | backlog | [story-05-regenerate-demos-diagrams-and-visual-assets](./story-05-regenerate-demos-diagrams-and-visual-assets.md) | - |
+| WLA-7-05 | Regenerate demos diagrams and visual assets | done | [story-05-regenerate-demos-diagrams-and-visual-assets](./story-05-regenerate-demos-diagrams-and-visual-assets.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-7-06 | Wire documentation CI checks | backlog | [story-06-wire-documentation-ci-checks](./story-06-wire-documentation-ci-checks.md) | - |
 | WLA-7-07 | OSS release preparation and versioned release | backlog | [story-07-oss-release-preparation-and-versioned-release](./story-07-oss-release-preparation-and-versioned-release.md) | - |
 
@@ -93,13 +97,14 @@ treatment as the code.
 
 ## Where we are
 
-WLA-7-04 is done with evidence: the agent surface ships as a real
-Claude Code plugin — validated, marketplace-added, and installed live
-at v1.5.0 (captured) — with the skill teaching exactly the loop the
-managed block teaches, enforced by parity tests that fail on drift,
-byte-identical command files, and a single test-enforced version
-source. Remaining: WLA-7-05 (assets), WLA-7-06 (docs CI), WLA-7-07
-(OSS release).
+WLA-7-05 is done with evidence: every rendered asset now regenerates
+from current sources by a checked-in script with the run captured —
+both VHS tapes re-rendered (audit F12 closed), a new headless-Firefox
+workbench tour GIF plus three real workbench stills in the root
+README, a 1280×640 social preview under `assets/`, 10/10 Mermaid
+blocks proven rendering, a clean alt-text audit, and the capture
+scripts wired into shellcheck and a CI `--smoke` step. Remaining:
+WLA-7-06 (docs CI), WLA-7-07 (OSS release).
 
 ## Active risks
 
