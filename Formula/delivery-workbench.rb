@@ -13,7 +13,7 @@ class DeliveryWorkbench < Formula
   homepage "https://github.com/karolswdev/delivery-workbench"
   url "https://github.com/karolswdev/delivery-workbench/releases/download/v1.6.0/delivery_workbench-1.6.0-py3-none-any.whl",
       using: :nounzip
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000" # stamped at release publication
+  sha256 "e75b0dd6a23829d6a5e0236a09851912ff5d448dca7998cfa806a7c917d7ccc9"
   license "MIT"
 
   depends_on "python@3.14"
