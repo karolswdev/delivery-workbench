@@ -1,0 +1,14 @@
+{
+  "name": "delivery-workbench",
+  "owner": {
+    "name": "karolswdev",
+    "url": "https://github.com/karolswdev"
+  },
+  "plugins": [
+    {
+      "name": "delivery-workbench",
+      "source": "./plugin",
+      "description": "Evidence-first delivery rails: operate Markdown roadmaps, commit contracts, evidence capture, and the dw commit gate from Claude Code."
+    }
+  ]
+}

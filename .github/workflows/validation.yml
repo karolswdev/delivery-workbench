@@ -44,6 +44,7 @@ jobs:
             pmo-roadmap/tests/work-log-mvp.sh \
             pmo-roadmap/tests/workbench-explorer.sh \
             pmo-roadmap/tests/workbench-ui-smoke.sh \
+            pmo-roadmap/tests/plugin-validate.sh \
             demos/scripts/prepare-onboarding-demo.sh \
             demos/scripts/prepare-commit-demo.sh \
             demos/scripts/write-demo-contract.sh
@@ -94,6 +95,7 @@ jobs:
             pmo-roadmap/tests/work-log-mvp.sh \
             pmo-roadmap/tests/workbench-explorer.sh \
             pmo-roadmap/tests/workbench-ui-smoke.sh \
+            pmo-roadmap/tests/plugin-validate.sh \
             demos/scripts/prepare-onboarding-demo.sh \
             demos/scripts/prepare-commit-demo.sh \
             demos/scripts/write-demo-contract.sh
@@ -126,6 +128,9 @@ jobs:
 
       - name: Workbench viewport smoke (skips without Firefox)
         run: pmo-roadmap/tests/workbench-ui-smoke.sh
+
+      - name: Claude Code plugin validation
+        run: pmo-roadmap/tests/plugin-validate.sh
 
       - name: Roadmap self-validation (dogfood)
         run: pmo-roadmap/bin/dw check work-log-automation

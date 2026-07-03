@@ -935,6 +935,48 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(rendered, tmpl,
                          "dw story create must render exactly the documented story template")
 
+    # -- Claude Code plugin parity (WLA-7-04) ----------------------------------
+
+    def _repo_file(self, rel_path):
+        return (Path(__file__).resolve().parents[2] / rel_path).read_text(encoding="utf-8")
+
+    def test_plugin_version_single_source(self) -> None:
+        import json
+        manifest = json.loads(self._repo_file("plugin/.claude-plugin/plugin.json"))
+        self.assertEqual(manifest["version"], core.__version__,
+                         "plugin.json version must track dw_pmo.__version__ (the single source)")
+        self.assertEqual(manifest["name"], "delivery-workbench")
+        marketplace = json.loads(self._repo_file(".claude-plugin/marketplace.json"))
+        entry = marketplace["plugins"][0]
+        self.assertEqual(entry["name"], "delivery-workbench")
+        self.assertEqual(entry["source"], "./plugin")
+
+    def test_plugin_skill_parity_with_managed_block(self) -> None:
+        import re
+        from dw_pmo.agentdocs import CANONICAL_BLOCK
+
+        skill = self._repo_file("plugin/skills/delivery-workbench/SKILL.md")
+        # every dw invocation the managed block teaches appears in the skill
+        block_commands = set(re.findall(r"\.githooks/dw[a-z-]* [a-z-]+(?: [a-z-]+)?", CANONICAL_BLOCK))
+        self.assertGreaterEqual(len(block_commands), 8, block_commands)
+        for command in sorted(block_commands):
+            self.assertIn(command, skill,
+                          f"managed block teaches {command!r}; the plugin skill must too")
+        # the canonical vocabulary line and gate invariants match
+        self.assertIn("backlog | ready | in-progress | blocked | done", skill)
+        self.assertIn("complete | closed | shipped", skill)
+        for invariant in ("one story flips done per commit", "BUNDLE-OK.md",
+                          "evidence-story-NN.md", "pmo-contract-archive"):
+            self.assertIn(invariant, skill, invariant)
+        self.assertIn("Never use `--no-verify`", skill)
+
+    def test_plugin_commands_match_installer_commands(self) -> None:
+        for name in ("dw-next", "dw-contract", "dw-story-done", "dw-adopt"):
+            agent_copy = self._framework_file(f"agent/{name}.md")
+            plugin_copy = self._repo_file(f"plugin/commands/{name}.md")
+            self.assertEqual(agent_copy, plugin_copy,
+                             f"{name}.md must be byte-identical between agent/ and plugin/commands/")
+
     # -- adoption bridge (WLA-6-07) -----------------------------------------
 
     GOOD_REPORT = """# New Proj - PMO Adoption Discovery

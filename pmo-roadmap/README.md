@@ -467,6 +467,29 @@ follows that same precedence everywhere it is read (hooks,
 `work-log-read`, `work-log-summarize`, `dw context`, and the
 workbench).
 
+## Claude Code plugin
+
+Claude Code users can install the agent surface as a plugin — a
+`delivery-workbench` skill teaching the full operating loop (orient →
+work → prove → gate, with refusal recovery) plus the four slash
+commands — without cloning this repo into every project:
+
+```bash
+claude plugin marketplace add karolswdev/delivery-workbench
+claude plugin install delivery-workbench@delivery-workbench
+```
+
+**When to use which:** the plugin travels with *Claude Code* (the
+skill and commands are available in every session); `install.sh`
+wires *the repository* (hooks, gate, `dw`, workbench, canon docs, the
+managed CLAUDE.md block). A repo needs the rails either way — the
+plugin complements the install, it does not replace it. Repos whose
+agents are not Claude Code rely on the managed block alone; parity
+tests keep the skill and the block teaching the same loop
+(`tests/dw-core-tests.py`, `tests/plugin-validate.sh`). The plugin
+version tracks the framework version from one source
+(`dw_pmo.__version__`).
+
 ## Workbench: the local web view
 
 Browse and safely edit the roadmap as an operational surface instead
