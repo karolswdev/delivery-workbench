@@ -192,9 +192,18 @@ The job runs the full epoch-to-HEAD sweep on both events rather than
 plumbing per-event ranges: it is strictly stronger, immune to
 force-push window edge cases (`github.event.before` is unreliable
 after history rewrites), and costs seconds at this history's scale.
-To make the verdict blocking, add the job to the branch-protection
-required checks — repository settings, deliberately outside this
-contract's scope.
+
+The verdict is blocking on this repository (configured 2026-07-03):
+`main` requires `verify-history`, `shellcheck`, `python-floor`,
+`package-smoke`, and the ubuntu integration leg as status checks,
+with linear history required (merges never land, matching the
+verifier's merges-out-of-scope rule), and force pushes and deletions
+disallowed. Admin enforcement is deliberately off: the maintainer's
+direct-to-main flow continues, with every push still audited by the
+same sweep; contributor pull requests are hard-gated. The macOS leg
+stays advisory (brew installs are the flakiest surface in the
+matrix). Adopting repositories configure the equivalent in their own
+branch-protection settings.
 
 ## Strengthening options (deliberately not in v1)
 
