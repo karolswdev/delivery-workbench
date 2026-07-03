@@ -56,7 +56,7 @@ notice to stderr naming both versions and the upgrade command
   | Payload path | Vendored to (by install.sh) |
   |---|---|
   | `hooks/pre-commit`, `hooks/commit-msg`, `hooks/post-commit` | `.githooks/` (chmod +x) |
-  | `bin/dw`, `bin/dw-workbench`, `bin/work-log-summarize`, `bin/work-log-read` | `.githooks/` |
+  | `bin/dw`, `bin/dw-workbench`, `bin/dw-mcp`, `bin/work-log-summarize`, `bin/work-log-read` | `.githooks/` |
   | `lib/dw_pmo/` | `.githooks/dw_pmo/` |
   | `workbench/` (local web UI assets) | `.githooks/workbench/` |
   | `templates/roadmap-builder.md`, `templates/PMO-CONTRACT.md` | `pm/roadmap/` |

@@ -19,6 +19,8 @@ Installs the pmo-roadmap framework into <target-dir>:
   - copies bin/dw-workbench + workbench/  → .githooks/ (local web UI)
   - copies bin/work-log-summarize         → .githooks/work-log-summarize
   - copies bin/work-log-read              → .githooks/work-log-read
+  - copies bin/dw-mcp                     → .githooks/dw-mcp (MCP stdio server)
+  - adds a delivery-workbench entry to .mcp.json (append-only)
   - copies agent/dw-*.md                  → .claude/commands/ (slash commands)
   - writes the managed Delivery Workbench block into CLAUDE.md/AGENTS.md
   - sets git config core.hooksPath .githooks
@@ -171,6 +173,50 @@ echo "  ✓ wrote .githooks/work-log-summarize"
 cp "$SOURCE_DIR/bin/work-log-read" "$TARGET/.githooks/work-log-read"
 chmod +x "$TARGET/.githooks/work-log-read"
 echo "  ✓ wrote .githooks/work-log-read"
+
+cp "$SOURCE_DIR/bin/dw-mcp" "$TARGET/.githooks/dw-mcp"
+chmod +x "$TARGET/.githooks/dw-mcp"
+echo "  ✓ wrote .githooks/dw-mcp (MCP stdio server; see docs/mcp.md)"
+
+# .mcp.json seam: append-only, never clobbering existing servers, and
+# refusing to guess at an unparseable file.
+if command -v python3 >/dev/null 2>&1; then
+  MCP_RESULT="$(python3 - "$TARGET" <<'MCPSEAM'
+import json
+import sys
+from pathlib import Path
+
+target = Path(sys.argv[1])
+path = target / ".mcp.json"
+entry = {"type": "stdio", "command": ".githooks/dw-mcp", "args": []}
+if not path.exists():
+    path.write_text(
+        json.dumps({"mcpServers": {"delivery-workbench": entry}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print("created")
+    raise SystemExit(0)
+try:
+    config = json.loads(path.read_text(encoding="utf-8"))
+except ValueError:
+    print("unparseable")
+    raise SystemExit(0)
+servers = config.setdefault("mcpServers", {})
+if "delivery-workbench" in servers:
+    print("present")
+    raise SystemExit(0)
+servers["delivery-workbench"] = entry
+path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+print("added")
+MCPSEAM
+)"
+  case "$MCP_RESULT" in
+    created) echo "  ✓ wrote .mcp.json (delivery-workbench MCP server entry)" ;;
+    added) echo "  ✓ added delivery-workbench entry to existing .mcp.json" ;;
+    present) echo "  · .mcp.json already has a delivery-workbench entry" ;;
+    unparseable) echo "  ! .mcp.json is not valid JSON — NOT touching it; add the delivery-workbench entry manually" >&2 ;;
+  esac
+fi
 
 # 3. core.hooksPath
 git -C "$TARGET" config core.hooksPath .githooks

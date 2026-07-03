@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 10
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-10-03
 - **Unblocks:** WLA-10-05
 - **Owner:** unassigned
@@ -63,3 +63,11 @@ obeys: the server that answers must be the rails that gate).
 
 - `.mcp.json` merging: stdlib JSON read-modify-write with a
   refusal on unparseable files (never guess at a broken config).
+- Scope amendment at execution (2026-07-03): the plugin does NOT
+  declare the server after all. A plugin-declared MCP server
+  spawns in every project the plugin is active in — including
+  repos without rails — and cannot point at a repo-vendored
+  binary robustly. The repo-scoped `.mcp.json` written by
+  install.sh is the native per-project mechanism and honors the
+  vendored-rails invariant; the plugin's SKILL.md teaches the
+  surface instead. Recorded in the phase status decisions.

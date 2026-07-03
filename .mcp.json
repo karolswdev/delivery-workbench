@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "delivery-workbench": {
+      "type": "stdio",
+      "command": ".githooks/dw-mcp",
+      "args": []
+    }
+  }
+}

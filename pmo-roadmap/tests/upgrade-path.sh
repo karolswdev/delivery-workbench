@@ -105,6 +105,7 @@ cp .githooks/pre-commit.local "$SNAP/pre-commit.local"
 
 # ── refreshed rails, untouched project ─────────────────────────────
 [ -f .githooks/dw_pmo/verify.py ] || fail "upgrade did not deliver verify.py"
+[ -x .githooks/dw-mcp ] || fail "upgrade did not deliver dw-mcp"
 "$PMO_DIR/update.sh" "$REPO" --check >/dev/null \
   || fail "expected --check exit 0 after upgrade"
 diff -r "$SNAP/demo" "$REPO/pm/roadmap/demo" >/dev/null \

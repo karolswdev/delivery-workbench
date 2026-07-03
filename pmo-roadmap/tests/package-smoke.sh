@@ -104,6 +104,8 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
   || fail "packaged bootstrap install failed"
 [ -f "$FIXTURE/.githooks/dw" ] || fail "install did not vendor .githooks/dw"
 [ -f "$FIXTURE/.githooks/dw_pmo/verify.py" ] || fail "vendored dw_pmo incomplete"
+[ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
+[ -f "$FIXTURE/.mcp.json" ] || fail "install did not write the .mcp.json seam"
 (cd "$FIXTURE" && ./.githooks/dw doctor) >/dev/null \
   || fail "fixture doctor not green after packaged install"
 

@@ -24,6 +24,7 @@ Always overwrites (these are framework-owned):
   - bin/dw-workbench + workbench/ → .githooks/ (local UI)
   - bin/work-log-summarize       → .githooks/work-log-summarize
   - bin/work-log-read            → .githooks/work-log-read
+  - bin/dw-mcp                   → .githooks/dw-mcp
 
 Refuses to overwrite WITHOUT --force (these may be project-customized):
   - templates/PMO-CONTRACT.md    → pm/roadmap/PMO-CONTRACT.md
@@ -146,6 +147,9 @@ echo "  ✓ .githooks/dw-workbench + workbench UI updated"
 
 cp "$SOURCE_DIR/bin/work-log-read" "$TARGET/.githooks/work-log-read"
 chmod +x "$TARGET/.githooks/work-log-read"
+cp "$SOURCE_DIR/bin/dw-mcp" "$TARGET/.githooks/dw-mcp"
+chmod +x "$TARGET/.githooks/dw-mcp"
+echo "  ✓ .githooks/dw-mcp updated"
 echo "  ✓ .githooks/work-log-read updated"
 
 mkdir -p "$TARGET/.claude/commands"

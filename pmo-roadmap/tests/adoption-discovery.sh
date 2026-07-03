@@ -201,4 +201,26 @@ echo "$OUT" | grep -q 'self-hosting refresh' \
 [ -e "$FOREIGN/pm/roadmap/PMO-CONTRACT.md" ] \
   || fail "external install must still scaffold pm/roadmap canon"
 
+# .mcp.json seam: created fresh, appended without clobbering, and an
+# unparseable file is refused, never guessed at (WLA-10-04).
+SEAM="$TMP_ROOT/mcp-seam"
+mkdir -p "$SEAM/b" "$SEAM/c"
+git -C "$SEAM/b" init >/dev/null
+git -C "$SEAM/b" config user.name t
+git -C "$SEAM/b" config user.email t@example.test
+printf %s '{"mcpServers": {"other": {"command": "foo"}}}' > "$SEAM/b/.mcp.json"
+"$PMO_DIR/install.sh" "$SEAM/b" --skip-bootstrap >/dev/null 2>&1
+grep -q '"other"' "$SEAM/b/.mcp.json" \
+  || fail ".mcp.json seam clobbered an existing server entry"
+grep -q '"delivery-workbench"' "$SEAM/b/.mcp.json" \
+  || fail ".mcp.json seam did not append the delivery-workbench entry"
+git -C "$SEAM/c" init >/dev/null
+git -C "$SEAM/c" config user.name t
+git -C "$SEAM/c" config user.email t@example.test
+printf %s "NOT-JSON{{{" > "$SEAM/c/.mcp.json"
+"$PMO_DIR/install.sh" "$SEAM/c" --skip-bootstrap >/dev/null 2>&1
+[ "$(cat "$SEAM/c/.mcp.json")" = "NOT-JSON{{{" ] \
+  || fail ".mcp.json seam modified an unparseable file"
+[ -x "$SEAM/b/.githooks/dw-mcp" ] || fail "install did not vendor dw-mcp"
+
 echo "adoption-discovery.sh: ok"

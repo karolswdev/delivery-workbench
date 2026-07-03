@@ -54,6 +54,11 @@ evidence never appears or disappears orphaned. Preflight any time with
 `.githooks/dw verify [<base>..<head> | --all]` re-derives the
 structural rules from pushed history alone — audit any range,
 no local contract needed.
+`.githooks/dw-mcp` serves the same core as MCP tools
+(dw_context, dw_next, dw_check, dw_verify, dw_story_status,
+dw_evidence_capture, ...) over stdio for MCP-capable agents —
+wired via `.mcp.json`; certification is never a tool call
+(`docs/mcp.md`).
 Never use `--no-verify`; when blocked, read the banner — it names the
 rule and the remediation, and includes the exact contract template.
 
