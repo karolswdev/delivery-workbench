@@ -239,16 +239,12 @@ def _sh(args: "list[str]", cwd: Path) -> None:
 
 
 def _prepare_fixture(root: Path, prep: str, target: Path) -> None:
-    """Fixture ladder: repo → installed → intaken → report, plus
-    clone (a fresh clone of this repository, for contributor docs).
-    Each rung is exactly the documented earlier quickstart steps."""
-    if prep == "clone":
-        _sh(["git", "clone", "-q", str(root), str(target)], cwd=root)
-    else:
-        _sh(["git", "init", "-q", str(target)], cwd=root)
+    """Fixture ladder: repo → installed → intaken → report. Each rung
+    is exactly the documented earlier quickstart steps, run quietly."""
+    _sh(["git", "init", "-q", str(target)], cwd=root)
     _sh(["git", "-C", str(target), "config", "user.name", "Docs Smoke"], cwd=root)
     _sh(["git", "-C", str(target), "config", "user.email", "docs@smoke.test"], cwd=root)
-    if prep in ("repo", "clone"):
+    if prep == "repo":
         return
     pmo = root / "pmo-roadmap"
     _sh([str(pmo / "install.sh"), str(target), "--skip-bootstrap"], cwd=pmo)

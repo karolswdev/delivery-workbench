@@ -23,6 +23,7 @@ fi
 
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONTRACT_FILE="$REPO_ROOT/.tmp/CONTRACT.md"
+# shellcheck disable=SC2034  # documented seam path, readable by pre-commit.local
 BUNDLE_OK_FILE="$REPO_ROOT/.tmp/BUNDLE-OK.md"
 EXPECTED_BOXES="${EXPECTED_BOXES:-7}"
 # PMO_WORK_LOG_DIR precedence: pre-commit.config > environment > default.
@@ -44,7 +45,9 @@ bar() {
   printf '%s\n' "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
-# Available to pre-commit.local rules.
+# Available to pre-commit.local rules (sourced below), so shellcheck
+# cannot see the call sites.
+# shellcheck disable=SC2329
 fail() {
   bar
   echo "✗ $1" >&2
@@ -96,8 +99,11 @@ porcelain_list() {
 # existing `for s in $SHIPPED_STORIES` consumers; paths with spaces are
 # fully handled inside the gate itself).
 STAGED="$(porcelain_list staged)"
+# shellcheck disable=SC2034  # seam variables consumed by sourced pre-commit.local
 STAGED_STORIES="$(porcelain_list staged_story)"
+# shellcheck disable=SC2034  # seam variable consumed by sourced pre-commit.local
 STAGED_EVIDENCE="$(porcelain_list staged_evidence)"
+# shellcheck disable=SC2034  # seam variable consumed by sourced pre-commit.local
 SHIPPED_STORIES="$(porcelain_list shipped_story | tr '\n' ' ' | sed 's/ *$//')"
 SHIPPED_COUNT="$(porcelain_value shipped_count)"
 SHIPPED_COUNT="${SHIPPED_COUNT:-0}"

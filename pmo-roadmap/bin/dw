@@ -34,6 +34,7 @@ _bootstrap_core()
 try:
     from dw_pmo import (
         DwError,
+        __version__ as DW_VERSION,
         append_trailers,
         apply_plan,
         build_context_payload,
@@ -390,6 +391,7 @@ def command_check(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dw", description="Delivery Workbench roadmap maintenance CLI")
+    parser.add_argument("--version", action="version", version=f"dw {DW_VERSION}")
     parser.add_argument("--root", type=Path, default=None, help="repository root containing pm/roadmap")
     sub = parser.add_subparsers(dest="command", required=True)
 

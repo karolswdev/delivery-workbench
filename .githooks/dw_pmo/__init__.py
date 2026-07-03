@@ -69,15 +69,17 @@ from .mutations import (
     FileChange,
     MutationPlan,
     apply_plan,
+    plan_fingerprint,
     plan_phase_close,
     plan_phase_create,
     plan_story_create,
     plan_story_evidence,
     plan_story_status,
     preview_plan,
+    projected_issues,
     write_changes,
 )
-from .api import build_context_payload, next_story, project_context, story_context
+from .api import build_context_payload, handoff_summary, next_story, phase_events, project_context, story_context, story_timeline
 from .contract import (
     append_trailers,
     build_contract,
@@ -106,7 +108,7 @@ from .gate import (
     run_gate,
 )
 from .model import EVIDENCE_PLACEHOLDER, STORY_STATUSES
-from .validate import evidence_content_issues
+from .validate import classify_issue, classify_warning, evidence_content_issues, health_report, hook_seam_explanations
 from .agentdocs import (
     BEGIN_MARKER,
     END_MARKER,

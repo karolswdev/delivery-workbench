@@ -12,6 +12,8 @@ Options:
   --log-dir DIR            Work-log root (default: \$PMO_WORK_LOG_DIR or ~/.work/log)
   --identity ID            Read {ID}-work-summary.log for the date
   --log-file FILE          Read one specific log file
+  --max-lines N            Print at most N lines with an explicit
+                           truncation marker (default 0 = full output)
   --list                   List matching logs instead of printing content
   -h, --help               Show this help
 
@@ -39,6 +41,7 @@ fi
 IDENTITY=""
 LOG_FILE=""
 LIST_ONLY=0
+MAX_LINES=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -47,6 +50,7 @@ while [ $# -gt 0 ]; do
     --log-dir) LOG_DIR="$2"; shift 2 ;;
     --identity) IDENTITY="$2"; shift 2 ;;
     --log-file) LOG_FILE="$2"; shift 2 ;;
+    --max-lines) MAX_LINES="$2"; shift 2 ;;
     --list) LIST_ONLY=1; shift ;;
     --) shift; break ;;
     -*) die "unknown option: $1" ;;
@@ -54,9 +58,21 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+case "$MAX_LINES" in
+  *[!0-9]*) die "--max-lines expects a non-negative integer" ;;
+esac
+
 print_file() {
   [ -f "$1" ] || die "log file does not exist: $1"
-  sed -n '1,260p' "$1"
+  if [ "$MAX_LINES" -gt 0 ]; then
+    total=$(wc -l < "$1" | tr -d ' ')
+    sed -n "1,${MAX_LINES}p" "$1"
+    if [ "$total" -gt "$MAX_LINES" ]; then
+      echo "[PMO_WORK_LOG_READ_TRUNCATED: showing $MAX_LINES of $total lines; use --max-lines 0 for full output]"
+    fi
+  else
+    cat "$1"
+  fi
 }
 
 if [ -n "$LOG_FILE" ]; then

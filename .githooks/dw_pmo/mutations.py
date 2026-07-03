@@ -22,6 +22,17 @@ from pathlib import Path
 from .model import DONE_STATUSES, STORY_RE, STORY_STATUSES, Phase, Project, die
 
 
+_SLUG_RE_STRICT = __import__("re").compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def validate_slug(slug: str) -> str:
+    """User-supplied slugs must stay in the slugify alphabet — a slug is
+    a filename fragment, never a path."""
+    if not _SLUG_RE_STRICT.match(slug):
+        die(f"invalid slug {slug!r}: lowercase letters, digits, and hyphens only")
+    return slug
+
+
 def validate_story_status(status: str) -> str:
     status = status.strip().lower()
     if status not in STORY_STATUSES:
@@ -115,26 +126,91 @@ def _change(path: Path, new_content: str) -> FileChange:
     )
 
 
-def preview_plan(plan: MutationPlan) -> dict[str, object]:
+def plan_fingerprint(plan: MutationPlan) -> str:
+    """Deterministic digest over the plan's inputs and outputs.
+
+    Binds the previewed intent to the exact before/after content of
+    every target, so an apply can refuse a preview that no longer
+    matches the working tree (WLA-5-07 consumes this).
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+    h.update(plan.kind.encode("utf-8"))
+    h.update(plan.project_slug.encode("utf-8"))
+    for change in sorted(plan.changes, key=lambda c: str(c.path)):
+        h.update(rel(change.path, plan.root).encode("utf-8"))
+        h.update(b"1" if change.existed else b"0")
+        h.update((change.old_content or "").encode("utf-8"))
+        h.update(change.new_content.encode("utf-8"))
+    return f"sha256:{h.hexdigest()}"
+
+
+def preview_plan(plan: MutationPlan, include_content: bool = False, include_diff: bool = False) -> dict[str, object]:
     """Render a plan without writing anything."""
+    import difflib
+
     files = []
     for change in plan.changes:
-        files.append(
-            {
-                "path": rel(change.path, plan.root),
-                "action": "update" if change.existed else "create",
-                "changed": change.new_content != (change.old_content or ""),
-                "bytes_before": len(change.old_content.encode("utf-8")) if change.old_content is not None else 0,
-                "bytes_after": len(change.new_content.encode("utf-8")),
-            }
-        )
+        entry = {
+            "path": rel(change.path, plan.root),
+            "action": "update" if change.existed else "create",
+            "changed": change.new_content != (change.old_content or ""),
+            "bytes_before": len(change.old_content.encode("utf-8")) if change.old_content is not None else 0,
+            "bytes_after": len(change.new_content.encode("utf-8")),
+        }
+        if include_content:
+            entry["new_content"] = change.new_content
+        if include_diff:
+            entry["diff"] = "\n".join(
+                difflib.unified_diff(
+                    (change.old_content or "").splitlines(),
+                    change.new_content.splitlines(),
+                    fromfile=f"a/{entry['path']}",
+                    tofile=f"b/{entry['path']}",
+                    lineterm="",
+                )
+            )
+        files.append(entry)
     return {
         "kind": plan.kind,
         "project": plan.project_slug,
+        "fingerprint": plan_fingerprint(plan),
+        "no_op": all(not f["changed"] for f in files),
         "create_dirs": [rel(d, plan.root) for d in plan.create_dirs],
         "files": files,
         "summary": plan.summary,
     }
+
+
+def projected_issues(plan: MutationPlan) -> list[str] | None:
+    """Validation issues the project would have after applying the plan.
+
+    Mirrors the project's roadmap directory into a scratch root,
+    overlays the planned contents, and runs the same validator. Returns
+    None when projection is not feasible (never blocks a preview).
+    """
+    import shutil
+    import tempfile
+
+    try:
+        project = get_project(plan.root, plan.project_slug)
+        scratch = Path(tempfile.mkdtemp(prefix="dw-projection.")).resolve()
+        try:
+            mirror_project_dir = scratch / rel(project.path, plan.root)
+            shutil.copytree(project.path, mirror_project_dir)
+            for directory in plan.create_dirs:
+                (scratch / rel(directory, plan.root)).mkdir(parents=True, exist_ok=True)
+            for change in plan.changes:
+                target = scratch / rel(change.path, plan.root)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                write_text(target, change.new_content)
+            mirrored = get_project(scratch, plan.project_slug)
+            return check_project(mirrored, scratch)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+    except Exception:
+        return None
 
 
 def apply_plan(plan: MutationPlan, validate_after: bool = True) -> dict[str, object]:
@@ -237,7 +313,7 @@ def plan_phase_create(
     status: str = "not-started",
     goal: str | None = None,
 ) -> MutationPlan:
-    slug = slug or slugify(title)
+    slug = validate_slug(slug) if slug else slugify(title)
     phase_dir = project.path / f"phase-{number}-{slug}"
     ensure_under(phase_dir, roadmap_dir(root))
     if phase_dir.exists():
@@ -265,6 +341,8 @@ def plan_story_create(
     status: str = "backlog",
 ) -> MutationPlan:
     status = validate_story_status(status)
+    if slug:
+        slug = validate_slug(slug)
     existing = []
     for story in phase.path.glob("story-*.md"):
         m = STORY_RE.match(story.name)

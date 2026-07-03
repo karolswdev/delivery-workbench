@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .model import OPEN_STATUSES, Phase, Project, StoryRow
+from .model import DONE_STATUSES, OPEN_STATUSES, Phase, Project, StoryRow
 from .parse import (
     discover_phases,
     get_phase,
@@ -159,3 +159,130 @@ def build_context_payload(
             for project in projects
         ],
     }
+
+# ── traceability timeline (WLA-5-05) ─────────────────────────────────
+
+def story_timeline(row: StoryRow, phase: Phase, project: Project, root: Path) -> dict[str, object]:
+    """Normalized intent-to-proof chain for one story.
+
+    The chain names every PMO hop with an explicit exists flag (absent
+    links render as absent, never disappear); events merge recent
+    commits (scoped to the story's PMO files, carrying PMO-Story and
+    PMO-Contract-Digest trailers where stamped) with work-log entries
+    (honoring PMO_WORK_LOG_DIR resolution; empty when no log root
+    exists). ``shipped`` is asserted only when the story status is done
+    AND evidence exists — never from either alone.
+    """
+    context = story_context(row, phase, project, root, include_trace=True)
+    chain = []
+    for hop in ("readme", "phase_status", "story", "evidence", "final_summary"):
+        rel_path = str(context["trace"][hop])  # type: ignore[index]
+        chain.append(
+            {
+                "hop": hop,
+                "path": rel_path,
+                "exists": bool(rel_path) and (root / rel_path).is_file(),
+            }
+        )
+    events: list[dict[str, object]] = []
+    for commit in context.get("recent_commits", []):  # type: ignore[union-attr]
+        events.append(
+            {
+                "type": "commit",
+                "sort_key": str(commit.get("date", "")),
+                "date": commit.get("date", ""),
+                "subject": commit.get("subject", ""),
+                "sha": commit.get("sha", ""),
+                "pmo_story": commit.get("pmo_story", ""),
+                "contract_digest": commit.get("contract_digest", ""),
+                "source": commit.get("sha", ""),
+            }
+        )
+    for entry in context.get("work_log_entries", []):  # type: ignore[union-attr]
+        events.append(
+            {
+                "type": "work-log",
+                "sort_key": str(entry.get("timestamp") or entry.get("date") or ""),
+                "date": entry.get("date", ""),
+                "subject": entry.get("subject", ""),
+                "commit": entry.get("commit", ""),
+                "source": entry.get("path", ""),
+            }
+        )
+    events.sort(key=lambda e: str(e["sort_key"]), reverse=True)
+    status = str(context["status"])
+    evidence_exists = bool(context["evidence_exists"])
+    shipped = status in DONE_STATUSES and evidence_exists
+    reason = ""
+    if not shipped:
+        if status not in DONE_STATUSES:
+            reason = f"story status is {status!r}, not done"
+        elif not evidence_exists:
+            reason = "story is marked done but its evidence file does not exist"
+    return {
+        "story_id": context["story_id"],
+        "title": context["title"],
+        "status": status,
+        "phase_number": phase.number,
+        "evidence_exists": evidence_exists,
+        "shipped": shipped,
+        "not_shipped_reason": reason,
+        "chain": chain,
+        "events": events,
+    }
+
+
+def phase_events(phase: Phase, root: Path) -> list[dict[str, object]]:
+    """Recent commits scoped to the phase directory (phase trace view)."""
+    return recent_commits(root, [phase.path], limit=10)
+
+def handoff_summary(row: StoryRow, phase: Phase, project: Project, root: Path) -> dict[str, object]:
+    """Concise agent handoff for one story: PMO source paths, captured
+    command-output references, PMO-scoped commits, and supplementary
+    work-log pointers. Deterministic text, safe to paste into a task or
+    commit-contract context. Work logs are labeled supplementary —
+    evidence-story-NN.md remains the proof of record."""
+    from .evidence import parse_captured_runs
+    from .paths import read_text
+
+    timeline = story_timeline(row, phase, project, root)
+    lines = [
+        f"# Delivery Workbench handoff — {timeline['story_id']}",
+        f"Story: {timeline['story_id']} — {timeline['title']} [{timeline['status']}]"
+        f" (shipped: {'yes' if timeline['shipped'] else 'no — ' + str(timeline['not_shipped_reason'])})",
+        "Sources:",
+    ]
+    evidence_path = None
+    for hop in timeline["chain"]:
+        state = hop["path"] if hop["exists"] else f"(absent) {hop['path']}"
+        lines.append(f"  {hop['hop']}: {state}")
+        if hop["hop"] == "evidence" and hop["exists"]:
+            evidence_path = root / str(hop["path"])
+    lines.append("Captured runs (command output references in evidence):")
+    runs = parse_captured_runs(read_text(evidence_path)) if evidence_path else []
+    if runs:
+        for run in runs:
+            lines.append(f"  - {run['timestamp']} `{run['command']}` exit {run['exit_code']}")
+    elif evidence_path:
+        lines.append("  - none (narrative-only evidence)")
+    else:
+        lines.append("  - none (no evidence file exists yet — required before done)")
+    lines.append("Recent commits (scoped to this story's PMO files):")
+    commits = [e for e in timeline["events"] if e["type"] == "commit"]
+    for event in commits or []:
+        trailer = f" [PMO-Story: {event['pmo_story']}]" if event["pmo_story"] else ""
+        lines.append(f"  - {str(event['sha'])[:9]} {event['date']} {event['subject']}{trailer}")
+    if not commits:
+        lines.append("  - none found")
+    lines.append("Work logs (supplementary; never a substitute for evidence-story-NN.md):")
+    logs = [e for e in timeline["events"] if e["type"] == "work-log"]
+    for event in logs or []:
+        lines.append(f"  - {event['source']} ({event['sort_key']})")
+    if not logs:
+        lines.append("  - none (optional evidence; absent)")
+    return {
+        "story_id": timeline["story_id"],
+        "shipped": timeline["shipped"],
+        "text": "\n".join(lines),
+    }
+
