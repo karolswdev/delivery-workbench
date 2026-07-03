@@ -78,6 +78,18 @@ This phase has been scaffolded and is ready for story planning.
 
 def render_story_template(project: Project, phase: Phase, number: int, title: str, status: str) -> str:
     story_id = f"{project.prefix}-{phase.number}-{number:02d}"
+    templates = template_dir()
+    if templates and (templates / "story.md.tmpl").exists():
+        text = read_text(templates / "story.md.tmpl")
+        for placeholder, value in {
+            "{{STORY_ID}}": story_id,
+            "{{STORY_TITLE}}": title,
+            "{{PROJECT_SLUG}}": project.slug,
+            "{{PHASE_N}}": str(phase.number),
+            "{{STATUS}}": status,
+        }.items():
+            text = text.replace(placeholder, value)
+        return text
     return f"""# {story_id} - {title}
 
 - **Project:** {project.slug}

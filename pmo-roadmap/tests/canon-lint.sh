@@ -32,6 +32,7 @@ TEMPLATE_FILES="$(find "$PMO_DIR/templates" -maxdepth 1 -type f 2>/dev/null)"
 PATTERNS='~/.claude
 reusable-processes
 [Pp]antrybot
+pantry-life
 feedback_
 MEMORY\.md
 \]\(https://github\.com/\)'

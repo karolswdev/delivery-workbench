@@ -866,6 +866,75 @@ class DwCoreTest(unittest.TestCase):
                          "a long multiline command must not push exit code out of the parse window")
         self.assertIsNotNone(latest_passing_capture(text))
 
+    # -- canon accuracy doc-parity (WLA-7-03) ----------------------------------
+
+    def _framework_file(self, rel_path):
+        return (Path(__file__).resolve().parents[1] / rel_path).read_text(encoding="utf-8")
+
+    def test_canon_cited_rule_ids_exist_in_gate(self) -> None:
+        import re
+        canon = self._framework_file("templates/PMO-CONTRACT.md")
+        gate_src = self._framework_file("lib/dw_pmo/gate.py")
+        cited = set(re.findall(r"`(contract-[a-z-]+|atomicity|evidence-missing|"
+                               r"orphan-evidence|evidence-deletion-orphans-story)`", canon))
+        self.assertGreaterEqual(len(cited), 8, f"canon should cite rule ids, found: {cited}")
+        for rule_id in sorted(cited):
+            if rule_id == "contract-tier-mismatch":
+                # tier verdicts are decided in contract resolution, surfaced by the gate
+                joined = gate_src + self._framework_file("lib/dw_pmo/contract.py")
+                self.assertIn(f'"{rule_id}"', joined, rule_id)
+                continue
+            self.assertIn(f'"{rule_id}"', gate_src,
+                          f"canon cites {rule_id!r} but gate.py does not define it")
+
+    def test_canon_fence_boxes_match_contract_template(self) -> None:
+        canon = self._framework_file("templates/PMO-CONTRACT.md")
+        fence = canon.split("## Contract template", 1)[1]
+        fence = fence.split("```markdown", 1)[1].split("```", 1)[0]
+        canon_boxes = [line for line in fence.splitlines() if line.startswith("- [ ] **")]
+        from dw_pmo.contract import CANONICAL_BOXES
+
+        self.assertEqual(canon_boxes, list(CANONICAL_BOXES),
+                         "the PMO-CONTRACT template fence and the generator's canonical "
+                         "fallback must carry identical rule boxes")
+        self.assertEqual(len(canon_boxes), 7)
+        # CONTRACT.md.tmpl single-sources boxes via the {{BOXES}} placeholder
+        tmpl = self._framework_file("templates/CONTRACT.md.tmpl")
+        self.assertIn("{{BOXES}}", tmpl)
+        self.assertNotIn("- [ ] **", tmpl,
+                         "the contract template must not duplicate box lines")
+
+    def test_builder_final_summary_spec_matches_generator(self) -> None:
+        from dw_pmo.render import render_final_summary
+        from dw_pmo.model import Phase
+
+        builder = self._framework_file("templates/roadmap-builder.md")
+        rendered = render_final_summary(
+            Phase(number=3, slug="x", path=self.phase_dir), "Body.")
+        self.assertIn("# Phase {n} Final Summary", builder,
+                      "builder §2.5 must document the generator's actual heading")
+        self.assertTrue(rendered.startswith("# Phase 3 Final Summary"))
+        self.assertIn("**Status:** complete.", builder)
+        self.assertIn("**Status:** complete.", rendered)
+        self.assertNotIn("**Phase opened:**", builder,
+                         "the retired final-summary header must not resurface in the spec")
+
+    def test_story_scaffold_matches_documented_template(self) -> None:
+        from dw_pmo.render import render_story_template
+        from dw_pmo.model import Phase, Project
+
+        project = Project("demo", self.root / "pm" / "roadmap" / "demo", "DM")
+        phase = Phase(number=1, slug="alpha", path=self.phase_dir)
+        rendered = render_story_template(project, phase, 9, "Parity story", "ready")
+        tmpl = self._framework_file("templates/story.md.tmpl")
+        for placeholder, value in {
+            "{{STORY_ID}}": "DM-1-09", "{{STORY_TITLE}}": "Parity story",
+            "{{PROJECT_SLUG}}": "demo", "{{PHASE_N}}": "1", "{{STATUS}}": "ready",
+        }.items():
+            tmpl = tmpl.replace(placeholder, value)
+        self.assertEqual(rendered, tmpl,
+                         "dw story create must render exactly the documented story template")
+
     # -- adoption bridge (WLA-6-07) -----------------------------------------
 
     GOOD_REPORT = """# New Proj - PMO Adoption Discovery

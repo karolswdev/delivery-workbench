@@ -34,11 +34,11 @@ write `.tmp/DESIGN-HANDOFF-OK.md` with a one-line rationale.
   design handoff inputs, or `.tmp/DESIGN-HANDOFF-OK.md` explains why not.
 ```
 
-**`.githooks/pre-commit.config`** — bump the count:
-
-```bash
-EXPECTED_BOXES=8     # 7 canonical + 1 project rule
-```
+**`.githooks/pre-commit.config`** — nothing to change: since contract
+v2 the gate derives the required box set from the `PMO-CONTRACT.md`
+template fence, so adding the checkbox above is authoritative.
+(`EXPECTED_BOXES` remains only as a legacy fallback for repos without
+a rules document.)
 
 **`.githooks/pre-commit.local`** — the structural check:
 

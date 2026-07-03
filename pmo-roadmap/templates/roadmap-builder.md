@@ -168,8 +168,9 @@ should know what to do next.}
 
 ### 2.3 `phase-{n}-{slug}/story-{n}-{slug}.md`
 
-One file per atomic unit of work. One story = one PR. Ported from the
-existing `pm/pantry-life/` story shape (it works; don't redesign it).
+One file per atomic unit of work. One story = one PR. This shape is
+battle-tested across the framework's own seven shipped phases; don't
+redesign it.
 
 Required header + sections:
 
@@ -259,10 +260,10 @@ Four sections — the phase status and evidence files already carry the
 detail; the summary is the exit record, not a restatement.
 
 ```markdown
-# Phase {n} — Final Summary
+# Phase {n} Final Summary
 
-- **Phase opened:** YYYY-MM-DD
-- **Phase closed:** YYYY-MM-DD
+**Status:** complete.
+**Date:** YYYY-MM-DD.
 
 ## Outcome vs exit criteria
 Re-run the original exit-criteria checklist verbatim. Every item:
@@ -372,6 +373,11 @@ same project should not duplicate or corrupt anything.
 2. READ — load all source canon. Do not invent phases. Phases come from
    the PMO plan; if the plan does not specify them, ask the user or
    surface candidate phases for approval before writing anything.
+
+   (Prefer the mechanical scaffolders for steps 3-5: `dw phase create`,
+   `dw story create`, and `dw adopt --from-report` render exactly the
+   §2 templates and update the cross-links; hand-write files only when
+   the tooling is unavailable.)
 
 3. PROJECT SCAFFOLD — if pm/roadmap/{slug}/ does not exist:
    - create it
@@ -507,3 +513,11 @@ This file changes when the methodology changes, not when individual
 projects do. Bump the "Status" line date and add a note here:
 
 - 2026-04-25 — initial methodology, v1.
+- 2026-07-02 — Phase 6 hardening: §2.3 declares the canonical story
+  vocabulary (doc-parity tested); §2.5 slimmed to the four-section
+  final summary; captured runs (`dw evidence capture`) named in the
+  lifecycle; worked examples extracted to `templates/examples/`;
+  de-personalized.
+- 2026-07-02 — Phase 7 accuracy pass: §2.5 header aligned with the
+  generator's output; §5 names the mechanical scaffolders; legacy
+  project reference removed from §2.3.

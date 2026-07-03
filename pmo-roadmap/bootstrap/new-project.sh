@@ -60,6 +60,7 @@ render() {
   text="${text//\{\{PHASE_TITLE\}\}/Setup}"
   text="${text//\{\{STORY_ID\}\}/$PREFIX-0-01}"
   text="${text//\{\{STORY_TITLE\}\}/Bootstrap roadmap project}"
+  text="${text//\{\{STATUS\}\}/backlog}"
   placeholder_row="| $PREFIX-0-01 | … | backlog | [story-01-…](./story-01-….md) | — |"
   bootstrap_row="| $PREFIX-0-01 | Bootstrap roadmap project | backlog | [story-01-bootstrap](./story-01-bootstrap.md) | - |"
   text="${text/"$placeholder_row"/$bootstrap_row}"

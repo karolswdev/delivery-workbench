@@ -16,10 +16,11 @@ gate`) that requires you (agent or human) to hold a fresh
 branch, HEAD, `git write-tree` index tree, the staged file sample, and
 the story ID(s) it covers — and the gate re-derives each fact at
 commit time. The index tree is the freshness proof: a contract written
-for a different staging state is stale by definition, and touching the
-file cannot refresh it. Checked boxes are verified against the rule
-titles in this document's contract template (canonical plus project
-extensions), not merely counted.
+for a different staging state is stale by definition
+(`contract-index-tree-mismatch`), and touching the file cannot refresh
+it. Checked boxes are verified against the rule titles in this
+document's contract template — canonical plus project extensions —
+not merely counted (`contract-unknown-box` / `contract-missing-box`).
 
 On success the trail is durable: the `commit-msg` hook stamps
 `PMO-Story:` and `PMO-Contract-Digest:` (sha256) trailers onto the
@@ -82,8 +83,9 @@ Prefer discharging this rule mechanically: run the tests through
 `dw evidence capture <project> <phase> <story> -- <command>` and
 generate the contract with `dw contract new --tests-capture
 <evidence-path>`. The gate then verifies the captured run exists in
-the staged evidence with exit code 0, instead of trusting the
-checkbox.
+the staged evidence with exit code 0
+(`contract-tests-capture-mismatch` otherwise), instead of trusting
+the checkbox.
 
 ### 4. Greenfield discipline (where applicable)
 
@@ -109,11 +111,18 @@ If a story file's status flipped to `done` in this commit, the
 corresponding `evidence-story-{n}.md` exists in this same commit.
 Otherwise the story is `in-progress`, not `done`.
 
-The pre-commit hook scans the staged diff for `+- **Status:** done`
-on any `pm/roadmap/{slug}/phase-{n}-*/story-{nn}-*.md` file and
-verifies the matching `evidence-story-{n}.md` (same phase folder,
-same number) is staged. The hook also rejects orphan evidence files
-(an evidence file without a matching story flip in the same commit).
+The gate compares each staged story file's `**Status:**` header in
+`HEAD` against the staged index: a story "ships" when the header
+flips from a non-done value to `done` or a done-synonym
+(`complete | closed | shipped`) — renames and reformatting of
+already-done stories are not flips. A shipped story without its
+`evidence-story-{n}.md` staged in the same commit is blocked
+(`evidence-missing`); evidence numbers pair as integers, so
+`evidence-story-1.md` matches `story-01-*`. The gate also rejects
+orphan evidence (`orphan-evidence`: an added evidence file whose
+story does not flip in the same commit) and evidence deletions that
+would orphan a still-done story
+(`evidence-deletion-orphans-story`).
 
 ### 7. One PR per story (mechanically enforced)
 
@@ -124,12 +133,13 @@ multiple stories, the commit message says so and each story file's
 
 The pre-commit hook counts how many `pm/roadmap/.../story-*.md`
 files flipped to `done` in this commit. More than one is a hard
-block. To bundle intentionally — and only intentionally — write
-`.tmp/BUNDLE-OK.md` with a one-line rationale. The hook accepts
-that as a per-commit override and auto-deletes it on success
-(same pattern as the contract file). Bundling is rare; if you find
-yourself reaching for `BUNDLE-OK` regularly, you are mis-sizing
-your stories.
+block (`atomicity`). To bundle intentionally — and only
+intentionally — write `.tmp/BUNDLE-OK.md` with a one-line rationale.
+The gate accepts that as a per-commit override; on success it is
+archived with the contract under `.git/pmo-contract-archive/<sha>`
+and the working copy cleared (same pattern as the contract file).
+Bundling is rare; if you find yourself reaching for `BUNDLE-OK`
+regularly, you are mis-sizing your stories.
 
 ---
 
