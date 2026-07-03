@@ -65,11 +65,17 @@ treatment as the code.
   quickstarts executed as printed per run, captured kill tests
   proving both suites die on planted drift, <1s + ~4s runtimes,
   both OS legs).
-- [ ] CONTRIBUTING.md, CODE_OF_CONDUCT.md, and issue/PR templates
-  exist, render on GitHub, and speak framework vocabulary.
-- [ ] CHANGELOG.md derives from the phase final summaries; the
+- [x] CONTRIBUTING.md, CODE_OF_CONDUCT.md, and issue/PR templates
+  exist, render on GitHub, and speak framework vocabulary
+  (evidence-story-07: contributor clone-to-gated-commit path executed
+  as printed in CI via prep=clone snippets; community profile 100%;
+  bug form demands verbatim repro + the failing gate banner).
+- [x] CHANGELOG.md derives from the phase final summaries; the
   version is single-sourced and test-asserted; a v1.x tag and GitHub
-  release exist with notes.
+  release exist with notes (evidence-story-07: v1.5.0 from the seven
+  linked final summaries; dw --version + plugin.json + changelog
+  heading locked by three unit tests; annotated v1.5.0 tag + release
+  on 712beaa, captured gh release view).
 - [ ] `dw check work-log-automation` and the full validation matrix
   are green at phase close, with a final summary written as an audit.
 
@@ -83,7 +89,7 @@ treatment as the code.
 | WLA-7-04 | Package the Claude Code plugin | done | [story-04-package-the-claude-code-plugin](./story-04-package-the-claude-code-plugin.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-7-05 | Regenerate demos diagrams and visual assets | done | [story-05-regenerate-demos-diagrams-and-visual-assets](./story-05-regenerate-demos-diagrams-and-visual-assets.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-7-06 | Wire documentation CI checks | done | [story-06-wire-documentation-ci-checks](./story-06-wire-documentation-ci-checks.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-7-07 | OSS release preparation and versioned release | backlog | [story-07-oss-release-preparation-and-versioned-release](./story-07-oss-release-preparation-and-versioned-release.md) | - |
+| WLA-7-07 | OSS release preparation and versioned release | done | [story-07-oss-release-preparation-and-versioned-release](./story-07-oss-release-preparation-and-versioned-release.md) | [evidence-story-07](./evidence-story-07.md) |
 
 ## Execution sequence
 
@@ -102,13 +108,14 @@ treatment as the code.
 
 ## Where we are
 
-WLA-7-06 is done with evidence: documentation now rots loudly — a
-stdlib docs linter checks every internal link, anchor (GitHub slug
-rules), and image across all 135 Markdown files and enforces alt
-text, while six framework-README quickstarts execute as printed
-against throwaway fixtures on every CI run. Captured kill tests prove
-both suites fail on planted drift with greppable ERROR lines. One
-story remains: WLA-7-07 (OSS release + phase close).
+WLA-7-07 is done with evidence: the repo is OSS-ready and released —
+CONTRIBUTING teaches the rails using the rails with its command
+blocks CI-executed as printed, templates ask for evidence in
+framework vocabulary, CHANGELOG derives v1.5.0 from the seven phase
+final summaries, the version is single-sourced with three test
+locks, and the annotated v1.5.0 tag + GitHub release were cut on a
+fully green CI run. All seven stories are done; the only remaining
+step is the phase close itself (final summary + criterion 10).
 
 ## Active risks
 
