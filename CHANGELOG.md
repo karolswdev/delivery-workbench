@@ -7,6 +7,40 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## v1.6.0 — 2026-07-03
+
+The gate's guarantees now hold beyond the local clone, and the
+framework installs without cloning its repository: remote history
+verification enforced in CI, a first real external adoption with its
+friction paid back, pip/pipx packaging, and a Homebrew formula —
+all shipped through the gate they extend.
+
+### Phase 8 — Remote Verification and Adoption ([final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-8-remote-verification-and-adoption/final-summary.md))
+
+Extended trust past `core.hooksPath`: `docs/remote-verification.md`
+classifies every gate rule as remotely re-derivable or
+attested-only; `dw verify` re-checks pushed history with the gate's
+own rule ids under an epoch policy (no per-sha exceptions); the
+`verify-history` CI job enforces the full sweep on every push and
+PR, red-path proven against a smuggled `--no-verify` flip; bundle
+rationales became `PMO-Bundle:` trailers, making atomicity fully
+re-derivable. A real external repository (133 commits) adopted the
+rails headlessly, shipped a gated story, and its five friction
+findings were triaged with four fixes landed.
+
+### Phase 9 — Distribution and Installability ([final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-9-distribution-and-installability/final-summary.md))
+
+Made the bootstrap the unit of distribution while per-repo vendored
+rails stay the only gating authority: `pyproject.toml` packaging
+with the full vendorable payload inside the wheel and a global `dw`
+that defers unconditionally to `.githooks/dw` in adopted repos; a
+proven upgrade path from real v1.5.0 rails (content byte-untouched,
+`update.sh --check` reporting content-based staleness); a Homebrew
+formula proven from a local tap with a pip-free, venv-free install;
+and this release, with version parity test-enforced across every
+surface. PyPI and public-tap publication remain deliberate
+one-command follow-ups.
+
 ## v1.5.0 — 2026-07-03
 
 First public release: the framework, its workbench, its agent

@@ -47,17 +47,15 @@ Make Delivery Workbench installable without cloning this repository: a distribut
 | WLA-9-02 | Package the framework for pipx | done | [story-02-package-the-framework-for-pipx](./story-02-package-the-framework-for-pipx.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-9-03 | Prove the consumer upgrade path | done | [story-03-prove-the-consumer-upgrade-path](./story-03-prove-the-consumer-upgrade-path.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-9-04 | Author a Homebrew formula on a local tap | done | [story-04-author-a-homebrew-formula-on-a-local-tap](./story-04-author-a-homebrew-formula-on-a-local-tap.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-9-05 | Release v1.6.0 | backlog | [story-05-release-v1-6-0](./story-05-release-v1-6-0.md) | - |
+| WLA-9-05 | Release v1.6.0 | done | [story-05-release-v1-6-0](./story-05-release-v1-6-0.md) | [evidence-story-05](./evidence-story-05.md) |
 
 ## Where we are
 
-WLA-9-04 shipped: the tracked formula installs the wheel into
-libexec with an interpreter shim (no pip/venv at install time —
-recorded waiver), proven end-to-end from a throwaway local tap:
-install, version truth, brew-installed bootstrap to doctor-green,
-defer rule, uninstall/untap. brew style clean; brew audit waits for
-a published tap. One story left: the WLA-9-05 release cuts v1.6.0
-across every version surface.
+All five stories shipped and the phase is closed: the framework is
+installable without cloning (pipx + Homebrew from a local tap), the
+upgrade path is proven from real v1.5.0 rails, and v1.6.0 is tagged
+with every version surface under parity tests. Publication (PyPI,
+public tap, pushes) remains a set of one-command user follow-ups.
 
 ## Active risks
 

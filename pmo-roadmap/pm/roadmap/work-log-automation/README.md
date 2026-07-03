@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
 **Last updated:** 2026-07-03.
-**Current phase:** [Phase 9 - Distribution and Installability](./phase-9-distribution-and-installability/current-phase-status.md).
-**Status:** active — framework shipped, teachable, and remotely verifiable (phases 0-8); Phase 9 makes it installable without cloning this repository.
+**Current phase:** n/a.
+**Status:** active — framework shipped, teachable, remotely verifiable, and installable without cloning (phases 0-9, v1.6.0).
 
 ## Vision
 
@@ -64,7 +64,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 6 | Harden the agent rails: single machine-checked gate, durable contract audit trail, first-class agent surface, proportionate ceremony, dogfooded on this repo | done | [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/) |
 | 7 | Make the framework teachable: audited docs, a Claude Code plugin, first-class assets, and OSS-grade repo hygiene with a versioned release. | done | [phase-7-documentation-mastery](./phase-7-documentation-mastery/) |
 | 8 | Make the gate's guarantees hold beyond the local clone: a range verifier that re-checks gate rules over pushed commits, CI wiring that enforces it on every PR, and a real external adoption exercising the rails end-to-end with friction folded back into the framework. | done | [phase-8-remote-verification-and-adoption](./phase-8-remote-verification-and-adoption/) |
-| 9 | Make Delivery Workbench installable without cloning this repository: a distribution design contract, a pipx-installable package exposing the bootstrap commands, a proven consumer upgrade path from v1.5.0 rails, a Homebrew formula served from a local tap, and a v1.6.0 release that ships it all. | not-started | [phase-9-distribution-and-installability](./phase-9-distribution-and-installability/) |
+| 9 | Make Delivery Workbench installable without cloning this repository: a distribution design contract, a pipx-installable package exposing the bootstrap commands, a proven consumer upgrade path from v1.5.0 rails, a Homebrew formula served from a local tap, and a v1.6.0 release that ships it all. | done | [phase-9-distribution-and-installability](./phase-9-distribution-and-installability/) |
 
 ## Operating cadence
 
@@ -97,12 +97,14 @@ behavior is:
 
 ## Active extension
 
-Phase 9 (Distribution and Installability) is the open phase: a
-distribution design contract that keeps the per-repo vendored rails
-authoritative, pipx packaging with a defer-to-repo global `dw`, an
-upgrade proof from real v1.5.0 rails, a Homebrew formula proven from
-a local tap, and the v1.6.0 release. See
-[phase-9-distribution-and-installability](./phase-9-distribution-and-installability/current-phase-status.md).
+No phase is open. Phase 9 (Distribution and Installability)
+shipped: the distribution contract keeps per-repo vendored rails
+authoritative, the framework builds and installs as
+delivery-workbench (pipx and a Homebrew formula from a local tap)
+with a defer-to-repo global `dw`, the upgrade path is proven from
+real v1.5.0 rails with content-based staleness reporting, and
+v1.6.0 is tagged with version parity test-enforced. See
+[phase-9-distribution-and-installability/final-summary.md](./phase-9-distribution-and-installability/final-summary.md).
 
 Phase 8 (Remote Verification and Adoption)
 shipped: `docs/remote-verification.md` classifies every gate rule
