@@ -1,0 +1,54 @@
+name: Bug report
+description: Something the rails do that they should not (or refuse to do that they should).
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This framework distrusts unproven claims — including bug reports.
+        The more of your report that is captured command output, the
+        faster it gets fixed.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `git -C <checkout> describe --tags` or the release you pinned.
+      placeholder: v1.5.0
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did the gate / dw / workbench do, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction (commands, verbatim)
+      description: >
+        The exact commands from a fresh fixture to the failure —
+        ideally the same shape as our tests: temp repo, install.sh,
+        the dw commands, the commit. Paste the failing gate banner or
+        `ERROR` lines whole; they name the rule id and remediation.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Captured output
+      description: >
+        Output of the failing run, plus `.githooks/dw doctor` and
+        `.githooks/dw check <project>` from the affected repo.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "macOS 15 / bash 3.2 / python 3.12  —  or  —  ubuntu 24.04 / bash 5.2 / python 3.9"
+    validations:
+      required: true

@@ -754,7 +754,7 @@ pmo-roadmap/
 - Docs are CI-checked like code (`tests/docs-lint.sh`): every internal
   link, anchor, and image in every Markdown file must resolve, and
   every image needs alt text. Quickstart blocks preceded by an
-  `<!-- snippet: name [prep=repo|installed|intaken|report] [cwd=…] -->`
+  `<!-- snippet: name [prep=repo|installed|intaken|report|clone] [cwd=…] -->`
   marker are executed as printed against a throwaway fixture by
   `tests/docs-snippet-smoke.sh` — if you edit a marked block, the
   smoke is the proof it still runs.

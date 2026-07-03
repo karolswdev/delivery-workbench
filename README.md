@@ -146,6 +146,10 @@ for the complete audit trail.
 - [PMO contract](./pmo-roadmap/templates/PMO-CONTRACT.md) — the rules
   and the contract template (canonical)
 - [Roadmap builder methodology](./pmo-roadmap/templates/roadmap-builder.md)
+- [Contributing](./CONTRIBUTING.md) — clone to gated commit, on the
+  rails you are contributing to
+- [Changelog](./CHANGELOG.md) — releases derived from the phase final
+  summaries
 - [Security and privacy](./SECURITY.md)
 - [Brand notes](./pmo-roadmap/brand/delivery-workbench.md)
 

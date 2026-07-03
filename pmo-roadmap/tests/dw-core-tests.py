@@ -940,6 +940,22 @@ class DwCoreTest(unittest.TestCase):
     def _repo_file(self, rel_path):
         return (Path(__file__).resolve().parents[2] / rel_path).read_text(encoding="utf-8")
 
+    def test_dw_version_flag_single_source(self) -> None:
+        import subprocess
+        bin_dw = Path(__file__).resolve().parents[1] / "bin" / "dw"
+        out = subprocess.check_output([sys.executable, str(bin_dw), "--version"],
+                                      text=True).strip()
+        self.assertEqual(out, f"dw {core.__version__}",
+                         "dw --version must report dw_pmo.__version__ (the single source)")
+
+    def test_changelog_release_matches_version(self) -> None:
+        import re
+        text = self._repo_file("CHANGELOG.md")
+        m = re.search(r"^## v(\d+\.\d+\.\d+)", text, re.MULTILINE)
+        self.assertIsNotNone(m, "CHANGELOG.md must open with a '## vX.Y.Z' release heading")
+        self.assertEqual(m.group(1), core.__version__,
+                         "CHANGELOG.md release heading must track dw_pmo.__version__ (the single source)")
+
     def test_plugin_version_single_source(self) -> None:
         import json
         manifest = json.loads(self._repo_file("plugin/.claude-plugin/plugin.json"))

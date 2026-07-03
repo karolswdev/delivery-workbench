@@ -1,0 +1,31 @@
+name: Feature request
+description: A capability the rails should have.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: >
+        What delivery situation do the rails currently handle badly?
+        Framework vocabulary helps: story, evidence, contract, gate,
+        trace, work log, workbench, adoption.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should happen instead — CLI surface, gate rule, workbench view?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: What would prove it works
+      description: >
+        Every story here ships with acceptance evidence. If this were
+        a story in the roadmap, what captured command run would prove
+        it done?
+    validations:
+      required: true
