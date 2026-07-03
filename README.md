@@ -164,6 +164,8 @@ pmo-roadmap/tests/work-log-mvp.sh
 pmo-roadmap/tests/workbench-explorer.sh
 pmo-roadmap/tests/workbench-ui-smoke.sh
 pmo-roadmap/tests/plugin-validate.sh
+pmo-roadmap/tests/docs-lint.sh
+pmo-roadmap/tests/docs-snippet-smoke.sh
 pmo-roadmap/bin/dw check work-log-automation
 shellcheck -e SC2317 pmo-roadmap/install.sh pmo-roadmap/update.sh \
   pmo-roadmap/hooks/* pmo-roadmap/bin/work-log-* \
@@ -184,3 +186,4 @@ evidence trail.
 ## License
 
 [MIT](./LICENSE).
+

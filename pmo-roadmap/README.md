@@ -70,6 +70,7 @@ flowchart TD
 
 ## Install into a target project
 
+<!-- snippet: install prep=repo -->
 ```bash
 cd /path/to/delivery-workbench/pmo-roadmap
 ./install.sh /path/to/target-project
@@ -133,6 +134,7 @@ flowchart TD
 
 ## Update an installed project
 
+<!-- snippet: update prep=installed -->
 ```bash
 cd /path/to/delivery-workbench/pmo-roadmap
 ./update.sh /path/to/target-project
@@ -292,6 +294,7 @@ sources that file after its own checks; `update.sh` never touches it.
 
 ## Bootstrap a new project's roadmap (post-install)
 
+<!-- snippet: new-project prep=installed cwd=pmo -->
 ```bash
 ./bootstrap/new-project.sh /path/to/target-project myproject "My Project" MP
 ```
@@ -573,6 +576,7 @@ acknowledge the issues. The server never commits.
 For a running project, install the mechanics first, then run session intake and
 adoption discovery before writing stories:
 
+<!-- snippet: adopt-three-step prep=repo cwd=pmo -->
 ```bash
 ./install.sh /path/to/target-project --skip-bootstrap
 ./bootstrap/session-intake.sh /path/to/target-project \
@@ -595,6 +599,7 @@ producing generic reconnaissance.
 
 For automation, pass the same values as flags and add `--no-prompt`:
 
+<!-- snippet: intake-no-prompt prep=installed cwd=pmo -->
 ```bash
 ./bootstrap/session-intake.sh /path/to/target-project \
   --project-name "My Project" \
@@ -639,6 +644,7 @@ pm/roadmap/myproject/adoption/adoption-discovery.md
 Its "Proposed Phase Index" and "Proposed First Stories" tables are
 machine-consumed — close the loop with the third command:
 
+<!-- snippet: adopt-close-loop prep=report -->
 ```bash
 cd /path/to/target-project
 .githooks/dw adopt --from-report pm/roadmap/myproject/adoption/adoption-discovery.md
@@ -745,3 +751,10 @@ pmo-roadmap/
   (the rules document agents read), `lib/dw_pmo/`, and all three hooks
   in sync — the doc-parity unit tests and `canon-lint.sh` catch the
   drift they know about.
+- Docs are CI-checked like code (`tests/docs-lint.sh`): every internal
+  link, anchor, and image in every Markdown file must resolve, and
+  every image needs alt text. Quickstart blocks preceded by an
+  `<!-- snippet: name [prep=repo|installed|intaken|report] [cwd=…] -->`
+  marker are executed as printed against a throwaway fixture by
+  `tests/docs-snippet-smoke.sh` — if you edit a marked block, the
+  smoke is the proof it still runs.

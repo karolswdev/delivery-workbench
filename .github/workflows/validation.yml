@@ -45,6 +45,8 @@ jobs:
             pmo-roadmap/tests/workbench-explorer.sh \
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
+            pmo-roadmap/tests/docs-lint.sh \
+            pmo-roadmap/tests/docs-snippet-smoke.sh \
             demos/scripts/prepare-onboarding-demo.sh \
             demos/scripts/prepare-commit-demo.sh \
             demos/scripts/write-demo-contract.sh \
@@ -98,6 +100,8 @@ jobs:
             pmo-roadmap/tests/workbench-explorer.sh \
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
+            pmo-roadmap/tests/docs-lint.sh \
+            pmo-roadmap/tests/docs-snippet-smoke.sh \
             demos/scripts/prepare-onboarding-demo.sh \
             demos/scripts/prepare-commit-demo.sh \
             demos/scripts/write-demo-contract.sh \
@@ -114,6 +118,12 @@ jobs:
 
       - name: Canon lint
         run: pmo-roadmap/tests/canon-lint.sh
+
+      - name: Docs lint (links, anchors, images, alt text)
+        run: pmo-roadmap/tests/docs-lint.sh
+
+      - name: Docs snippet smoke (quickstarts run as printed)
+        run: pmo-roadmap/tests/docs-snippet-smoke.sh
 
       - name: Adoption discovery smoke test
         run: pmo-roadmap/tests/adoption-discovery.sh

@@ -1578,5 +1578,112 @@ class GateTest(unittest.TestCase):
         self.assertEqual(timeline["events"][0]["type"], "work-log")  # 2099 sorts first
 
 
+class DocsLintTest(unittest.TestCase):
+    """Self-tests for the docs linter (WLA-7-06) on fixture files."""
+
+    def setUp(self) -> None:
+        from dw_pmo import docslint
+        self.docslint = docslint
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-docslint-test."))
+        self.addCleanup(shutil.rmtree, str(self.tmp), True)
+
+    def lint(self) -> "list[str]":
+        issues, _count = self.docslint.lint(self.tmp)
+        return issues
+
+    def write(self, name: str, text: str) -> Path:
+        path = self.tmp / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_github_slug_rules(self) -> None:
+        slug = self.docslint.github_slug
+        self.assertEqual(slug("Workbench: the local web view"),
+                         "workbench-the-local-web-view")
+        self.assertEqual(slug("The commit gate (`dw gate`) and contract v2"),
+                         "the-commit-gate-dw-gate-and-contract-v2")
+        self.assertEqual(slug("**Bold** and [linked](./x.md) words"),
+                         "bold-and-linked-words")
+
+    def test_duplicate_headings_get_numeric_suffixes(self) -> None:
+        slugs = self.docslint.heading_slugs("# Same\n\n## Same\n\n### Same\n")
+        self.assertEqual(slugs, {"same", "same-1", "same-2"})
+
+    def test_headings_inside_fences_are_not_anchors(self) -> None:
+        slugs = self.docslint.heading_slugs("# Real\n\n```text\n# Fake\n```\n")
+        self.assertEqual(slugs, {"real"})
+
+    def test_every_defect_class_is_caught(self) -> None:
+        self.write("present.md", "# Present Heading\n")
+        self.write(
+            "broken.md",
+            "# Fixture\n\n"
+            "[gone](./missing.md)\n"
+            "[bad](./present.md#absent-heading)\n"
+            "[self](#nowhere)\n"
+            "![](./present.md)\n"
+            "![lost](./missing.png)\n",
+        )
+        issues = self.lint()
+        self.assertEqual(len(issues), 5, issues)
+        for needle in ["broken link: ./missing.md", "broken anchor: ./present.md#absent-heading",
+                       "broken anchor: #nowhere", "image missing alt text",
+                       "missing image: ./missing.png"]:
+            self.assertTrue(any(needle in i for i in issues), (needle, issues))
+
+    def test_valid_links_anchors_and_images_pass(self) -> None:
+        self.write("img.png", "fake")
+        self.write("target.md", "# Target\n\n## Sub Section\n")
+        self.write(
+            "good.md",
+            "# Good\n\n[t](./target.md)\n[a](./target.md#sub-section)\n"
+            "[s](#good)\n![alt text](./img.png)\n"
+            "[ext](https://example.com/unchecked) [m](mailto:a@b.c)\n",
+        )
+        self.assertEqual(self.lint(), [])
+
+    def test_links_inside_code_are_not_linted(self) -> None:
+        self.write(
+            "code.md",
+            "# Code\n\n```markdown\n[gone](./missing.md)\n```\n\n"
+            "inline `![shot](./assets/shot.png)` example\n",
+        )
+        self.assertEqual(self.lint(), [])
+
+    def test_ignore_pragmas(self) -> None:
+        self.write(
+            "ignored.md",
+            "# Ignored\n\n"
+            "[gone](./missing.md) <!-- docs-lint: ignore -->\n"
+            "<!-- docs-lint: ignore -->\n[also-gone](./missing2.md)\n",
+        )
+        self.write("skipped.md",
+                    "<!-- docs-lint: skip-file -->\n# Skipped\n\n[x](./missing.md)\n")
+        self.assertEqual(self.lint(), [])
+
+    def test_anchor_only_checked_for_markdown_targets(self) -> None:
+        self.write("script.sh", "#!/bin/sh\n")
+        self.write("lines.md", "# L\n\n[line link](./script.sh#L1)\n")
+        self.assertEqual(self.lint(), [])
+
+    def test_snippet_extraction_names_attrs_and_body(self) -> None:
+        self.write(
+            "quick.md",
+            "# Q\n\n<!-- snippet: demo prep=installed cwd=pmo -->\n"
+            "```bash\necho one\necho two\n```\n",
+        )
+        snippets = self.docslint.extract_snippets(self.tmp)
+        self.assertEqual(len(snippets), 1)
+        self.assertEqual(snippets[0]["name"], "demo")
+        self.assertEqual(snippets[0]["attrs"], {"prep": "installed", "cwd": "pmo"})
+        self.assertEqual(snippets[0]["body"], "echo one\necho two")
+
+    def test_snippet_marker_without_fence_is_an_error(self) -> None:
+        self.write("bad.md", "# B\n\n<!-- snippet: orphan -->\n\nprose, no fence\n")
+        with self.assertRaises(SystemExit):
+            self.docslint.extract_snippets(self.tmp)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
