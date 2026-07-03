@@ -45,10 +45,12 @@ treatment as the code.
   doc-parity tests covering newly cited machine-enforced statements
   (evidence-story-03: rule-id citations, fence/template/generator
   parity, byte-identical scaffolds).
-- [ ] A Claude Code plugin (manifest, skill, commands, marketplace
+- [x] A Claude Code plugin (manifest, skill, commands, marketplace
   entry) installs from this repo and passes a parity check against
   the managed agent-docs block; install.sh remains the non-plugin
-  path and the docs say when to use which.
+  path and the docs say when to use which (evidence-story-04:
+  captured live install at v1.5.0, three parity tests,
+  plugin-validate.sh in CI).
 - [ ] All demos, screenshots, and diagrams are regenerated from
   current sources by checked-in scripts; the workbench appears in the
   root README; every image has alt text; a social preview is set.
@@ -69,7 +71,7 @@ treatment as the code.
 | WLA-7-01 | Documentation audit and information architecture | done | [story-01-documentation-audit-and-information-architecture](./story-01-documentation-audit-and-information-architecture.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-7-02 | Core docs overhaul and architecture guide | done | [story-02-core-docs-overhaul-and-architecture-guide](./story-02-core-docs-overhaul-and-architecture-guide.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-7-03 | Canon and template accuracy pass | done | [story-03-canon-and-template-accuracy-pass](./story-03-canon-and-template-accuracy-pass.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-7-04 | Package the Claude Code plugin | backlog | [story-04-package-the-claude-code-plugin](./story-04-package-the-claude-code-plugin.md) | - |
+| WLA-7-04 | Package the Claude Code plugin | done | [story-04-package-the-claude-code-plugin](./story-04-package-the-claude-code-plugin.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-7-05 | Regenerate demos diagrams and visual assets | backlog | [story-05-regenerate-demos-diagrams-and-visual-assets](./story-05-regenerate-demos-diagrams-and-visual-assets.md) | - |
 | WLA-7-06 | Wire documentation CI checks | backlog | [story-06-wire-documentation-ci-checks](./story-06-wire-documentation-ci-checks.md) | - |
 | WLA-7-07 | OSS release preparation and versioned release | backlog | [story-07-oss-release-preparation-and-versioned-release](./story-07-oss-release-preparation-and-versioned-release.md) | - |
@@ -91,14 +93,13 @@ treatment as the code.
 
 ## Where we are
 
-WLA-7-03 is done with evidence: the canon now describes the machine
-exactly — rule ids cited and parity-tested, pre-v2 mechanics
-corrected, the final-summary spec aligned with the generator, the
-legacy project reference gone and lint-blocked — and a real
-divergence died: dw story create, the bootstrap, and the documented
-story template now render byte-identical scaffolds from one source.
-The vocabulary is stable; WLA-7-04 (the Claude Code plugin) builds on
-it next, then assets (7-05), docs CI (7-06), and the release (7-07).
+WLA-7-04 is done with evidence: the agent surface ships as a real
+Claude Code plugin — validated, marketplace-added, and installed live
+at v1.5.0 (captured) — with the skill teaching exactly the loop the
+managed block teaches, enforced by parity tests that fail on drift,
+byte-identical command files, and a single test-enforced version
+source. Remaining: WLA-7-05 (assets), WLA-7-06 (docs CI), WLA-7-07
+(OSS release).
 
 ## Active risks
 
