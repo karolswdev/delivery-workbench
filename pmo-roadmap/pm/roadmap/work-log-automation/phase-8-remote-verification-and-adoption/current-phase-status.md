@@ -41,18 +41,19 @@ Make the gate's guarantees hold beyond the local clone: a range verifier that re
 | WLA-8-01 | Define the remote verification contract | done | [story-01-define-the-remote-verification-contract](./story-01-define-the-remote-verification-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-8-02 | Implement dw verify for commit ranges | done | [story-02-implement-dw-verify-for-commit-ranges](./story-02-implement-dw-verify-for-commit-ranges.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-8-03 | Wire remote verification into CI | done | [story-03-wire-remote-verification-into-ci](./story-03-wire-remote-verification-into-ci.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-8-04 | Adopt Delivery Workbench in an external repository | in-progress | [story-04-adopt-delivery-workbench-in-an-external-repository](./story-04-adopt-delivery-workbench-in-an-external-repository.md) | - |
+| WLA-8-04 | Adopt Delivery Workbench in an external repository | done | [story-04-adopt-delivery-workbench-in-an-external-repository](./story-04-adopt-delivery-workbench-in-an-external-repository.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-8-05 | Fold adoption friction back into the framework | backlog | [story-05-fold-adoption-friction-back-into-the-framework](./story-05-fold-adoption-friction-back-into-the-framework.md) | - |
 
 ## Where we are
 
-The verification thread is complete: `dw verify` re-derives the
-structural rules over commit ranges (WLA-8-02), and the
-`verify-history` CI job enforces the full sweep on every push and
-PR, red-path proven against a smuggled `--no-verify` flip
-(WLA-8-03). Remaining: the adoption thread — WLA-8-04 exercises the
-documented adoption path on an external repository, WLA-8-05 folds
-its friction back in.
+Verification thread complete (WLA-8-01..03) and the external
+adoption is done: fridgr (a real 133-commit product repo, scratch
+clone) went through the documented three-command path headlessly,
+shipped FR-1-01 through the gate with trailers and archive, and
+`dw verify --all` passed there with the entire pre-adoption history
+correctly pre-epoch-skipped. Five friction entries are logged in
+`adoption-friction.md`. Remaining: WLA-8-05 triages and folds the
+fix-now slice back into the framework.
 
 ## Active risks
 
