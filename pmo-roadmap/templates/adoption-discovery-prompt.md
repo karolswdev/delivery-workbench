@@ -13,6 +13,17 @@ commit. Do not run destructive commands.
 - **Discovery output requested:** {{OUTPUT_PATH}}
 - **Session intake path:** {{INTAKE_PATH}}
 
+## How to deliver the report
+
+Your final output (stdout) IS the report: the wrapper that invoked
+you captures it verbatim into the output path above. Do not attempt
+to write the report file yourself — your permission mode is
+read-only by design, and a failed write is not an error. Emit ONLY
+the report markdown, starting directly with the `#` title line: no
+preamble, no commentary about permissions, no closing remarks.
+Anything you print before the title ships inside the canonical
+report file.
+
 ## Mission
 
 Inspect the repository and produce a practical adoption report that can become

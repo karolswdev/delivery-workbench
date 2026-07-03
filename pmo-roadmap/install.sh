@@ -72,7 +72,7 @@ done
 
 # Resolve to absolute path, portably.
 TARGET="$(cd "$TARGET" && pwd)"
-SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 
 # Verify target is a git repo.
 git -C "$TARGET" rev-parse --show-toplevel >/dev/null 2>&1 \
@@ -81,8 +81,17 @@ TARGET="$(git -C "$TARGET" rev-parse --show-toplevel)"
 
 echo "→ Installing pmo-roadmap into $TARGET"
 
+# Self-hosting refresh: when the framework source lives inside the
+# target repo (this repository refreshing its own .githooks snapshot),
+# the canon already lives under the source tree — scaffolding a second
+# pm/roadmap/ at the target root would just leave a stray tree to
+# delete by hand (adoption friction entry 5, WLA-8-05).
+SELF_HOSTED=0
+case "$SOURCE_DIR" in
+  "$TARGET"/*) SELF_HOSTED=1 ;;
+esac
+
 # 1. Methodology + contract
-mkdir -p "$TARGET/pm/roadmap"
 copy_template() {
   src="$1"; dst="$2"
   if [ -e "$dst" ] && [ "$FORCE" -ne 1 ]; then
@@ -92,8 +101,13 @@ copy_template() {
     echo "  ✓ wrote ${dst#"$TARGET"/}"
   fi
 }
-copy_template "$SOURCE_DIR/templates/roadmap-builder.md" "$TARGET/pm/roadmap/roadmap-builder.md"
-copy_template "$SOURCE_DIR/templates/PMO-CONTRACT.md"    "$TARGET/pm/roadmap/PMO-CONTRACT.md"
+if [ "$SELF_HOSTED" -eq 1 ]; then
+  echo "  · self-hosting refresh (source inside target); skipping pm/roadmap canon scaffold"
+else
+  mkdir -p "$TARGET/pm/roadmap"
+  copy_template "$SOURCE_DIR/templates/roadmap-builder.md" "$TARGET/pm/roadmap/roadmap-builder.md"
+  copy_template "$SOURCE_DIR/templates/PMO-CONTRACT.md"    "$TARGET/pm/roadmap/PMO-CONTRACT.md"
+fi
 
 # 2. Hooks — refuse to clobber a foreign hook manager silently.
 EXISTING_HOOKS_PATH="$(git -C "$TARGET" config core.hooksPath 2>/dev/null || true)"

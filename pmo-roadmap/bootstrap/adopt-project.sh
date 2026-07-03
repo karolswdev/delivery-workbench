@@ -169,6 +169,11 @@ if [ -e "$OUTPUT" ] && [ "$FORCE" -ne 1 ]; then
   die "output exists, use --force to overwrite: $OUTPUT"
 fi
 
+echo "→ Running $AGENT discovery agent (read-only)…"
+echo "  This typically takes 5-15 minutes on a mid-size repository."
+echo "  The report lands at ${OUTPUT#"$TARGET"/} when the agent finishes;"
+echo "  until then the file stays empty and the agent process is visible in ps."
+
 case "$AGENT" in
   codex)
     command -v codex >/dev/null 2>&1 || die "codex CLI not found"

@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
 **Last updated:** 2026-07-03.
-**Current phase:** [Phase 8 - Remote Verification and Adoption](./phase-8-remote-verification-and-adoption/current-phase-status.md).
-**Status:** active — framework shipped and teachable (phases 0-7, v1.5.0); Phase 8 extends the gate's guarantees beyond the local clone.
+**Current phase:** n/a.
+**Status:** active — framework shipped, teachable, and remotely verifiable (phases 0-8); the gate's guarantees now hold beyond the local clone.
 
 ## Vision
 
@@ -63,7 +63,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 5 | Ship the rich PMO Workbench interaction layer on top of the existing agent-safe CLI/core without creating a second source of truth. | done | [phase-5-pmo-workbench-interaction-layer](./phase-5-pmo-workbench-interaction-layer/) |
 | 6 | Harden the agent rails: single machine-checked gate, durable contract audit trail, first-class agent surface, proportionate ceremony, dogfooded on this repo | done | [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/) |
 | 7 | Make the framework teachable: audited docs, a Claude Code plugin, first-class assets, and OSS-grade repo hygiene with a versioned release. | done | [phase-7-documentation-mastery](./phase-7-documentation-mastery/) |
-| 8 | Make the gate's guarantees hold beyond the local clone: a range verifier that re-checks gate rules over pushed commits, CI wiring that enforces it on every PR, and a real external adoption exercising the rails end-to-end with friction folded back into the framework. | not-started | [phase-8-remote-verification-and-adoption](./phase-8-remote-verification-and-adoption/) |
+| 8 | Make the gate's guarantees hold beyond the local clone: a range verifier that re-checks gate rules over pushed commits, CI wiring that enforces it on every PR, and a real external adoption exercising the rails end-to-end with friction folded back into the framework. | done | [phase-8-remote-verification-and-adoption](./phase-8-remote-verification-and-adoption/) |
 
 ## Operating cadence
 
@@ -96,12 +96,14 @@ behavior is:
 
 ## Active extension
 
-Phase 8 (Remote Verification and Adoption) is the open phase: a
-design contract for what the gate can re-verify from pushed history
-alone, a `dw verify` range verifier implementing it, CI enforcement
-on every push and PR, and a real external adoption whose friction is
-triaged back into the framework. See
-[phase-8-remote-verification-and-adoption](./phase-8-remote-verification-and-adoption/current-phase-status.md).
+No phase is open. Phase 8 (Remote Verification and Adoption)
+shipped: `docs/remote-verification.md` classifies every gate rule
+for remote re-derivability, `dw verify` re-checks pushed history
+with the gate's own rule ids, the `verify-history` CI job enforces
+the sweep on every push and PR, and the first real external
+adoption (fridgr) shipped a gated story with its friction triaged
+back into the framework. See
+[phase-8-remote-verification-and-adoption/final-summary.md](./phase-8-remote-verification-and-adoption/final-summary.md).
 
 Phase 7 (Documentation Mastery) shipped: audit-first documentation
 overhaul, a Claude Code plugin packaging the agent surface,

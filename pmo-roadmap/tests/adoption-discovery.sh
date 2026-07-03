@@ -184,4 +184,21 @@ chmod +x "$LOCALHOOKS/.git/hooks/pre-commit"
 grep -q 'will disable' "$TMP_ROOT/warn.txt" \
   || fail "install should warn about active .git/hooks it disables"
 
+# Self-hosting refresh must not scaffold a stray root pm/ tree, while
+# a normal external install still ships the canon (WLA-8-05, friction
+# entry 5).
+SELFHOST="$TMP_ROOT/selfhost"
+mkdir -p "$SELFHOST"
+git -C "$SELFHOST" init >/dev/null
+git -C "$SELFHOST" config user.name t
+git -C "$SELFHOST" config user.email t@example.test
+cp -R "$PMO_DIR" "$SELFHOST/pmo-roadmap"
+OUT="$("$SELFHOST/pmo-roadmap/install.sh" "$SELFHOST" --skip-bootstrap 2>&1)"
+echo "$OUT" | grep -q 'self-hosting refresh' \
+  || fail "self-hosted install should announce the canon-scaffold skip"
+[ ! -e "$SELFHOST/pm" ] \
+  || fail "self-hosted install must not create a root pm/ tree"
+[ -e "$FOREIGN/pm/roadmap/PMO-CONTRACT.md" ] \
+  || fail "external install must still scaffold pm/roadmap canon"
+
 echo "adoption-discovery.sh: ok"

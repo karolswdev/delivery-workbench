@@ -23,6 +23,13 @@ pmo-roadmap/bootstrap/adopt-project.sh /path/to/project \
 Finish with `.githooks/dw doctor` (proves the wiring) and pick up work
 with `.githooks/dw next`.
 
+What to expect from step 2: `--agent claude` spawns a read-only
+discovery agent whose stdout becomes the report — it typically takes
+5–15 minutes and needs the `claude` CLI authenticated in headless
+contexts; when stdin is not a TTY, `--with-intake` records a
+placeholder intake and discovery flags intent as unresolved (fill the
+intake, or pass answers as flags, to get a directed roadmap).
+
 ## What you get
 
 - **A Markdown roadmap** under `pm/roadmap/<project>/` — phases,

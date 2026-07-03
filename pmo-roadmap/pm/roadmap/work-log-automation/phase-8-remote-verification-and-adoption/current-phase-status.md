@@ -42,18 +42,17 @@ Make the gate's guarantees hold beyond the local clone: a range verifier that re
 | WLA-8-02 | Implement dw verify for commit ranges | done | [story-02-implement-dw-verify-for-commit-ranges](./story-02-implement-dw-verify-for-commit-ranges.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-8-03 | Wire remote verification into CI | done | [story-03-wire-remote-verification-into-ci](./story-03-wire-remote-verification-into-ci.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-8-04 | Adopt Delivery Workbench in an external repository | done | [story-04-adopt-delivery-workbench-in-an-external-repository](./story-04-adopt-delivery-workbench-in-an-external-repository.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-8-05 | Fold adoption friction back into the framework | backlog | [story-05-fold-adoption-friction-back-into-the-framework](./story-05-fold-adoption-friction-back-into-the-framework.md) | - |
+| WLA-8-05 | Fold adoption friction back into the framework | done | [story-05-fold-adoption-friction-back-into-the-framework](./story-05-fold-adoption-friction-back-into-the-framework.md) | [evidence-story-05](./evidence-story-05.md) |
 
 ## Where we are
 
-Verification thread complete (WLA-8-01..03) and the external
-adoption is done: fridgr (a real 133-commit product repo, scratch
-clone) went through the documented three-command path headlessly,
-shipped FR-1-01 through the gate with trailers and archive, and
-`dw verify --all` passed there with the entire pre-adoption history
-correctly pre-epoch-skipped. Five friction entries are logged in
-`adoption-friction.md`. Remaining: WLA-8-05 triages and folds the
-fix-now slice back into the framework.
+All five stories shipped. The gate's guarantees now extend beyond
+the local clone (`dw verify` + `verify-history` CI, red-path
+proven), a real external repository (fridgr, 133 commits) adopted
+the rails headlessly and shipped a gated story, and all five
+friction findings are triaged — four fixes landed with proofs and
+regression coverage, two follow-ups recorded as deferred decisions.
+The phase is ready to close.
 
 ## Active risks
 
@@ -77,3 +76,5 @@ fix-now slice back into the framework.
 
 - Whether contract archives become remotely portable (notes ref or tracked dir) - trigger: a multi-machine audit requirement materializes - default is local-only (decided for v1 in WLA-8-01).
 - Evidence-run presence as a remote rule (flip must ship an exit-0 captured run) - trigger: after WLA-8-02 lands and pre-capture epochs are understood - default is not-in-v1.
+- Discovery `--timeout` and mid-run heartbeat - trigger: next long discovery run - launch messaging shipped in WLA-8-05, supervision deferred.
+- Sandbox allowlisting of read-only `dw` orientation commands for discovery agents - trigger: next external adoption - per-CLI permission plumbing differs between claude and codex (WLA-8-05 entry 4).

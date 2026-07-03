@@ -67,7 +67,15 @@ contract, gated commit with trailers and archive — and `dw verify
 --all` passing with all 133 pre-adoption commits skipped as
 pre-epoch, exactly as the remote verification contract specifies.
 
-## Triage
+## Triage (WLA-8-05, 2026-07-03)
 
-Deferred to WLA-8-05 (every entry above gets fix-now / defer /
-decline there).
+| # | Verdict | Action taken / rationale |
+|---|---|---|
+| 1 | fix-now (partial) + defer | `adopt-project.sh` now announces the agent launch with expected duration and where the report lands (proof: the lines print before the agent exec). A `--timeout` flag and mid-run heartbeat are **deferred** — they need process supervision the wrapper doesn't have yet; trigger: next long discovery run. |
+| 2 | fix-now | README quickstart now sets expectations: stdout-captured report, 5–15 minute duration, headless auth requirement, placeholder-intake behavior. Docs-lint clean. |
+| 3 | fix-now | The discovery prompt template gained a "How to deliver the report" section: stdout IS the report, emit only the report starting at the `#` title, never attempt the write. Proof: rendered prompt in a fixture carries the section. Wrapper-side stripping of pre-title content was **declined** — risk of eating legitimate report content outweighs the cosmetic gain, and the prompt fix addresses the cause. |
+| 4 | defer | Allowing the sandboxed discovery agent to run the read-only `dw doctor/check/context` needs per-CLI permission plumbing (`--allowedTools` equivalents differ between claude and codex). The report's "unverified here" caveats stay honest meanwhile. Trigger: next external adoption run. |
+| 5 | fix-now | `install.sh` detects self-hosting (source inside target, physical-path comparison — `git rev-parse` returns physical paths) and skips the root `pm/roadmap` canon scaffold; external installs unchanged. Regression case added to `tests/adoption-discovery.sh` covering both directions. |
+
+All five entries triaged; counts match the log. Deferred items are
+mirrored in the phase status "Decisions deferred" section.
