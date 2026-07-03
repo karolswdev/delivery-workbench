@@ -22,5 +22,15 @@ GitHub has no API for the social-preview setting: after regenerating
 source of truth for what is uploaded.
 
 The framework icon lives at
-[`pmo-roadmap/assets/delivery-workbench-icon.png`](../pmo-roadmap/assets/delivery-workbench-icon.png)
-(original artwork, not generated).
+[`pmo-roadmap/assets/delivery-workbench-icon.png`](../pmo-roadmap/assets/delivery-workbench-icon.png).
+It is a one-off art asset, not script-regenerated: 400×400 pixel art
+generated 2026-07-03 with the PixelLab MCP (`create_map_object`,
+low top-down view, high detail, detailed shading, selective
+outline; prompt: an isometric architect's delivery workbench — desk,
+retro computer with a green checkmark on screen, stamped contract
+papers, rubber stamp, checklist clipboard, coffee mug, and a cargo
+cart carrying a sealed package). The uniform background PixelLab
+produced was flood-filled to true transparency from the borders
+(stdlib script, tolerance ±8 around RGB 157/156/157). Replacing the
+icon means re-running `demos/scripts/render-social-preview.sh`,
+which embeds it.

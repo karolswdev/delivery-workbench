@@ -94,6 +94,10 @@ cat > "$PAGE" <<EOF
 EOF
 
 profile="$(mktemp -d)"
+# The wait loop below watches for the screenshot to appear; a stale
+# committed asset at $OUT would satisfy it instantly and Firefox
+# would be killed mid-render, silently keeping the old image.
+rm -f "$OUT"
 "$FF" --headless --no-remote --profile "$profile" \
   --screenshot "$OUT" --window-size=1280,640 "file://$PAGE" >/dev/null 2>&1 &
 ffpid=$!

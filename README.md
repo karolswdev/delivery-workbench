@@ -1,6 +1,6 @@
 # Delivery Workbench
 
-![Delivery Workbench icon](./pmo-roadmap/assets/delivery-workbench-icon.png)
+![Pixel-art delivery workbench: a desk with a retro computer showing a green checkmark, stamped contract papers, a rubber stamp, and a cargo cart carrying a sealed package](./pmo-roadmap/assets/delivery-workbench-icon.png)
 
 **Evidence-first rails for agentic software delivery.** Delivery
 Workbench turns a Git repository into a self-verifying delivery
