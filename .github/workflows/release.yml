@@ -5,9 +5,13 @@ name: release
 # (OIDC) — no long-lived token lives in this repository. One-time
 # activation on pypi.org: project "delivery-workbench" → Publishing →
 # add GitHub publisher (owner karolswdev, repo delivery-workbench,
-# workflow release.yml, environment pypi). Until that registration
+# workflow release.yml, environment pipit). Until that registration
 # exists, this workflow's publish step fails with a clear OIDC error
-# and nothing else is affected.
+# and nothing else is affected. Yes, the environment is named
+# "pipit": the registered publisher's environment field caught an
+# autocorrect typo, and the maintainer chose to match it here rather
+# than re-register. It is load-bearing; renaming it breaks the OIDC
+# claim match.
 
 on:
   release:
@@ -50,7 +54,7 @@ jobs:
   publish-pypi:
     needs: build
     runs-on: ubuntu-latest
-    environment: pypi
+    environment: pipit
     permissions:
       # OIDC token for PyPI Trusted Publishing.
       id-token: write

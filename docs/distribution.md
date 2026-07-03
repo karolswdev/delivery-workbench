@@ -129,7 +129,10 @@ package smoke, builds, and publishes on every published GitHub
 Release. It activates once the one-time publisher registration
 exists on pypi.org (project `delivery-workbench` → Publishing → add
 GitHub publisher: owner `karolswdev`, repo `delivery-workbench`,
-workflow `release.yml`, environment `pypi`).
+workflow `release.yml`, environment `pipit` — yes, `pipit`: the
+registered publisher's environment field caught an autocorrect typo
+and the workflow matches it deliberately; both sides must agree for
+the OIDC exchange).
 
 ## Proof obligations
 
