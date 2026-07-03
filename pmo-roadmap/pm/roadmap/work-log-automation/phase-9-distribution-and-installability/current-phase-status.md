@@ -43,7 +43,7 @@ Make Delivery Workbench installable without cloning this repository: a distribut
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-9-01 | Define the distribution contract | backlog | [story-01-define-the-distribution-contract](./story-01-define-the-distribution-contract.md) | - |
+| WLA-9-01 | Define the distribution contract | done | [story-01-define-the-distribution-contract](./story-01-define-the-distribution-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-9-02 | Package the framework for pipx | backlog | [story-02-package-the-framework-for-pipx](./story-02-package-the-framework-for-pipx.md) | - |
 | WLA-9-03 | Prove the consumer upgrade path | backlog | [story-03-prove-the-consumer-upgrade-path](./story-03-prove-the-consumer-upgrade-path.md) | - |
 | WLA-9-04 | Author a Homebrew formula on a local tap | backlog | [story-04-author-a-homebrew-formula-on-a-local-tap](./story-04-author-a-homebrew-formula-on-a-local-tap.md) | - |
@@ -51,9 +51,11 @@ Make Delivery Workbench installable without cloning this repository: a distribut
 
 ## Where we are
 
-Phase scaffolded with full story specs. WLA-9-01 (design contract)
-is the entry point; 02 gates 03 and 04, which run as parallel
-tracks into the 05 release.
+WLA-9-01 shipped: `docs/distribution.md` locks the vendored-rails
+invariant, the defer-to-repo rule, the `dw_pmo/_payload/` layout
+(one script, two homes), and the v1 channels, with every install.sh
+copy source cross-checked into the doc. Next: WLA-9-02 packaging;
+03 and 04 then run as parallel tracks into the 05 release.
 
 ## Active risks
 
@@ -67,8 +69,13 @@ tracks into the 05 release.
 ## Decisions made (this phase)
 
 - 2026-07-03 - Phase scaffolded with `dw phase create` - keeps roadmap structure consistent - CLI.
-- 2026-07-03 - The unit of distribution is the bootstrap vehicle; per-repo vendored rails remain the only gating authority - preserves the Phase 6 single-source-of-truth invariant - phase design (to be locked in WLA-9-01).
+- 2026-07-03 - The unit of distribution is the bootstrap vehicle; per-repo vendored rails remain the only gating authority - preserves the Phase 6 single-source-of-truth invariant - locked in WLA-9-01 (`docs/distribution.md`).
 - 2026-07-03 - Publication (PyPI, public tap, pushes) stays out of scope - requires credentials and public artifacts; every publication becomes a one-command user action after this phase - constraint.
+- 2026-07-03 - Defer-to-repo rule: a global `dw` inside an adopted repo execs `.githooks/dw` unconditionally, staleness reported on stderr but never silently "fixed" - version honesty over convenience - WLA-9-01.
+- 2026-07-03 - Payload ships as `dw_pmo/_payload/` mirroring the `pmo-roadmap/` layout so install.sh/update.sh run unmodified from checkout or package - one script, two homes, zero forks - WLA-9-01.
+- 2026-07-03 - Single console script `dw` via a launcher module; workbench and work-log tools arrive only by vendoring - keeps the global surface minimal - WLA-9-01.
+- 2026-07-03 - Builds may fetch the build backend (network verified available; system python lacks setuptools); runtime stays stdlib-only with empty install_requires - WLA-9-01.
+- 2026-07-03 - curl|sh installers declined - unauditable by design, contrary to evidence-first posture - WLA-9-01.
 
 ## Decisions deferred
 

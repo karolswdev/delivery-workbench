@@ -1,0 +1,133 @@
+# Delivery Workbench — Distribution Contract
+
+How Delivery Workbench reaches a machine that never cloned this
+repository, without weakening the architecture that makes it
+trustworthy. This is the design contract for WLA-9-02 (packaging),
+WLA-9-03 (upgrades), and WLA-9-04 (Homebrew); the invariants below
+are what those stories are tested against.
+
+## The invariant distribution must not break
+
+**Per-repo vendored rails are the only gating authority.** Every
+adopted repository carries its own copy of the hooks and the
+`dw_pmo` core under `.githooks/`, pinned by `core.hooksPath`. The
+gate that certifies a commit is the gate that travels with that
+repo's history — reproducible years later from the repo alone,
+immune to whatever version happens to be installed globally that
+day. Phase 6 spent an entire hardening pass making sure there is no
+second implementation of any rule; a global CLI that gated repos
+directly would resurrect exactly that split.
+
+Therefore: **the unit of distribution is the bootstrap vehicle, not
+the gate.** What ships globally is the ability to install, update,
+and adopt — plus a convenience launcher. What gates commits is
+always the vendored copy.
+
+## The defer-to-repo rule
+
+A globally installed `dw`, invoked inside a repository that has
+`.githooks/dw`, must `exec` that vendored copy with the same
+arguments — unconditionally, even (especially) when the global
+version is newer. Version honesty over convenience: the output a
+user sees must come from the rails their commits actually pass
+through. The global CLI acts in its own right only:
+
+- outside any adopted repository (bootstrap verbs, `--version`,
+  help), or
+- for the bootstrap verbs themselves (`install`, `update`,
+  `adopt-project`, `new-project`, `intake`), which by definition
+  operate on a target repo from outside its rails.
+
+Staleness becomes visible, never silently "fixed": when the global
+launcher defers to older vendored rails it may print a one-line
+notice to stderr naming both versions and the upgrade command
+(`dw update <path>`), but the vendored copy still runs.
+
+## Package layout
+
+- **Distribution name:** `delivery-workbench` (PyPI-style name;
+  publication itself is out of scope this phase).
+- **Import package:** `dw_pmo`, sourced from `pmo-roadmap/lib/` —
+  the same files the repo vendors; no fork, no shim package.
+- **Payload:** everything `install.sh` copies ships as package data
+  in a `dw_pmo/_payload/` directory that mirrors the `pmo-roadmap/`
+  source layout exactly:
+
+  | Payload path | Vendored to (by install.sh) |
+  |---|---|
+  | `hooks/pre-commit`, `hooks/commit-msg`, `hooks/post-commit` | `.githooks/` (chmod +x) |
+  | `bin/dw`, `bin/dw-workbench`, `bin/work-log-summarize`, `bin/work-log-read` | `.githooks/` |
+  | `lib/dw_pmo/` | `.githooks/dw_pmo/` |
+  | `workbench/` (local web UI assets) | `.githooks/workbench/` |
+  | `templates/roadmap-builder.md`, `templates/PMO-CONTRACT.md` | `pm/roadmap/` |
+  | `agent/dw-*.md` | `.claude/commands/` |
+  | `install.sh`, `update.sh`, `bootstrap/*.sh` | (executed, not vendored) |
+
+  Because the payload mirrors the source layout and the shell
+  scripts locate everything relative to `SOURCE_DIR` (their own
+  directory, resolved physically), `install.sh` and `update.sh` run
+  unmodified from inside the installed package — the packaged and
+  checkout paths are the same code taking the same relative turns.
+- **Entry points:** a single console script, `dw`, bound to a small
+  launcher module (`dw_pmo.launcher:main`) that implements the
+  defer-to-repo rule, dispatches the bootstrap verbs to the payload
+  scripts, and otherwise delegates to the packaged `bin/dw` for the
+  roadmap commands (useful outside adopted repos, e.g. `dw
+  --version`). No second console script: `dw-workbench` and the
+  work-log helpers are repo-scoped tools that arrive via vendoring.
+- **Runtime dependencies: none.** The stdlib-only, python ≥ 3.9
+  floor is a distribution feature; `install_requires` stays empty
+  and CI's `python-floor` job remains the proof.
+- **What does not ship here:** the Claude Code plugin (`plugin/`)
+  distributes through the plugin marketplace; the roadmap tree,
+  docs, demos, and CI of this repository are not payload.
+
+## Version and upgrade flow
+
+`dw_pmo.__version__` remains the single version source. Surfaces
+that repeat it — `dw --version`, the plugin manifest, CHANGELOG,
+`pyproject.toml`, the Homebrew formula — are held equal by the
+version-parity unit test, which grows with each new surface.
+
+Upgrades flow one direction: **source → package → per-repo
+snapshot.** A new release produces new artifacts; `dw update
+<repo>` (the packaged `update.sh`) refreshes the vendored rails;
+the repo's own gate then certifies the refresh commit like any
+other change. Consumer roadmap content (`pm/roadmap/<slug>/`),
+`pre-commit.config`, and `pre-commit.local` are never touched by
+updates — that contract predates this phase and WLA-9-03 proves it
+against real v1.5.0 rails.
+
+## Channels (v1)
+
+1. **pipx / pip** — canonical build: `pipx run build` (sdist +
+   wheel); canonical install: `pipx install <artifact-or-source-dir>`.
+   Network at build time may fetch the build backend only; runtime
+   installs nothing. Verified on this machine: pipx 1.11.1, brew
+   python 3.14, PyPI reachable; the system interpreter has no
+   `setuptools`, so builds rely on isolation (or `pipx run build`)
+   rather than `--no-build-isolation`.
+2. **Homebrew** — a formula tracked in this repository
+   (`Formula/delivery-workbench.rb`) as the source of truth for a
+   future public tap, proven locally via a throwaway tap and a
+   `file://` artifact URL with computed sha256 (WLA-9-04).
+
+**Explicitly out:** PyPI publication and a public
+`homebrew-tap` repository (credentials and new public surfaces —
+user decisions; the artifacts from this phase make each a
+one-command follow-up), `curl | sh` installers (unauditable by
+design, contrary to the framework's evidence-first posture), OS
+packages, and bottles.
+
+## Proof obligations
+
+- `tests/package-smoke.sh` — build artifacts, `pipx install` from
+  the local artifact, bootstrap a fixture repo to doctor-green with
+  no checkout present, prove the defer-to-repo rule (WLA-9-02).
+- `tests/upgrade-path.sh` — adopt from the real `v1.5.0` tag,
+  upgrade, byte-compare protected content, `dw verify` over the
+  mixed-version history, gated commit after refresh (WLA-9-03).
+- `tests/brew-formula-smoke.sh` — local-tap install, version truth,
+  graceful skip where brew is absent (WLA-9-04).
+- Version parity — the existing unit test extended to
+  `pyproject.toml` and the formula (WLA-9-02/04/05).
