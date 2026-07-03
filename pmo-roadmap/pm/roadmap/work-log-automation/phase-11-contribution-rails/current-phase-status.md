@@ -43,16 +43,13 @@ Extend the gate's guarantees to work that arrives by pull request: a contributio
 | WLA-11-01 | Define the contribution contract | done | [story-01-define-the-contribution-contract](./story-01-define-the-contribution-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-11-02 | Prove the contributor flow end-to-end | done | [story-02-prove-the-contributor-flow-end-to-end](./story-02-prove-the-contributor-flow-end-to-end.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-11-03 | Enforce merge policy and rewrite the contributor docs | done | [story-03-enforce-merge-policy-and-rewrite-the-contributor-docs](./story-03-enforce-merge-policy-and-rewrite-the-contributor-docs.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-11-04 | Release v1.8.0 | backlog | [story-04-release-v1-8-0](./story-04-release-v1-8-0.md) | - |
+| WLA-11-04 | Release v1.8.0 | done | [story-04-release-v1-8-0](./story-04-release-v1-8-0.md) | [evidence-story-04](./evidence-story-04.md) |
 
 ## Where we are
 
-WLA-11-03 shipped: the repo is rebase-only (squash and merge-commit
-disabled, before/after captured), CONTRIBUTING walks the whole loop
-including the PR section in the plain register with its CI-executed
-snippets intact, and the PR template asks for story, evidence, and
-the range verify. Remaining: WLA-11-04 releases v1.8.0 — expected
-to be the first fully automatic PyPI publication.
+All four stories shipped and the phase is closed: the fork boundary
+is contracted, proven, enforced, and documented, and v1.8.0 carries
+it with version parity across every surface.
 
 ## Active risks
 

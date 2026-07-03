@@ -7,6 +7,27 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## v1.8.0 — 2026-07-03
+
+The gate's guarantees now survive the pull-request boundary: what a
+fork can carry, what a merge can corrupt, and what the repository
+now refuses to let happen.
+
+### Phase 11 — Contribution Rails ([final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-11-contribution-rails/final-summary.md))
+
+`docs/contribution-rails.md` classifies every guarantee across the
+fork boundary: structural rules stay mechanically verified by the
+required PR-range check, contract facts and certification remain
+attestations anchored by the digest trailer. The
+`contributor-flow.sh` suite proves the green path (gated branch,
+PR-range verify, rebase merge, main verification green with
+rewritten SHAs) and demonstrates both squash corruption modes with
+exact rule ids — including the finding that the local gate itself
+refuses a two-flip squash before the verifier ever sees it. The
+repository is now rebase-merge only, CONTRIBUTING walks the whole
+fork-to-merged loop in plain language, and the PR template asks for
+the story, the evidence, and a green range verify.
+
 ## v1.7.0 — 2026-07-03
 
 Agents get a first-class programmatic surface: the rails now speak

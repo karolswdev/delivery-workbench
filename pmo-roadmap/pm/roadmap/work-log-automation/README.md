@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
 **Last updated:** 2026-07-03.
-**Current phase:** [Phase 11 - Contribution Rails](./phase-11-contribution-rails/current-phase-status.md).
-**Status:** active — framework shipped through v1.7.0 (phases 0-10); Phase 11 extends the gate's guarantees to work arriving by pull request.
+**Current phase:** n/a.
+**Status:** active — framework shipped through v1.8.0 (phases 0-11); the gate's guarantees hold locally, remotely, across distribution channels, for agents, and across the pull-request boundary.
 
 ## Vision
 
@@ -66,7 +66,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 8 | Make the gate's guarantees hold beyond the local clone: a range verifier that re-checks gate rules over pushed commits, CI wiring that enforces it on every PR, and a real external adoption exercising the rails end-to-end with friction folded back into the framework. | done | [phase-8-remote-verification-and-adoption](./phase-8-remote-verification-and-adoption/) |
 | 9 | Make Delivery Workbench installable without cloning this repository: a distribution design contract, a pipx-installable package exposing the bootstrap commands, a proven consumer upgrade path from v1.5.0 rails, a Homebrew formula served from a local tap, and a v1.6.0 release that ships it all. | done | [phase-9-distribution-and-installability](./phase-9-distribution-and-installability/) |
 | 10 | Give agents a first-class programmatic surface: a stdlib-only MCP stdio server exposing the dw core as structured JSON tools — orientation, verification, and guarded mutations, never certification — vendored and wired like every other rail, proven against a real client session, and shipped as v1.7.0. | done | [phase-10-agent-interface](./phase-10-agent-interface/) |
-| 11 | Extend the gate's guarantees to work that arrives by pull request: a contribution contract defining how gated commits travel through forks and merges, an end-to-end contributor-flow proof with red paths for the merge methods that would corrupt the audit trail, repository enforcement and plain-language contributor docs, and a v1.8.0 release. | not-started | [phase-11-contribution-rails](./phase-11-contribution-rails/) |
+| 11 | Extend the gate's guarantees to work that arrives by pull request: a contribution contract defining how gated commits travel through forks and merges, an end-to-end contributor-flow proof with red paths for the merge methods that would corrupt the audit trail, repository enforcement and plain-language contributor docs, and a v1.8.0 release. | done | [phase-11-contribution-rails](./phase-11-contribution-rails/) |
 
 ## Operating cadence
 
@@ -99,12 +99,12 @@ behavior is:
 
 ## Active extension
 
-Phase 11 (Contribution Rails) is the open phase: a contribution
-contract for what survives the fork boundary, an end-to-end
-contributor-flow proof with squash-corruption red paths, rebase-only
-enforcement with rewritten contributor docs, and the v1.8.0 release.
-See
-[phase-11-contribution-rails](./phase-11-contribution-rails/current-phase-status.md).
+No phase is open. Phase 11 (Contribution Rails) shipped: the
+contribution contract classifies what survives the fork boundary,
+contributor-flow.sh proved the rebase green path and both squash
+corruption modes with exact rule ids, the repository is rebase-merge
+only, and the contributor docs walk the loop in plain language. See
+[phase-11-contribution-rails/final-summary.md](./phase-11-contribution-rails/final-summary.md).
 
 Phase 10 (Agent Interface) shipped: `dw-mcp`, a
 stdlib-only MCP stdio server, exposes nine tools as thin adapters
