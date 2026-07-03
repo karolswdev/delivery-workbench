@@ -170,6 +170,79 @@ def _tool_gate(root: Path, args: dict) -> tuple[str, dict]:
     return text, structured
 
 
+def _tool_story_status(root: Path, args: dict) -> tuple[str, dict]:
+    from .mutations import apply_plan, plan_story_status
+    from .parse import get_phase, get_project
+
+    project = get_project(root, args["project"])
+    phase = get_phase(project, str(args["phase"]))
+    plan = plan_story_status(root, project, phase, str(args["story"]), args["status"])
+    apply_plan(plan, validate_after=False)
+    summary = dict(plan.summary)
+    text = f"{summary['story_id']}\t{summary['status']}\t{summary['story_path']}"
+    return text, summary
+
+
+def _tool_evidence_capture(root: Path, args: dict) -> tuple[str, dict]:
+    from .evidence import run_capture
+    from .parse import get_phase, get_project
+
+    command = args["command"]
+    if not isinstance(command, list) or not command or not all(
+        isinstance(part, str) for part in command
+    ):
+        raise DwError("command must be a non-empty array of strings")
+    project = get_project(root, args["project"])
+    phase = get_phase(project, str(args["phase"]))
+    exit_code, evidence_path, timestamp = run_capture(
+        root, project, phase, str(args["story"]), list(command)
+    )
+    try:
+        shown = str(evidence_path.relative_to(root))
+    except ValueError:
+        shown = str(evidence_path)
+    text = f"{shown}\t{exit_code}\t{timestamp}"
+    return text, {
+        "evidence_path": shown,
+        "exit_code": exit_code,
+        "timestamp": timestamp,
+        "tests_capture_ref": f"{shown}#{timestamp}",
+    }
+
+
+def _tool_contract_new(root: Path, args: dict) -> tuple[str, dict]:
+    from .contract import parse_contract_facts, write_contract
+    from .paths import read_text
+
+    story_ids: list[str] = []
+    for raw in args.get("story") or []:
+        story_ids.extend(part.strip() for part in raw.split(",") if part.strip())
+    path = write_contract(
+        root,
+        story_ids=story_ids or None,
+        consent=args.get("consent", "no"),
+        reasons=list(args.get("reasons") or []) or None,
+        force=bool(args.get("force")),
+        tests_capture=args.get("tests_capture"),
+        tier=args.get("tier", "auto"),
+    )
+    facts = parse_contract_facts(read_text(path)) or {}
+    text = (
+        f".tmp/CONTRACT.md\t{facts.get('index_tree', 'unknown')}\t{facts.get('story', 'none')}\n"
+        "Facts stamped. Certification is a deliberate act: verify each rule, then edit "
+        ".tmp/CONTRACT.md and flip every '- [ ]' to '- [x]' yourself — no tool does this. "
+        "Restaging invalidates the contract (regenerate with force=true)."
+    )
+    structured = {
+        "contract_path": ".tmp/CONTRACT.md",
+        "index_tree": facts.get("index_tree"),
+        "story": facts.get("story"),
+        "tier": facts.get("tier"),
+        "certification": "manual-edit-only",
+    }
+    return text, structured
+
+
 _PROJECT_PROP = {"type": "string", "description": "Project slug (optional when the repo has exactly one project)"}
 
 TOOLS: dict[str, dict] = {
@@ -243,6 +316,79 @@ TOOLS: dict[str, dict] = {
         ),
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "handler": _tool_gate,
+    },
+    "dw_story_status": {
+        "description": (
+            "Transactionally update a story's header status and the phase table "
+            "(refuses done without evidence, exactly like the CLI). Adapter over "
+            "dw_pmo.mutations.plan_story_status + apply_plan."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project slug"},
+                "phase": {"type": ["string", "integer"], "description": "Phase number or folder name"},
+                "story": {"type": ["string", "integer"], "description": "Story id, number, or filename"},
+                "status": {
+                    "type": "string",
+                    "description": "backlog | ready | in-progress | blocked | done (synonyms complete/closed/shipped)",
+                },
+            },
+            "required": ["project", "phase", "story", "status"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_story_status,
+    },
+    "dw_evidence_capture": {
+        "description": (
+            "Run a command and record it (command, exit code, index tree, output) "
+            "into the story's evidence file — evidence comes from real runs. "
+            "Adapter over dw_pmo.evidence.run_capture."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project slug"},
+                "phase": {"type": ["string", "integer"], "description": "Phase number or folder name"},
+                "story": {"type": ["string", "integer"], "description": "Story id, number, or filename"},
+                "command": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "description": "Command argv to execute (no shell)",
+                },
+            },
+            "required": ["project", "phase", "story", "command"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_evidence_capture,
+    },
+    "dw_contract_new": {
+        "description": (
+            "Generate .tmp/CONTRACT.md with stamped, gate-verified facts. "
+            "Certification stays a deliberate manual edit — no tool flips the "
+            "boxes. Adapter over dw_pmo.contract.build_contract/write_contract."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "story": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Story IDs to declare (default: auto-detect flipped stories)",
+                },
+                "consent": {"type": "string", "enum": ["yes", "no"], "description": "Work-log consent"},
+                "reasons": {"type": "array", "items": {"type": "string"}, "description": "Work-log reasons"},
+                "tests_capture": {
+                    "type": "string",
+                    "description": "Evidence capture reference <path>[#timestamp] to discharge the Tests-ran rule mechanically",
+                },
+                "tier": {"type": "string", "enum": ["auto", "full", "short"], "description": "Contract tier"},
+                "force": {"type": "boolean", "description": "Replace an existing contract"},
+            },
+            "additionalProperties": False,
+        },
+        "handler": _tool_contract_new,
     },
 }
 

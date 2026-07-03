@@ -47,18 +47,19 @@ Give agents a first-class programmatic surface: a stdlib-only MCP stdio server e
 |---|---|---|---|---|
 | WLA-10-01 | Define the MCP surface contract | done | [story-01-define-the-mcp-surface-contract](./story-01-define-the-mcp-surface-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-10-02 | Implement the stdio MCP server skeleton with orientation tools | done | [story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools](./story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-10-03 | Expose guarded mutation tools | backlog | [story-03-expose-guarded-mutation-tools](./story-03-expose-guarded-mutation-tools.md) | - |
+| WLA-10-03 | Expose guarded mutation tools | done | [story-03-expose-guarded-mutation-tools](./story-03-expose-guarded-mutation-tools.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-10-04 | Vendor and wire the server for repos agents and the plugin | backlog | [story-04-vendor-and-wire-the-server-for-repos-agents-and-the-plugin](./story-04-vendor-and-wire-the-server-for-repos-agents-and-the-plugin.md) | - |
 | WLA-10-05 | Prove the surface end-to-end and release v1.7.0 | backlog | [story-05-prove-the-surface-end-to-end-and-release-v1-7-0](./story-05-prove-the-surface-end-to-end-and-release-v1-7-0.md) | - |
 
 ## Where we are
 
-WLA-10-02 shipped: dw-mcp speaks the pinned stdio subset with the
-six orientation/verification tools as thin core adapters, proven by
-7 in-process protocol cases and a real subprocess exchange against
-an installed fixture (CLI parity asserted, malformed frames
-survived, no-rails refusal discoverable). Next: WLA-10-03 adds the
-guarded mutation tools.
+WLA-10-03 shipped: the mutation tools are live with CLI-identical
+guardrails — a fixture story walked backlog → done over MCP only,
+the done-without-evidence refusal carries the core's own message,
+byte-parity with a CLI-driven twin holds, and the certification
+exclusion is proven mechanically (boxes unchecked, gate still
+blocking). Next: WLA-10-04 vendors and wires the server everywhere
+the rails go.
 
 ## Active risks
 

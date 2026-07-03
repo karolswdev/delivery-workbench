@@ -1818,6 +1818,46 @@ class MCPServerTest(unittest.TestCase):
         self.assertTrue(result["isError"])
         self.assertIn("roadmap project not found", result["content"][0]["text"])
 
+    # -- guarded mutations ---------------------------------------------------
+
+    def test_story_status_refusal_matches_core(self) -> None:
+        # DM-1-02 has no evidence: done must be refused with the same
+        # message the core raises for the CLI.
+        result = self.call(
+            "dw_story_status",
+            {"project": "demo", "phase": "1", "story": "2", "status": "done"},
+        )
+        self.assertTrue(result["isError"])
+        project = core.get_project(self.root, "demo")
+        phase = core.get_phase(project, "1")
+        try:
+            core.plan_story_status(self.root, project, phase, "2", "done")
+            self.fail("core unexpectedly allowed done without evidence")
+        except DwError as exc:
+            self.assertEqual(result["content"][0]["text"], f"dw: {exc.args[0]}")
+
+    def test_story_status_flip_writes_what_the_core_writes(self) -> None:
+        result = self.call(
+            "dw_story_status",
+            {"project": "demo", "phase": 1, "story": 2, "status": "in-progress"},
+        )
+        self.assertNotIn("isError", result)
+        self.assertEqual(result["structuredContent"]["status"], "in-progress")
+        story = (self.root / "pm" / "roadmap" / "demo" / "phase-1-alpha" / "story-02-second.md").read_text(encoding="utf-8")
+        self.assertIn("- **Status:** in-progress", story)
+        table = (self.root / "pm" / "roadmap" / "demo" / "phase-1-alpha" / "current-phase-status.md").read_text(encoding="utf-8")
+        self.assertIn("| DM-1-02 | Second thing | in-progress |", table)
+
+    def test_mutation_tools_require_their_params(self) -> None:
+        result = self.call("dw_story_status", {"project": "demo"})
+        self.assertTrue(result["isError"])
+        self.assertIn("missing required parameter", result["content"][0]["text"])
+        result = self.call(
+            "dw_evidence_capture",
+            {"project": "demo", "phase": 1, "story": 2, "command": []},
+        )
+        self.assertTrue(result["isError"])
+
 
 class LauncherTest(unittest.TestCase):
     """Global dw launcher: payload resolution and the defer rule inputs."""

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MCP server smoke (WLA-10-02).
+# MCP server smoke (WLA-10-02 protocol + orientation; WLA-10-03 mutations).
 #
 # Spawns the real dw-mcp subprocess against a freshly installed
 # fixture repo and drives a full client exchange over stdio:
@@ -62,9 +62,17 @@ cat > "$PHASE/current-phase-status.md" <<'EOF'
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | DM-1-01 | Thing 1 | backlog | [story-01-thing-1](./story-01-thing-1.md) | - |
+| DM-1-02 | Thing 2 | backlog | [story-02-thing-2](./story-02-thing-2.md) | - |
 EOF
 cat > "$PHASE/story-01-thing-1.md" <<'EOF'
 # DM-1-01 - Thing 1
+
+- **Project:** demo
+- **Phase:** 1
+- **Status:** backlog
+EOF
+cat > "$PHASE/story-02-thing-2.md" <<'EOF'
+# DM-1-02 - Thing 2
 
 - **Project:** demo
 - **Phase:** 1
@@ -196,5 +204,114 @@ text = result["content"][0]["text"]
 assert "no Delivery Workbench rails" in text and "dw install" in text, text
 print("no-rails refusal: ok")
 PYEOF
+
+# ── mutation walk: backlog → in-progress → capture → done, MCP only ─
+python3 - "$DWMCP" "$REPO" <<'PYEOF' || fail "mutation walk failed"
+import json
+import subprocess
+import sys
+
+dwmcp, repo = sys.argv[1], sys.argv[2]
+
+def exchange(msgs):
+    proc = subprocess.Popen(
+        ["python3", dwmcp, "--root", repo],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, cwd=repo, text=True,
+    )
+    inp = "\n".join(json.dumps(m) for m in msgs) + "\n"
+    out, _ = proc.communicate(inp, timeout=120)
+    return {json.loads(l)["id"]: json.loads(l) for l in out.strip().splitlines() if json.loads(l).get("id") is not None}
+
+init = {"jsonrpc": "2.0", "id": 0, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                   "clientInfo": {"name": "smoke", "version": "0"}}}
+
+def call(i, name, arguments):
+    return {"jsonrpc": "2.0", "id": i, "method": "tools/call",
+            "params": {"name": name, "arguments": arguments}}
+
+sel = {"project": "demo", "phase": "1", "story": "1"}
+replies = exchange([
+    init,
+    call(1, "dw_story_status", dict(sel, status="in-progress")),
+    call(2, "dw_evidence_capture", dict(sel, command=["echo", "proof-run"])),
+    call(3, "dw_story_status", dict(sel, status="done")),
+    call(4, "dw_story_status", {"project": "demo", "phase": "1", "story": "2", "status": "done"}),
+    call(5, "dw_contract_new", {"force": True}),
+])
+r1 = replies[1]["result"]
+assert not r1.get("isError"), r1
+assert r1["structuredContent"]["status"] == "in-progress", r1
+r2 = replies[2]["result"]
+assert not r2.get("isError"), r2
+assert r2["structuredContent"]["exit_code"] == 0, r2
+assert "#" in r2["structuredContent"]["tests_capture_ref"], r2
+r3 = replies[3]["result"]
+assert not r3.get("isError"), r3
+assert r3["structuredContent"]["status"] == "done", r3
+r4 = replies[4]["result"]
+assert r4.get("isError") is True, r4
+assert "evidence" in r4["content"][0]["text"].lower(), r4
+r5 = replies[5]["result"]
+assert not r5.get("isError"), r5
+assert r5["structuredContent"]["certification"] == "manual-edit-only", r5
+assert "no tool does this" in r5["content"][0]["text"], r5
+print("mutation walk: ok (done-without-evidence refused; contract stamped, certification manual)")
+PYEOF
+
+# The story-02 fixture file was NOT flipped (refusal above); the gate
+# must still block a commit whose contract is uncertified.
+[ -f "$REPO/pm/roadmap/demo/phase-1-alpha/evidence-story-01.md" ] \
+  || fail "MCP capture did not create the evidence file"
+grep -q "proof-run" "$REPO/pm/roadmap/demo/phase-1-alpha/evidence-story-01.md" \
+  || fail "captured output missing from evidence"
+git -C "$REPO" add -A
+if git -C "$REPO" commit -q -m "uncertified attempt" 2>/dev/null; then
+  fail "gate accepted an uncertified commit after MCP mutations — the server granted a shortcut"
+fi
+echo "gate still blocks uncertified commits: ok"
+
+# Certification remains untouched by everything the server did.
+grep -q "^- \[ \]" "$REPO/.tmp/CONTRACT.md" \
+  || fail "contract boxes are not all unchecked — something certified mechanically"
+
+# ── byte-parity vs the CLI driving the same sequence ────────────────
+CLIREPO="$TMP_ROOT/cli-twin"
+mkdir -p "$CLIREPO"
+git -C "$CLIREPO" init -q -b main
+git -C "$CLIREPO" config user.name "MCP Smoke"
+git -C "$CLIREPO" config user.email "mcp-smoke@example.test"
+"$PMO_DIR/install.sh" "$CLIREPO" --skip-bootstrap >/dev/null
+cp -R "$REPO/pm/roadmap/demo" "$CLIREPO/pm/roadmap/" 2>/dev/null || true
+rm -rf "$CLIREPO/pm/roadmap/demo"
+mkdir -p "$CLIREPO/pm/roadmap"
+git -C "$REPO" stash -q 2>/dev/null || true
+git -C "$REPO" stash pop -q 2>/dev/null || true
+# Rebuild the CLI twin from the same scaffold commit content.
+git -C "$REPO" show "HEAD:pm/roadmap/demo/README.md" > /dev/null 2>&1 || true
+cp -R "$REPO/pm/roadmap/demo" "$CLIREPO/pm/roadmap/demo"
+# Reset the twin's roadmap to the pre-walk scaffold state.
+(cd "$CLIREPO/pm/roadmap/demo/phase-1-alpha" \
+  && rm -f evidence-story-01.md \
+  && sed -i.bak "s/^- \*\*Status:\*\* done/- **Status:** backlog/" story-01-thing-1.md \
+  && sed -i.bak "s/| DM-1-01 | Thing 1 | done |/| DM-1-01 | Thing 1 | backlog |/" current-phase-status.md \
+  && rm -f ./*.bak)
+(cd "$CLIREPO" \
+  && ./.githooks/dw story status demo 1 1 in-progress >/dev/null \
+  && ./.githooks/dw evidence capture demo 1 1 -- echo proof-run >/dev/null \
+  && ./.githooks/dw story status demo 1 1 "done" >/dev/null) \
+  || fail "CLI twin sequence failed"
+normalize() {
+  sed -e "s/Captured run — .*/Captured run — TS/" \
+      -e "s/\*\*Date:\*\* .*/**Date:** D/" \
+      -e "s/\*\*Index-tree:\*\* .*/**Index-tree:** T/" \
+      -e "s/\*\*Last updated:\*\* .*/**Last updated:** D/" "$1"
+}
+for f in story-01-thing-1.md current-phase-status.md evidence-story-01.md; do
+  diff <(normalize "$REPO/pm/roadmap/demo/phase-1-alpha/$f") \
+       <(normalize "$CLIREPO/pm/roadmap/demo/phase-1-alpha/$f") \
+    || fail "MCP and CLI diverge on $f"
+done
+echo "MCP/CLI byte-parity (timestamps normalized): ok"
 
 echo "mcp-server.sh: ok"
