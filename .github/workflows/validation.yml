@@ -29,6 +29,17 @@ jobs:
         # docs/remote-verification.md.
         run: python3 pmo-roadmap/bin/dw verify --all
 
+  package-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build, install, bootstrap a fixture from the package
+        # Proves the distribution contract: sdist+wheel build, isolated
+        # install (pipx or venv+pip), packaged bootstrap to
+        # doctor-green, defer-to-repo rule. docs/distribution.md.
+        run: pmo-roadmap/tests/package-smoke.sh
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:
@@ -61,6 +72,8 @@ jobs:
             pmo-roadmap/tests/workbench-explorer.sh \
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
+            pmo-roadmap/tests/package-smoke.sh \
+            pmo-roadmap/tests/verify-range.sh \
             pmo-roadmap/tests/docs-lint.sh \
             pmo-roadmap/tests/docs-snippet-smoke.sh \
             demos/scripts/prepare-onboarding-demo.sh \
@@ -116,6 +129,8 @@ jobs:
             pmo-roadmap/tests/workbench-explorer.sh \
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
+            pmo-roadmap/tests/package-smoke.sh \
+            pmo-roadmap/tests/verify-range.sh \
             pmo-roadmap/tests/docs-lint.sh \
             pmo-roadmap/tests/docs-snippet-smoke.sh \
             demos/scripts/prepare-onboarding-demo.sh \

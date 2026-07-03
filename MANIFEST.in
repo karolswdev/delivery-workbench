@@ -1,0 +1,13 @@
+# sdist must carry everything the build_py payload hook copies, so a
+# wheel built from the sdist is identical to one built from the repo.
+graft pmo-roadmap/hooks
+graft pmo-roadmap/bin
+graft pmo-roadmap/lib
+graft pmo-roadmap/templates
+graft pmo-roadmap/workbench
+graft pmo-roadmap/bootstrap
+graft pmo-roadmap/agent
+include pmo-roadmap/install.sh
+include pmo-roadmap/update.sh
+include LICENSE
+global-exclude __pycache__/* *.pyc

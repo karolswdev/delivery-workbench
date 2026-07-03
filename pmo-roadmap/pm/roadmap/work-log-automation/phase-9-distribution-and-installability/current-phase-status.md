@@ -44,18 +44,22 @@ Make Delivery Workbench installable without cloning this repository: a distribut
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-9-01 | Define the distribution contract | done | [story-01-define-the-distribution-contract](./story-01-define-the-distribution-contract.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-9-02 | Package the framework for pipx | backlog | [story-02-package-the-framework-for-pipx](./story-02-package-the-framework-for-pipx.md) | - |
+| WLA-9-02 | Package the framework for pipx | done | [story-02-package-the-framework-for-pipx](./story-02-package-the-framework-for-pipx.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-9-03 | Prove the consumer upgrade path | backlog | [story-03-prove-the-consumer-upgrade-path](./story-03-prove-the-consumer-upgrade-path.md) | - |
 | WLA-9-04 | Author a Homebrew formula on a local tap | backlog | [story-04-author-a-homebrew-formula-on-a-local-tap](./story-04-author-a-homebrew-formula-on-a-local-tap.md) | - |
 | WLA-9-05 | Release v1.6.0 | backlog | [story-05-release-v1-6-0](./story-05-release-v1-6-0.md) | - |
 
 ## Where we are
 
-WLA-9-01 shipped: `docs/distribution.md` locks the vendored-rails
-invariant, the defer-to-repo rule, the `dw_pmo/_payload/` layout
-(one script, two homes), and the v1 channels, with every install.sh
-copy source cross-checked into the doc. Next: WLA-9-02 packaging;
-03 and 04 then run as parallel tracks into the 05 release.
+WLA-9-02 shipped: the framework builds as delivery-workbench
+(sdist+wheel, 55-file payload), installs into an isolated env, and
+bootstraps a fixture repo to doctor-green from outside the checkout;
+the defer-to-repo rule is proven by test and the launcher/pyproject
+carry unit coverage. Discovered en route: this machine's brew python
+3.14 has a broken pyexpat, so pipx is unusable locally — the smoke
+probes interpreter health and falls back to venv+pip. Next: WLA-9-03
+(upgrade path) and WLA-9-04 (Homebrew) in parallel, then the 05
+release.
 
 ## Active risks
 

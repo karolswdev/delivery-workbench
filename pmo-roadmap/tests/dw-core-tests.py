@@ -956,6 +956,16 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(m.group(1), core.__version__,
                          "CHANGELOG.md release heading must track dw_pmo.__version__ (the single source)")
 
+    def test_pyproject_version_single_source_and_entry_point(self) -> None:
+        # pyproject carries no literal version: it must derive it from
+        # dw_pmo.__version__ so the single source stays single.
+        text = self._repo_file("pyproject.toml")
+        self.assertIn('version = { attr = "dw_pmo.__version__" }', text)
+        self.assertIn('name = "delivery-workbench"', text)
+        self.assertIn('dw = "dw_pmo.launcher:main"', text)
+        self.assertIn("dependencies = []", text,
+                      "runtime must stay stdlib-only (distribution contract)")
+
     def test_plugin_version_single_source(self) -> None:
         import json
         manifest = json.loads(self._repo_file("plugin/.claude-plugin/plugin.json"))
@@ -1699,6 +1709,49 @@ class DocsLintTest(unittest.TestCase):
         self.write("bad.md", "# B\n\n<!-- snippet: orphan -->\n\nprose, no fence\n")
         with self.assertRaises(SystemExit):
             self.docslint.extract_snippets(self.tmp)
+
+
+class LauncherTest(unittest.TestCase):
+    """Global dw launcher: payload resolution and the defer rule inputs."""
+
+    def setUp(self) -> None:
+        from dw_pmo import launcher
+        self.launcher = launcher
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-launcher-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_payload_dir_resolves_checkout_layout(self) -> None:
+        payload = self.launcher.payload_dir()
+        self.assertIsNotNone(payload, "checkout layout must resolve")
+        self.assertTrue((payload / "install.sh").is_file())
+        for script in self.launcher.BOOTSTRAP_VERBS.values():
+            self.assertTrue((payload / script).is_file(), script)
+
+    def test_repo_dw_found_only_in_adopted_repos(self) -> None:
+        import subprocess
+        repo = self.tmp / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        self.assertIsNone(self.launcher.repo_dw(repo), "no rails yet")
+        hooks = repo / ".githooks"
+        hooks.mkdir()
+        (hooks / "dw").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        found = self.launcher.repo_dw(repo)
+        self.assertIsNotNone(found)
+        self.assertEqual(found.name, "dw")
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        self.assertIsNone(self.launcher.repo_dw(outside))
+
+    def test_vendored_version_parses_init(self) -> None:
+        hooks = self.tmp / ".githooks"
+        (hooks / "dw_pmo").mkdir(parents=True)
+        (hooks / "dw").write_text("", encoding="utf-8")
+        (hooks / "dw_pmo" / "__init__.py").write_text(
+            '__version__ = "0.0.1-test"\n', encoding="utf-8"
+        )
+        self.assertEqual(self.launcher.vendored_version(hooks / "dw"), "0.0.1-test")
+        self.assertIsNone(self.launcher.vendored_version(self.tmp / "nope"))
 
 
 class VerifyTest(unittest.TestCase):
