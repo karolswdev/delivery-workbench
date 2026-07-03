@@ -41,19 +41,18 @@ Extend the gate's guarantees to work that arrives by pull request: a contributio
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-11-01 | Define the contribution contract | done | [story-01-define-the-contribution-contract](./story-01-define-the-contribution-contract.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-11-02 | Prove the contributor flow end-to-end | backlog | [story-02-prove-the-contributor-flow-end-to-end](./story-02-prove-the-contributor-flow-end-to-end.md) | - |
+| WLA-11-02 | Prove the contributor flow end-to-end | done | [story-02-prove-the-contributor-flow-end-to-end](./story-02-prove-the-contributor-flow-end-to-end.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-11-03 | Enforce merge policy and rewrite the contributor docs | backlog | [story-03-enforce-merge-policy-and-rewrite-the-contributor-docs](./story-03-enforce-merge-policy-and-rewrite-the-contributor-docs.md) | - |
 | WLA-11-04 | Release v1.8.0 | backlog | [story-04-release-v1-8-0](./story-04-release-v1-8-0.md) | - |
 
 ## Where we are
 
-WLA-11-01 shipped: `docs/contribution-rails.md` classifies every
-guarantee across the fork boundary, writes out both squash failure
-modes, and locks rebase-only plus one-story-per-PR. The rule ids it
-cites are cross-checked against the verifier source, and the
-pre-enforcement settings baseline is captured. Next: WLA-11-02
-demonstrates the failure narratives in a fixture before WLA-11-03
-removes the buttons.
+WLA-11-02 shipped: contributor-flow.sh proves the green rebase path
+end to end and both squash failure modes land with exactly the rule
+ids the design doc predicts — with the bonus finding that the local
+gate itself refuses the two-flip squash before the verifier ever
+sees it. No core changes were needed. Next: WLA-11-03 removes the
+squash and merge-commit buttons and rewrites the contributor docs.
 
 ## Active risks
 

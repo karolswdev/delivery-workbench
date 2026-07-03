@@ -88,8 +88,10 @@ visible in the PR range like everything else.
 
 ## What contributors need
 
-Rails travel with the repo, so a clone of an adopted repository
-already gates commits; contributors install nothing except
+Rails travel with the repo: a clone of an adopted repository
+carries the hooks and CLI under `.githooks/`, and one command
+activates them (`git config core.hooksPath .githooks`; `dw doctor`
+confirms the wiring). Contributors install nothing except
 optionally the global toolchain (`pipx install delivery-workbench`
 or the Homebrew tap) for the bootstrap verbs. Contributors without
 working rails cannot produce the trailers, and their roadmap

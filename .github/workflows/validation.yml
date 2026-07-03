@@ -78,6 +78,7 @@ jobs:
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
             pmo-roadmap/tests/mcp-server.sh \
+            pmo-roadmap/tests/contributor-flow.sh \
             pmo-roadmap/tests/package-smoke.sh \
             pmo-roadmap/tests/brew-formula-smoke.sh \
             pmo-roadmap/tests/upgrade-path.sh \
@@ -138,6 +139,7 @@ jobs:
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
             pmo-roadmap/tests/mcp-server.sh \
+            pmo-roadmap/tests/contributor-flow.sh \
             pmo-roadmap/tests/package-smoke.sh \
             pmo-roadmap/tests/brew-formula-smoke.sh \
             pmo-roadmap/tests/upgrade-path.sh \
@@ -187,6 +189,9 @@ jobs:
 
       - name: MCP server integration test
         run: pmo-roadmap/tests/mcp-server.sh
+
+      - name: Contributor flow integration test
+        run: pmo-roadmap/tests/contributor-flow.sh
 
       - name: Claude Code plugin validation
         run: pmo-roadmap/tests/plugin-validate.sh
