@@ -116,12 +116,20 @@ against real v1.5.0 rails.
    future public tap, proven locally via a throwaway tap and a
    `file://` artifact URL with computed sha256 (WLA-9-04).
 
-**Explicitly out:** PyPI publication and a public
-`homebrew-tap` repository (credentials and new public surfaces —
-user decisions; the artifacts from this phase make each a
-one-command follow-up), `curl | sh` installers (unauditable by
-design, contrary to the framework's evidence-first posture), OS
-packages, and bottles.
+**Explicitly out:** `curl | sh` installers (unauditable by design,
+contrary to the framework's evidence-first posture), OS packages,
+and bottles.
+
+Publication status (updated post-phase, 2026-07-03): the public tap
+(`karolswdev/homebrew-tap`) is live and the GitHub Release serves
+the artifacts the formula names. PyPI publishing is wired as
+`.github/workflows/release.yml` using Trusted Publishing (OIDC — no
+token stored in the repo): it re-verifies the history, re-runs the
+package smoke, builds, and publishes on every published GitHub
+Release. It activates once the one-time publisher registration
+exists on pypi.org (project `delivery-workbench` → Publishing → add
+GitHub publisher: owner `karolswdev`, repo `delivery-workbench`,
+workflow `release.yml`, environment `pypi`).
 
 ## Proof obligations
 

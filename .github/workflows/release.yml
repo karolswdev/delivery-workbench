@@ -1,0 +1,66 @@
+name: release
+
+# Publishes delivery-workbench to PyPI when a GitHub Release is
+# published (or on manual dispatch). Uses PyPI Trusted Publishing
+# (OIDC) — no long-lived token lives in this repository. One-time
+# activation on pypi.org: project "delivery-workbench" → Publishing →
+# add GitHub publisher (owner karolswdev, repo delivery-workbench,
+# workflow release.yml, environment pypi). Until that registration
+# exists, this workflow's publish step fails with a clear OIDC error
+# and nothing else is affected.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # dw verify refuses shallow clones; the release build first
+          # re-verifies the history it is about to publish.
+          fetch-depth: 0
+
+      - name: Verify the history being released
+        run: python3 pmo-roadmap/bin/dw verify --all
+
+      - name: Version surfaces agree
+        run: python3 pmo-roadmap/tests/dw-core-tests.py DwCoreTest
+
+      - name: Build sdist and wheel
+        run: |
+          python3 -m pip install --upgrade build
+          python3 -m build --outdir dist
+
+      - name: Smoke the built artifacts
+        run: pmo-roadmap/tests/package-smoke.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # OIDC token for PyPI Trusted Publishing.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
