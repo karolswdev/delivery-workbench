@@ -38,7 +38,7 @@ Make the gate's guarantees hold beyond the local clone: a range verifier that re
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-8-01 | Define the remote verification contract | backlog | [story-01-define-the-remote-verification-contract](./story-01-define-the-remote-verification-contract.md) | - |
+| WLA-8-01 | Define the remote verification contract | done | [story-01-define-the-remote-verification-contract](./story-01-define-the-remote-verification-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-8-02 | Implement dw verify for commit ranges | backlog | [story-02-implement-dw-verify-for-commit-ranges](./story-02-implement-dw-verify-for-commit-ranges.md) | - |
 | WLA-8-03 | Wire remote verification into CI | backlog | [story-03-wire-remote-verification-into-ci](./story-03-wire-remote-verification-into-ci.md) | - |
 | WLA-8-04 | Adopt Delivery Workbench in an external repository | backlog | [story-04-adopt-delivery-workbench-in-an-external-repository](./story-04-adopt-delivery-workbench-in-an-external-repository.md) | - |
@@ -46,9 +46,12 @@ Make the gate's guarantees hold beyond the local clone: a range verifier that re
 
 ## Where we are
 
-Phase scaffolded with full story specs. WLA-8-01 (design contract)
-is the entry point; WLA-8-04 (external adoption) is independent and
-can run in parallel with the verification thread.
+WLA-8-01 shipped: `docs/remote-verification.md` classifies all gate
+rule ids for remote verifiability, specifies the `dw verify` CLI, and
+locks the `PMO-Bundle:` trailer, local-only-archives, and epoch
+decisions, kept honest by the doc-parity test. Next: WLA-8-02
+implements the verifier; WLA-8-04 (external adoption) remains
+independently startable.
 
 ## Active risks
 
@@ -63,8 +66,11 @@ can run in parallel with the verification thread.
 - 2026-07-03 - Phase scaffolded with `dw phase create` - keeps roadmap structure consistent - CLI.
 - 2026-07-03 - Verification thread (01→02→03) and adoption thread (04→05) run as parallel tracks - shortens the phase without coupling unrelated work - roadmap design.
 - 2026-07-03 - Pre-receive enforcement is out of scope - GitHub-hosted repos cannot run server hooks; CI is the enforcement point - constraint.
+- 2026-07-03 - Bundle rationale becomes a `PMO-Bundle:` trailer stamped by commit-msg when BUNDLE-OK authorizes a multi-flip - makes atomicity fully re-derivable remotely; no multi-flip commits predate it, so history stays compatible - WLA-8-01 (`docs/remote-verification.md`).
+- 2026-07-03 - Contract archives stay local-only in v1 - the remotely-valuable facts are structural and already in the tree; publishing full contract text adds noise for marginal gain - WLA-8-01 (`docs/remote-verification.md`).
+- 2026-07-03 - Verification epoch is auto-detected as the first digest-trailer commit (`faa7de6` here), pinnable via `--epoch`/`PMO_VERIFY_EPOCH`; per-sha exception lists rejected - policy in configuration, mechanism in the verifier - WLA-8-01.
 
 ## Decisions deferred
 
-- Whether contract archives become remotely portable (notes ref or tracked dir) - trigger: WLA-8-01 design analysis - default is local-only.
-- Bundle rationale visibility (`PMO-Bundle:` trailer vs. flagged multi-flips) - trigger: WLA-8-01 - default is flag-and-explain.
+- Whether contract archives become remotely portable (notes ref or tracked dir) - trigger: a multi-machine audit requirement materializes - default is local-only (decided for v1 in WLA-8-01).
+- Evidence-run presence as a remote rule (flip must ship an exit-0 captured run) - trigger: after WLA-8-02 lands and pre-capture epochs are understood - default is not-in-v1.
