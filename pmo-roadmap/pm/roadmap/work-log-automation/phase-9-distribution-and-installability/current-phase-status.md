@@ -51,11 +51,17 @@ Make Delivery Workbench installable without cloning this repository: a distribut
 
 ## Where we are
 
-All five stories shipped and the phase is closed: the framework is
-installable without cloning (pipx + Homebrew from a local tap), the
-upgrade path is proven from real v1.5.0 rails, and v1.6.0 is tagged
-with every version surface under parity tests. Publication (PyPI,
-public tap, pushes) remains a set of one-command user follow-ups.
+Shipped AND published (2026-07-03, user-authorized): main and the
+v1.6.0 tag pushed; CI fully green on the release head including the
+first real verify-history sweep and both distribution smokes (one
+shellcheck round-trip: the runner caught findings in scripts added
+to its list retroactively — fixed in `b12deb6`); the GitHub Release
+serves wheel + sdist (hash-verified); the formula carries the
+published artifact's real sha256; the public tap
+`karolswdev/homebrew-tap` is live and `brew install
+delivery-workbench` was proven on a real machine against the real
+release artifact. Remaining publication: PyPI only (no credentials
+on this machine).
 
 ## Active risks
 
@@ -79,5 +85,5 @@ public tap, pushes) remains a set of one-command user follow-ups.
 
 ## Decisions deferred
 
-- PyPI project registration and public tap repository - trigger: user decides to publish v1.6.0 - default is local artifacts only.
+- PyPI project registration - trigger: user provides a PyPI token - default is GitHub Release artifacts only (the public tap shipped 2026-07-03 with user authorization; PyPI remains the one unpublished channel).
 - Bottles / prebuilt binaries - trigger: measurable install friction from source builds - default is none.
