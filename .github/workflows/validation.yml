@@ -47,7 +47,9 @@ jobs:
             pmo-roadmap/tests/plugin-validate.sh \
             demos/scripts/prepare-onboarding-demo.sh \
             demos/scripts/prepare-commit-demo.sh \
-            demos/scripts/write-demo-contract.sh
+            demos/scripts/write-demo-contract.sh \
+            demos/scripts/capture-workbench-demo.sh \
+            demos/scripts/render-social-preview.sh
 
   python-floor:
     runs-on: ubuntu-latest
@@ -98,7 +100,9 @@ jobs:
             pmo-roadmap/tests/plugin-validate.sh \
             demos/scripts/prepare-onboarding-demo.sh \
             demos/scripts/prepare-commit-demo.sh \
-            demos/scripts/write-demo-contract.sh
+            demos/scripts/write-demo-contract.sh \
+            demos/scripts/capture-workbench-demo.sh \
+            demos/scripts/render-social-preview.sh
 
       - name: Python syntax check
         run: |
@@ -142,3 +146,8 @@ jobs:
         run: |
           demos/scripts/prepare-onboarding-demo.sh
           demos/scripts/prepare-commit-demo.sh
+
+      - name: Asset capture smoke (skips without Firefox/ImageMagick)
+        run: |
+          demos/scripts/capture-workbench-demo.sh --smoke
+          demos/scripts/render-social-preview.sh --smoke

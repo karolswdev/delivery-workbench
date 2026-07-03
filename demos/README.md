@@ -1,27 +1,32 @@
-# Terminal Demos
+# Demos
 
-These tapes are Charm VHS sources for repository demos. They require the `vhs`
-CLI from Charmbracelet.
+Every rendered demo in this repository is regenerated from current
+sources by a checked-in script — assets are documentation and get the
+same treatment as code.
 
-- `onboarding.vhs` shows guided session intake followed by adoption prompt
-  generation.
-- `commit-gate.vhs` shows the commit hook blocking a missing contract, then
-  accepting a fresh contract and appending a consented work-log entry.
+| Asset | Shows | Regenerate with |
+|---|---|---|
+| `rendered/onboarding.gif` | guided session intake, then adoption prompt generation | `vhs demos/onboarding.vhs` |
+| `rendered/commit-gate.gif` | the commit hook blocking a missing contract, then accepting a certified one and appending a consented work-log entry | `vhs demos/commit-gate.vhs` |
+| `rendered/workbench-tour.gif` | the workbench web view: overview → project → health → trace → guarded editor → preview/diff | `demos/scripts/capture-workbench-demo.sh` |
 
-Render them from the repository root:
+The terminal tapes are Charm VHS sources and require the `vhs` CLI;
+run them from the repository root. Their helper scripts
+(`scripts/prepare-*.sh`) build throwaway repositories under `/tmp` and
+never touch the current checkout. The workbench tour needs Firefox and
+ImageMagick: it drives a fixture roadmap through `bin/dw`, serves it
+with `bin/dw-workbench`, and screenshots the live UI headlessly — the
+same script also produces the README stills under
+[`assets/`](../assets/). `--smoke` runs the full capture into a temp
+directory (used by CI; skips cleanly when the tools are absent).
 
-```bash
-vhs demos/onboarding.vhs
-vhs demos/commit-gate.vhs
-```
+## Rendered assets
 
-## Rendered Assets
+![Terminal recording of the onboarding flow: session-intake asks its guided questions, then adopt-project generates the adoption prompt and session intake file](./rendered/onboarding.gif)
 
-![Onboarding demo](./rendered/onboarding.gif)
+![Terminal recording of the commit gate: a commit without a contract is blocked with the failing rule, then a certified contract lets it pass and a consented work-log entry is appended](./rendered/commit-gate.gif)
 
-![Commit-gate demo](./rendered/commit-gate.gif)
+![Animated tour of the workbench web view stepping through project overview, health console, intent-to-proof trace, and the guarded editor's preview and diff](./rendered/workbench-tour.gif)
 
-The GIF outputs are written to `demos/rendered/`. The helper scripts create
-throwaway repositories under `/tmp` and do not touch the current checkout.
-Only the published demo GIFs are tracked; other generated files in
+Only the published GIFs above are tracked; other generated files in
 `demos/rendered/` stay ignored.
