@@ -1,6 +1,6 @@
 ---
 name: delivery-workbench
-description: Operate a Delivery Workbench repository — evidence-first Markdown roadmaps with a machine-verified commit gate. Use when the repo has a pm/roadmap/ tree and .githooks/dw, when a commit is blocked by the PMO gate, or when asked to work, prove, or ship roadmap stories.
+description: Operate a Delivery Workbench repository — evidence-first Markdown roadmaps with a machine-verified commit gate, plus the dw-mcp server exposing the same operations as MCP tools. Use when the repo has a pm/roadmap/ tree and .githooks/dw, when a commit is blocked by the PMO gate, when dw_* MCP tools are available, or when asked to work, prove, or ship roadmap stories.
 ---
 
 # Operating Delivery Workbench
@@ -62,11 +62,6 @@ appears or disappears orphaned. Preflight any time with
 `.githooks/dw verify [<base>..<head> | --all]` re-derives the
 structural rules from pushed history alone — audit any range,
 no local contract needed.
-`.githooks/dw-mcp` serves the same core as MCP tools
-(dw_context, dw_next, dw_check, dw_verify, dw_story_status,
-dw_evidence_capture, ...) over stdio for MCP-capable agents —
-wired via `.mcp.json`; certification is never a tool call
-(`docs/mcp.md`).
 
 **Never use `--no-verify`.** When blocked, read the banner — it names
 the failed rule id and the remediation, and includes the exact
@@ -74,6 +69,17 @@ contract template to regenerate. Fix what it names, re-run
 `dw contract new --force`, re-certify, and commit again. If the rules
 themselves seem wrong for the work, stop and raise it with the user
 rather than bypassing.
+
+## MCP tools
+
+MCP-capable agents: prefer the MCP tools over shelling out —
+`.githooks/dw-mcp` (wired via `.mcp.json`) serves the same core as
+structured tools with identical refusals: orientation (`dw_context`,
+`dw_next`, `dw_check`, `dw_doctor`), verification (`dw_verify`,
+`dw_gate`), guarded mutations (`dw_story_status`,
+`dw_evidence_capture`, `dw_contract_new`). Certification is never a
+tool call: flipping contract boxes stays a manual, deliberate edit
+(see `docs/mcp.md` in the framework repo).
 
 ## Canon
 
@@ -85,7 +91,15 @@ rather than bypassing.
 ## If the repo lacks the rails
 
 The plugin teaches the operating loop; the rails themselves are
-per-repository. If `pm/roadmap/` or `.githooks/dw` is missing, install
-them from https://github.com/karolswdev/delivery-workbench
-(`pmo-roadmap/install.sh /path/to/repo`, or the three-command adoption
-path for running projects — see `/dw-adopt`).
+per-repository. If `pm/roadmap/` or `.githooks/dw` is missing, adopt
+the repo — no clone of the framework needed:
+
+```bash
+brew install karolswdev/tap/delivery-workbench   # or pipx install the
+                                                 # release wheel from GitHub
+dw install /path/to/repo --skip-bootstrap        # rails + MCP server + .mcp.json
+```
+
+For running projects with history, use the three-command adoption
+path instead (see `/dw-adopt`). Source and releases:
+https://github.com/karolswdev/delivery-workbench.
