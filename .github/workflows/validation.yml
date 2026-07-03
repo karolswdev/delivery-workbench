@@ -13,6 +13,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify-history:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # dw verify refuses shallow clones (exit 2): a truncated
+          # history must never verify silently.
+          fetch-depth: 0
+
+      - name: Verify history against the gate's structural rules
+        # Full sweep from the epoch on every push and PR: strictly
+        # stronger than range plumbing, immune to force-push window
+        # edge cases, and runs in seconds. Contract:
+        # docs/remote-verification.md.
+        run: python3 pmo-roadmap/bin/dw verify --all
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:

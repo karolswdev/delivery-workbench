@@ -159,6 +159,39 @@ dw verify [<base>..<head> | --all] [--epoch <rev>] [--porcelain]
   first-parent diffing — a shallow clone must fail loudly, never
   pass silently).
 
+## CI enforcement
+
+The verifier closes the trust gap only where the committer's hooks
+cannot be assumed: in CI, on every push and pull request. This
+repository's `verify-history` job in
+`.github/workflows/validation.yml` is the reference wiring, and
+adopting repositories can copy it verbatim:
+
+```yaml
+verify-history:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v5
+      with:
+        # dw verify refuses shallow clones (exit 2): a truncated
+        # history must never verify silently.
+        fetch-depth: 0
+
+    - name: Verify history against the gate's structural rules
+      run: python3 .githooks/dw verify --all
+```
+
+(In an adopted repository the CLI lives at `.githooks/dw`; this
+repository invokes its source copy at `pmo-roadmap/bin/dw`.)
+
+The job runs the full epoch-to-HEAD sweep on both events rather than
+plumbing per-event ranges: it is strictly stronger, immune to
+force-push window edge cases (`github.event.before` is unreliable
+after history rewrites), and costs seconds at this history's scale.
+To make the verdict blocking, add the job to the branch-protection
+required checks — repository settings, deliberately outside this
+contract's scope.
+
 ## Strengthening options (deliberately not in v1)
 
 - **Evidence-run presence:** flipped stories' evidence files carry

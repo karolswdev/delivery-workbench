@@ -40,20 +40,19 @@ Make the gate's guarantees hold beyond the local clone: a range verifier that re
 |---|---|---|---|---|
 | WLA-8-01 | Define the remote verification contract | done | [story-01-define-the-remote-verification-contract](./story-01-define-the-remote-verification-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-8-02 | Implement dw verify for commit ranges | done | [story-02-implement-dw-verify-for-commit-ranges](./story-02-implement-dw-verify-for-commit-ranges.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-8-03 | Wire remote verification into CI | backlog | [story-03-wire-remote-verification-into-ci](./story-03-wire-remote-verification-into-ci.md) | - |
+| WLA-8-03 | Wire remote verification into CI | done | [story-03-wire-remote-verification-into-ci](./story-03-wire-remote-verification-into-ci.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-8-04 | Adopt Delivery Workbench in an external repository | backlog | [story-04-adopt-delivery-workbench-in-an-external-repository](./story-04-adopt-delivery-workbench-in-an-external-repository.md) | - |
 | WLA-8-05 | Fold adoption friction back into the framework | backlog | [story-05-fold-adoption-friction-back-into-the-framework](./story-05-fold-adoption-friction-back-into-the-framework.md) | - |
 
 ## Where we are
 
-WLA-8-02 shipped: `dw verify` re-derives the structural rules over
-commit ranges (rule ids shared with the gate, epoch scoping, exit
-0/1/2, porcelain), the commit-msg hook stamps `PMO-Bundle:` from
-BUNDLE-OK, and the claim is held by 13 new unit cases plus the
-verify-range.sh fixture suite — the repo's own history verifies
-clean (27 commits, 17 pre-epoch skipped). Next: WLA-8-03 wires the
-verifier into CI; WLA-8-04 (external adoption) remains independently
-startable.
+The verification thread is complete: `dw verify` re-derives the
+structural rules over commit ranges (WLA-8-02), and the
+`verify-history` CI job enforces the full sweep on every push and
+PR, red-path proven against a smuggled `--no-verify` flip
+(WLA-8-03). Remaining: the adoption thread — WLA-8-04 exercises the
+documented adoption path on an external repository, WLA-8-05 folds
+its friction back in.
 
 ## Active risks
 
@@ -71,6 +70,7 @@ startable.
 - 2026-07-03 - Bundle rationale becomes a `PMO-Bundle:` trailer stamped by commit-msg when BUNDLE-OK authorizes a multi-flip - makes atomicity fully re-derivable remotely; no multi-flip commits predate it, so history stays compatible - WLA-8-01 (`docs/remote-verification.md`).
 - 2026-07-03 - Contract archives stay local-only in v1 - the remotely-valuable facts are structural and already in the tree; publishing full contract text adds noise for marginal gain - WLA-8-01 (`docs/remote-verification.md`).
 - 2026-07-03 - Verification epoch is auto-detected as the first digest-trailer commit (`faa7de6` here), pinnable via `--epoch`/`PMO_VERIFY_EPOCH`; per-sha exception lists rejected - policy in configuration, mechanism in the verifier - WLA-8-01.
+- 2026-07-03 - CI runs the full `--all` sweep on both push and PR instead of per-event range plumbing - strictly stronger, immune to force-push `event.before` unreliability, seconds at this scale - WLA-8-03.
 
 ## Decisions deferred
 

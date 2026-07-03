@@ -38,6 +38,10 @@ with `.githooks/dw next`.
 - **A durable audit trail** — every gated commit carries `PMO-Story:`
   and `PMO-Contract-Digest:` trailers, and the exact certified
   contract is archived under `.git/pmo-contract-archive/<sha>`.
+- **History verification** — `dw verify` re-derives the structural
+  rules from pushed commits alone (story flips, evidence pairing,
+  trailers), so CI catches what a bypassed local gate let through;
+  see [docs/remote-verification.md](./docs/remote-verification.md).
 - **The workbench** — a localhost web view (`dw-workbench`): project
   overview, health console, intent-to-proof trace timeline, and a
   guarded editor whose writes go through preview → diff →
