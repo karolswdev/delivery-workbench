@@ -36,12 +36,12 @@ anything, and the block above runs verbatim in CI
 
 ## Validate before and after
 
-The full matrix is the Validation block in the
-[root README](./README.md#validation) — unit suite, eight shell
-suites, plugin validation, docs lint, snippet smoke, shellcheck, and
-`dw check`. CI runs all of it on ubuntu and macos plus a python 3.9
-floor job, but run it locally first; it takes about two minutes and
-failures name their file and rule.
+The suites live in `pmo-roadmap/tests/` (see
+[the root README's Tests section](./README.md#tests)) — unit suite,
+the shell suites, plugin validation, docs lint, snippet smoke,
+shellcheck, and `dw check`. CI runs all of it on ubuntu and macos
+plus a python 3.9 floor job, but run it locally first; it takes a
+few minutes and failures name their file and rule.
 
 ## How a change ships
 
