@@ -49,18 +49,14 @@ Give agents a first-class programmatic surface: a stdlib-only MCP stdio server e
 | WLA-10-02 | Implement the stdio MCP server skeleton with orientation tools | done | [story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools](./story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-10-03 | Expose guarded mutation tools | done | [story-03-expose-guarded-mutation-tools](./story-03-expose-guarded-mutation-tools.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-10-04 | Vendor and wire the server for repos agents and the plugin | done | [story-04-vendor-and-wire-the-server-for-repos-agents-and-the-plugin](./story-04-vendor-and-wire-the-server-for-repos-agents-and-the-plugin.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-10-05 | Prove the surface end-to-end and release v1.7.0 | backlog | [story-05-prove-the-surface-end-to-end-and-release-v1-7-0](./story-05-prove-the-surface-end-to-end-and-release-v1-7-0.md) | - |
+| WLA-10-05 | Prove the surface end-to-end and release v1.7.0 | done | [story-05-prove-the-surface-end-to-end-and-release-v1-7-0](./story-05-prove-the-surface-end-to-end-and-release-v1-7-0.md) | [evidence-story-05](./evidence-story-05.md) |
 
 ## Where we are
 
-WLA-10-04 shipped: dw-mcp is vendored by install.sh and update.sh,
-ships in the package payload and formula by construction (bin/ is
-grafted whole), the append-only `.mcp.json` seam is proven in three
-behaviors (create / append-without-clobber / refuse-unparseable),
-upgrades deliver the server to old rails, the managed block and
-plugin skill teach the surface, and this repository dogfoods its
-own `.mcp.json`. Remaining: WLA-10-05 — the live client proof and
-the v1.7.0 release.
+All five stories shipped and the phase is closed: the MCP surface
+is contracted, implemented, guarded, wired, and proven by a live
+Claude Code session; v1.7.0 carries it with version parity enforced
+across every surface.
 
 ## Active risks
 

@@ -7,6 +7,27 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## v1.7.0 — 2026-07-03
+
+Agents get a first-class programmatic surface: the rails now speak
+MCP natively, with the same guardrails the CLI enforces — and the
+same deliberate refusals.
+
+### Phase 10 — Agent Interface ([final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-10-agent-interface/final-summary.md))
+
+A stdlib-only MCP stdio server (`dw-mcp`, pinned protocol
+2025-06-18) exposes nine tools as thin adapters over the exact core
+functions the CLI calls: orientation (`dw_context`, `dw_next`,
+`dw_check`, `dw_doctor`), verification (`dw_verify`, `dw_gate`),
+and guarded mutations (`dw_story_status`, `dw_evidence_capture`,
+`dw_contract_new`) with CLI-identical refusals proven by parity
+tests. Deliberately absent, enforced by test: no certification tool,
+no commit tool — attestation cannot be mechanized without hollowing
+it out. Vendored by install/update, carried by the package and
+formula, wired through an append-only `.mcp.json` seam, and proven
+by a live Claude Code session driving a story from backlog to done
+over MCP tools alone.
+
 ## v1.6.0 — 2026-07-03
 
 The gate's guarantees now hold beyond the local clone, and the
