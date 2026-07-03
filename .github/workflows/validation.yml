@@ -77,6 +77,7 @@ jobs:
             pmo-roadmap/tests/workbench-explorer.sh \
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
+            pmo-roadmap/tests/mcp-server.sh \
             pmo-roadmap/tests/package-smoke.sh \
             pmo-roadmap/tests/brew-formula-smoke.sh \
             pmo-roadmap/tests/upgrade-path.sh \
@@ -101,7 +102,7 @@ jobs:
       - name: Core compiles and passes on the declared floor
         run: |
           python3 --version
-          python3 -m py_compile pmo-roadmap/bin/dw pmo-roadmap/bin/dw-workbench
+          python3 -m py_compile pmo-roadmap/bin/dw pmo-roadmap/bin/dw-workbench pmo-roadmap/bin/dw-mcp
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
           python3 pmo-roadmap/tests/dw-core-tests.py
 
@@ -136,6 +137,7 @@ jobs:
             pmo-roadmap/tests/workbench-explorer.sh \
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
+            pmo-roadmap/tests/mcp-server.sh \
             pmo-roadmap/tests/package-smoke.sh \
             pmo-roadmap/tests/brew-formula-smoke.sh \
             pmo-roadmap/tests/upgrade-path.sh \
@@ -150,7 +152,7 @@ jobs:
 
       - name: Python syntax check
         run: |
-          python3 -m py_compile pmo-roadmap/bin/dw pmo-roadmap/bin/dw-workbench
+          python3 -m py_compile pmo-roadmap/bin/dw pmo-roadmap/bin/dw-workbench pmo-roadmap/bin/dw-mcp
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
 
       - name: dw core unit tests
@@ -182,6 +184,9 @@ jobs:
 
       - name: Workbench viewport smoke (skips without Firefox)
         run: pmo-roadmap/tests/workbench-ui-smoke.sh
+
+      - name: MCP server integration test
+        run: pmo-roadmap/tests/mcp-server.sh
 
       - name: Claude Code plugin validation
         run: pmo-roadmap/tests/plugin-validate.sh

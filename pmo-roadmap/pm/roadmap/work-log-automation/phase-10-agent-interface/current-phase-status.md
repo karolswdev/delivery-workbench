@@ -46,17 +46,19 @@ Give agents a first-class programmatic surface: a stdlib-only MCP stdio server e
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-10-01 | Define the MCP surface contract | done | [story-01-define-the-mcp-surface-contract](./story-01-define-the-mcp-surface-contract.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-10-02 | Implement the stdio MCP server skeleton with orientation tools | backlog | [story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools](./story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools.md) | - |
+| WLA-10-02 | Implement the stdio MCP server skeleton with orientation tools | done | [story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools](./story-02-implement-the-stdio-mcp-server-skeleton-with-orientation-tools.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-10-03 | Expose guarded mutation tools | backlog | [story-03-expose-guarded-mutation-tools](./story-03-expose-guarded-mutation-tools.md) | - |
 | WLA-10-04 | Vendor and wire the server for repos agents and the plugin | backlog | [story-04-vendor-and-wire-the-server-for-repos-agents-and-the-plugin](./story-04-vendor-and-wire-the-server-for-repos-agents-and-the-plugin.md) | - |
 | WLA-10-05 | Prove the surface end-to-end and release v1.7.0 | backlog | [story-05-prove-the-surface-end-to-end-and-release-v1-7-0](./story-05-prove-the-surface-end-to-end-and-release-v1-7-0.md) | - |
 
 ## Where we are
 
-WLA-10-01 shipped: `docs/mcp.md` locks nine tools mapped one-to-one
-onto core functions, the certify/commit/bundle exclusions as tested
-properties, and the pinned stdio protocol subset. Next: WLA-10-02
-implements the server skeleton with the orientation tools.
+WLA-10-02 shipped: dw-mcp speaks the pinned stdio subset with the
+six orientation/verification tools as thin core adapters, proven by
+7 in-process protocol cases and a real subprocess exchange against
+an installed fixture (CLI parity asserted, malformed frames
+survived, no-rails refusal discoverable). Next: WLA-10-03 adds the
+guarded mutation tools.
 
 ## Active risks
 

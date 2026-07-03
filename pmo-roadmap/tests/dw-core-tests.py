@@ -1718,6 +1718,107 @@ class DocsLintTest(unittest.TestCase):
             self.docslint.extract_snippets(self.tmp)
 
 
+class MCPServerTest(unittest.TestCase):
+    """MCP server: protocol subset, thin-adapter parity, exclusions."""
+
+    def setUp(self) -> None:
+        from dw_pmo import mcpserver
+        self.mcp = mcpserver
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-mcp-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        phase_dir = self.root / "pm" / "roadmap" / "demo" / "phase-1-alpha"
+        phase_dir.mkdir(parents=True)
+        (self.root / "pm" / "roadmap" / "demo" / "README.md").write_text(README, encoding="utf-8")
+        (phase_dir / "current-phase-status.md").write_text(STATUS_FILE, encoding="utf-8")
+        (phase_dir / "story-01-first.md").write_text(
+            STORY_TMPL.format(sid="DM-1-01", title="First thing", status="done"), encoding="utf-8"
+        )
+        (phase_dir / "story-02-second.md").write_text(
+            STORY_TMPL.format(sid="DM-1-02", title="Second thing", status="ready"), encoding="utf-8"
+        )
+        (phase_dir / "evidence-story-01.md").write_text(EVIDENCE_01, encoding="utf-8")
+
+    def rpc(self, method, params=None, req_id=1):
+        msg = {"jsonrpc": "2.0", "id": req_id, "method": method}
+        if params is not None:
+            msg["params"] = params
+        return self.mcp.handle_message(self.root, msg)
+
+    def call(self, name, arguments=None):
+        reply = self.rpc("tools/call", {"name": name, "arguments": arguments or {}})
+        return reply["result"]
+
+    # -- protocol ----------------------------------------------------------
+
+    def test_initialize_pins_protocol_version(self) -> None:
+        result = self.rpc(
+            "initialize", {"protocolVersion": self.mcp.PROTOCOL_VERSION, "capabilities": {}}
+        )["result"]
+        self.assertEqual(result["protocolVersion"], self.mcp.PROTOCOL_VERSION)
+        self.assertEqual(result["capabilities"], {"tools": {}})
+        self.assertEqual(result["serverInfo"]["version"], core.__version__)
+        # Mismatched request → server answers with its pinned version.
+        result = self.rpc("initialize", {"protocolVersion": "1863-01-01"})["result"]
+        self.assertEqual(result["protocolVersion"], self.mcp.PROTOCOL_VERSION)
+
+    def test_notifications_get_no_reply_and_unknown_methods_error(self) -> None:
+        note = self.mcp.handle_message(
+            self.root, {"jsonrpc": "2.0", "method": "notifications/initialized"}
+        )
+        self.assertIsNone(note)
+        reply = self.rpc("resources/list")
+        self.assertEqual(reply["error"]["code"], self.mcp.METHOD_NOT_FOUND)
+        self.assertEqual(self.rpc("ping")["result"], {})
+
+    def test_tools_list_matches_contract_and_excludes_attestation(self) -> None:
+        tools = self.rpc("tools/list")["result"]["tools"]
+        names = [t["name"] for t in tools]
+        for expected in ("dw_context", "dw_next", "dw_check", "dw_doctor", "dw_verify", "dw_gate"):
+            self.assertIn(expected, names)
+        for banned in ("certify", "commit", "bundle"):
+            self.assertFalse(any(banned in n for n in names), names)
+        for tool in tools:
+            self.assertIn("inputSchema", tool)
+            self.assertIn("Adapter over dw_pmo.", tool["description"])
+
+    # -- thin-adapter parity -------------------------------------------------
+
+    def test_check_and_next_agree_with_core(self) -> None:
+        result = self.call("dw_check", {"project": "demo"})
+        self.assertNotIn("isError", result)
+        direct = core.check_project(core.get_project(self.root, "demo"), self.root)
+        self.assertEqual(result["structuredContent"]["issues"], direct)
+        self.assertEqual(result["structuredContent"]["ok"], not direct)
+
+        result = self.call("dw_next", {"project": "demo"})
+        from dw_pmo.api import next_story
+        direct_next = next_story(core.get_project(self.root, "demo"), self.root)
+        self.assertEqual(result["structuredContent"]["next_story"], direct_next)
+        self.assertIn(direct_next["story_id"], result["content"][0]["text"])
+
+    # -- error paths -----------------------------------------------------------
+
+    def test_unknown_tool_and_unknown_params(self) -> None:
+        result = self.call("dw_nonexistent")
+        self.assertTrue(result["isError"])
+        result = self.call("dw_check", {"projekt": "demo"})
+        self.assertTrue(result["isError"])
+        self.assertIn("unknown parameter", result["content"][0]["text"])
+
+    def test_no_rails_is_a_discoverable_refusal(self) -> None:
+        bare = self.tmp / "bare"
+        bare.mkdir()
+        result = self.mcp.call_tool(bare, "dw_check", {})
+        self.assertTrue(result["isError"])
+        self.assertIn("no Delivery Workbench rails", result["content"][0]["text"])
+
+    def test_core_refusal_becomes_tool_error(self) -> None:
+        result = self.call("dw_check", {"project": "nope"})
+        self.assertTrue(result["isError"])
+        self.assertIn("roadmap project not found", result["content"][0]["text"])
+
+
 class LauncherTest(unittest.TestCase):
     """Global dw launcher: payload resolution and the defer rule inputs."""
 
