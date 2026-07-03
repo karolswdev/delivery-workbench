@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-02.
-**Current phase:** n/a.
-**Status:** active — core framework shipped (phases 0-6); Phase 7 makes it teachable.
+**Last updated:** 2026-07-03.
+**Current phase:** [Phase 8 - Remote Verification and Adoption](./phase-8-remote-verification-and-adoption/current-phase-status.md).
+**Status:** active — framework shipped and teachable (phases 0-7, v1.5.0); Phase 8 extends the gate's guarantees beyond the local clone.
 
 ## Vision
 
@@ -63,6 +63,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 5 | Ship the rich PMO Workbench interaction layer on top of the existing agent-safe CLI/core without creating a second source of truth. | done | [phase-5-pmo-workbench-interaction-layer](./phase-5-pmo-workbench-interaction-layer/) |
 | 6 | Harden the agent rails: single machine-checked gate, durable contract audit trail, first-class agent surface, proportionate ceremony, dogfooded on this repo | done | [phase-6-agent-rails-hardening](./phase-6-agent-rails-hardening/) |
 | 7 | Make the framework teachable: audited docs, a Claude Code plugin, first-class assets, and OSS-grade repo hygiene with a versioned release. | done | [phase-7-documentation-mastery](./phase-7-documentation-mastery/) |
+| 8 | Make the gate's guarantees hold beyond the local clone: a range verifier that re-checks gate rules over pushed commits, CI wiring that enforces it on every PR, and a real external adoption exercising the rails end-to-end with friction folded back into the framework. | not-started | [phase-8-remote-verification-and-adoption](./phase-8-remote-verification-and-adoption/) |
 
 ## Operating cadence
 
@@ -95,12 +96,18 @@ behavior is:
 
 ## Active extension
 
-Phase 7 (Documentation Mastery) is the open phase: audit-first
-documentation overhaul, a Claude Code plugin packaging the agent
-surface, reproducible visual assets, docs CI, and OSS release
-preparation ending in a versioned v1.x release. The phase was created
-through the workbench's own mutation workflow — see
-[phase-7-documentation-mastery](./phase-7-documentation-mastery/current-phase-status.md).
+Phase 8 (Remote Verification and Adoption) is the open phase: a
+design contract for what the gate can re-verify from pushed history
+alone, a `dw verify` range verifier implementing it, CI enforcement
+on every push and PR, and a real external adoption whose friction is
+triaged back into the framework. See
+[phase-8-remote-verification-and-adoption](./phase-8-remote-verification-and-adoption/current-phase-status.md).
+
+Phase 7 (Documentation Mastery) shipped: audit-first documentation
+overhaul, a Claude Code plugin packaging the agent surface,
+reproducible visual assets, docs CI, and OSS release preparation
+ending in the versioned v1.5.0 release. See
+[phase-7-documentation-mastery/final-summary.md](./phase-7-documentation-mastery/final-summary.md).
 
 Phase 5 (PMO Workbench Interaction Layer) shipped: the local
 workbench serves explorer, health console, trace timeline with agent
@@ -122,7 +129,7 @@ python-floor job. See
 Future work remains possible around default-on policy, richer
 redaction, remote sync, hosted collaboration, and DOM-level UI tests —
 each parked deliberately in the phase final summaries. Any of it would
-open as a new phase through the same gate that shipped these seven.
+open as a new phase through the same gate that shipped the ones above.
 
 ## Project metadata
 
