@@ -191,6 +191,7 @@ trailers and an archived contract, the full history passing
 - [Framework README](./pmo-roadmap/README.md): install, update, adopt, operate
 - [The contract rules](./pmo-roadmap/templates/PMO-CONTRACT.md)
 - [Remote verification design](./docs/remote-verification.md)
+- [Contribution rails](./docs/contribution-rails.md): what survives a pull request
 - [MCP surface design](./docs/mcp.md)
 - [Distribution design](./docs/distribution.md)
 - [Contributing](./CONTRIBUTING.md) and [changelog](./CHANGELOG.md)
