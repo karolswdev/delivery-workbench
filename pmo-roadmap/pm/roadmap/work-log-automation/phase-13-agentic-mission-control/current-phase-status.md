@@ -24,11 +24,16 @@ consumes only what this phase exposes.
   built on HoldSpeak's existing agent-session registry; an
   append-only event log of rail happenings; an end-to-end proof
   with a real Desk driving a real approval through the Phase 12
-  actuator — including the gate refusing one.
+  actuator — including the gate refusing one; and a Telegram
+  mission-control client (`KarolDeliveryWorkbenchBot`) consuming
+  the same substrate — state, agent Q&A relay, approval-gated
+  steering, read-only tmux previews (WLA-13-06).
 - **Out:** HoldSpeak UI code, the conveyor's visual/gamified
   design, and any Desk object type (all counterpart-phase work in
   the HoldSpeak repo); actuator verbs beyond Phase 12's two;
-  machine certification of contracts (canon: never); the parked
+  machine certification of contracts (canon: never); credentials
+  in the repo (bot tokens live in untracked `~/.config` files or
+  env vars — the repo is public and history is forever); the parked
   candidates (multi-project dashboard, announcement post, HTTP/SSE
   MCP transport) stay parked.
 
@@ -50,6 +55,10 @@ consumes only what this phase exposes.
   flips a story through the Phase 12 actuator, and a gate refusal
   surfaces as a first-class event — all evidence-captured
   (WLA-13-05).
+- [ ] The Telegram bot reports state and events, relays an agent
+  question and its answer, executes an approved flip, relays a
+  gate refusal into chat, and refuses to steer an unarmed session
+  — all evidence-captured (WLA-13-06).
 
 ## Story status
 
@@ -60,6 +69,7 @@ consumes only what this phase exposes.
 | WLA-13-03 | Correlate live agent sessions to stories | backlog | [story-03-correlate-live-agent-sessions-to-stories](./story-03-correlate-live-agent-sessions-to-stories.md) | - |
 | WLA-13-04 | Emit the events worth showing | backlog | [story-04-emit-the-events-worth-showing](./story-04-emit-the-events-worth-showing.md) | - |
 | WLA-13-05 | Prove mission control end-to-end with the Desk | backlog | [story-05-prove-mission-control-end-to-end-with-the-desk](./story-05-prove-mission-control-end-to-end-with-the-desk.md) | - |
+| WLA-13-06 | Prove mission control from Telegram | backlog | [story-06-telegram-mission-control](./story-06-telegram-mission-control.md) | - |
 
 ## Where we are
 
@@ -87,6 +97,9 @@ scaffold-grade on purpose and say so.
 - 2026-07-03 - Scaffolded mid-Phase-12 rather than widening Phase 12; Phase 12 scope untouched - Karol.
 - 2026-07-03 - Split ownership: DW exposes state/events/verbs, HoldSpeak owns the conveyor UI (web + iOS) as a counterpart phase in its own repo - Karol + agent.
 - 2026-07-03 - Steering stays within Phase 12's actuator envelope: two verbs, propose-approve-execute, gate always final, certification human, always - canon.
+- 2026-07-04 - Telegram joins the phase as a second mission-control client (WLA-13-06), same substrate as the Desk; bot identity `KarolDeliveryWorkbenchBot` - Karol.
+- 2026-07-04 - Bot credentials never enter the repo, bogus or real: token provisioned at `~/.config/delivery-workbench/telegram.json` (untracked, chmod 600), env override; CI greps the repo clean - Karol + agent.
+- 2026-07-04 - tmux `send-keys` steering is the program's sharpest edge: per-session visible expiring arming, proposal-preview-approval per act, default off; WLA-13-01 designs the envelope before any implementation - Karol + agent.
 
 ## Decisions deferred
 
