@@ -87,10 +87,13 @@ field their hook already resolves:
 1. For each registry record: `repo_root` names a directory that is
    a rails repo (has `pm/roadmap/` and `.githooks/dw`) → join to
    that repo's in-progress stories from the feed.
-2. Exactly one in-progress story → the session is *on* it. More
-   than one → all listed, `ambiguous: true` (unknown beats
-   guessed). None → `idle_on_rails`. `repo_root` not a rails repo
-   → `off_rails`.
+2. Exactly one in-progress story → `on_story`. More than one →
+   `ambiguous`, all listed (unknown beats guessed). None →
+   `idle_on_rails`. `repo_root` not a rails repo → `off_rails`.
+   *(Amended by WLA-13-03:)* rails markers present but the roadmap
+   unparseable → `unreadable`, a fifth outcome implementation
+   surfaced — a repo we cannot read is not "off the rails," and
+   guessing either way would lie.
 3. A record whose `updated_at` is older than a staleness TTL
    (decided: 30 minutes) is reported `stale: true`, never dropped
    silently.
@@ -102,6 +105,15 @@ The registry is desk-runtime state on a 0.x project: the
 correlator reads every field defensively with the observed field
 list pinned in its tests, and a shape change is a documented
 compatibility note, not a silent break — the pack precedent.
+
+*(Amended by WLA-13-03, verified live:)* the registry file is
+`{"version": 1, "sessions": {"<agent>:<session_id>": {record}}}` —
+it carries its own version field, and the correlator refuses
+politely on any version it was not proven against. And correlation
+is **its own document** (`dw sessions --json`, `sessions_schema`
+1), not a feed key: the feed is per-repo and frozen; sessions span
+every repo on the desk and carry desk-runtime state. §5 already
+listed them as separate consumables; clients merge them.
 
 ## 3. The event log (implemented by WLA-13-04)
 

@@ -72,7 +72,7 @@ consumes only what this phase exposes.
 |---|---|---|---|---|
 | WLA-13-01 | Design the mission-control contract | done | [story-01-design-the-mission-control-contract](./story-01-design-the-mission-control-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-13-02 | Ship the roadmap state feed | done | [story-02-ship-the-roadmap-state-feed](./story-02-ship-the-roadmap-state-feed.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-13-03 | Correlate live agent sessions to stories | backlog | [story-03-correlate-live-agent-sessions-to-stories](./story-03-correlate-live-agent-sessions-to-stories.md) | - |
+| WLA-13-03 | Correlate live agent sessions to stories | done | [story-03-correlate-live-agent-sessions-to-stories](./story-03-correlate-live-agent-sessions-to-stories.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-13-04 | Emit the events worth showing | backlog | [story-04-emit-the-events-worth-showing](./story-04-emit-the-events-worth-showing.md) | - |
 | WLA-13-05 | Prove mission control end-to-end with the Desk | backlog | [story-05-prove-mission-control-end-to-end-with-the-desk](./story-05-prove-mission-control-end-to-end-with-the-desk.md) | - |
 | WLA-13-06 | Prove mission control from Telegram | backlog | [story-06-telegram-mission-control](./story-06-telegram-mission-control.md) | - |
@@ -94,7 +94,13 @@ feed: `dw state --json` (feed_schema 1, schema-pinned by tests,
 with the §1 schema amended before freezing to carry the full
 `phases` belt data — and both HoldSpeak packs converted from
 context scraping to the feed (0.1.1, live on the desk, 23 pack
-tests green). WLA-13-03 (the correlator) is next.
+tests green). WLA-13-03 then made the goal statement's quoted
+sentence computable: `dw sessions --json` joins the registry
+(read-only, version-pinned, its live format verified) to each
+repo's in-progress stories with five honest outcomes — the fifth,
+`unreadable`, surfaced during implementation — and the live proof
+resolved a real tmux-launched codex session to `on_story
+WSH-1-02` at its exact pane address. WLA-13-04 (events) is next.
 
 ## Active risks
 

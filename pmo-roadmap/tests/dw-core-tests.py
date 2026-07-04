@@ -2214,6 +2214,157 @@ class StateFeedTest(unittest.TestCase):
             self.assertEqual(sorted(reread.keys()), self.TOP_KEYS)
 
 
+class SessionsTest(unittest.TestCase):
+    """WLA-13-03: every correlation outcome has a test and a
+    defined, honest output — unknown beats guessed."""
+
+    SESSION_KEYS = [
+        "agent", "awaiting_response", "correlation", "key",
+        "last_assistant_text", "model", "project_name", "repo_root",
+        "stale", "stories", "tmux", "updated_at",
+    ]
+
+    def setUp(self) -> None:
+        from datetime import datetime, timezone
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = Path(self.tmp.name)
+        self.now = datetime(2026, 7, 4, 12, 0, 0, tzinfo=timezone.utc)
+        self.fresh = "2026-07-04T11:45:00Z"   # 15 min old
+        self.old = "2026-07-04T10:00:00Z"     # 2 h old
+
+    def _rails_repo(self, name: str, statuses: list[str]) -> Path:
+        root = self.base / name
+        project = root / "pm" / "roadmap" / "shop"
+        project.mkdir(parents=True)
+        (root / ".githooks").mkdir()
+        (root / ".githooks" / "dw").write_text("#!/bin/sh\n", encoding="utf-8")
+        rows = "\n".join(
+            f"| SHP-1-{i+1:02d} | Story {i+1} | {status} | "
+            f"[story-{i+1:02d}-x](./story-{i+1:02d}-x.md) | - |"
+            for i, status in enumerate(statuses)
+        )
+        (project / "README.md").write_text(
+            "# Shop - Roadmap\n\n**Last updated:** 2026-07-04.\n"
+            "**Current phase:** n/a.\n**Status:** active.\n\n"
+            "## Phase index\n\n| Phase | Goal (one line) | Status | Folder |\n"
+            "|---|---|---|---|\n"
+            "| 1 | Ship | active | [phase-1-ship](./phase-1-ship) |\n\n"
+            "## Project metadata\n\n- **Slug:** `shop`\n"
+            "- **Story ID prefix:** `SHP`\n",
+            encoding="utf-8",
+        )
+        phase = project / "phase-1-ship"
+        phase.mkdir()
+        (phase / "current-phase-status.md").write_text(
+            "# Phase 1 - Ship\n\n## Story status\n\n"
+            "| ID | Story | Status | Story file | Evidence |\n"
+            "|---|---|---|---|---|\n" + rows + "\n",
+            encoding="utf-8",
+        )
+        return root
+
+    def _registry(self, records: dict) -> Path:
+        path = self.base / "agent_sessions.json"
+        import json as _json
+
+        path.write_text(
+            _json.dumps({"version": 1, "sessions": records}),
+            encoding="utf-8",
+        )
+        return path
+
+    def _record(self, repo: Path | None, **extra) -> dict:
+        base = {
+            "agent": "claude",
+            "session_id": "s-1",
+            "model": "m",
+            "repo_root": str(repo) if repo else "",
+            "project_name": "shop",
+            "awaiting_response": False,
+            "last_assistant_text": None,
+            "tmux_session": None,
+            "tmux_window": None,
+            "tmux_pane": None,
+            "updated_at": self.fresh,
+        }
+        base.update(extra)
+        return base
+
+    def _correlate(self, records: dict) -> list[dict]:
+        from dw_pmo.sessions import correlate_sessions
+
+        doc = correlate_sessions(self._registry(records), now=self.now)
+        self.assertEqual(doc["registry"], "ok")
+        return doc["sessions"]
+
+    def test_all_outcomes(self) -> None:
+        on = self._rails_repo("on", ["in-progress", "done", "backlog"])
+        ambiguous = self._rails_repo("amb", ["in-progress", "in-progress"])
+        idle = self._rails_repo("idle", ["done", "backlog"])
+        off = self.base / "plain"
+        off.mkdir()
+        # Rails markers present, roadmap unparseable: README.md is a
+        # directory, so project discovery raises instead of parsing.
+        unreadable = self.base / "broken"
+        (unreadable / "pm" / "roadmap" / "shop" / "README.md").mkdir(parents=True)
+        (unreadable / ".githooks").mkdir()
+        (unreadable / ".githooks" / "dw").write_text("#!/bin/sh\n", encoding="utf-8")
+
+        sessions = self._correlate(
+            {
+                "claude:on": self._record(on, awaiting_response=True,
+                                          tmux_session="main", tmux_window=1,
+                                          tmux_pane="%3"),
+                "claude:amb": self._record(ambiguous),
+                "claude:idle": self._record(idle),
+                "claude:off": self._record(off),
+                "claude:broken": self._record(unreadable),
+                "claude:stale": self._record(on, updated_at=self.old),
+            }
+        )
+        by_key = {s["key"]: s for s in sessions}
+        self.assertEqual(by_key["claude:on"]["correlation"], "on_story")
+        self.assertEqual(
+            by_key["claude:on"]["stories"][0]["story_id"], "SHP-1-01"
+        )
+        self.assertTrue(by_key["claude:on"]["awaiting_response"])
+        self.assertEqual(
+            by_key["claude:on"]["tmux"],
+            {"session": "main", "window": 1, "pane": "%3"},
+        )
+        self.assertFalse(by_key["claude:on"]["stale"])
+        self.assertEqual(by_key["claude:amb"]["correlation"], "ambiguous")
+        self.assertEqual(len(by_key["claude:amb"]["stories"]), 2)
+        self.assertEqual(by_key["claude:idle"]["correlation"], "idle_on_rails")
+        self.assertEqual(by_key["claude:off"]["correlation"], "off_rails")
+        self.assertEqual(by_key["claude:broken"]["correlation"], "unreadable")
+        self.assertTrue(by_key["claude:stale"]["stale"])
+        for s in sessions:
+            self.assertEqual(sorted(s.keys()), self.SESSION_KEYS)
+
+    def test_registry_failure_shapes(self) -> None:
+        from dw_pmo.sessions import correlate_sessions
+
+        absent = correlate_sessions(self.base / "missing.json", now=self.now)
+        self.assertEqual(absent["registry"], "absent")
+        self.assertEqual(absent["sessions"], [])
+
+        wrong = self.base / "wrong.json"
+        wrong.write_text('{"version": 99, "sessions": {}}', encoding="utf-8")
+        doc = correlate_sessions(wrong, now=self.now)
+        self.assertIn("99", doc["registry"])
+        self.assertEqual(doc["sessions"], [])
+
+        garbage = self.base / "garbage.json"
+        garbage.write_text("not json", encoding="utf-8")
+        self.assertEqual(
+            correlate_sessions(garbage, now=self.now)["registry"],
+            "unreadable",
+        )
+
+
 class RiderDocsTest(unittest.TestCase):
     """WLA-12-04: one canonical brief, rendered per surface, drift is
     a check error."""

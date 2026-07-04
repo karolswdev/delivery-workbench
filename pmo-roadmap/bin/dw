@@ -446,6 +446,30 @@ def command_state(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_sessions(args: argparse.Namespace) -> int:
+    from dw_pmo.sessions import correlate_sessions, render_sessions
+
+    if args.json:
+        print(render_sessions())
+        return 0
+    doc = correlate_sessions()
+    if doc.get("registry") != "ok":
+        print(f"sessions: registry {doc.get('registry')}")
+        return 0 if doc.get("registry") == "absent" else 1
+    for s_ in doc["sessions"]:
+        where = s_["stories"][0]["story_id"] if s_["correlation"] == "on_story" else s_["correlation"]
+        flags = []
+        if s_["awaiting_response"]:
+            flags.append("awaiting-response")
+        if s_["stale"]:
+            flags.append("stale")
+        tmux = s_["tmux"]
+        if tmux:
+            flags.append(f"tmux {tmux['session']}:{tmux['window']}.{tmux['pane']}")
+        print(f"{s_['agent']}\t{where}\t{s_['repo_root'] or '-'}\t{' '.join(flags) or '-'}")
+    return 0
+
+
 def command_rider_docs(args: argparse.Namespace) -> int:
     from dw_pmo.riderdocs import rider_docs_issues, write_rider_docs
 
@@ -519,6 +543,10 @@ def build_parser() -> argparse.ArgumentParser:
     state.add_argument("--json", action="store_true", help="emit the feed_schema JSON document")
     state.add_argument("--write", type=Path, default=None, help="also write the JSON document to this path")
     state.set_defaults(func=command_state)
+
+    sessions = sub.add_parser("sessions", help="correlate live agent sessions to stories (docs/mission-control.md §2)")
+    sessions.add_argument("--json", action="store_true", help="emit the sessions_schema JSON document")
+    sessions.set_defaults(func=command_sessions)
 
     rider = sub.add_parser("rider", help="agent-surface rider tooling (canonical brief renderers)")
     rider_sub = rider.add_subparsers(dest="rider_command", required=True)
