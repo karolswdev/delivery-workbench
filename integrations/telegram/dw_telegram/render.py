@@ -78,7 +78,11 @@ def _session_line(session: dict) -> str:
     return (
         f"{session.get('key')} — {session.get('agent')} — {where}"
         + (f" ({'; '.join(flags)})" if flags else "")
-        + (f"  tmux:{tmux.get('session')}" if tmux.get("session") else "")
+        + (
+            f"  tmux:{tmux.get('session')}"
+            if tmux.get("session")
+            else "  [not steerable — no tmux]"
+        )
     )
 
 
@@ -99,7 +103,11 @@ def render_question(session: dict) -> str:
         f"{agent} on {story} is asking:" if story else f"{agent} is asking:"
     )
     question = str(session.get("last_assistant_text") or "").strip()
-    return clip(
-        f"{heading}\n\n{question}\n\n"
+    tmux = session.get("tmux") or {}
+    hint = (
         f"Reply with: /reply {session.get('key')} <your answer>"
+        if tmux.get("session")
+        else "(not steerable from here — this session is not inside "
+        "tmux; answer it at the desk)"
     )
+    return clip(f"{heading}\n\n{question}\n\n{hint}")

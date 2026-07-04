@@ -314,7 +314,13 @@ class TelegramInterface:
             return
         tmux = session.get("tmux") or {}
         if not tmux.get("session"):
-            self._say(chat_id, f"session {key!r} has no tmux address to steer")
+            self._say(
+                chat_id,
+                f"{key} is not running inside tmux, so there is no pane "
+                "to type into — it can only be answered at the desk. "
+                "Steerable sessions show a tmux address in /sessions; "
+                "/launch <claude|codex|pi> <path> starts one.",
+            )
             return
         pane = tmux.get("pane")
         target = (

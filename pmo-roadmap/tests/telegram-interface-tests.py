@@ -133,6 +133,7 @@ def make_rails_repo(base: Path) -> Path:
 
 
 def make_registry(base: Path, repo: Path, *, awaiting=True) -> Path:
+    now = utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")
     registry = base / "agent_sessions.json"
     registry.write_text(
         json.dumps(
@@ -150,10 +151,19 @@ def make_registry(base: Path, repo: Path, *, awaiting=True) -> Path:
                         "tmux_session": "desk",
                         "tmux_window": 0,
                         "tmux_pane": "%7",
-                        "updated_at": utc_now().strftime(
-                            "%Y-%m-%dT%H:%M:%SZ"
-                        ),
-                    }
+                        "updated_at": now,
+                    },
+                    # A session started in a plain terminal: no tmux
+                    # address, therefore honest but unsteerable.
+                    "claude:bare-term": {
+                        "agent": "claude",
+                        "session_id": "bare-term",
+                        "repo_root": str(repo),
+                        "project_name": "demo",
+                        "awaiting_response": awaiting,
+                        "last_assistant_text": "Ship it?",
+                        "updated_at": now,
+                    },
                 },
             }
         )
@@ -497,6 +507,26 @@ class QARelayTest(InterfaceCase):
             message(OWNER, "/reply claude:sess-1 late answer")
         )
         self.assertIn("Approving also arms", self.last_text())
+
+    def test_reply_to_a_session_outside_tmux_explains_itself(self) -> None:
+        self.iface.handle_update(
+            message(OWNER, "/reply claude:bare-term go ahead")
+        )
+        text = self.last_text()
+        self.assertIn("not running inside tmux", text)
+        self.assertIn("/launch", text)
+        self.assertIsNone(self.transport.sent[-1]["buttons"])
+
+    def test_unsteerable_sessions_are_marked(self) -> None:
+        self.iface.handle_update(message(OWNER, "/sessions"))
+        self.assertIn("[not steerable — no tmux]", self.last_text())
+        self.iface.handle_update(message(OWNER, "/questions"))
+        bare = [
+            t for t in self.sent_texts() if "Ship it?" in t
+        ]
+        self.assertTrue(bare)
+        self.assertIn("answer it at the desk", bare[-1])
+        self.assertNotIn("/reply claude:bare-term", bare[-1])
 
     def test_disarm_and_status(self) -> None:
         self.iface.handle_update(message(OWNER, "/arm desk"))
