@@ -446,6 +446,19 @@ def command_state(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_events(args: argparse.Namespace) -> int:
+    from dw_pmo.events import read_events
+
+    entries = read_events(args.root, tail=args.tail)
+    if args.json:
+        print(json.dumps(entries, sort_keys=True))
+        return 0
+    for entry in entries:
+        detail = " ".join(f"{k}={v}" for k, v in (entry.get("detail") or {}).items() if v is not None)
+        print(f"{entry.get('ts')}\t{entry.get('event')}\t{entry.get('story') or '-'}\t{detail or '-'}")
+    return 0
+
+
 def command_sessions(args: argparse.Namespace) -> int:
     from dw_pmo.sessions import correlate_sessions, render_sessions
 
@@ -543,6 +556,11 @@ def build_parser() -> argparse.ArgumentParser:
     state.add_argument("--json", action="store_true", help="emit the feed_schema JSON document")
     state.add_argument("--write", type=Path, default=None, help="also write the JSON document to this path")
     state.set_defaults(func=command_state)
+
+    events = sub.add_parser("events", help="the rail event log (append-only; docs/mission-control.md §3)")
+    events.add_argument("--tail", type=int, default=None, help="only the last N events")
+    events.add_argument("--json", action="store_true", help="emit events as a JSON array")
+    events.set_defaults(func=command_events)
 
     sessions = sub.add_parser("sessions", help="correlate live agent sessions to stories (docs/mission-control.md §2)")
     sessions.add_argument("--json", action="store_true", help="emit the sessions_schema JSON document")

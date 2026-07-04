@@ -176,6 +176,14 @@ def run_capture(
     else:
         content = render_evidence(row, story_num, block.rstrip("\n"))
 
+    from .events import emit
+
+    emit(
+        root, "evidence_capture", project=project,
+        story=row.story_id,
+        detail={"exit_code": exit_code, "timestamp": timestamp},
+    )
+
     # Deliberately single-file: capture never touches the phase table or
     # any artifact other than the evidence file itself.
     from .mutations import write_changes

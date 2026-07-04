@@ -111,6 +111,27 @@ def run_gate(
     expected_boxes: int | None = None,
     work_log_enabled: bool | None = None,
 ) -> GateResult:
+    result = _run_gate_inner(root, expected_boxes, work_log_enabled)
+    from .events import emit
+
+    if result.ok:
+        emit(
+            root, "gate_pass",
+            detail={"stories": ", ".join(result.shipped_stories) or None},
+        )
+    else:
+        emit(
+            root, "gate_refusal",
+            detail={"rule": result.failure.rule if result.failure else None},
+        )
+    return result
+
+
+def _run_gate_inner(
+    root: Path,
+    expected_boxes: int | None = None,
+    work_log_enabled: bool | None = None,
+) -> GateResult:
     if expected_boxes is None:
         raw = config_value(root, "EXPECTED_BOXES") or os.environ.get("EXPECTED_BOXES") or "7"
         try:

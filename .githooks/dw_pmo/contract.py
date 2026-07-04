@@ -368,6 +368,12 @@ def write_contract(
         die(f"contract already exists; pass --force to replace: {CONTRACT_REL}")
     path.parent.mkdir(parents=True, exist_ok=True)
     write_text(path, build_contract(root, story_ids, consent, reasons, tests_capture, tier))
+    from .events import emit
+
+    emit(
+        root, "contract_generated",
+        detail={"stories": ", ".join(story_ids or []) or None},
+    )
     return path
 
 

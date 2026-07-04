@@ -73,7 +73,7 @@ consumes only what this phase exposes.
 | WLA-13-01 | Design the mission-control contract | done | [story-01-design-the-mission-control-contract](./story-01-design-the-mission-control-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-13-02 | Ship the roadmap state feed | done | [story-02-ship-the-roadmap-state-feed](./story-02-ship-the-roadmap-state-feed.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-13-03 | Correlate live agent sessions to stories | done | [story-03-correlate-live-agent-sessions-to-stories](./story-03-correlate-live-agent-sessions-to-stories.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-13-04 | Emit the events worth showing | backlog | [story-04-emit-the-events-worth-showing](./story-04-emit-the-events-worth-showing.md) | - |
+| WLA-13-04 | Emit the events worth showing | done | [story-04-emit-the-events-worth-showing](./story-04-emit-the-events-worth-showing.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-13-05 | Prove mission control end-to-end with the Desk | backlog | [story-05-prove-mission-control-end-to-end-with-the-desk](./story-05-prove-mission-control-end-to-end-with-the-desk.md) | - |
 | WLA-13-06 | Prove mission control from Telegram | backlog | [story-06-telegram-mission-control](./story-06-telegram-mission-control.md) | - |
 
@@ -100,7 +100,16 @@ sentence computable: `dw sessions --json` joins the registry
 repo's in-progress stories with five honest outcomes — the fifth,
 `unreadable`, surfaced during implementation — and the live proof
 resolved a real tmux-launched codex session to `on_story
-WSH-1-02` at its exact pane address. WLA-13-04 (events) is next.
+WSH-1-02` at its exact pane address. WLA-13-04 then gave the rails a
+narrator: seven event types, append-only JSONL beside the contract
+archive, emitted from the four chokepoints every path passes
+through, with the consent stance enforced as code (whitelisted
+keys, scalars only, truncation — the audit test smuggles nothing)
+and telemetry that never outranks the rails. The log recorded its
+own story flipping done. The substrate is complete: feed,
+correlation, events. The two windows remain — WLA-13-05 (Desk)
+needs the counterpart phase; WLA-13-06 (the Telegram interface)
+is next on this side.
 
 ## Active risks
 
@@ -128,4 +137,4 @@ WSH-1-02` at its exact pane address. WLA-13-04 (events) is next.
 - Feed transport - resolved 2026-07-04 by WLA-13-01: `dw state --json` invocation + `--write` for file-watchers - see docs/mission-control.md §1.
 - Journal continuation - resolved 2026-07-04 by WLA-13-01: continues under the same charter (entry 10 onward) - see docs/mission-control.md §6.
 - Version target (v2.0.0 vs v1.10.0) - decide at phase close by what the feed's stability promise turned out to be.
-- Event log persistence (append-only file vs sqlite) - decide in WLA-13-04 with real volume data.
+- Event log persistence - resolved 2026-07-04 by WLA-13-04: the contract's JSONL file; no volume data argued for more.

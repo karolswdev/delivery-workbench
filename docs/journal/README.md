@@ -54,3 +54,4 @@ read as narrative and audited as history.
 - [Entry 10 — The substrate was already there](./entry-10-the-substrate-was-already-there.md) *(Phase 13 begins; the journal continues by the contract's §6)*
 - [Entry 11 — The first pipe](./entry-11-the-first-pipe.md)
 - [Entry 12 — The sentence becomes computable](./entry-12-the-sentence-becomes-computable.md)
+- [Entry 13 — The rails narrate themselves](./entry-13-the-rails-narrate-themselves.md)

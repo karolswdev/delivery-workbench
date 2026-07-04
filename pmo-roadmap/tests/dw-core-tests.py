@@ -2214,6 +2214,134 @@ class StateFeedTest(unittest.TestCase):
             self.assertEqual(sorted(reread.keys()), self.TOP_KEYS)
 
 
+class EventsTest(unittest.TestCase):
+    """WLA-13-04: every taxonomy event fires at its rail moment; the
+    log is append-only rails metadata that rogue callers cannot
+    pollute."""
+
+    def setUp(self) -> None:
+        import subprocess as sp
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        sp.run(["git", "init", "-q", str(self.root)], check=True,
+               stdin=sp.DEVNULL)
+        project = self.root / "pm" / "roadmap" / "shop"
+        project.mkdir(parents=True)
+        (project / "README.md").write_text(
+            "# Shop - Roadmap\n\n**Last updated:** 2026-07-04.\n"
+            "**Current phase:** n/a.\n**Status:** planning.\n\n"
+            "## Phase index\n\n| Phase | Goal (one line) | Status | Folder |\n"
+            "|---|---|---|---|\n\n## Project metadata\n\n"
+            "- **Slug:** `shop`\n- **Story ID prefix:** `SHP`\n",
+            encoding="utf-8",
+        )
+
+    def _events(self) -> list[dict]:
+        from dw_pmo.events import read_events
+
+        return read_events(self.root)
+
+    def test_rail_moments_emit(self) -> None:
+        from dw_pmo import (
+            apply_plan, get_phase, get_project, plan_phase_create,
+            plan_story_create, plan_story_status, run_capture,
+        )
+        from dw_pmo.contract import write_contract
+
+        project = get_project(self.root, "shop")
+        apply_plan(plan_phase_create(self.root, project, 1, "Ship", goal="g."),
+                   validate_after=False)
+        project = get_project(self.root, "shop")
+        phase = get_phase(project, "1")
+        apply_plan(plan_story_create(self.root, project, phase, "Cart"),
+                   validate_after=False)
+        apply_plan(
+            plan_story_status(self.root, project, phase, "SHP-1-01",
+                              "in-progress"),
+            validate_after=False,
+        )
+        run_capture(self.root, project, phase, "SHP-1-01",
+                    ["sh", "-c", "true"])
+        write_contract(self.root, ["SHP-1-01"])
+
+        events = self._events()
+        kinds = [e["event"] for e in events]
+        self.assertEqual(
+            kinds,
+            ["phase_created", "story_status", "story_status",
+             "evidence_capture", "contract_generated"],
+        )
+        self.assertEqual(events[0]["detail"], {"phase": 1})
+        self.assertEqual(events[1]["detail"], {"from": None, "to": "backlog"})
+        self.assertEqual(
+            events[2]["detail"], {"from": "backlog", "to": "in-progress"}
+        )
+        self.assertEqual(events[3]["detail"]["exit_code"], 0)
+        self.assertEqual(events[4]["detail"], {"stories": "SHP-1-01"})
+        for event in events:
+            self.assertEqual(
+                sorted(event.keys()),
+                ["detail", "event", "project", "story", "story", "tree", "ts"][:0]
+                or ["detail", "event", "project", "story", "tree", "ts"],
+            )
+
+    def test_gate_refusal_carries_its_rule(self) -> None:
+        from dw_pmo import run_gate
+
+        result = run_gate(self.root)
+        events = self._events()
+        self.assertTrue(events, "a gate run must emit")
+        last = events[-1]
+        if result.ok:
+            self.assertEqual(last["event"], "gate_pass")
+        else:
+            self.assertEqual(last["event"], "gate_refusal")
+            self.assertEqual(last["detail"]["rule"], result.failure.rule)
+
+    def test_content_audit_rogue_keys_dropped(self) -> None:
+        from dw_pmo.events import emit
+
+        emit(
+            self.root, "story_status", project="shop", story="SHP-1-01",
+            detail={
+                "from": "backlog", "to": "done",
+                "diff": "secret diff content",
+                "transcript": "what the human typed",
+                "prompt": "x" * 10_000,
+            },
+        )
+        emit(self.root, "not_a_real_event", detail={"anything": "nope"})
+        events = self._events()
+        self.assertEqual(len(events), 1, "unknown event types are dropped")
+        self.assertEqual(
+            sorted(events[0]["detail"].keys()), ["from", "to"],
+            "rogue detail keys must never reach the log",
+        )
+        text = (self.root / ".git" / "pmo-events.jsonl").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("secret diff content", text)
+        self.assertNotIn("what the human typed", text)
+
+    def test_append_only_and_never_raises(self) -> None:
+        from dw_pmo.events import emit, read_events
+
+        emit(self.root, "gate_pass", detail={"stories": None})
+        emit(self.root, "gate_pass", detail={"stories": None})
+        self.assertEqual(len(read_events(self.root)), 2)
+        # a root without .git is a silent no-op, not an error
+        bare = self.root / "nowhere"
+        bare.mkdir()
+        emit(bare, "gate_pass")
+        self.assertEqual(read_events(bare), [])
+        # oversized values are truncated, not rejected
+        emit(self.root, "gate_refusal", detail={"rule": "r" * 5000})
+        last = read_events(self.root)[-1]
+        self.assertEqual(len(last["detail"]["rule"]), 200)
+
+
 class SessionsTest(unittest.TestCase):
     """WLA-13-03: every correlation outcome has a test and a
     defined, honest output — unknown beats guessed."""

@@ -233,6 +233,28 @@ def apply_plan(plan: MutationPlan, validate_after: bool = True) -> dict[str, obj
         project = get_project(plan.root, plan.project_slug)
         issues = check_project(project, plan.root)
 
+    from .events import emit
+
+    summary = plan.summary or {}
+    if plan.kind == "story-status":
+        emit(
+            plan.root, "story_status", project=plan.project_slug,
+            story=summary.get("story_id"),
+            detail={"from": summary.get("previous_status"), "to": summary.get("status")},
+        )
+    elif plan.kind == "story-create":
+        emit(
+            plan.root, "story_status", project=plan.project_slug,
+            story=summary.get("story_id"),
+            detail={"from": None, "to": summary.get("status", "backlog")},
+        )
+    elif plan.kind == "phase-create":
+        emit(plan.root, "phase_created", project=plan.project_slug,
+             detail={"phase": summary.get("phase_number")})
+    elif plan.kind == "phase-close":
+        emit(plan.root, "phase_closed", project=plan.project_slug,
+             detail={"phase": summary.get("phase_number")})
+
     return {
         "kind": plan.kind,
         "project": plan.project_slug,
@@ -272,6 +294,7 @@ def plan_story_status(
     plan.summary = {
         "story_id": row.story_id,
         "status": status,
+        "previous_status": row.status,
         "story_path": rel(story_path, root),
         "evidence_path": rel(evidence_path, root),
     }
