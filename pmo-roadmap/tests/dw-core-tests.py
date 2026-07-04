@@ -92,6 +92,37 @@ commit: 1111111111111111111111111111111111111111
 
 
 class DwCoreTest(unittest.TestCase):
+    def test_missioncontrol_route_serves_the_three_documents(self):
+        # WLA-15-01: the workbench is the fourth consumer of the
+        # mission-control substrate — one read-only GET returning the
+        # feed, the correlation, and the events, via the in-process
+        # API (never re-parsing pm/roadmap in the route).
+        import dw_pmo.workbench as wb
+        status, body = wb.handle_api(self.root, "/api/missioncontrol", {})
+        self.assertEqual(status, 200)
+        data = body["data"]
+        self.assertEqual(data["feed"]["feed_schema"], 1)
+        slugs = [p["slug"] for p in data["feed"]["projects"]]
+        self.assertIn("demo", slugs)
+        self.assertIn("sessions_schema", data["sessions"])
+        self.assertIsInstance(data["events"], list)
+
+    def test_missioncontrol_tail_clamps(self):
+        import dw_pmo.workbench as wb
+        status, body = wb.handle_api(
+            self.root, "/api/missioncontrol", {"tail": ["99999"]}
+        )
+        self.assertEqual(status, 200)  # clamped, not an error
+
+    def test_missioncontrol_has_no_mutation_route(self):
+        # The read-only stance, asserted at the API layer: the
+        # mutation dispatcher refuses any missioncontrol path.
+        import dw_pmo.workbench as wb
+        status, body = wb.handle_mutation(
+            self.root, "/api/missioncontrol", {"anything": 1}
+        )
+        self.assertEqual(status, 405)
+
     def setUp(self) -> None:
         # Resolve like the CLI does (main() resolves --root / find_root
         # output); on macOS mkdtemp returns the /var symlink alias.

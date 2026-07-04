@@ -233,6 +233,27 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
         if parts == ["api", "health"]:
             return 200, envelope(health_report(root, discover_projects(root)))
 
+        if parts == ["api", "missioncontrol"]:
+            # WLA-15-01: the read-only belt — the workbench is the
+            # fourth consumer of the mission-control substrate, via
+            # the in-process API (never re-parsing pm/roadmap here).
+            # GET-only by construction; the web view never mutates.
+            from .events import read_events
+            from .sessions import correlate_sessions
+            from .statefeed import build_state_feed
+
+            try:
+                tail = max(1, min(int(query.get("tail", ["20"])[0]), 100))
+            except ValueError:
+                tail = 20
+            return 200, envelope(
+                {
+                    "feed": build_state_feed(root),
+                    "sessions": correlate_sessions(),
+                    "events": read_events(root, tail=tail),
+                }
+            )
+
         if parts == ["api", "file"]:
             return _contained_read(root, query.get("path", [""])[0])
 

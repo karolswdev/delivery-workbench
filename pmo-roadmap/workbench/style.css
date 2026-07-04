@@ -205,3 +205,30 @@ button.applybtn {
   border-radius: 5px; padding: 8px 16px; font-size: 13px; cursor: pointer; margin-top: 10px;
 }
 button.applybtn:hover { filter: brightness(1.2); }
+
+/* ── mission control: the read-only belt (WLA-15-01) ─────────────── */
+.mc-project { margin: 10px 0 14px; }
+.mc-phases { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.mc-slug { font-weight: 600; margin-right: 10px; }
+.mc-phase {
+  min-width: 22px; text-align: center; padding: 0 4px;
+  border: 1px solid var(--line, #d0d4da); border-radius: 4px;
+  color: var(--muted, #667085); font-family: var(--mono, monospace); font-size: 12px;
+}
+.mc-phase.closed { opacity: 0.45; }
+.mc-phase.current { color: inherit; border-color: currentColor; font-weight: 600; }
+.mc-belt { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px 12px; }
+.mc-story {
+  padding: 1px 9px; border-radius: 999px; font-size: 12px;
+  border: 1px solid var(--line, #d0d4da);
+}
+.mc-story.st-done { border-color: #7dc9a2; }
+.mc-story.st-blocked { border-color: #e5544b; }
+.mc-story.next { border-color: #f2790f; box-shadow: 0 0 6px rgba(242, 121, 15, .35); }
+.mc-warn { color: #b7791f; margin-left: 10px; }
+.mc-session { padding: 3px 0; }
+.mc-session.awaiting { font-weight: 600; }
+.mc-session.stale { opacity: 0.55; }
+.mc-ticker { font-family: var(--mono, monospace); font-size: 12px; }
+.mc-event { padding: 1px 0; color: var(--muted, #667085); white-space: pre-wrap; }
+.mc-event.refusal { color: #c0362c; }

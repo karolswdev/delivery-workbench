@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 15
-- **Status:** ready
+- **Status:** done
 - **Depends on:** Phase 13 (the feed/sessions/events substrate),
   Phase 14 (the message-layer patterns to echo where useful).
 - **Unblocks:** WLA-15-02, WLA-15-03.

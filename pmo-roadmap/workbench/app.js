@@ -94,6 +94,99 @@ function statusCounts(counts) {
   return keys.map((k) => badge(`${k} ${counts[k]}`, k)).join(" ");
 }
 
+/* ── mission control (WLA-15-01): the read-only belt ──────────────
+ * The workbench is the fourth consumer of the mission-control
+ * substrate (feed + sessions + events), read-only by charter — the
+ * picture without the hands. A single-flight 10s poll keeps it live
+ * while the view is open; leaving the view stops the poll. */
+
+let mcPoll = null;
+let mcInFlight = false;
+
+function stopMcPoll() {
+  if (mcPoll) { clearInterval(mcPoll); mcPoll = null; }
+}
+
+function mcBelt(project) {
+  const current = project.current_phase;
+  const beltStories = current
+    ? project.stories.filter((s) => s.phase === current.number) : [];
+  const nextId = project.next_story ? project.next_story.story_id : null;
+  return `
+    <div class="mc-project">
+      <div class="mc-phases">
+        <span class="mc-slug">${esc(project.slug)}</span>
+        ${project.phases.map((ph) => `
+          <span class="mc-phase${ph.status === "closed" ? " closed" : ""}${current && ph.number === current.number ? " current" : ""}"
+                title="${esc(ph.title)} — ${ph.stories_done}/${ph.stories_total}">${ph.number}</span>`).join("")}
+        ${project.warnings ? `<span class="mc-warn">⚠ ${project.warnings}</span>` : ""}
+      </div>
+      <div class="mc-belt">
+        ${beltStories.map((s) => `
+          <span class="mc-story st-${esc(s.status)}${s.story_id === nextId ? " next" : ""}"
+                title="${esc(s.title)} [${esc(s.status)}]${s.evidence_exists ? " ·evidence" : ""}">
+            <a href="#/p/${encodeURIComponent(project.slug)}/s/${encodeURIComponent(s.story_id)}">${esc(s.story_id)}</a>${s.evidence_exists ? " ✓" : ""}
+          </span>`).join("")}
+      </div>
+    </div>`;
+}
+
+function mcSessions(doc) {
+  if (!doc || doc.registry !== "ok") {
+    return `<div class="sub">sessions: registry ${esc(doc ? String(doc.registry) : "unavailable")}</div>`;
+  }
+  if (!doc.sessions.length) return `<div class="sub">no live agent sessions</div>`;
+  return doc.sessions.map((s) => {
+    const where = s.correlation === "on_story" && s.stories.length
+      ? s.stories[0].story_id : s.correlation.replace(/_/g, " ");
+    return `<div class="mc-session${s.awaiting_response ? " awaiting" : ""}${s.stale ? " stale" : ""}">
+      <code>${esc(s.key)}</code> — ${esc(s.agent)} — ${esc(where)}
+      ${s.awaiting_response ? badge("awaiting a response", "warn") : ""}
+      ${s.stale ? badge("stale") : ""}
+    </div>`;
+  }).join("");
+}
+
+function mcEvents(events) {
+  if (!events.length) return `<div class="sub">no rail events yet</div>`;
+  return `<div class="mc-ticker">` + events.slice().reverse().map((e) => {
+    const detail = Object.entries(e.detail || {})
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k, v]) => `${k}=${v}`).join(" ");
+    const refusal = e.event === "gate_refusal";
+    return `<div class="mc-event${refusal ? " refusal" : ""}">
+      ${refusal ? "✕ " : ""}${esc(e.ts || "?")}  ${esc(e.event || "?")}${e.story ? `  ${esc(e.story)}` : ""}${detail ? `  ${esc(detail)}` : ""}
+    </div>`;
+  }).join("") + `</div>`;
+}
+
+async function loadMissionControl() {
+  if (mcInFlight) return; // single-flight: a slow poll skips ticks
+  mcInFlight = true;
+  try {
+    const body = await api("/api/missioncontrol");
+    const data = body.data;
+    const el = document.getElementById("mc-root");
+    if (!el) { stopMcPoll(); return; } // view left; stop polling
+    el.innerHTML = `
+      <div class="section"><h2>the belt</h2>
+        ${data.feed.projects.map(mcBelt).join("") || stateHtml("no projects on the rails here")}
+      </div>
+      <div class="section"><h2>live sessions</h2>${mcSessions(data.sessions)}</div>
+      <div class="section"><h2>rail events</h2>${mcEvents(data.events)}</div>
+      <div class="sub">read-only — the workbench never stages or commits; steering lives on the phone and the Desk.</div>`;
+  } finally {
+    mcInFlight = false;
+  }
+}
+
+async function viewMissionControl() {
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "mission control" }]);
+  app.innerHTML = `<div id="mc-root">${stateHtml("Loading the belt…")}</div>`;
+  await loadMissionControl();
+  mcPoll = setInterval(() => { loadMissionControl().catch(() => {}); }, 10000);
+}
+
 /* ── views ─────────────────────────────────────────────────────────── */
 
 async function viewOverview() {
@@ -590,6 +683,7 @@ async function viewEdit(action) {
 /* ── router ─────────────────────────────────────────────────────────── */
 
 async function route() {
+  stopMcPoll(); // leaving mission control stops its poll
   app.innerHTML = stateHtml("Loading…");
   const hash = decodeURIComponent(location.hash.replace(/^#/, "")) || "/";
   const parts = hash.split("/").filter(Boolean);
@@ -602,6 +696,7 @@ async function route() {
     if (parts[0] === "wl") return await viewWorklog(parts.slice(1).join("/"));
     if (parts[0] === "edit") return await viewEdit(parts[1]);
     if (parts[0] === "health") return await viewHealth();
+    if (parts[0] === "mc") return await viewMissionControl();
     if (parts[0] === "f") return await viewFile(parts.slice(1).join("/"));
     app.innerHTML = stateHtml(`Unknown view: ${hash}`, true);
   } catch (err) {
