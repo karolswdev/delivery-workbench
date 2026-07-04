@@ -461,6 +461,51 @@ Verified operational notes (codex-cli 0.142.4):
   Codex in a fixture repo; the commit carries the standard trailers
   and `dw verify` re-derives it from history alone.
 
+## The pi rider — and any other harness
+
+Shipped by WLA-12-06. In a rails repo:
+
+```sh
+.githooks/dw rider install pi
+```
+
+wires the shared AGENTS.md managed block and the four commands as
+project prompt templates in `.pi/prompts/` (type `/dw-next` in pi's
+editor). The templates are the canon verbatim — pi's format is
+byte-identical to the command-spec format — and they are
+mechanically checked to contain no MCP or Claude references, both
+at install time and in CI. All pi-rendered surfaces live under the
+`dw check` drift rule.
+
+**The shared-file answer** (the matrix's open question, now
+recorded): there is exactly one `AGENTS.md` filename, so one block
+serves every AGENTS.md-reading harness — Codex, pi, and whatever
+arrives next. That is why the agents variant is CLI-first with MCP
+as a single clearly-optional aside. Installing the Codex rider and
+then the pi rider leaves AGENTS.md untouched on the second
+install; test-proven.
+
+**Any other harness.** The pi proof is the reference: the full
+story loop ran under an agent with *nothing but a context file and
+shell access* — no MCP, no slash commands, no plugin system. So
+for a harness this document has never heard of, the recipe is
+three lines:
+
+1. Point the agent at the managed block in `AGENTS.md` (or
+   `CLAUDE.md`) — or paste the block into whatever context file
+   the harness reads; `dw agent-docs` writes it.
+2. Ensure the agent can run shell commands in the repo. The four
+   workflows are plain `dw` invocations with meaningful exit codes
+   (`dw next` exits 0/2/1 for found/none/error; `dw check` and
+   `dw gate` exit non-zero on issues; the commit gate refuses on
+   its own).
+3. Keep certification human-in-the-loop: whoever works the story
+   verifies the contract rules and flips the boxes — no tool does
+   it for them, on any surface, ever.
+
+Everything else — MCP, skills, slash commands, packs — is
+per-surface sugar over that core.
+
 ## Amendments this matrix forces
 
 Recorded here so the risk table's stop signal ("a rider story finds

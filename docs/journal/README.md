@@ -48,3 +48,4 @@ read as narrative and audited as history.
 - [Entry 4 — Two consent systems, stacked](./entry-04-two-consent-systems-stacked.md)
 - [Entry 5 — Parity becomes a property](./entry-05-parity-becomes-a-property.md)
 - [Entry 6 — The other agent rides](./entry-06-the-other-agent-rides.md)
+- [Entry 7 — A context file and a shell](./entry-07-a-context-file-and-a-shell.md)

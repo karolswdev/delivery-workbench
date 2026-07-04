@@ -189,7 +189,7 @@ def write_rider_docs(root: Path) -> list[tuple[Path, str]]:
     from .agentdocs import write_agent_docs
 
     actions: list[tuple[Path, str]] = []
-    for path, expected, _canon in _command_targets(root) + _codex_targets(root):
+    for path, expected, _canon in _command_targets(root) + _codex_targets(root) + _pi_targets(root):
         if not path.exists():
             write_text(path, expected)
             actions.append((path, "created"))
@@ -277,6 +277,72 @@ def install_codex_rider(root: Path) -> dict:
     return {"actions": actions, "mcp_snippet": codex_mcp_snippet(root)}
 
 
+PI_PROMPTS_DIR = ".pi/prompts"
+
+# Strings that must never appear in pi-native rendered files: pi has
+# no MCP by design and no Claude affordances; the purity check is
+# mechanical, per the WLA-12-06 acceptance criteria.
+PI_FORBIDDEN_FRAGMENTS = ("mcp", "MCP", ".claude", "Claude", ".mcp.json")
+
+
+def pi_prompt(name: str) -> str:
+    """One command spec rendered as a pi prompt template.
+
+    pi's template format (frontmatter `description:` + body, filename
+    becomes /name) is byte-identical to the command-spec format, so
+    the rendering is the canon, verbatim — the minimalist surface
+    needs no transformation at all."""
+    return command_spec(name)
+
+
+def pi_purity_violations(text: str) -> list[str]:
+    return [frag for frag in PI_FORBIDDEN_FRAGMENTS if frag in text]
+
+
+def install_pi_rider(root: Path) -> dict:
+    """Wire the pi rider, idempotently: the shared AGENTS.md managed
+    block (agents variant — one file serves every AGENTS.md-reading
+    harness; the shared-file answer is recorded in docs/riders.md)
+    and the four commands as project prompt templates in
+    .pi/prompts/ (pure CLI text, mechanically checked)."""
+    from .agentdocs import write_agent_docs
+
+    actions: list[tuple[Path, str]] = []
+    agents_path, action = write_agent_docs(root, root / "AGENTS.md")
+    actions.append((agents_path, action))
+    prompts_root = root / PI_PROMPTS_DIR
+    prompts_root.mkdir(parents=True, exist_ok=True)
+    for name in COMMAND_NAMES:
+        expected = pi_prompt(name)
+        violations = pi_purity_violations(expected)
+        if violations:
+            raise ValueError(
+                f"pi prompt {name} failed the purity check: {violations}"
+            )
+        target = prompts_root / f"{name}.md"
+        if not target.exists():
+            write_text(target, expected)
+            actions.append((target, "created"))
+        elif read_text(target) != expected:
+            write_text(target, expected)
+            actions.append((target, "refreshed"))
+        else:
+            actions.append((target, "unchanged"))
+    return {"actions": actions}
+
+
+def _pi_targets(root: Path) -> list[tuple[Path, str, str]]:
+    """Rendered pi prompt templates come under the drift rule."""
+    targets: list[tuple[Path, str, str]] = []
+    prompts_root = root / PI_PROMPTS_DIR
+    if not prompts_root.is_dir():
+        return targets
+    for name in COMMAND_NAMES:
+        target = prompts_root / f"{name}.md"
+        targets.append((target, pi_prompt(name), command_canon_label(name)))
+    return targets
+
+
 def _codex_targets(root: Path) -> list[tuple[Path, str, str]]:
     """Rendered Codex skills that exist come under the drift rule."""
     targets: list[tuple[Path, str, str]] = []
@@ -294,7 +360,7 @@ def rider_docs_issues(root: Path) -> list[str]:
     """Drift between rendered copies and canon, as `dw check` issue
     strings (empty when clean)."""
     issues: list[str] = []
-    for path, expected, canon in _command_targets(root) + _codex_targets(root):
+    for path, expected, canon in _command_targets(root) + _codex_targets(root) + _pi_targets(root):
         rel = path.relative_to(root)
         if not path.exists():
             issues.append(f"{rel}: rendered command missing — run dw rider docs (canon: {canon})")

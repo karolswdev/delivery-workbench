@@ -2299,6 +2299,61 @@ class RiderDocsTest(unittest.TestCase):
                 (self.root / ".codex" / "skills" / name / "SKILL.md").exists()
             )
 
+    # -- pi rider (WLA-12-06) ---------------------------------------
+
+    def test_pi_prompt_is_verbatim_canon_and_pure(self) -> None:
+        from dw_pmo import riderdocs
+
+        for name in riderdocs.COMMAND_NAMES:
+            prompt = riderdocs.pi_prompt(name)
+            self.assertEqual(prompt, riderdocs.command_spec(name))
+            self.assertEqual(
+                riderdocs.pi_purity_violations(prompt), [],
+                f"{name} rendered for pi must carry no MCP/Claude-isms",
+            )
+
+    def test_pi_installer_is_idempotent(self) -> None:
+        from dw_pmo import riderdocs
+
+        first = riderdocs.install_pi_rider(self.root)
+        self.assertTrue(
+            any(a in {"created", "added"} for _p, a in first["actions"])
+        )
+        second = riderdocs.install_pi_rider(self.root)
+        self.assertTrue(
+            all(a == "unchanged" for _p, a in second["actions"]),
+            f"second install must be a no-op, got {second['actions']}",
+        )
+        for name in riderdocs.COMMAND_NAMES:
+            self.assertTrue((self.root / ".pi" / "prompts" / f"{name}.md").exists())
+
+    def test_pi_prompt_drift_is_a_check_error(self) -> None:
+        from dw_pmo import riderdocs
+
+        riderdocs.install_pi_rider(self.root)
+        victim = self.root / ".pi" / "prompts" / "dw-adopt.md"
+        victim.write_text(
+            victim.read_text(encoding="utf-8") + "\nrogue\n", encoding="utf-8"
+        )
+        issues = riderdocs.rider_docs_issues(self.root)
+        self.assertTrue(
+            any(".pi/prompts/dw-adopt.md" in i and "drifted" in i for i in issues),
+            issues,
+        )
+        riderdocs.write_rider_docs(self.root)
+        self.assertEqual(riderdocs.rider_docs_issues(self.root), [])
+
+    def test_codex_and_pi_share_agents_md_without_conflict(self) -> None:
+        from dw_pmo import riderdocs
+
+        riderdocs.install_codex_rider(self.root)
+        result = riderdocs.install_pi_rider(self.root)
+        agents_action = [a for p, a in result["actions"] if p.name == "AGENTS.md"]
+        self.assertEqual(
+            agents_action, ["unchanged"],
+            "one AGENTS.md serves both riders; the second install must not rewrite it",
+        )
+
     def test_codex_skill_drift_is_a_check_error(self) -> None:
         from dw_pmo import riderdocs
 

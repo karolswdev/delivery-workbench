@@ -47,7 +47,7 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 | WLA-12-03 | Build the HoldSpeak story actuator | done | [story-03-holdspeak-story-actuator](./story-03-holdspeak-story-actuator.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-12-04 | Collapse the agent-surface duplication behind a canonical brief | done | [story-04-canonical-brief-collapse-duplication](./story-04-canonical-brief-collapse-duplication.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-12-05 | Prove the Codex rider end-to-end | done | [story-05-codex-rider](./story-05-codex-rider.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-12-06 | Prove the pi rider end-to-end | backlog | [story-06-pi-rider](./story-06-pi-rider.md) | - |
+| WLA-12-06 | Prove the pi rider end-to-end | done | [story-06-pi-rider](./story-06-pi-rider.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-12-07 | Desk presence, doctor awareness, and release | backlog | [story-07-desk-presence-doctor-release](./story-07-desk-presence-doctor-release.md) | - |
 | WLA-12-08 | Fix evidence-capture stdin inheritance under dw-mcp | done | [story-08-mcp-capture-stdin-fix](./story-08-mcp-capture-stdin-fix.md) | [evidence-story-08](./evidence-story-08.md) |
 
@@ -99,7 +99,15 @@ tamper with gate hooks by default), and hooks are trust-gated
 (their template is fine; trust once or bypass deliberately).
 Codex itself refused to certify a contract after staging failed —
 "would not be honest" — which says the contract reads as rules,
-not tickboxes. WLA-12-06 (pi) is next.
+not tickboxes. WLA-12-06 then closed the phase's central claim:
+the full loop ran under pi — a context file and a shell, no MCP,
+no slash commands — with the commands rendered verbatim as
+`.pi/prompts/` templates (pi's format is byte-identical to canon),
+purity mechanically checked, the shared-AGENTS.md answer recorded,
+and `docs/riders.md` carrying the "any other harness" recipe the
+proof earned. Three harnesses, three model vendors, one gate.
+WLA-12-07 (Desk presence, doctor awareness, release v1.9.0)
+closes the phase.
 
 ## Active risks
 
@@ -131,6 +139,8 @@ not tickboxes. WLA-12-06 (pi) is next.
 - 2026-07-04 - Brief wording deliberately unchanged this story so the regeneration proof stays pure; the release story owns any wording refresh - WLA-12-04.
 - 2026-07-04 - Codex automation runs the loop under `-s danger-full-access` (workspace-write keeps `.git` read-only — verified live); interactive users approve commits instead - WLA-12-05.
 - 2026-07-04 - HoldSpeak's Codex hook template works on codex-cli 0.142.4; the one-time hook-trust gate is codex's, not theirs — trust interactively or bypass deliberately in vetted automation - WLA-12-05.
+- 2026-07-04 - One AGENTS.md serves every AGENTS.md-reading harness (single filename, forks impossible); the agents variant stays CLI-first with MCP as one optional aside (resolves WLA-12-06's open question) - WLA-12-06.
+- 2026-07-04 - pi loop provider: openrouter, key sourced from the operator's shell at run time, never printed or stored in evidence - WLA-12-06.
 
 ## Decisions deferred
 
