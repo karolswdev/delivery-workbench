@@ -44,7 +44,7 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 |---|---|---|---|---|
 | WLA-12-01 | Design the symbiosis contract and the journal charter | done | [story-01-design-symbiosis-contract-and-journal-charter](./story-01-design-symbiosis-contract-and-journal-charter.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-12-02 | Build the HoldSpeak roadmap-alignment synthesizer | done | [story-02-holdspeak-roadmap-alignment-synthesizer](./story-02-holdspeak-roadmap-alignment-synthesizer.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-12-03 | Build the HoldSpeak story actuator | backlog | [story-03-holdspeak-story-actuator](./story-03-holdspeak-story-actuator.md) | - |
+| WLA-12-03 | Build the HoldSpeak story actuator | done | [story-03-holdspeak-story-actuator](./story-03-holdspeak-story-actuator.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-12-04 | Collapse the agent-surface duplication behind a canonical brief | backlog | [story-04-canonical-brief-collapse-duplication](./story-04-canonical-brief-collapse-duplication.md) | - |
 | WLA-12-05 | Prove the Codex rider end-to-end | backlog | [story-05-codex-rider](./story-05-codex-rider.md) | - |
 | WLA-12-06 | Prove the pi rider end-to-end | backlog | [story-06-pi-rider](./story-06-pi-rider.md) | - |
@@ -74,7 +74,14 @@ by code, not trust), 10 tests green plus a `--no-deps` CI job
 pinned to the public v0.3.1 tag, and the pack installed live on
 the desk. The renderer-registration assumption died on contact
 (private registries, no public API) — the summary became the
-rendering, recorded in `docs/riders.md`. WLA-12-03, the actuator,
+rendering, recorded in `docs/riders.md`. WLA-12-03 then stacked
+the two consent systems: an actuator whose model produces fields
+(never argv), a gated connector admitting exactly two `dw story`
+argv prefixes, HoldSpeak's approval/policy/parity stack above, and
+the captured crown proof underneath — an approved done-flip on an
+evidence-less story refused by the gate with its banner verbatim,
+audit `proposed -> approved -> failed`. 23 pack tests green, both
+packs discovered live on the desk. WLA-12-04, the canonical brief,
 is next.
 
 ## Active risks
@@ -100,6 +107,8 @@ is next.
 - 2026-07-03 - Pack copy step is a documented `cp` (docstring + `docs/riders.md`), not machinery; `dw doctor` learns to check the installation in WLA-12-07 (resolves the deferred question) - WLA-12-02.
 - 2026-07-03 - holdspeak is NOT on PyPI (corrects an earlier report); CI pins the public v0.3.1 git tag with `--no-deps`, test-proven sufficient for the stdlib-only plugin surface - WLA-12-02.
 - 2026-07-03 - Packs cannot register renderers/artifact types on 0.3.1; the typed payload rides the plugin-run output and the rich summary is the rendered body; upstream renderer-registration seam noted as a candidate contribution, not worked around - WLA-12-02.
+- 2026-07-04 - One plugin per pack file (0.3.1 loader exports one MANIFEST): the actuator ships as its own `delivery_workbench_actuator_pack.py` beside the synthesizer - WLA-12-03, amends the story's "same file" wording.
+- 2026-07-04 - Connector resolves `dw` as the target repo's own `.githooks/dw` first, installed `dw --root` second (resolves the story's open question); argv is always built by the connector from the stored payload, never by the model - WLA-12-03.
 
 ## Decisions deferred
 

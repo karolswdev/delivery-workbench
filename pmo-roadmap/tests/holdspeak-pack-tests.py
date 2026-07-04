@@ -338,5 +338,432 @@ class PackHostIntegrationTest(unittest.TestCase):
         self.assertEqual(draft.status, "draft")
 
 
+ACTUATOR_PACK_PATH = (
+    REPO_ROOT / "integrations" / "holdspeak"
+    / "delivery_workbench_actuator_pack.py"
+)
+
+
+def _load_actuator_pack():
+    spec = importlib.util.spec_from_file_location(
+        "delivery_workbench_actuator_pack", ACTUATOR_PACK_PATH
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ACTUATOR_LLM_RESPONSE = """```json
+{"kind": "status", "project": "webshop", "story_id": "WSH-1-02",
+ "status": "in-progress", "title": null,
+ "why": "Dev picks up the payment provider next"}
+```"""
+
+
+class _FakeCompleted:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class _RecordingRunner:
+    def __init__(self, result=None):
+        self.calls = []
+        self.result = result or _FakeCompleted(stdout="ok")
+
+    def __call__(self, argv, **kwargs):
+        self.calls.append(list(argv))
+        return self.result
+
+
+@unittest.skipUnless(
+    HAVE_HOLDSPEAK,
+    "holdspeak not importable — install it (CI pins the v0.3.1 tag) "
+    "or run with HoldSpeak's venv python",
+)
+class ActuatorProposalTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.pack = _load_actuator_pack()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.rails = Path(self.tmp.name) / "rails"
+        self.rails.mkdir()
+        _build_rails_fixture(self.rails)
+
+    def _plugin(self, response: str = ACTUATOR_LLM_RESPONSE):
+        return self.pack.DeliveryWorkbenchStoryActuator(
+            intel_call=lambda _messages: response
+        )
+
+    def _context(self, **extra):
+        base = {
+            "transcript": "Dev picks up the payment provider next.",
+            "active_intents": ["delivery"],
+            "project_path": str(self.rails),
+        }
+        base.update(extra)
+        return base
+
+    def test_explicit_action_builds_status_proposal(self) -> None:
+        out = self._plugin().run(
+            self._context(
+                dw_action={
+                    "kind": "status",
+                    "project": "webshop",
+                    "story_id": "WSH-1-02",
+                    "status": "in-progress",
+                    "why": "explicit desk request",
+                }
+            )
+        )
+        self.assertEqual(out["action"], "dw_story_status")
+        self.assertEqual(out["payload"]["story"], "WSH-1-02")
+        self.assertEqual(out["payload"]["status"], "in-progress")
+        self.assertTrue(out["reversible"])
+        self.assertIn("Reversal:", out["preview"])
+        self.assertIn("dw gate still applies", out["preview"])
+
+    def test_llm_path_builds_the_same_proposal(self) -> None:
+        out = self._plugin().run(self._context())
+        self.assertEqual(out["action"], "dw_story_status")
+        self.assertEqual(out["payload"]["story"], "WSH-1-02")
+
+    def test_invented_story_id_is_refused(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            self._plugin().run(
+                self._context(
+                    dw_action={
+                        "kind": "status",
+                        "project": "webshop",
+                        "story_id": "WSH-9-99",
+                        "status": "done",
+                    }
+                )
+            )
+        self.assertIn("WSH-9-99", str(ctx.exception))
+
+    def test_illegal_status_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            self._plugin().run(
+                self._context(
+                    dw_action={
+                        "kind": "status",
+                        "project": "webshop",
+                        "story_id": "WSH-1-01",
+                        "status": "obliterated",
+                    }
+                )
+            )
+
+    def test_create_proposal_targets_a_real_phase(self) -> None:
+        out = self._plugin().run(
+            self._context(
+                dw_action={
+                    "kind": "create",
+                    "project": "webshop",
+                    "title": "Add gift cards",
+                }
+            )
+        )
+        self.assertEqual(out["action"], "dw_story_create")
+        self.assertEqual(out["payload"]["phase"], "1")
+        self.assertIn("deletable before anything commits", out["preview"])
+
+    def test_no_action_meeting_raises(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            self._plugin().run(self._context(dw_action={"kind": "none"}))
+        self.assertIn("no explicit roadmap action", str(ctx.exception))
+
+
+@unittest.skipUnless(
+    HAVE_HOLDSPEAK,
+    "holdspeak not importable — install it (CI pins the v0.3.1 tag) "
+    "or run with HoldSpeak's venv python",
+)
+class ActuatorConnectorTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.pack = _load_actuator_pack()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.rails = Path(self.tmp.name) / "rails"
+        self.rails.mkdir()
+        _build_rails_fixture(self.rails)
+
+    def _proposal(self, payload):
+        from holdspeak.plugins.actuators import ActuatorProposal
+
+        return ActuatorProposal(
+            target="delivery-workbench",
+            action="dw_story_status",
+            preview="p",
+            payload=payload,
+            reversible=True,
+            required_capabilities=("actuator",),
+        )
+
+    def test_happy_path_builds_allowlisted_argv(self) -> None:
+        runner = _RecordingRunner()
+        connector = self.pack.build_dw_connector(self.rails, runner=runner)
+        out = connector(
+            self._proposal(
+                {
+                    "repo": str(self.rails),
+                    "verb": "status",
+                    "project": "webshop",
+                    "phase": "1",
+                    "story": "WSH-1-02",
+                    "status": "in-progress",
+                }
+            )
+        )
+        self.assertEqual(len(runner.calls), 1)
+        argv = runner.calls[0]
+        self.assertEqual(argv[-4:], ["webshop", "1", "WSH-1-02", "in-progress"])
+        self.assertIn("story", argv)
+        self.assertEqual(out["argv"], argv)
+
+    def test_out_of_allowlist_verb_is_refused_before_egress(self) -> None:
+        from holdspeak.plugins.gated_connector import ConnectorOperationRefused
+
+        runner = _RecordingRunner()
+        connector = self.pack.build_dw_connector(self.rails, runner=runner)
+        with self.assertRaises(ConnectorOperationRefused):
+            connector(
+                self._proposal(
+                    {"repo": str(self.rails), "verb": "delete", "project": "x"}
+                )
+            )
+        self.assertEqual(runner.calls, [], "refusal must precede any egress")
+
+    def test_foreign_repo_payload_is_refused(self) -> None:
+        runner = _RecordingRunner()
+        connector = self.pack.build_dw_connector(self.rails, runner=runner)
+        with self.assertRaises(Exception):
+            connector(
+                self._proposal(
+                    {
+                        "repo": "/somewhere/else",
+                        "verb": "status",
+                        "project": "webshop",
+                        "phase": "1",
+                        "story": "WSH-1-02",
+                        "status": "done",
+                    }
+                )
+            )
+        self.assertEqual(runner.calls, [])
+
+
+@unittest.skipUnless(
+    HAVE_HOLDSPEAK,
+    "holdspeak not importable — install it (CI pins the v0.3.1 tag) "
+    "or run with HoldSpeak's venv python",
+)
+class ActuatorEndToEndTest(unittest.TestCase):
+    """propose → approve → execute against a real rails fixture,
+    through HoldSpeak's real host, db, executor, and gated connector."""
+
+    def setUp(self) -> None:
+        self.pack = _load_actuator_pack()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.rails = Path(self.tmp.name) / "rails"
+        self.rails.mkdir()
+        _build_rails_fixture(self.rails)
+
+    def _db(self):
+        from datetime import datetime
+
+        from holdspeak.db import Database
+        from holdspeak.meeting_session import MeetingState
+
+        db = Database(Path(self.tmp.name) / "exec.db")
+        db.meetings.save_meeting(
+            MeetingState(
+                id="m1", started_at=datetime.now(), title="t", segments=[]
+            )
+        )
+        return db
+
+    def _propose_via_host(self, dw_action):
+        from holdspeak.plugins.host import PluginHost
+
+        host = PluginHost(
+            default_timeout_seconds=120.0,
+            enabled_capabilities={"llm", "actuator"},
+        )
+        host.register(
+            self.pack.DeliveryWorkbenchStoryActuator(
+                intel_call=lambda _m: ACTUATOR_LLM_RESPONSE
+            )
+        )
+        result = host.execute(
+            "delivery_workbench_actuator",
+            context={
+                "transcript": "meeting",
+                "active_intents": ["delivery"],
+                "project_path": str(self.rails),
+                "dw_action": dw_action,
+            },
+            meeting_id="m1",
+            window_id="w-1",
+            transcript_hash="h-1",
+        )
+        self.assertEqual(result.status, "proposed")
+        return result
+
+    def _approved_proposal(self, db, output):
+        record = db.actuators.record_proposal(
+            meeting_id="m1",
+            window_id="w-1",
+            plugin_id="delivery_workbench_actuator",
+            plugin_version="0.1.0",
+            idempotency_key=f"k-{output['action']}-{output['payload'].get('status', output['payload'].get('title'))}",
+            target=output["target"],
+            action=output["action"],
+            preview=output["preview"],
+            payload=output["payload"],
+            reversible=output["reversible"],
+            required_capabilities=list(output["required_capabilities"]),
+        )
+        db.actuators.transition_proposal(
+            record.id, to_status="approved", actor="karol"
+        )
+        return record
+
+    def _story_status_in_fixture(self, story_file: str) -> str:
+        text = (
+            self.rails / "pm" / "roadmap" / "webshop"
+            / "phase-1-checkout-flow" / story_file
+        ).read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if line.startswith("- **Status:**"):
+                return line.split(":**", 1)[1].strip()
+        return "?"
+
+    def test_green_path_approved_flip_executes(self) -> None:
+        from holdspeak.plugins.actuator_executor import ActuatorExecutor
+
+        db = self._db()
+        result = self._propose_via_host(
+            {
+                "kind": "status",
+                "project": "webshop",
+                "story_id": "WSH-1-02",
+                "status": "in-progress",
+            }
+        )
+        record = self._approved_proposal(db, result.output)
+        executor = ActuatorExecutor(
+            db,
+            connector=self.pack.build_dw_connector(self.rails),
+            allow_actuators=True,
+            allowed_actuator_ids=["delivery_workbench_actuator"],
+        )
+        outcome = executor.execute(record.id)
+        self.assertEqual(outcome.status, "executed")
+        self.assertEqual(
+            self._story_status_in_fixture("story-02-add-payment-provider.md"),
+            "in-progress",
+            "the rails fixture must show the flip",
+        )
+
+    def test_crown_case_gate_refuses_dishonest_done_flip(self) -> None:
+        from holdspeak.plugins.actuator_executor import ActuatorExecutor
+
+        db = self._db()
+        result = self._propose_via_host(
+            {
+                "kind": "status",
+                "project": "webshop",
+                "story_id": "WSH-1-02",
+                "status": "done",
+            }
+        )
+        record = self._approved_proposal(db, result.output)
+        executor = ActuatorExecutor(
+            db,
+            connector=self.pack.build_dw_connector(self.rails),
+            allow_actuators=True,
+            allowed_actuator_ids=["delivery_workbench_actuator"],
+        )
+        outcome = executor.execute(record.id)
+        self.assertEqual(
+            outcome.status, "failed",
+            "approved by HoldSpeak, executed, and refused by the rails",
+        )
+        self.assertIn(
+            "refusing to mark story done without evidence",
+            outcome.error or "",
+            "the dw banner must ride the proposal's error verbatim",
+        )
+        self.assertEqual(
+            self._story_status_in_fixture("story-02-add-payment-provider.md"),
+            "backlog",
+            "the dishonest flip must not have landed",
+        )
+
+    def test_policy_defaults_execute_nothing(self) -> None:
+        from holdspeak.plugins.actuator_executor import (
+            ActuatorExecutor,
+            ActuatorPolicyError,
+        )
+
+        db = self._db()
+        result = self._propose_via_host(
+            {
+                "kind": "status",
+                "project": "webshop",
+                "story_id": "WSH-1-02",
+                "status": "in-progress",
+            }
+        )
+        record = self._approved_proposal(db, result.output)
+        connector_calls = []
+        executor = ActuatorExecutor(
+            db,
+            connector=lambda p: connector_calls.append(p) or {},
+            allow_actuators=False,
+        )
+        with self.assertRaises(ActuatorPolicyError):
+            executor.execute(record.id)
+        executor_listed = ActuatorExecutor(
+            db,
+            connector=lambda p: connector_calls.append(p) or {},
+            allow_actuators=True,
+            allowed_actuator_ids=["some_other_actuator"],
+        )
+        with self.assertRaises(ActuatorPolicyError):
+            executor_listed.execute(record.id)
+        self.assertEqual(connector_calls, [], "no egress under default policy")
+
+    def test_parity_mismatch_aborts_without_egress(self) -> None:
+        from holdspeak.plugins.actuator_executor import ActuatorExecutor
+
+        db = self._db()
+        result = self._propose_via_host(
+            {
+                "kind": "status",
+                "project": "webshop",
+                "story_id": "WSH-1-02",
+                "status": "in-progress",
+            }
+        )
+        record = self._approved_proposal(db, result.output)
+        connector_calls = []
+        executor = ActuatorExecutor(
+            db,
+            connector=lambda p: connector_calls.append(p) or {},
+            allow_actuators=True,
+            allowed_actuator_ids=["delivery_workbench_actuator"],
+        )
+        outcome = executor.execute(
+            record.id, approved_payload_hash="deadbeef" * 8
+        )
+        self.assertEqual(outcome.status, "failed")
+        self.assertEqual(connector_calls, [], "no egress on parity mismatch")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

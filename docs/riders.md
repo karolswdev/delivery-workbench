@@ -371,6 +371,42 @@ the day it was found):
   (WLA-12-03) and mission control (Phase 13) — read; the artifact
   is the human-facing rendering.
 
+### The story actuator (WLA-12-03)
+
+The write half, `delivery_workbench_actuator_pack.py`, installed
+beside the synthesizer pack (one plugin per pack file is the 0.3.1
+loader contract — a delta from the phase's "same file" wording).
+The trust chain, end to end:
+
+1. The LLM (or an explicit `context["dw_action"]` — the
+   deterministic desk/relay seam Phase 13 builds on) produces
+   **fields only**: project, story ID, target status, or a title.
+2. Code validates every field against the live roadmap before a
+   proposal exists — an invented story ID or illegal status dies as
+   a `ValueError`, never as a proposal.
+3. The proposal stores domain fields; **argv is built by the
+   connector from the stored payload at egress time**, never by the
+   model, and the payload hash guarantees what executes is what was
+   approved.
+4. The connector's `WriteConnectorManifest` (`shell:exec`) admits
+   exactly two argv prefixes — the repo's own `.githooks/dw`
+   (installed `dw --root` as fallback; recorded decision) plus
+   `story status` / `story create` — anything else raises
+   `ConnectorOperationRefused` before egress.
+5. HoldSpeak's executor enforces its own stack on top: approval
+   state, `allow_actuators` master switch (off by default), the
+   actuator allow-list (empty by default), payload parity.
+6. And the dw gate keeps final say: the captured crown proof shows
+   an approved done-flip on an evidence-less story coming back
+   `failed` with `dw: refusing to mark story done without
+   evidence` verbatim, fixture untouched, audit trail
+   `proposed -> approved -> failed`. That refusal is the feature.
+
+Pending, owed honestly: the desk's "Pending actions" execution
+wiring for pack actuators (vs built-ins) is unverified — the E2E
+proof scripts HoldSpeak's own host/db/executor path, which is what
+their tests do too. Lands with the live-desk demo.
+
 ## Amendments this matrix forces
 
 Recorded here so the risk table's stop signal ("a rider story finds
