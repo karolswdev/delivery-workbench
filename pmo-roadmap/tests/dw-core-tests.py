@@ -2150,5 +2150,125 @@ class VerifyTest(unittest.TestCase):
                 self.assertIn(f"`{rule_id}`", doc_text, f"{rule_id} unclassified in remote-verification.md")
 
 
+class RiderDocsTest(unittest.TestCase):
+    """WLA-12-04: one canonical brief, rendered per surface, drift is
+    a check error."""
+
+    REPO_ROOT = TESTS_DIR.parent.parent
+
+    def setUp(self) -> None:
+        from dw_pmo import agentdocs
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        (self.root / ".claude" / "commands").mkdir(parents=True)
+        (self.root / "plugin" / "commands").mkdir(parents=True)
+        (self.root / "CLAUDE.md").write_text(
+            "# Fixture\n\n" + agentdocs.render_block() + "\n", encoding="utf-8"
+        )
+        from dw_pmo import riderdocs
+
+        self.first_render = riderdocs.write_rider_docs(self.root)
+
+    def test_embedded_specs_match_source_canon(self) -> None:
+        from dw_pmo import riderdocs
+
+        agent_dir = self.REPO_ROOT / "pmo-roadmap" / "agent"
+        for name in riderdocs.COMMAND_NAMES:
+            self.assertEqual(
+                riderdocs._EMBEDDED_COMMANDS[name],
+                (agent_dir / f"{name}.md").read_text(encoding="utf-8"),
+                f"embedded canon for {name} drifted from pmo-roadmap/agent",
+            )
+
+    def test_regeneration_is_idempotent(self) -> None:
+        from dw_pmo import riderdocs
+
+        self.assertTrue(
+            any(a == "created" for _p, a in self.first_render),
+            "the first render over empty dirs must create the copies",
+        )
+        second = riderdocs.write_rider_docs(self.root)
+        self.assertTrue(
+            all(a == "unchanged" for _p, a in second),
+            f"second render must be a no-op, got {second}",
+        )
+        self.assertEqual(riderdocs.rider_docs_issues(self.root), [])
+
+    def test_hand_edited_copy_is_a_check_error(self) -> None:
+        from dw_pmo import riderdocs
+
+        riderdocs.write_rider_docs(self.root)
+        victim = self.root / "plugin" / "commands" / "dw-next.md"
+        victim.write_text(
+            victim.read_text(encoding="utf-8") + "\nrogue edit\n",
+            encoding="utf-8",
+        )
+        issues = riderdocs.rider_docs_issues(self.root)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("plugin/commands/dw-next.md", issues[0])
+        self.assertIn("drifted from", issues[0])
+        self.assertIn("dw-next", issues[0])
+        riderdocs.write_rider_docs(self.root)
+        self.assertEqual(riderdocs.rider_docs_issues(self.root), [])
+
+    def test_hand_edited_doc_block_is_a_check_error(self) -> None:
+        from dw_pmo import agentdocs, riderdocs
+
+        claude = self.root / "CLAUDE.md"
+        claude.write_text(
+            claude.read_text(encoding="utf-8").replace(
+                "evidence-first commit gate", "vibes-first commit gate"
+            ),
+            encoding="utf-8",
+        )
+        issues = riderdocs.rider_docs_issues(self.root)
+        self.assertTrue(any("CLAUDE.md: managed block drifted" in i for i in issues))
+        agentdocs.write_agent_docs(self.root)
+        self.assertEqual(riderdocs.rider_docs_issues(self.root), [])
+
+    def test_agents_md_gets_the_agents_variant(self) -> None:
+        from dw_pmo import agentdocs
+
+        target = self.root / "AGENTS.md"
+        target.write_text("# Agents fixture\n", encoding="utf-8")
+        path, action = agentdocs.write_agent_docs(self.root, target)
+        self.assertEqual(path, target)
+        self.assertEqual(action, "added")
+        text = target.read_text(encoding="utf-8")
+        self.assertNotIn("Slash commands (Claude Code", text)
+        self.assertIn("complete surface", text)
+        self.assertIn("codex mcp add", text)
+        # And its drift status is judged against its own variant.
+        again = agentdocs.write_agent_docs(self.root, target)
+        self.assertEqual(again[1], "unchanged")
+
+    def test_agents_transformations_actually_fire(self) -> None:
+        from dw_pmo import agentdocs
+
+        canon = agentdocs.canonical_block()
+        self.assertIn(
+            agentdocs._CLAUDE_SLASH_PARAGRAPH_START, canon,
+            "canon lost the paragraph the agents variant removes",
+        )
+        self.assertIn(
+            agentdocs._MCP_CLAUDE_WIRING, canon,
+            "canon lost the wiring phrase the agents variant generalizes",
+        )
+        variant = agentdocs.agents_block()
+        self.assertNotEqual(variant, canon)
+        self.assertNotIn(agentdocs._CLAUDE_SLASH_PARAGRAPH_START, variant)
+
+    def test_real_tree_matches_canon(self) -> None:
+        from dw_pmo import riderdocs
+
+        self.assertEqual(
+            riderdocs.rider_docs_issues(self.REPO_ROOT),
+            [],
+            "the framework repo's own rendered surfaces must match canon",
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

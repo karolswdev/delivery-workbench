@@ -244,6 +244,20 @@ flowchart LR
   offense. `dw doctor` keeps its softer staleness warning for
   unmanaged clones.
 
+**Shipped (WLA-12-04).** The seam above is live: command-spec canon
+is embedded in `dw_pmo/riderdocs.py` with `pmo-roadmap/agent/*.md`
+as the source-tree override (the same fallback pattern as the
+brief's template override — this is what lets a consumer repo with
+only a vendored `dw_pmo` render and drift-check), `dw rider docs
+[--check]` regenerates, and the drift rule runs in both `dw check`
+surfaces (CLI and MCP). The AGENTS.md brief variant exists behind
+the same managed markers (compatibility with every block already in
+the wild): Claude-only paragraphs removed, MCP wiring generalized,
+and an explicit "the CLI is the complete surface" line for agents
+without MCP. AGENTS.md itself is created by the rider installers
+(05/06), not by this repo's regeneration. The first canon-driven
+regeneration was byte-identical on every target.
+
 ## The HoldSpeak seams we ride — and what we leave alone
 
 Three seams, all existing:

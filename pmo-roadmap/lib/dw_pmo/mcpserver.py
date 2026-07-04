@@ -85,6 +85,7 @@ def _tool_next(root: Path, args: dict) -> tuple[str, dict]:
 
 def _tool_check(root: Path, args: dict) -> tuple[str, dict]:
     from .parse import discover_projects, get_project
+    from .riderdocs import rider_docs_issues
     from .validate import check_project
 
     project = args.get("project")
@@ -92,6 +93,8 @@ def _tool_check(root: Path, args: dict) -> tuple[str, dict]:
     issues: list[str] = []
     for proj in projects:
         issues.extend(check_project(proj, root))
+    # Repo-level: rendered agent surfaces must match canon (WLA-12-04).
+    issues.extend(rider_docs_issues(root))
     if issues:
         text = "\n".join(f"ERROR {issue}" for issue in issues)
     else:

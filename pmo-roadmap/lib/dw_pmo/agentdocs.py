@@ -113,6 +113,49 @@ def render_block() -> str:
     return f"{BEGIN_MARKER}\n\n{canonical_block()}\n\n{END_MARKER}"
 
 
+_CLAUDE_SLASH_PARAGRAPH_START = "Slash commands (Claude Code"
+_MCP_CLAUDE_WIRING = "(wired via `.mcp.json`)"
+_MCP_NEUTRAL_WIRING = (
+    "(stdio JSON-RPC; wire it per your client — Claude Code reads "
+    "`.mcp.json`, Codex uses `codex mcp add`)"
+)
+_AGENTS_CLI_NOTE = (
+    "Agents without MCP support: the CLI commands above are the "
+    "complete surface — nothing below requires MCP."
+)
+
+
+def agents_block() -> str:
+    """The brief for AGENTS.md-reading harnesses (Codex, pi, others):
+    the same canon minus Claude-only affordances. Transformations are
+    best-effort at runtime (canon may be template-overridden); a unit
+    test in the framework repo asserts they both actually fired."""
+    text = canonical_block()
+    start = text.find(_CLAUDE_SLASH_PARAGRAPH_START)
+    if start != -1:
+        end = text.find("\n\n", start)
+        end = len(text) if end == -1 else end + 2
+        text = text[:start] + text[end:]
+    if _MCP_CLAUDE_WIRING in text:
+        text = text.replace(_MCP_CLAUDE_WIRING, _MCP_NEUTRAL_WIRING, 1)
+        text = text.rstrip() + "\n\n" + _AGENTS_CLI_NOTE
+    return text.strip()
+
+
+def render_agents_block() -> str:
+    return f"{BEGIN_MARKER}\n\n{agents_block()}\n\n{END_MARKER}"
+
+
+def agents_variant_for(path: Path) -> bool:
+    """AGENTS.md gets the harness-neutral variant; anything else the
+    Claude variant (CLAUDE.md is the historical default target)."""
+    return path.name == "AGENTS.md"
+
+
+def render_block_for(path: Path) -> str:
+    return render_agents_block() if agents_variant_for(path) else render_block()
+
+
 def agent_docs_target(root: Path) -> Path:
     """Prefer an existing CLAUDE.md, then AGENTS.md, else a new CLAUDE.md."""
     for name in ("CLAUDE.md", "AGENTS.md"):
@@ -124,7 +167,7 @@ def agent_docs_target(root: Path) -> Path:
 def write_agent_docs(root: Path, target: Path | None = None) -> tuple[Path, str]:
     """Create or refresh the managed block. Returns (path, action)."""
     path = target or agent_docs_target(root)
-    block = render_block()
+    block = render_block_for(path)
     if not path.exists():
         write_text(path, block + "\n")
         return path, "created"
@@ -142,7 +185,8 @@ def write_agent_docs(root: Path, target: Path | None = None) -> tuple[Path, str]
 
 
 def agent_docs_status(root: Path) -> tuple[str, Path | None]:
-    """One of 'missing', 'stale', 'current' plus the file examined."""
+    """One of 'missing', 'stale', 'current' plus the file examined.
+    Each file is compared against its own variant (WLA-12-04)."""
     for name in ("CLAUDE.md", "AGENTS.md"):
         path = root / name
         if not path.exists():
@@ -151,7 +195,7 @@ def agent_docs_status(root: Path) -> tuple[str, Path | None]:
         region = managed_region(text)
         if region is None:
             continue
-        if text[region[0]:region[1]] == render_block():
+        if text[region[0]:region[1]] == render_block_for(path):
             return "current", path
         return "stale", path
     return "missing", None

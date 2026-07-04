@@ -45,7 +45,7 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 | WLA-12-01 | Design the symbiosis contract and the journal charter | done | [story-01-design-symbiosis-contract-and-journal-charter](./story-01-design-symbiosis-contract-and-journal-charter.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-12-02 | Build the HoldSpeak roadmap-alignment synthesizer | done | [story-02-holdspeak-roadmap-alignment-synthesizer](./story-02-holdspeak-roadmap-alignment-synthesizer.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-12-03 | Build the HoldSpeak story actuator | done | [story-03-holdspeak-story-actuator](./story-03-holdspeak-story-actuator.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-12-04 | Collapse the agent-surface duplication behind a canonical brief | backlog | [story-04-canonical-brief-collapse-duplication](./story-04-canonical-brief-collapse-duplication.md) | - |
+| WLA-12-04 | Collapse the agent-surface duplication behind a canonical brief | done | [story-04-canonical-brief-collapse-duplication](./story-04-canonical-brief-collapse-duplication.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-12-05 | Prove the Codex rider end-to-end | backlog | [story-05-codex-rider](./story-05-codex-rider.md) | - |
 | WLA-12-06 | Prove the pi rider end-to-end | backlog | [story-06-pi-rider](./story-06-pi-rider.md) | - |
 | WLA-12-07 | Desk presence, doctor awareness, and release | backlog | [story-07-desk-presence-doctor-release](./story-07-desk-presence-doctor-release.md) | - |
@@ -81,8 +81,13 @@ argv prefixes, HoldSpeak's approval/policy/parity stack above, and
 the captured crown proof underneath — an approved done-flip on an
 evidence-less story refused by the gate with its banner verbatim,
 audit `proposed -> approved -> failed`. 23 pack tests green, both
-packs discovered live on the desk. WLA-12-04, the canonical brief,
-is next.
+packs discovered live on the desk. WLA-12-04 then collapsed the
+duplication: command-spec canon embedded in `dw_pmo/riderdocs.py`
+(source files override in the framework tree), `dw rider docs`
+regenerates every surface, drift is now a `dw check` ERROR on both
+the CLI and MCP surfaces, and the AGENTS.md brief variant exists
+behind the same markers. First canon regeneration: byte-identical
+everywhere. The rider seam is open — WLA-12-05 (Codex) is next.
 
 ## Active risks
 
@@ -109,6 +114,9 @@ is next.
 - 2026-07-03 - Packs cannot register renderers/artifact types on 0.3.1; the typed payload rides the plugin-run output and the rich summary is the rendered body; upstream renderer-registration seam noted as a candidate contribution, not worked around - WLA-12-02.
 - 2026-07-04 - One plugin per pack file (0.3.1 loader exports one MANIFEST): the actuator ships as its own `delivery_workbench_actuator_pack.py` beside the synthesizer - WLA-12-03, amends the story's "same file" wording.
 - 2026-07-04 - Connector resolves `dw` as the target repo's own `.githooks/dw` first, installed `dw --root` second (resolves the story's open question); argv is always built by the connector from the stored payload, never by the model - WLA-12-03.
+- 2026-07-04 - Command-spec canon embedded in `dw_pmo` with `pmo-roadmap/agent/*.md` as the source-tree override (the agentdocs/template pattern), so consumer repos drift-check with only the vendored CLI - WLA-12-04.
+- 2026-07-04 - AGENTS.md keeps the same managed markers (never orphan deployed blocks) with variant content per filename; AGENTS.md files are created by rider installers, not by regeneration - WLA-12-04.
+- 2026-07-04 - Brief wording deliberately unchanged this story so the regeneration proof stays pure; the release story owns any wording refresh - WLA-12-04.
 
 ## Decisions deferred
 

@@ -402,16 +402,39 @@ def command_verify(args: argparse.Namespace) -> int:
 
 def command_check(args: argparse.Namespace) -> int:
     from dw_pmo import check_project
+    from dw_pmo.riderdocs import rider_docs_issues
 
     projects = [get_project(args.root, args.project)] if args.project else discover_projects(args.root)
     issues: list[str] = []
     for project in projects:
         issues.extend(check_project(project, args.root))
+    # Repo-level: rendered agent surfaces must match canon (WLA-12-04).
+    issues.extend(rider_docs_issues(args.root))
     if issues:
         for issue in issues:
             print(f"ERROR {issue}")
         return 1
     print("dw check: ok")
+    return 0
+
+
+def command_rider_docs(args: argparse.Namespace) -> int:
+    from dw_pmo.riderdocs import rider_docs_issues, write_rider_docs
+
+    if args.check:
+        issues = rider_docs_issues(args.root)
+        for issue in issues:
+            print(f"ERROR {issue}")
+        if issues:
+            return 1
+        print("dw rider docs: all rendered surfaces match canon")
+        return 0
+    for path, action in write_rider_docs(args.root):
+        try:
+            shown = path.relative_to(args.root)
+        except ValueError:
+            shown = path
+        print(f"{shown}\t{action}")
     return 0
 
 
@@ -446,6 +469,12 @@ def build_parser() -> argparse.ArgumentParser:
     adopt.add_argument("--project-prefix", help="story-ID prefix for a new README (default: from the report's story IDs)")
     adopt.add_argument("--apply", action="store_true", help="write the scaffold (default is a dry-run preview)")
     adopt.set_defaults(func=command_adopt)
+
+    rider = sub.add_parser("rider", help="agent-surface rider tooling (canonical brief renderers)")
+    rider_sub = rider.add_subparsers(dest="rider_command", required=True)
+    rider_docs = rider_sub.add_parser("docs", help="regenerate rendered agent surfaces (.claude/commands, plugin/commands, managed doc blocks) from canon")
+    rider_docs.add_argument("--check", action="store_true", help="report drift without writing anything")
+    rider_docs.set_defaults(func=command_rider_docs)
 
     agent_docs = sub.add_parser("agent-docs", help="write or refresh the managed Delivery Workbench block in CLAUDE.md/AGENTS.md")
     agent_docs.add_argument("--file", type=Path, help="explicit target file (default: existing CLAUDE.md, then AGENTS.md, else new CLAUDE.md)")
