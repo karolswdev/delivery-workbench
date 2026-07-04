@@ -6,8 +6,8 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Current phase: 12 (phase-12-holdspeak-symbiosis-and-agent-riders)
-- Next story: WLA-12-07 — Desk presence, doctor awareness, and release [in-progress]
-- Open roadmap warnings: 2
+- Current phase: 13 (phase-13-agentic-mission-control)
+- Next story: WLA-13-05 — Prove mission control end-to-end with the Desk [backlog]
+- Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->
