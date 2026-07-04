@@ -170,6 +170,40 @@ preview-then-apply flow. It never stages or commits.
 More screenshots and two terminal recordings are in
 [demos/](./demos/README.md).
 
+## Mission control: steer from anywhere
+
+The same roadmap state that gates commits is also a feed you can
+watch and act on from outside the terminal. Three read-only CLI
+documents make it a substrate any client can consume:
+
+```bash
+.githooks/dw state --json      # the roadmap: phases, stories, next actionable
+.githooks/dw sessions --json   # which live agent is on which story
+.githooks/dw events            # what happened on the rails (gate verdicts, flips)
+```
+
+Two clients consume that substrate today. A **Telegram interface**
+(`integrations/telegram/`) puts mission control in your pocket:
+bind a chat topic to a repo and it renders phases, stories, and
+gate refusals; a blocked agent's question reaches your phone in
+about a second through an installed hook; and once you bind a
+session, you talk to the agent by just typing, and your words
+relay into its terminal pane. A **Desk conveyor** on the
+[HoldSpeak](https://github.com/karolswdev/HoldSpeak) side renders
+the same feed as a belt.
+
+Everything that changes the rails stays gated. The owner is bound
+by a one-time pairing token, not a hardcoded id. Story flips and
+project creation are proposals that execute on an approval tap,
+through the same allow-listed commands the CLI uses. The dw gate
+still refuses a dishonest done-flip and relays the banner back
+into the chat. Steering a terminal is guarded by explicit,
+expiring session binding and a pane-ownership check on every
+keystroke; sending a file runs it past seven refusal locks first.
+The design is in
+[docs/mission-control.md](./docs/mission-control.md) and
+[docs/absorption-ccgram.md](./docs/absorption-ccgram.md).
+
 ## Other components
 
 - Local work logs: consent-gated daily notes of what each commit delivered.
@@ -180,7 +214,7 @@ More screenshots and two terminal recordings are in
 ## This repo runs on it
 
 Every phase and story of the framework was shipped through its own
-gate: ten phases, each story with evidence, every commit with
+gate: fifteen phases, each story with evidence, every commit with
 trailers and an archived contract, the full history passing
 `dw verify --all`. The trail is in
 [pmo-roadmap/pm/roadmap/work-log-automation/](./pmo-roadmap/pm/roadmap/work-log-automation/).
@@ -194,7 +228,7 @@ trailers and an archived contract, the full history passing
 - [Contribution rails](./docs/contribution-rails.md): what survives a pull request
 - [MCP surface design](./docs/mcp.md)
 - [Riders: the symbiosis contract](./docs/riders.md): one brief, every agent surface (Claude Code, Codex, pi, HoldSpeak)
-- [The Phase 12 journal](./docs/journal/README.md): the worked example — a phase delivered on its own rails, written in the moment, refusals and dead ends included
+- [The journal](./docs/journal/README.md): the worked example, phases delivered on their own rails, written in the moment with refusals and dead ends included (through the mission-control and ccgram-absorption phases)
 - [Distribution design](./docs/distribution.md)
 - [Contributing](./CONTRIBUTING.md) and [changelog](./CHANGELOG.md)
 
@@ -206,4 +240,4 @@ floor), and history verification on every push.
 
 ## License
 
-[MIT](./LICENSE). Current version: 1.7.0.
+[MIT](./LICENSE). Current version: 1.11.0.
