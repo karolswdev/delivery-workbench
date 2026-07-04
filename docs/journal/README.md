@@ -44,3 +44,4 @@ read as narrative and audited as history.
 - [Entry 0 — Opening the phase](./entry-00-opening-the-phase.md)
 - [Entry 1 — The matrix kills two assumptions](./entry-01-design-story.md)
 - [Entry 2 — The bug the dogfood found](./entry-02-the-bug-the-dogfood-found.md)
+- [Entry 3 — First pack in the ecosystem](./entry-03-first-pack-in-the-ecosystem.md)

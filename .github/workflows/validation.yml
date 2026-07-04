@@ -107,6 +107,26 @@ jobs:
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
           python3 pmo-roadmap/tests/dw-core-tests.py
 
+  holdspeak-pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install holdspeak (pinned pack target, no runtime deps)
+        # --no-deps is deliberate and test-proven: the plugin surface
+        # (plugin_sdk, plugins.host, plugin_pack_loader, synthesis) is
+        # stdlib-only with lazy intel imports, and the full dep set
+        # drags in PortAudio/X11 bindings a headless runner can't use.
+        # The pin matches the pack MANIFEST's proven range (WLA-12-02).
+        run: pip install --no-deps "holdspeak @ git+https://github.com/karolswdev/HoldSpeak@v0.3.1"
+
+      - name: HoldSpeak pack tests (discovery, host, failure shapes)
+        run: python3 pmo-roadmap/tests/holdspeak-pack-tests.py
+
   shell-and-integration:
     strategy:
       fail-fast: false

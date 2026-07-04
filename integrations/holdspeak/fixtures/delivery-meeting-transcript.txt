@@ -1,0 +1,28 @@
+Karol: Quick delivery sync on the workbench. Where are we on the
+riders phase?
+
+Agent notes readback: The design story is done — the capability
+matrix is live-verified and the journal charter is in. The MCP
+stdin bug we hit during shipping is also fixed and committed.
+
+Karol: Good. So the decision from my side: the HoldSpeak
+synthesizer is the next thing we land, before anyone touches the
+Codex work. I want the pack producing a real artifact on the desk
+this week.
+
+Karol: Action item for the agent — build the synthesizer plugin
+pack, route it on the delivery intent, and make sure it degrades
+honestly when a project has no roadmap. That is the read-only
+one; the actuator that proposes story flips comes right after,
+behind the approval flow.
+
+Karol: Second action item — once the actuator lands, we need the
+canonical brief refactor so the command copies stop drifting.
+That one unblocks both riders.
+
+Karol: One more thing we keep talking about and never scheduling:
+dark mode for the workbench web view. Nobody owns it, there is no
+story for it, park it again but write it down this time.
+
+Agent: Parked and noted. Next actionable on the rails after this
+meeting is the synthesizer story itself.

@@ -43,7 +43,7 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-12-01 | Design the symbiosis contract and the journal charter | done | [story-01-design-symbiosis-contract-and-journal-charter](./story-01-design-symbiosis-contract-and-journal-charter.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-12-02 | Build the HoldSpeak roadmap-alignment synthesizer | backlog | [story-02-holdspeak-roadmap-alignment-synthesizer](./story-02-holdspeak-roadmap-alignment-synthesizer.md) | - |
+| WLA-12-02 | Build the HoldSpeak roadmap-alignment synthesizer | done | [story-02-holdspeak-roadmap-alignment-synthesizer](./story-02-holdspeak-roadmap-alignment-synthesizer.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-12-03 | Build the HoldSpeak story actuator | backlog | [story-03-holdspeak-story-actuator](./story-03-holdspeak-story-actuator.md) | - |
 | WLA-12-04 | Collapse the agent-surface duplication behind a canonical brief | backlog | [story-04-canonical-brief-collapse-duplication](./story-04-canonical-brief-collapse-duplication.md) | - |
 | WLA-12-05 | Prove the Codex rider end-to-end | backlog | [story-05-codex-rider](./story-05-codex-rider.md) | - |
@@ -66,7 +66,16 @@ server. WLA-12-08 fixed it the same session: every framework child
 now gets explicit stdin (`DEVNULL` everywhere except the terminal
 launcher, which inherits deliberately), a regression test proves
 the sentinel can't leak, and the wedge scenario replays through a
-held-open pipe in 0.06s. WLA-12-02 is next.
+held-open pipe in 0.06s. WLA-12-02 then landed the first real pack
+in HoldSpeak's ecosystem: the roadmap-alignment synthesizer proven
+through real discovery, the real host, and the desk's real LLM
+(both fixture story IDs grounded, hallucinations demoted to drift
+by code, not trust), 10 tests green plus a `--no-deps` CI job
+pinned to the public v0.3.1 tag, and the pack installed live on
+the desk. The renderer-registration assumption died on contact
+(private registries, no public API) — the summary became the
+rendering, recorded in `docs/riders.md`. WLA-12-03, the actuator,
+is next.
 
 ## Active risks
 
@@ -88,9 +97,12 @@ held-open pipe in 0.06s. WLA-12-02 is next.
 - 2026-07-03 - HoldSpeak pinned at released 0.3.1; desk runs main 575 commits ahead, so the pack MANIFEST declares its proven range - WLA-12-01.
 - 2026-07-03 - Agentic mission-control / Desk conveyor vision (rich web+iOS roadmap primitive fed by the agent hook + rails) lands as Phase 13, scaffolded after 12-01 ships; Phase 12 scope unchanged - Karol.
 - 2026-07-03 - MCP evidence-capture stdin bug (captured child inherits the JSON-RPC pipe; wedges the single-threaded server) found while shipping 12-01; fix is its own story with its own evidence - Karol + agent.
+- 2026-07-03 - Pack copy step is a documented `cp` (docstring + `docs/riders.md`), not machinery; `dw doctor` learns to check the installation in WLA-12-07 (resolves the deferred question) - WLA-12-02.
+- 2026-07-03 - holdspeak is NOT on PyPI (corrects an earlier report); CI pins the public v0.3.1 git tag with `--no-deps`, test-proven sufficient for the stdlib-only plugin surface - WLA-12-02.
+- 2026-07-03 - Packs cannot register renderers/artifact types on 0.3.1; the typed payload rides the plugin-run output and the rich summary is the rendered body; upstream renderer-registration seam noted as a candidate contribution, not worked around - WLA-12-02.
 
 ## Decisions deferred
 
 - Rendered command copies committed vs build products - resolved 2026-07-03 by WLA-12-01 (committed; drift is a `dw check` ERROR) - see "Decisions made".
-- Who owns the pack copy step into `~/.holdspeak/plugin_packs/` (doctor vs install script) - decide in WLA-12-02.
+- Who owns the pack copy step into `~/.holdspeak/plugin_packs/` (doctor vs install script) - resolved 2026-07-03 by WLA-12-02 (documented `cp`; doctor checks it in WLA-12-07) - see "Decisions made".
 - Whether WLA-12-07 splits release into its own story - trigger if Desk/doctor halves grow - default is split rather than rush.

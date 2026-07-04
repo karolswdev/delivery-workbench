@@ -1,0 +1,21 @@
+Karol: Delivery sync for the webshop. Two things on my mind: the
+cart and the payments.
+
+Dev: The cart API is mid-flight — endpoints are sketched, tests
+half done. If nothing interrupts, it lands this week.
+
+Karol: Then the decision is we finish the cart API before anyone
+starts payment work. No parallel tracks, we have been burned by
+that before.
+
+Dev: Agreed. Action item on me — once cart merges, I pick up the
+payment provider integration next; the provider sandbox account
+is already approved.
+
+Karol: One more thing the support folks keep raising: customers
+want a dark mode on the storefront. There is no ticket, no story,
+nothing — we keep saying "later". Write it down as unplanned so
+it stops living in hallway conversations.
+
+Dev: Noted. So: cart first, payments right after, dark mode
+recorded as not scheduled.

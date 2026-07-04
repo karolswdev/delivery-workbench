@@ -319,6 +319,58 @@ of what the tool would probably do.
   v1.9.0 is live on PyPI, the tap, and GitHub Releases; the journal
   has an index and one entry per story, linked from the README.
 
+## The HoldSpeak pack: install and operate
+
+Shipped by WLA-12-02. The pack is one file in this repo,
+`integrations/holdspeak/delivery_workbench_pack.py`, installed by
+copying (the copy step is deliberately a documented `cp`, not
+machinery — `dw doctor` learns to check the installation in
+WLA-12-07):
+
+```sh
+mkdir -p ~/.holdspeak/plugin_packs
+cp integrations/holdspeak/delivery_workbench_pack.py ~/.holdspeak/plugin_packs/
+```
+
+HoldSpeak's context does not carry a repo path, so the operator
+maps meeting projects to rails repos once, in
+`~/.holdspeak/delivery_workbench.json`:
+
+```json
+{"projects": {"delivery-workbench": "/path/to/repo"},
+ "default": "/path/to/repo"}
+```
+
+Grounding is enforced in code, not trusted from the model: an
+alignment naming a story ID that is not on the roadmap is demoted
+to a drift flag naming the invented ID, and the next-actionable
+story always comes from `dw context`, never from the LLM.
+
+Findings verified while shipping the pack (each amended this doc
+the day it was found):
+
+- **holdspeak is not on PyPI.** It installs editable from its repo;
+  CI pins the public `v0.3.1` git tag with `--no-deps`, which is
+  test-proven sufficient — the plugin surface (`plugin_sdk`,
+  `plugins.host`, `plugin_pack_loader`, `plugins.synthesis`) is
+  stdlib-only with lazy intel imports, and those five modules are
+  byte-identical between `v0.3.1` and current main.
+- **Packs cannot register renderers or artifact types** on 0.3.1:
+  the registries in `plugins/synthesis.py` are private dicts with
+  no public API, and core edits are out of scope. Consequence: the
+  pack's artifact lands as `plugin_output` with the default body,
+  which inserts the plugin's `summary` — so the pack writes its
+  full alignment (grounded items, drift, next story) as a rich
+  markdown summary. The 0.3.1 body composer whitespace-collapses
+  it; keep summaries scannable despite the collapse. A public
+  renderer-registration seam is a candidate upstream contribution,
+  not a workaround on our side.
+- **The typed payload lives in the plugin-run output**
+  (`roadmap_alignment` key: aligned items, drift, next story,
+  grounded IDs), which is what downstream consumers — the actuator
+  (WLA-12-03) and mission control (Phase 13) — read; the artifact
+  is the human-facing rendering.
+
 ## Amendments this matrix forces
 
 Recorded here so the risk table's stop signal ("a rider story finds
