@@ -134,6 +134,36 @@ registered publisher's environment field caught an autocorrect typo
 and the workflow matches it deliberately; both sides must agree for
 the OIDC exchange).
 
+## Cutting a release
+
+The ritual, as run for v1.6.0 through v1.8.0 (a release story in the
+roadmap carries it; see WLA-11-04 for the worked example):
+
+1. Bump `dw_pmo.__version__`; the plugin manifest and the formula
+   url follow it (reset the formula sha256 to the zero placeholder).
+   `pyproject.toml` is dynamic and needs no edit. Add the CHANGELOG
+   section linking the phase final summary.
+2. Refresh the vendored snapshot (`pmo-roadmap/install.sh .
+   --skip-bootstrap`), then run the full battery and both
+   distribution smokes at the new version. The parity tests fail if
+   any surface lags.
+3. Ship the release story through the gate, close the phase, create
+   the annotated tag, push main and the tag.
+4. Build sdist and wheel, publish the GitHub Release with both
+   artifacts and their sha256 in the notes. The release event
+   triggers `release.yml`, which re-verifies history, re-runs the
+   package smoke, and publishes to PyPI via trusted publishing with
+   no manual step.
+5. Download the served wheel, confirm its sha256, stamp it into
+   `Formula/delivery-workbench.rb`, commit through the gate, push.
+6. Mirror the formula into the tap repository
+   (https://github.com/karolswdev/homebrew-tap, `Formula/` directory,
+   one commit per release) and push it. `brew upgrade
+   delivery-workbench` then serves the new version.
+7. Confirm: PyPI JSON lists the version (CDN can lag a minute), a
+   cold `pip install` from a neutral directory reports it, and CI is
+   green on the release head.
+
 ## Proof obligations
 
 - `tests/package-smoke.sh` — build artifacts, `pipx install` from
