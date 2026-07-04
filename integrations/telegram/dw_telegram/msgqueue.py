@@ -28,6 +28,7 @@ class OutMessage:
     text: str
     kind: str = "text"  # "text" | "status"
     buttons: list | None = None
+    thread_id: int | None = None  # forum topic, None = flat chat
 
 
 @dataclass
@@ -38,23 +39,27 @@ class Action:
     chat_id: int
     text: str
     buttons: list | None = None
+    thread_id: int | None = None
 
 
 def plan_batch(pending: list[OutMessage]) -> list[Action]:
-    """The kernel: merge adjacent plain texts per chat, coalesce all
-    statuses per chat to the latest (as one edit_status), keep
-    button-bearing messages unmerged and in order."""
+    """The kernel: merge adjacent plain texts within one (chat,
+    topic), coalesce statuses per (chat, topic) to the latest, keep
+    button-bearing messages unmerged and in order. Topics never
+    merge into each other."""
     actions: list[Action] = []
-    latest_status: dict[int, OutMessage] = {}
+    latest_status: dict[tuple[int, int | None], OutMessage] = {}
     for message in pending:
+        scope = (message.chat_id, message.thread_id)
         if message.kind == "status":
-            latest_status[message.chat_id] = message
+            latest_status[scope] = message
             continue
         previous = actions[-1] if actions else None
         if (
             previous is not None
             and previous.op == "send"
             and previous.chat_id == message.chat_id
+            and previous.thread_id == message.thread_id
             and previous.buttons is None
             and message.buttons is None
             and len(previous.text) + len(message.text) + 2 <= MERGE_LIMIT
@@ -62,10 +67,15 @@ def plan_batch(pending: list[OutMessage]) -> list[Action]:
             previous.text = f"{previous.text}\n\n{message.text}"
             continue
         actions.append(
-            Action("send", message.chat_id, message.text, message.buttons)
+            Action(
+                "send", message.chat_id, message.text,
+                message.buttons, message.thread_id,
+            )
         )
-    for chat_id, message in latest_status.items():
-        actions.append(Action("edit_status", chat_id, message.text))
+    for (chat_id, thread_id), message in latest_status.items():
+        actions.append(
+            Action("edit_status", chat_id, message.text, thread_id=thread_id)
+        )
     return actions
 
 
@@ -78,7 +88,8 @@ class MessageQueue:
         self._transport = transport
         self._sleep = sleeper
         self._pending: list[OutMessage] = []
-        self._status_ids: dict[int, int] = {}  # chat -> live status msg
+        # (chat, topic) -> live status message id
+        self._status_ids: dict[tuple[int, int | None], int] = {}
 
     def enqueue(
         self,
@@ -87,8 +98,11 @@ class MessageQueue:
         *,
         kind: str = "text",
         buttons: list | None = None,
+        thread_id: int | None = None,
     ) -> None:
-        self._pending.append(OutMessage(chat_id, text, kind, buttons))
+        self._pending.append(
+            OutMessage(chat_id, text, kind, buttons, thread_id)
+        )
 
     def flush(self) -> None:
         pending, self._pending = self._pending, []
@@ -101,13 +115,14 @@ class MessageQueue:
     # -- internals ----------------------------------------------------
 
     def _flush_status(self, action: Action) -> None:
-        message_id = self._status_ids.get(action.chat_id)
+        scope = (action.chat_id, action.thread_id)
+        message_id = self._status_ids.get(scope)
         if message_id is not None:
             if self._try_edit(action.chat_id, message_id, action.text):
                 return
         new_id = self._deliver(action)
         if new_id is not None:
-            self._status_ids[action.chat_id] = new_id
+            self._status_ids[scope] = new_id
 
     def _try_edit(self, chat_id: int, message_id: int, text: str) -> bool:
         from .transport import TransportError
@@ -142,6 +157,7 @@ class MessageQueue:
                             piece,
                             buttons,
                             entities=attempt_entities,
+                            thread_id=action.thread_id,
                         )
                         delivered = True
                         break

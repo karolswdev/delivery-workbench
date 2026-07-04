@@ -34,15 +34,20 @@ from .render import (
 )
 from .runtime import RuntimeState, utc_now
 from .tmuxdrive import TmuxDriver, Unarmed
+from .topics import TopicRouter
 
 HELP_TEXT = """Mission control (v{version})
+Topics are projects: /bind [path] ties this topic to a repo (commands
+  here then need no repo arg); /unbind releases it.
+Converse: /steer <session-key> binds a session — then just type, and
+  your words reach the pane (no tap per message); /unsteer stops.
 Read: /state /events [n] /sessions /questions /peek <tmux-target> /status
 Steer (proposal → approval tap): /flip <project> <phase> <story> <status>
   /newstory <project> <phase> <title…>  /reply <session-key> <answer…>
   /launch <claude|codex|pi> <path> [name]
 Projects: /open <path>  /install <path>
   /newproject <path> <slug> <prefix> <name…>
-Arming (ring 3): /arm <tmux-session> [minutes] /disarm <s> /armed
+Arming: /arm <tmux-session> [minutes] /disarm <s> /armed
 Certification stays human and the dw gate keeps final say."""
 
 PAIRING_PROMPT = (
@@ -75,7 +80,9 @@ class TelegramInterface:
         self.lifecycle = lifecycle or LifecycleClient(config, self.rails)
         self.proposals = ProposalBook()
         self.queue = MessageQueue(transport)
+        self.topics = TopicRouter(state)
         self._notified_questions: set[tuple[str, str]] = set()
+        self._reply_thread: int | None = None  # topic of the update in flight
         import threading
 
         self._lock = threading.RLock()  # drain thread vs update loop
@@ -85,12 +92,21 @@ class TelegramInterface:
     def _now(self) -> datetime:
         return self.clock()
 
-    def _say(self, chat_id: int, text: str, buttons=None) -> None:
+    def _say(self, chat_id: int, text: str, buttons=None, thread_id=...) -> None:
         # Renderers keep full content; the queue's send layer merges,
-        # formats via entities, and chunks (absorption map §2).
-        self.queue.enqueue(chat_id, text, buttons=buttons)
+        # formats via entities, and chunks (absorption map §2). By
+        # default a reply lands in the topic the update came from.
+        thread = self._reply_thread if thread_id is ... else thread_id
+        self.queue.enqueue(chat_id, text, buttons=buttons, thread_id=thread)
 
-    def _active_repo(self) -> Path | None:
+    def _active_repo(self, chat_id: int | None = None) -> Path | None:
+        # Topic-scoped first (§3): a bound topic means that repo, no
+        # argument. Flat chat and unbound topics fall back to the
+        # active/default repo — flat mode unchanged.
+        if chat_id is not None:
+            bound = self.topics.repo_for(chat_id, self._reply_thread)
+            if bound:
+                return Path(bound)
         if self.state.active_repo:
             return Path(self.state.active_repo)
         return self.config.default_repo
@@ -117,13 +133,16 @@ class TelegramInterface:
             if isinstance(message, dict):
                 chat = (message.get("chat") or {}).get("id")
                 text = str(message.get("text") or "")
+                thread = message.get("message_thread_id")
+                self._reply_thread = thread if isinstance(thread, int) else None
                 if isinstance(chat, int) and text:
                     self._handle_message(chat, text)
             elif isinstance(callback, dict):
-                chat = (
-                    (callback.get("message") or {}).get("chat") or {}
-                ).get("id")
-                message_id = (callback.get("message") or {}).get("message_id")
+                cb_message = callback.get("message") or {}
+                chat = (cb_message.get("chat") or {}).get("id")
+                message_id = cb_message.get("message_id")
+                thread = cb_message.get("message_thread_id")
+                self._reply_thread = thread if isinstance(thread, int) else None
                 data = str(callback.get("data") or "")
                 callback_id = str(callback.get("id") or "")
                 if isinstance(chat, int):
@@ -138,6 +157,7 @@ class TelegramInterface:
             if chat is not None:
                 self._say(chat, f"internal error: {type(exc).__name__}")
         finally:
+            self._reply_thread = None
             self.queue.flush()
 
     def drain_agent_events(self) -> int:
@@ -169,7 +189,9 @@ class TelegramInterface:
             return len(pushes)
 
     def poll_tick(self) -> None:
-        """Push newly awaiting agent questions to the paired chat."""
+        """Push newly awaiting agent questions — routed home to the
+        topic bound to the session's repo when there is one (§3),
+        otherwise to the flat chat / active topic."""
         chat = self.state.paired_chat
         repo = self._active_repo()
         if chat is None or repo is None:
@@ -187,13 +209,20 @@ class TelegramInterface:
             if key in self._notified_questions:
                 continue
             self._notified_questions.add(key)
-            self._say(chat, render_question(session))
+            session_repo = str(session.get("repo_root") or "")
+            home = (
+                self.topics.topic_for_repo(chat, session_repo)
+                if session_repo
+                else None
+            )
+            self._say(chat, render_question(session), thread_id=home)
         self.queue.flush()
 
     # -- messages -------------------------------------------------------
 
     def _handle_message(self, chat_id: int, text: str) -> None:
-        parts = text.strip().split()
+        stripped = text.strip()
+        parts = stripped.split()
         if not parts:
             return
         command = parts[0].split("@")[0].lower()
@@ -212,6 +241,20 @@ class TelegramInterface:
                 self._say(chat_id, PAIRING_PROMPT)
             return
 
+        # Flowing conversation (§0): plain text — not a command — in a
+        # topic with a live session binding relays straight to the
+        # pane. The binding IS the arming; no per-message tap. Pane
+        # ownership is still verified beneath, per keystroke.
+        if not command.startswith("/"):
+            if self._relay_if_bound(chat_id, stripped):
+                return
+            self._say(
+                chat_id,
+                "no session bound to this topic — /steer <session-key> "
+                "to converse, or start a command with /.",
+            )
+            return
+
         handler = {
             "/start": self._cmd_help, "/help": self._cmd_help,
             "/status": self._cmd_status,
@@ -227,6 +270,10 @@ class TelegramInterface:
             "/disarm": self._cmd_disarm,
             "/armed": self._cmd_armed,
             "/open": self._cmd_open,
+            "/bind": self._cmd_bind,
+            "/unbind": self._cmd_unbind,
+            "/steer": self._cmd_steer,
+            "/unsteer": self._cmd_unsteer,
             "/install": self._cmd_install,
             "/newproject": self._cmd_newproject,
             "/launch": self._cmd_launch,
@@ -236,6 +283,31 @@ class TelegramInterface:
             self._say(chat_id, f"unknown command {command}; /help lists them")
             return
         handler(chat_id, args)
+
+    def _relay_if_bound(self, chat_id: int, text: str) -> bool:
+        """Relay free text to a topic's bound session, or False if
+        this topic has no live binding."""
+        binding = self.topics.bound_session(
+            chat_id, self._reply_thread, self._now()
+        )
+        if binding is None:
+            return False
+        session = binding["tmux_session"]
+        now = self._now()
+        if not self.arming.is_armed(session, now):
+            # The topic binding is the grant; keep the driver's own
+            # arming store in step so its ownership check passes.
+            self.arming.arm(session, now)
+        try:
+            ok, output = self.driver.send_text(
+                session, binding["target"], text, now
+            )
+        except Unarmed as exc:
+            self._say(chat_id, f"✕ {exc}")
+            return True
+        if not ok:
+            self._say(chat_id, f"✕ relay failed: {output}")
+        return True
 
     def _cmd_repair(self, chat_id: int, args: list[str]) -> None:
         if not args:
@@ -248,7 +320,7 @@ class TelegramInterface:
         self._say(chat_id, HELP_TEXT.format(version=INTERFACE_VERSION))
 
     def _cmd_status(self, chat_id: int, _args: list[str]) -> None:
-        repo = self._active_repo()
+        repo = self._active_repo(chat_id)
         armed = self.arming.status(self._now())
         lines = [
             f"interface v{INTERFACE_VERSION}, paired",
@@ -263,9 +335,12 @@ class TelegramInterface:
         self._say(chat_id, "\n".join(lines))
 
     def _repo_or_complain(self, chat_id: int) -> Path | None:
-        repo = self._active_repo()
+        repo = self._active_repo(chat_id)
         if repo is None:
-            self._say(chat_id, "no active rails repo; /open <path> first")
+            self._say(
+                chat_id,
+                "no rails repo here; /bind in a topic or /open <path>",
+            )
         return repo
 
     def _cmd_state(self, chat_id: int, _args: list[str]) -> None:
@@ -524,6 +599,123 @@ class TelegramInterface:
         self.state.active_repo = str(path.resolve())
         self.state.save()
         self._say(chat_id, f"active rails repo: {self.state.active_repo}")
+
+    def _cmd_bind(self, chat_id: int, args: list[str]) -> None:
+        """Bind this topic to a rails repo (§3). No path: list the
+        allow-listed rails repos to pick from."""
+        if not args:
+            options = self._biddable_repos()
+            if not options:
+                self._say(
+                    chat_id,
+                    "no rails repos under the allow-listed workspace "
+                    "roots; check workspace_roots in the config.",
+                )
+                return
+            self._say(
+                chat_id,
+                "bind this topic to a repo:\n"
+                + "\n".join(f"  /bind {p}" for p in options),
+            )
+            return
+        path = Path(args[0]).expanduser()
+        ok, reason = self.lifecycle.check_open(path)
+        if not ok:
+            self._say(chat_id, f"refused: {reason}")
+            return
+        self.topics.bind_repo(
+            chat_id, self._reply_thread, str(path.resolve())
+        )
+        where = "this topic" if self._reply_thread is not None else "this chat"
+        self._say(
+            chat_id,
+            f"◆ {where} is now {path.name} ({path.resolve()}). "
+            "Commands here scope to it; /steer a session to converse.",
+        )
+
+    def _cmd_unbind(self, chat_id: int, _args: list[str]) -> None:
+        was = self.topics.unbind_repo(chat_id, self._reply_thread)
+        self._say(
+            chat_id,
+            "unbound; this topic is no longer tied to a repo"
+            if was
+            else "this topic was not bound",
+        )
+
+    def _biddable_repos(self) -> list[str]:
+        found: list[str] = []
+        for root in self.config.workspace_roots:
+            try:
+                for child in sorted(root.iterdir()):
+                    if (child / "pm" / "roadmap").is_dir() and (
+                        child / ".githooks" / "dw"
+                    ).is_file():
+                        found.append(str(child))
+            except OSError:
+                continue
+        return found
+
+    def _cmd_steer(self, chat_id: int, args: list[str]) -> None:
+        """Bind a session into this topic — the arming (§0). After
+        this, plain text flows to the pane, no per-message tap."""
+        if not args:
+            self._say(chat_id, "usage: /steer <session-key>")
+            return
+        key = args[0]
+        repo = self._repo_or_complain(chat_id)
+        if repo is None:
+            return
+        doc, reason = self.rails.read_sessions(repo)
+        if doc is None:
+            self._say(chat_id, f"sessions unavailable: {reason}")
+            return
+        session = next(
+            (s for s in doc.get("sessions") or [] if s.get("key") == key),
+            None,
+        )
+        if session is None:
+            self._say(chat_id, f"no live session {key!r}; /sessions lists them")
+            return
+        tmux = session.get("tmux") or {}
+        if not tmux.get("session"):
+            self._say(
+                chat_id,
+                f"{key} is not inside tmux — it can't be steered "
+                "(no pane to type into).",
+            )
+            return
+        target = self._pane_target(tmux)
+        self.topics.bind_session(
+            chat_id, self._reply_thread, key, target,
+            str(tmux["session"]), self._now(),
+        )
+        self.arming.arm(str(tmux["session"]), self._now())
+        self._say(
+            chat_id,
+            f"⚡ steering {session.get('agent')} session {key} — "
+            "type to converse; the binding refreshes on activity and "
+            "expires when idle. /unsteer stops it.",
+        )
+
+    def _cmd_unsteer(self, chat_id: int, _args: list[str]) -> None:
+        binding = self.topics.bound_session(
+            chat_id, self._reply_thread, self._now()
+        )
+        was = self.topics.unbind_session(chat_id, self._reply_thread)
+        if was and binding:
+            self.arming.disarm(binding.get("tmux_session", ""))
+        self._say(
+            chat_id,
+            "stopped steering this topic" if was else "no session was bound here",
+        )
+
+    def _pane_target(self, tmux: dict) -> str:
+        pane = tmux.get("pane")
+        if str(pane or "").startswith("%"):
+            return str(pane)
+        if tmux.get("window") is not None and pane is not None:
+            return f"{tmux['session']}:{tmux.get('window')}.{pane}"
+        return str(tmux["session"])
 
     def _cmd_install(self, chat_id: int, args: list[str]) -> None:
         if not args:

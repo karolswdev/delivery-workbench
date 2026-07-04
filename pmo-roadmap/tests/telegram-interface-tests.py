@@ -198,6 +198,13 @@ class RecordingRunner:
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
 
+
+
+def topic_message(chat: int, text: str, thread: int) -> dict:
+    return {"message": {"chat": {"id": chat}, "text": text,
+                        "message_thread_id": thread}}
+
+
 def message(chat: int, text: str) -> dict:
     return {"message": {"chat": {"id": chat}, "text": text}}
 
@@ -1156,6 +1163,151 @@ class CardLifecycleTest(InterfaceCase):
             )
         )
         self.assertIn("rejected", self.transport.edited[-1]["text"])
+
+
+
+# ----------------------------------------------------- topics = projects
+
+
+from dw_telegram.topics import TopicRouter, topic_key
+
+
+class TopicRouterTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-topics-test."))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.state = RuntimeState(self.tmp / "state.json")
+        self.router = TopicRouter(self.state)
+        self.clock = FakeClock()
+
+    def test_repo_bind_scope_and_reverse(self):
+        self.router.bind_repo(1, 10, "/repos/a")
+        self.router.bind_repo(1, 20, "/repos/b")
+        self.assertEqual(self.router.repo_for(1, 10), "/repos/a")
+        self.assertEqual(self.router.repo_for(1, 20), "/repos/b")
+        self.assertIsNone(self.router.repo_for(1, 99))
+        self.assertEqual(self.router.topic_for_repo(1, "/repos/b"), 20)
+        self.assertIsNone(self.router.topic_for_repo(1, "/nope"))
+
+    def test_flat_chat_is_the_none_topic(self):
+        self.router.bind_repo(1, None, "/repos/flat")
+        self.assertEqual(self.router.repo_for(1, None), "/repos/flat")
+        self.assertEqual(topic_key(1, None), "1:-")
+
+    def test_unbind_repo_cascades_to_session(self):
+        self.router.bind_repo(1, 10, "/repos/a")
+        self.router.bind_session(1, 10, "claude:s", "%1", "desk", self.clock())
+        self.router.unbind_repo(1, 10)
+        self.assertIsNone(self.router.bound_session(1, 10, self.clock()))
+
+    def test_session_binding_expires_but_activity_refreshes(self):
+        self.router.bind_session(1, 10, "claude:s", "%1", "desk", self.clock())
+        self.clock.advance(minutes=25)
+        # a read within the window refreshes the idle clock
+        self.assertIsNotNone(self.router.bound_session(1, 10, self.clock()))
+        self.clock.advance(minutes=25)
+        self.assertIsNotNone(self.router.bound_session(1, 10, self.clock()))
+        self.clock.advance(minutes=31)
+        self.assertIsNone(self.router.bound_session(1, 10, self.clock()))
+
+    def test_bindings_persist_across_restart(self):
+        self.router.bind_repo(1, 10, "/repos/a")
+        self.router.bind_session(1, 10, "claude:s", "%1", "desk", self.clock())
+        reloaded = RuntimeState(self.tmp / "state.json")
+        router2 = TopicRouter(reloaded)
+        self.assertEqual(router2.repo_for(1, 10), "/repos/a")
+        self.assertIsNotNone(router2.bound_session(1, 10, self.clock()))
+
+
+class TopicScopingTest(InterfaceCase):
+    def setUp(self):
+        super().setUp()
+        self.config.default_repo = None  # force topic scoping to matter
+        self.pair()
+
+    def test_bind_then_commands_scope_to_the_topic(self):
+        self.iface.handle_update(
+            topic_message(OWNER, f"/bind {self.repo}", 77)
+        )
+        self.assertIn("is now", self.last_text())
+        # /state in the bound topic needs no repo arg and hits that repo
+        self.iface.handle_update(topic_message(OWNER, "/state", 77))
+        text = self.last_text()
+        self.assertIn("demo", text)
+        self.assertIn("DM-1-02", text)
+
+    def test_replies_land_in_the_originating_topic(self):
+        self.iface.handle_update(topic_message(OWNER, f"/bind {self.repo}", 77))
+        self.iface.handle_update(topic_message(OWNER, "/state", 77))
+        self.assertEqual(self.transport.sent[-1]["thread_id"], 77)
+
+    def test_unbound_topic_has_no_repo(self):
+        self.iface.handle_update(topic_message(OWNER, "/state", 88))
+        self.assertIn("no rails repo here", self.last_text())
+
+    def test_flat_chat_still_uses_active_repo(self):
+        self.iface.handle_update(message(OWNER, f"/open {self.repo}"))
+        self.iface.handle_update(message(OWNER, "/state"))
+        self.assertIn("demo", self.last_text())
+        self.assertIsNone(self.transport.sent[-1]["thread_id"])
+
+
+class FlowingConversationTest(InterfaceCase):
+    def setUp(self):
+        super().setUp()
+        self.pair()
+        self.iface.handle_update(topic_message(OWNER, f"/bind {self.repo}", 5))
+
+    def test_steer_then_plain_text_flows_no_tap(self):
+        self.iface.handle_update(
+            topic_message(OWNER, "/steer claude:sess-1", 5)
+        )
+        self.assertIn("steering", self.last_text())
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(
+            topic_message(OWNER, "yes, delete the flag", 5)
+        )
+        sends = [c for c in self.tmux_runner.calls if c[1] == "send-keys"]
+        self.assertEqual(
+            sends,
+            [
+                ["tmux", "send-keys", "-t", "%7", "-l", "yes, delete the flag"],
+                ["tmux", "send-keys", "-t", "%7", "Enter"],
+            ],
+            "plain text relays to the bound pane with no proposal",
+        )
+        # and no proposal card was ever offered
+        self.assertFalse(
+            any(s["buttons"] for s in self.transport.sent[-2:]),
+            "conversation flows without a tap",
+        )
+
+    def test_plain_text_without_a_binding_is_refused_gently(self):
+        self.iface.handle_update(topic_message(OWNER, "just chatting", 5))
+        self.assertIn("no session bound", self.last_text())
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], []
+        )
+
+    def test_unsteer_stops_the_flow(self):
+        self.iface.handle_update(topic_message(OWNER, "/steer claude:sess-1", 5))
+        self.iface.handle_update(topic_message(OWNER, "/unsteer", 5))
+        self.assertIn("stopped steering", self.last_text())
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(topic_message(OWNER, "hello?", 5))
+        self.assertIn("no session bound", self.last_text())
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], []
+        )
+
+    def test_a_question_routes_home_to_its_repo_topic(self):
+        # the fixture registry session is in self.repo, bound to topic 5
+        self.iface.poll_tick()
+        homed = [
+            s for s in self.transport.sent
+            if "is asking:" in s["text"] and s["thread_id"] == 5
+        ]
+        self.assertTrue(homed, "the question landed in the repo's topic")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

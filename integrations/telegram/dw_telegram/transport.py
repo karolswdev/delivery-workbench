@@ -98,8 +98,11 @@ class HttpTransport:
         text: str,
         buttons: list[list[tuple[str, str]]] | None = None,
         entities: list[dict] | None = None,
+        thread_id: int | None = None,
     ) -> int | None:
         payload: dict = {"chat_id": chat_id, "text": text}
+        if thread_id is not None:
+            payload["message_thread_id"] = thread_id
         if entities:
             payload["entities"] = entities
         if buttons:
@@ -175,7 +178,7 @@ class ScriptedTransport:
         batch, self.queue = self.queue, []
         return batch
 
-    def send(self, chat_id, text, buttons=None, entities=None) -> int:
+    def send(self, chat_id, text, buttons=None, entities=None, thread_id=None) -> int:
         if self.reject_entities and entities:
             raise TransportError("scripted: entities rejected")
         if self.flood_after is not None:
@@ -188,6 +191,7 @@ class ScriptedTransport:
             "text": text,
             "buttons": buttons,
             "entities": entities,
+            "thread_id": thread_id,
             "message_id": self._next_id,
         }
         self._next_id += 1

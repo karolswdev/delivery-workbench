@@ -52,6 +52,28 @@ in chat; the binding lands in runtime state. Wrong, expired, and
 reused tokens are refused; re-pairing revokes the previous binding;
 an unpaired chat gets silence beyond the pairing prompt.
 
+## Topics are projects, and conversation flows
+
+Add the bot to a Telegram group with topics enabled and one
+forum topic becomes one rails repo: `/bind` (no argument lists the
+allow-listed repos to pick from; `/bind <path>` ties this topic to
+that repo). Commands in a bound topic need no repo argument —
+`/state`, `/flip`, `/events` all act on the topic's repo — and a
+question from an agent working that repo routes home to its topic.
+The flat single-chat mode is unchanged: with no topics, `/open`
+still sets one active repo.
+
+Inside a bound topic, `/steer <session-key>` binds a live agent
+session — **that binding is the arming** (the owner decision of
+2026-07-04: consent gates entry, not every utterance). After it,
+you just type: your words relay straight to the agent's pane, no
+tap per message, agent questions land back in the topic. The
+binding refreshes on activity and expires when idle; `/unsteer`
+stops it, and pane-ownership verification still runs beneath every
+keystroke. Rails verbs (`/flip`, `/newstory`), project lifecycle,
+and session launches keep their approval tap — the boundaries the
+gate cares about. Design: docs/absorption-ccgram.md §0+§3.
+
 ## The three consent rings (contract §4)
 
 1. **Read** — `/state`, `/events`, `/sessions`, `/questions`,

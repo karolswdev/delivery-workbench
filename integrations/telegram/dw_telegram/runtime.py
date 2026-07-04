@@ -46,6 +46,8 @@ class RuntimeState:
         self.armed: dict[str, str] = {}  # tmux session -> expires_at iso
         self.active_repo: str | None = None
         self.events_offset: int = 0  # byte offset into the hook stream
+        self.topic_repos: dict[str, str] = {}  # topic-key -> repo path
+        self.topic_sessions: dict[str, dict] = {}  # topic-key -> binding
         self._load()
 
     def reload(self) -> None:
@@ -78,6 +80,18 @@ class RuntimeState:
         self.active_repo = str(repo) if repo else None
         offset = doc.get("events_offset")
         self.events_offset = offset if isinstance(offset, int) and offset >= 0 else 0
+        repos = doc.get("topic_repos")
+        self.topic_repos = (
+            {str(k): str(v) for k, v in repos.items()}
+            if isinstance(repos, dict)
+            else {}
+        )
+        sessions = doc.get("topic_sessions")
+        self.topic_sessions = (
+            {str(k): v for k, v in sessions.items() if isinstance(v, dict)}
+            if isinstance(sessions, dict)
+            else {}
+        )
 
     def save(self) -> None:
         doc = {
@@ -87,6 +101,8 @@ class RuntimeState:
             "armed": self.armed,
             "active_repo": self.active_repo,
             "events_offset": self.events_offset,
+            "topic_repos": self.topic_repos,
+            "topic_sessions": self.topic_sessions,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(

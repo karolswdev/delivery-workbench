@@ -60,3 +60,4 @@ read as narrative and audited as history.
 - [Entry 16 — Reading someone else's scars](./entry-16-reading-someone-elses-scars.md) *(Phase 14 begins; the journal continues by the absorption map's decision)*
 - [Entry 17 — The rails learn to knock](./entry-17-the-rails-learn-to-knock.md)
 - [Entry 18 — Nothing left to escape](./entry-18-nothing-left-to-escape.md)
+- [Entry 19 — A room of its own](./entry-19-a-room-of-its-own.md)
