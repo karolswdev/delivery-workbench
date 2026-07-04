@@ -339,6 +339,12 @@ class TelegramInterface:
             else f"\nApproving also arms {tmux['session']!r} for "
             "15 minutes (visible via /armed, revocable via /disarm)."
         )
+        if session.get("stale"):
+            arming_part += (
+                "\n⚠ This session's registry entry is stale (no update "
+                "in 30+ min) — it may have ended; the driver will "
+                "verify the pane before typing."
+            )
         self._propose(
             chat_id,
             "reply",

@@ -81,6 +81,30 @@ class TmuxDriver:
                 f"session {session!r} is not armed; arm it first "
                 "(arming is per-session and expires)"
             )
+        # Pane ids are only unique per tmux *server*: a recycled id
+        # from a dead server can point at an unrelated pane — typing
+        # into it would be exactly the "whatever is focused" failure
+        # the contract forbids. Prove the target belongs to the armed
+        # session before one keystroke leaves.
+        try:
+            owner = self._run(
+                ["tmux", "display-message", "-p", "-t", target,
+                 "#{session_name}"]
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return False, f"tmux failed: {exc}"
+        if owner.returncode != 0:
+            return False, (
+                f"target pane {target!r} does not exist — the session "
+                "has likely ended (its registry entry was stale)"
+            )
+        actual = (owner.stdout or "").strip()
+        if actual != session:
+            return False, (
+                f"refusing: pane {target!r} belongs to tmux session "
+                f"{actual!r}, not the armed {session!r} — the registry "
+                "address is stale, nothing was typed"
+            )
         for argv in (
             ["tmux", "send-keys", "-t", target, "-l", text],
             ["tmux", "send-keys", "-t", target, "Enter"],

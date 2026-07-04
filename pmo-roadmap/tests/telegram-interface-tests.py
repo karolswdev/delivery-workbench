@@ -225,7 +225,17 @@ class InterfaceCase(unittest.TestCase):
         self.registry = make_registry(self.tmp, self.repo)
         self.clock = FakeClock()
         self.transport = ScriptedTransport()
-        self.tmux_runner = RecordingRunner()
+
+        def tmux_hook(argv, cwd):
+            # The driver verifies pane ownership before typing; the
+            # fixture pane %7 belongs to tmux session "desk".
+            if argv[1] == "display-message":
+                return types.SimpleNamespace(
+                    returncode=0, stdout="desk\n", stderr=""
+                )
+            return None
+
+        self.tmux_runner = RecordingRunner(tmux_hook)
         self.config = Config(
             bot_token="unit-test-token",
             workspace_roots=[self.tmp],
@@ -482,6 +492,57 @@ class QARelayTest(InterfaceCase):
         )
         self.iface.handle_update(message(OWNER, "/armed"))
         self.assertIn("desk armed until", self.last_text())
+
+    def test_recycled_pane_id_is_refused(self) -> None:
+        # Live-found (2026-07-04): pane ids are only unique per tmux
+        # server. A stale registry entry pointed at %0, which the
+        # current server had reassigned to the bot's own console —
+        # the relay typed into the wrong pane and reported success.
+        # The driver must prove pane ownership before one keystroke.
+        def hijacked(argv, cwd):
+            if argv[1] == "display-message":
+                return types.SimpleNamespace(
+                    returncode=0, stdout="dw-telegram\n", stderr=""
+                )
+            return None
+
+        runner = RecordingRunner(hijacked)
+        self.iface.driver = TmuxDriver(
+            Arming(self.state), runner=runner
+        )
+        self.iface.handle_update(message(OWNER, "/arm desk"))
+        self.iface.handle_update(
+            message(OWNER, "/reply claude:sess-1 hello?")
+        )
+        self.approve_last()
+        text = self.last_text()
+        self.assertIn("belongs to tmux session 'dw-telegram'", text)
+        self.assertIn("nothing was typed", text)
+        self.assertEqual(
+            [c for c in runner.calls if c[1] == "send-keys"], []
+        )
+
+    def test_dead_pane_is_refused(self) -> None:
+        def dead(argv, cwd):
+            if argv[1] == "display-message":
+                return types.SimpleNamespace(
+                    returncode=1, stdout="", stderr="can't find pane %7"
+                )
+            return None
+
+        runner = RecordingRunner(dead)
+        self.iface.driver = TmuxDriver(
+            Arming(self.state), runner=runner
+        )
+        self.iface.handle_update(message(OWNER, "/arm desk"))
+        self.iface.handle_update(
+            message(OWNER, "/reply claude:sess-1 hello?")
+        )
+        self.approve_last()
+        self.assertIn("does not exist", self.last_text())
+        self.assertEqual(
+            [c for c in runner.calls if c[1] == "send-keys"], []
+        )
 
     def test_no_keystroke_without_a_grant(self) -> None:
         # The driver boundary is intact: text that never passed

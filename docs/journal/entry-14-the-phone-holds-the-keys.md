@@ -53,3 +53,23 @@ What CI cannot prove stays owed and named: the live phone leg,
 screenshots into the evidence assets, the same loop against the
 real desk. The fixture phone tapped every button; Karol's phone
 gets the next turn.
+
+*Correction, appended the same evening — the live leg found what
+the fixtures could not.* Four real bugs in the first hour of
+operating it: a 401 the old serve loop swallowed silently (it now
+proves the token with getMe before serving); the polling loop died
+on the first network blip (now retries with backoff); a pairing
+token generated while the server was running was invisible to it
+(two processes, one state file — the server now reloads before
+judging); and the one with teeth — Karol replied to a stale
+session whose recorded pane id `%0` had been recycled by a fresh
+tmux server, and the driver typed his answer into the wrong pane
+while reporting success. Pane ids are only unique per server; had
+that pane held a shell, the reply would have executed as a
+command. The driver now proves the target pane belongs to the
+armed session before one keystroke leaves, and refuses with "the
+registry address is stale, nothing was typed." The arming ring
+also lost a tap on the way: the reply approval now doubles as the
+arming grant, named in the preview — the owner found two taps
+hostile, and he was right. Every fix carries a regression test;
+the suite stands at 43.
