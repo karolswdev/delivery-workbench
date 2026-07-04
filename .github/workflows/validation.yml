@@ -117,12 +117,17 @@ jobs:
           python-version: "3.13"
 
       - name: Install holdspeak (pinned pack target, no runtime deps)
-        # --no-deps is deliberate and test-proven: the plugin surface
-        # (plugin_sdk, plugins.host, plugin_pack_loader, synthesis) is
-        # stdlib-only with lazy intel imports, and the full dep set
-        # drags in PortAudio/X11 bindings a headless runner can't use.
-        # The pin matches the pack MANIFEST's proven range (WLA-12-02).
-        run: pip install --no-deps "holdspeak @ git+https://github.com/karolswdev/HoldSpeak@v0.3.1"
+        # --no-deps is deliberate: the plugin surface (plugin_sdk,
+        # plugins.host, plugin_pack_loader, synthesis) is stdlib-only
+        # with lazy intel imports, and the full dep set drags in
+        # PortAudio/X11 bindings a headless runner can't use. numpy is
+        # the one exception — meeting_session (the E2E tests' meeting
+        # row) imports it at v0.3.1; a dev box usually has it, which is
+        # exactly why CI is the honest floor here (WLA-12-02/03).
+        # The pin matches the pack MANIFEST's proven range.
+        run: |
+          pip install --no-deps "holdspeak @ git+https://github.com/karolswdev/HoldSpeak@v0.3.1"
+          pip install numpy
 
       - name: HoldSpeak pack tests (discovery, host, failure shapes)
         run: python3 pmo-roadmap/tests/holdspeak-pack-tests.py
