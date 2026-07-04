@@ -57,3 +57,4 @@ read as narrative and audited as history.
 - [Entry 13 — The rails narrate themselves](./entry-13-the-rails-narrate-themselves.md)
 - [Entry 14 — The phone holds the keys, the gate keeps the lock](./entry-14-the-phone-holds-the-keys.md)
 - [Entry 15 — The belt and the gate shake hands](./entry-15-the-belt-and-the-gate-shake-hands.md)
+- [Entry 16 — Reading someone else's scars](./entry-16-reading-someone-elses-scars.md) *(Phase 14 begins; the journal continues by the absorption map's decision)*

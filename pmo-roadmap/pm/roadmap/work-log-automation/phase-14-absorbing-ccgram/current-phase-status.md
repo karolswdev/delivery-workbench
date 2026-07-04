@@ -42,7 +42,7 @@ Absorb and re-interpret ccgram's operational excellence under the consent spine:
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-14-01 | Design: the absorption map | ready | [story-01-design-the-absorption-map](./story-01-design-the-absorption-map.md) | - |
+| WLA-14-01 | Design: the absorption map | done | [story-01-design-the-absorption-map](./story-01-design-the-absorption-map.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-14-02 | The rails speak first: hook-driven push | backlog | [story-02-the-rails-speak-first-hook-driven-push](./story-02-the-rails-speak-first-hook-driven-push.md) | - |
 | WLA-14-03 | The message layer grows up | backlog | [story-03-the-message-layer-grows-up](./story-03-the-message-layer-grows-up.md) | - |
 | WLA-14-04 | Topics are projects, and conversation flows | backlog | [story-04-topics-are-projects](./story-04-topics-are-projects.md) | - |

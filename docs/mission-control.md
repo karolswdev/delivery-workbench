@@ -199,6 +199,18 @@ Three rings, strictest last:
    and the driver-level refusal below the chat layer stands. Two
    taps collapsed into one explicit one; the boundary did not
    move.
+   *(Amended by WLA-14-01, owner decision 2026-07-04 — the
+   interaction stance:)* consent gates ENTRY, not every
+   utterance. Binding a session into a topic IS the arming — one
+   explicit, visible, revocable act with an activity-refreshed
+   TTL — and inside a live binding, conversation flows: typed
+   text relays directly, replies land back, no per-message
+   proposal (13-06's per-reply proposal is retired). Taps remain
+   at the boundaries the gate cares about: rails verbs, project
+   lifecycle, session launch/recovery. Pane-ownership
+   verification per keystroke and the dw gate's final say are
+   unchanged. Full map:
+   [absorption-ccgram.md](./absorption-ccgram.md) §0.
 
 ## 5. The counterpart seam
 

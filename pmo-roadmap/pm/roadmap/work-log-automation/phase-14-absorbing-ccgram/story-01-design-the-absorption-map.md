@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 14
-- **Status:** ready
+- **Status:** done
 - **Depends on:** Phase 13 closed (the Telegram interface exists and
   runs live); the ccgram study (alexei-led/ccgram v4.3.5, MIT,
   lineage six-ddc — read in full 2026-07-04).

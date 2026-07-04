@@ -7,6 +7,8 @@
 - **Unblocks:** WLA-14-07.
 - **Owner:** unassigned
 
+*Re-pinned by WLA-14-01 (2026-07-04): implement against [docs/absorption-ccgram.md](../../../../../docs/absorption-ccgram.md) §0+§3.*
+
 ## Problem
 
 One flat chat is fine for one repo, and a proposal tap per spoken

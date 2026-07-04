@@ -7,6 +7,8 @@
 - **Unblocks:** phase close.
 - **Owner:** unassigned
 
+*Re-pinned by WLA-14-01 (2026-07-04): implement against [docs/absorption-ccgram.md](../../../../../docs/absorption-ccgram.md) §6.*
+
 ## Problem
 
 Six stories of absorbed craft prove nothing until the whole pocket
