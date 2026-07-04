@@ -24,10 +24,13 @@ consumes only what this phase exposes.
   built on HoldSpeak's existing agent-session registry; an
   append-only event log of rail happenings; an end-to-end proof
   with a real Desk driving a real approval through the Phase 12
-  actuator — including the gate refusing one; and a Telegram
-  mission-control client (`KarolDeliveryWorkbenchBot`) consuming
-  the same substrate — state, agent Q&A relay, approval-gated
-  steering, read-only tmux previews (WLA-13-06).
+  actuator — including the gate refusing one; and the Telegram
+  interface consuming the same substrate — state, agent Q&A relay,
+  approval-gated steering as the tmux CLI driver for all supported
+  harnesses, project lifecycle (open/install/create rails-backed
+  repos) behind the same consent envelope, read-only previews
+  (WLA-13-06; concrete bot identity is operator config, not
+  roadmap content).
 - **Out:** HoldSpeak UI code, the conveyor's visual/gamified
   design, and any Desk object type (all counterpart-phase work in
   the HoldSpeak repo); actuator verbs beyond Phase 12's two;
@@ -55,10 +58,13 @@ consumes only what this phase exposes.
   flips a story through the Phase 12 actuator, and a gate refusal
   surfaces as a first-class event — all evidence-captured
   (WLA-13-05).
-- [ ] The Telegram bot reports state and events, relays an agent
-  question and its answer, executes an approved flip, relays a
-  gate refusal into chat, and refuses to steer an unarmed session
-  — all evidence-captured (WLA-13-06).
+- [ ] The Telegram interface reports state and events, relays an
+  agent question and its answer, executes an approved flip, relays
+  a gate refusal into chat, refuses to steer an unarmed session,
+  drives a full story loop through tmux on each supported harness,
+  and creates a rails-backed project from chat that lands doctor
+  green with a first gated commit — all evidence-captured
+  (WLA-13-06).
 
 ## Story status
 
@@ -97,7 +103,9 @@ scaffold-grade on purpose and say so.
 - 2026-07-03 - Scaffolded mid-Phase-12 rather than widening Phase 12; Phase 12 scope untouched - Karol.
 - 2026-07-03 - Split ownership: DW exposes state/events/verbs, HoldSpeak owns the conveyor UI (web + iOS) as a counterpart phase in its own repo - Karol + agent.
 - 2026-07-03 - Steering stays within Phase 12's actuator envelope: two verbs, propose-approve-execute, gate always final, certification human, always - canon.
-- 2026-07-04 - Telegram joins the phase as a second mission-control client (WLA-13-06), same substrate as the Desk; bot identity `KarolDeliveryWorkbenchBot` - Karol.
+- 2026-07-04 - Telegram joins the phase as a second mission-control client (WLA-13-06), same substrate as the Desk - Karol.
+- 2026-07-04 - The component is named generically (the Telegram interface); the concrete bot identity and token are operator config in `~/.config/delivery-workbench/telegram.json`, never roadmap or repo content - Karol.
+- 2026-07-04 - Interface scope broadened: it is the tmux CLI driver for all supported harnesses (claude, codex, pi) and can open/install/create rails-backed git projects — every act behind proposal-preview-approval, project creation path-allow-listed to workspace roots, terminal remains the only place anything runs - Karol.
 - 2026-07-04 - Bot credentials never enter the repo, bogus or real: token provisioned at `~/.config/delivery-workbench/telegram.json` (untracked, chmod 600), env override; CI greps the repo clean - Karol + agent.
 - 2026-07-04 - tmux `send-keys` steering is the program's sharpest edge: per-session visible expiring arming, proposal-preview-approval per act, default off; WLA-13-01 designs the envelope before any implementation - Karol + agent.
 

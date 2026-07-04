@@ -26,8 +26,10 @@ allow-listed, evidenced property.
 
 ## Scope
 
-- **In:** A bot (working identity: `KarolDeliveryWorkbenchBot`)
-  that (a) reports mission-control state on demand and on events —
+- **In:** The Telegram interface — the component name; the
+  concrete bot identity and token are operator configuration in
+  `~/.config/delivery-workbench/telegram.json`, never in this repo
+  — that (a) reports mission-control state on demand and on events —
   current phase, story statuses, next actionable, gate verdicts
   and refusals — rendered for chat; (b) relays agent Q&A using the
   session↔story correlation (WLA-13-03): "Claude on WLA-12-03 is
@@ -39,8 +41,18 @@ allow-listed, evidenced property.
   Phase 12 actuator seam and (2) text relay into an explicitly
   armed tmux session via `send-keys` — arming is per-session,
   visible, and expires; (d) shows live previews via read-only
-  `tmux capture-pane` snapshots on request. Chat identity
-  allow-list: the bot answers its owner, nobody else.
+  `tmux capture-pane` snapshots on request; (e) drives project
+  lifecycle: open, install, or create Delivery-Workbench-backed
+  git projects on request — `dw`-scaffolded repo, rails installed,
+  doctor green, first gated commit — each act a proposal with a
+  preview and an approval tap, path-allow-listed to the operator's
+  workspace roots; (f) acts as the CLI driver for ALL supported
+  agent harnesses through tmux: launching and driving claude,
+  codex, and pi sessions in named tmux sessions, every session
+  under the same visible, expiring arming envelope, so the whole
+  story loop can be conducted from the phone while the terminal
+  stays the single place where anything actually runs. Chat
+  identity allow-list: the bot answers its owner, nobody else.
 - **Out:** Committing any credential to this repo — the bot token
   lives in `~/.config/delivery-workbench/telegram.json` (untracked,
   chmod 600; already provisioned) or `TELEGRAM_BOT_TOKEN`, and the
@@ -63,7 +75,13 @@ allow-listed, evidenced property.
   the dw gate, with the banner relayed back into the chat.
 - [ ] Steering into a tmux session requires prior, visible,
   expiring arming; an unarmed session cannot be steered (test
-  proves the refusal); `capture-pane` previews are read-only.
+  proves the refusal); `capture-pane` previews are read-only;
+  the driver works against every supported harness (claude,
+  codex, pi) in the fixture proof.
+- [ ] A project created from chat arrives fully on the rails:
+  approved proposal → scaffolded git repo under an allow-listed
+  workspace root → rails installed → `dw doctor` green → first
+  gated commit; refused outside the allow-listed roots.
 - [ ] No token or chat ID appears anywhere in the repo (grep-clean
   in CI); the config path and env override are documented.
 
