@@ -7,6 +7,25 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## v1.9.0 — 2026-07-04
+
+One canonical agent brief, every surface: Phase 12 made Delivery
+Workbench a plug-n-play rider for Claude Code, Codex, and pi — the
+full story loop proven end-to-end under all three, from `dw next`
+to a gated commit — and gave HoldSpeak its first real plugin packs:
+a roadmap-alignment synthesizer that grounds meetings in story IDs
+(hallucinations demoted to drift by code, not trust) and a story
+actuator stacking HoldSpeak's propose→approve→execute consent on
+top of the dw gate, which keeps final say. `dw rider install
+codex|pi|holdspeak` wires each surface from one canon;
+hand-edited drift in any rendered copy is a `dw check` ERROR;
+`dw doctor` reports per-rider wiring honestly. Evidence capture
+under `dw-mcp` no longer wedges the server (stdin bug found by
+dogfooding, fixed same session). The whole phase was journaled in
+the moment — refusals, dead ends, and failed captures included —
+as the worked example ([docs/journal/](./docs/journal/README.md)).
+Phase 12 final summary: [phase-12-holdspeak-symbiosis-and-agent-riders](./pmo-roadmap/pm/roadmap/work-log-automation/phase-12-holdspeak-symbiosis-and-agent-riders/final-summary.md).
+
 ## v1.8.0 — 2026-07-03
 
 The gate's guarantees now survive the pull-request boundary: what a

@@ -50,7 +50,7 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 | WLA-12-06 | Prove the pi rider end-to-end | done | [story-06-pi-rider](./story-06-pi-rider.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-12-07 | Desk presence, doctor awareness, and release | done | [story-07-desk-presence-doctor-release](./story-07-desk-presence-doctor-release.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-12-08 | Fix evidence-capture stdin inheritance under dw-mcp | done | [story-08-mcp-capture-stdin-fix](./story-08-mcp-capture-stdin-fix.md) | [evidence-story-08](./evidence-story-08.md) |
-| WLA-12-09 | Release v1.9.0 and close the phase | backlog | [story-09-release-and-close](./story-09-release-and-close.md) | - |
+| WLA-12-09 | Release v1.9.0 and close the phase | done | [story-09-release-and-close](./story-09-release-and-close.md) | [evidence-story-09](./evidence-story-09.md) |
 
 ## Where we are
 

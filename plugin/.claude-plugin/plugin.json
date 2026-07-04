@@ -1,6 +1,6 @@
 {
   "name": "delivery-workbench",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Evidence-first delivery rails: operate Markdown roadmaps, commit contracts, evidence capture, and the dw commit gate from Claude Code.",
   "author": {
     "name": "karolswdev",
