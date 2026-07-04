@@ -7,8 +7,8 @@
 - **Unblocks:** WLA-13-05
 - **Owner:** unassigned
 
-*Scaffold-grade spec (2026-07-03): direction is firm, details are
-not. WLA-13-01 re-pins this story before it starts.*
+*Re-pinned by WLA-13-01 (2026-07-04): implement against
+[docs/mission-control.md](../../../../../docs/mission-control.md) §3 (seven events, `.git/pmo-events.jsonl`, content-audit test).*
 
 ## Problem
 

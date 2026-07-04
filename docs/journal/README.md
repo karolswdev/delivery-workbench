@@ -51,3 +51,4 @@ read as narrative and audited as history.
 - [Entry 7 — A context file and a shell](./entry-07-a-context-file-and-a-shell.md)
 - [Entry 8 — The rails on the desk](./entry-08-the-rails-on-the-desk.md)
 - [Entry 9 — Ship it as one thing](./entry-09-ship-it-as-one-thing.md)
+- [Entry 10 — The substrate was already there](./entry-10-the-substrate-was-already-there.md) *(Phase 13 begins; the journal continues by the contract's §6)*

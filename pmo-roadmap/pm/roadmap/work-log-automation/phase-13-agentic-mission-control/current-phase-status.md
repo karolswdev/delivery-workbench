@@ -70,7 +70,7 @@ consumes only what this phase exposes.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-13-01 | Design the mission-control contract | backlog | [story-01-design-the-mission-control-contract](./story-01-design-the-mission-control-contract.md) | - |
+| WLA-13-01 | Design the mission-control contract | done | [story-01-design-the-mission-control-contract](./story-01-design-the-mission-control-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-13-02 | Ship the roadmap state feed | backlog | [story-02-ship-the-roadmap-state-feed](./story-02-ship-the-roadmap-state-feed.md) | - |
 | WLA-13-03 | Correlate live agent sessions to stories | backlog | [story-03-correlate-live-agent-sessions-to-stories](./story-03-correlate-live-agent-sessions-to-stories.md) | - |
 | WLA-13-04 | Emit the events worth showing | backlog | [story-04-emit-the-events-worth-showing](./story-04-emit-the-events-worth-showing.md) | - |
@@ -79,14 +79,17 @@ consumes only what this phase exposes.
 
 ## Where we are
 
-Scaffolded 2026-07-03, mid-Phase-12, by the owner's call: the
-conveyor vision arrived during WLA-12-01 and was deliberately
-parked here instead of widening the largest phase this repo has
-run. Not actionable until Phase 12 lands the substrate this phase
-rides on: the HoldSpeak pack (12-02), the actuator (12-03), and
-`.hs/` Desk presence (12-07). WLA-13-01 sharpens every later
-story before any of them starts — the specs below Story 01 are
-scaffold-grade on purpose and say so.
+Phase 12 landed and v1.9.0 shipped; this phase is live.
+WLA-13-01 closed 2026-07-04: `docs/mission-control.md` pins the
+feed (`dw state --json`, schema 1), the correlation model (a
+read-only join on the `repo_root` HoldSpeak's hook already
+resolves — verified live, along with the tmux addressing triplet
+sitting in the same registry), the seven-event JSONL log with its
+rails-metadata-only consent stance, and the three-ring consent
+envelope whose center is stated plainly: arming IS the consent
+for the tmux driver, engineered with TTLs and revocation. Stories
+02–06 are re-pinned to their sections. WLA-13-02 (the feed) is
+next.
 
 ## Active risks
 
@@ -111,7 +114,7 @@ scaffold-grade on purpose and say so.
 
 ## Decisions deferred
 
-- Feed transport (file, `dw state` invocation, or served endpoint) - decide in WLA-13-01 - default is the cheapest thing the Desk can poll.
-- Whether the journal continues into Phase 13 or Phase 12's stands alone - decide in WLA-13-01 - default is continue; the worked example gets richer.
+- Feed transport - resolved 2026-07-04 by WLA-13-01: `dw state --json` invocation + `--write` for file-watchers - see docs/mission-control.md §1.
+- Journal continuation - resolved 2026-07-04 by WLA-13-01: continues under the same charter (entry 10 onward) - see docs/mission-control.md §6.
 - Version target (v2.0.0 vs v1.10.0) - decide at phase close by what the feed's stability promise turned out to be.
 - Event log persistence (append-only file vs sqlite) - decide in WLA-13-04 with real volume data.

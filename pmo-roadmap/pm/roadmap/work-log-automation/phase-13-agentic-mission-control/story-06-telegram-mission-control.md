@@ -7,8 +7,8 @@
 - **Unblocks:** phase close (with WLA-13-05)
 - **Owner:** unassigned
 
-*Scaffold-grade spec (2026-07-04): direction is firm, details are
-not. WLA-13-01 re-pins this story before it starts.*
+*Re-pinned by WLA-13-01 (2026-07-04): implement against
+[docs/mission-control.md](../../../../../docs/mission-control.md) §4 in full; tmux addressing from the verified registry fields; bot lives in `integrations/telegram/`.*
 
 ## Problem
 

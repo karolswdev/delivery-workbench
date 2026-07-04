@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 13
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** Phase 12 landed (WLA-12-02, WLA-12-03, WLA-12-07)
 - **Unblocks:** WLA-13-02, WLA-13-03, WLA-13-04, WLA-13-05
 - **Owner:** unassigned
