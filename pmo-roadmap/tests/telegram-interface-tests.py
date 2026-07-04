@@ -1612,5 +1612,80 @@ class SendCommandTest(InterfaceCase):
         self.iface.handle_update(message(OWNER, "/send nonesuch"))
         self.assertIn("no file matches", self.last_text())
 
+
+
+# ------------------------------------------- the pocket desk, composed
+
+
+class PocketDeskExitExamTest(InterfaceCase):
+    """WLA-14-07: every absorbed leg, driven end-to-end in one flow
+    against the real dw CLI (fixture repo) with a scripted transport.
+    The legs 02-06 composed, plus the crown case from a topic."""
+
+    def setUp(self):
+        super().setUp()
+        self.config.default_repo = None
+        self.pair()
+
+    def test_the_whole_pocket_desk_in_one_flow(self):
+        # (1) topics are projects: bind a topic to the fixture repo
+        self.iface.handle_update(topic_message(OWNER, f"/bind {self.repo}", 42))
+        self.assertIn("is now", self.last_text())
+
+        # (2) the message layer: /state renders, scoped, in-topic
+        self.iface.handle_update(topic_message(OWNER, "/state", 42))
+        self.assertIn("DM-1-02", self.last_text())
+        self.assertEqual(self.transport.sent[-1]["thread_id"], 42)
+
+        # (3) hook-driven push: a Notification drains to the topic home
+        events = self.tmp / "agent-events.jsonl"
+        self.config.agent_events_path = events
+        with events.open("a") as fh:
+            fh.write(json.dumps({
+                "ts": "2026-07-04T21:00:00Z", "agent": "claude",
+                "event": "Notification", "session_id": "sess-1",
+                "cwd": str(self.repo),
+            }) + "\n")
+        self.assertEqual(self.iface.drain_agent_events(), 1)
+        self.assertTrue(any("needs attention" in x for x in self.sent_texts()))
+
+        # (4) flowing conversation: steer + type, no per-message tap
+        self.iface.handle_update(topic_message(OWNER, "/steer claude:sess-1", 42))
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(topic_message(OWNER, "yes, proceed", 42))
+        sends = [c for c in self.tmux_runner.calls if c[1] == "send-keys"]
+        self.assertEqual(sends[0], ["tmux", "send-keys", "-t", "%7", "-l", "yes, proceed"])
+
+        # (5) the driver's toolbar: a key fires directly while bound
+        self.iface.handle_update({"callback_query": {
+            "id": "cb", "data": "kb:Escape",
+            "message": {"chat": {"id": OWNER}, "message_id": 1,
+                        "message_thread_id": 42}}})
+        self.assertEqual(self.transport.answered[-1]["text"], "Escape")
+
+        # (6) the file leg: a clean file sends, a secret refuses by lock
+        (self.repo / "note.txt").write_text("proof")
+        (self.repo / "id_rsa").write_text("SECRET")
+        self.iface.handle_update(topic_message(OWNER, "/send note.txt", 42))
+        self.assertEqual(len(self.transport.documents), 1)
+        self.iface.handle_update(topic_message(OWNER, "/send id_rsa", 42))
+        self.assertEqual(len(self.transport.documents), 1, "the secret did not send")
+        self.assertIn("lock 3", self.last_text())
+
+        # (7) the crown case, from a topic: an approved dishonest
+        # done-flip is refused by the dw gate, banner on the card
+        self.iface.handle_update(topic_message(OWNER, "/flip demo 1 DM-1-02 done", 42))
+        card = self.transport.sent[-1]
+        self.assertIsNotNone(card["buttons"])
+        self.assertEqual(card["thread_id"], 42, "the proposal is in the topic")
+        proposal_id = card["buttons"][0][0][1].split(":", 1)[1]
+        self.iface.handle_update({"callback_query": {
+            "id": "cb2", "data": f"ap:{proposal_id}",
+            "message": {"chat": {"id": OWNER}, "message_id": card["message_id"],
+                        "message_thread_id": 42}}})
+        refusal = self.transport.edited[-1]["text"]
+        self.assertIn("the rails refused", refusal)
+        self.assertIn("refusing to mark story done without evidence", refusal)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

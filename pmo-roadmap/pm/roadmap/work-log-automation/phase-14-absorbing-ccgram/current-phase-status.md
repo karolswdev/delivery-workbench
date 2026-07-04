@@ -48,7 +48,7 @@ Absorb and re-interpret ccgram's operational excellence under the consent spine:
 | WLA-14-04 | Topics are projects, and conversation flows | done | [story-04-topics-are-projects](./story-04-topics-are-projects.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-14-05 | The driver learns the desk's manners | done | [story-05-the-driver-learns-the-desk-s-manners](./story-05-the-driver-learns-the-desk-s-manners.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-14-06 | Send files through seven locks | done | [story-06-send-files-through-seven-locks](./story-06-send-files-through-seven-locks.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-14-07 | Prove the pocket desk end-to-end | backlog | [story-07-prove-the-pocket-desk-end-to-end](./story-07-prove-the-pocket-desk-end-to-end.md) | - |
+| WLA-14-07 | Prove the pocket desk end-to-end | done | [story-07-prove-the-pocket-desk-end-to-end](./story-07-prove-the-pocket-desk-end-to-end.md) | [evidence-story-07](./evidence-story-07.md) |
 
 ## Where we are
 

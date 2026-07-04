@@ -63,3 +63,4 @@ read as narrative and audited as history.
 - [Entry 19 — A room of its own](./entry-19-a-room-of-its-own.md)
 - [Entry 20 — Manners at the keyboard](./entry-20-manners-at-the-keyboard.md)
 - [Entry 21 — Seven locks, one open hand](./entry-21-seven-locks-one-open-hand.md)
+- [Entry 22 — The pocket desk, whole](./entry-22-the-pocket-desk-whole.md)

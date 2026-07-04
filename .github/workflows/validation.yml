@@ -122,6 +122,9 @@ jobs:
           python3 -m compileall -q integrations/telegram
           python3 pmo-roadmap/tests/telegram-interface-tests.py
 
+      - name: Telegram architecture fitness (layering + consent-floor guards)
+        run: python3 pmo-roadmap/tests/telegram-fitness-tests.py
+
       - name: Credential grep-clean (WLA-13-06 acceptance)
         # No bot token, pairing token, or chat ID may appear anywhere
         # in the repo. A real Bot API token is <digits>:<35 url-safe
