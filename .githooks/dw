@@ -459,6 +459,32 @@ def command_events(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_hook(args: argparse.Namespace) -> int:
+    from dw_pmo import agenthooks
+
+    agents = (
+        ["claude", "codex"] if args.agent == "all" else [args.agent]
+    )
+    if args.hook_action == "install":
+        return max(agenthooks.install_agent(agent) for agent in agents)
+    if args.hook_action == "uninstall":
+        return max(agenthooks.uninstall_agent(agent) for agent in agents)
+    if args.hook_action == "status":
+        for agent in agents:
+            report = agenthooks.status_agent(agent)
+            marks = " ".join(
+                f"{event}:{'on' if on else 'off'}"
+                for event, on in report["events"].items()
+            )
+            print(f"{report['agent']}\t{marks}\t{report['settings']}")
+        return 0
+    if args.hook_action == "emit":
+        stdin_text = "" if sys.stdin.isatty() else sys.stdin.read()
+        return agenthooks.emit(args.agent, args.event, stdin_text)
+    print(f"dw hook: unknown action {args.hook_action!r}", file=sys.stderr)
+    return 1
+
+
 def command_sessions(args: argparse.Namespace) -> int:
     from dw_pmo.sessions import correlate_sessions, render_sessions
 
@@ -566,6 +592,12 @@ def build_parser() -> argparse.ArgumentParser:
     sessions.add_argument("--json", action="store_true", help="emit the sessions_schema JSON document")
     sessions.add_argument("--registry", type=Path, default=None, help="registry file to read (default: the HoldSpeak desk registry)")
     sessions.set_defaults(func=command_sessions)
+
+    hook = sub.add_parser("hook", help="agent hook seam: instant push events (docs/absorption-ccgram.md §1)")
+    hook.add_argument("hook_action", choices=["install", "uninstall", "status", "emit"])
+    hook.add_argument("--agent", default="all", choices=["claude", "codex", "all"], help="which agent CLI (emit requires a specific one)")
+    hook.add_argument("--event", default="", help="hook event name (emit only)")
+    hook.set_defaults(func=command_hook)
 
     rider = sub.add_parser("rider", help="agent-surface rider tooling (canonical brief renderers)")
     rider_sub = rider.add_subparsers(dest="rider_command", required=True)

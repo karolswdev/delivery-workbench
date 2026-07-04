@@ -87,6 +87,21 @@ preview says exactly that and the dw gate re-verifies every stamped
 fact downstream. Story-work certification is never delegated to the
 interface; the two allow-listed story verbs cannot commit at all.
 
+## Instant push: the dw hook seam
+
+`dw hook install` (claude and codex) wires the agent CLIs to
+append whitelisted events — SessionStart, Notification, Stop,
+SessionEnd; never message or transcript content — to
+`~/.config/delivery-workbench/agent-events.jsonl`. The serve loop
+drains that stream every second by persisted byte offset, so a
+blocked agent reaches your phone in about a second instead of a
+poll cycle; the 15-second sessions poll remains as reconciliation.
+`dw hook status` shows the wiring; `dw hook uninstall` removes
+exactly our entries and nothing else; `DW_HOOK_QUIET=1` in a
+process's environment silences its hooks (the nested-session
+guard). Config override: `agent_events_path`; hook-side override:
+`DW_AGENT_EVENTS`. Design: docs/absorption-ccgram.md §1.
+
 ## Testing
 
 `pmo-roadmap/tests/telegram-interface-tests.py` proves the whole

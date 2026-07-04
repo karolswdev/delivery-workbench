@@ -866,5 +866,129 @@ class SchemaComplianceTest(unittest.TestCase):
         self.assertEqual(argv[:4], ["dw", "--root", "/r", "story"])
 
 
+
+
+# ---------------------------------------------------------- hook drain
+
+
+from dw_telegram.agentevents import decide_pushes, read_new_events
+
+
+class AgentEventsReaderTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-events-test."))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.path = self.tmp / "agent-events.jsonl"
+
+    def append(self, text):
+        with self.path.open("a") as fh:
+            fh.write(text)
+
+    def test_reads_incrementally_by_offset(self):
+        self.append('{"event": "Stop", "agent": "claude"}\n')
+        events, offset = read_new_events(self.path, 0)
+        self.assertEqual([e["event"] for e in events], ["Stop"])
+        events2, offset2 = read_new_events(self.path, offset)
+        self.assertEqual(events2, [])
+        self.append('{"event": "Notification"}\n')
+        events3, _ = read_new_events(self.path, offset2)
+        self.assertEqual([e["event"] for e in events3], ["Notification"])
+
+    def test_partial_tail_waits_for_its_newline(self):
+        self.append('{"event": "Stop"}\n{"event": "Notif')
+        events, offset = read_new_events(self.path, 0)
+        self.assertEqual(len(events), 1)
+        self.append('ication"}\n')
+        events2, _ = read_new_events(self.path, offset)
+        self.assertEqual([e["event"] for e in events2], ["Notification"])
+
+    def test_truncation_resets_honestly(self):
+        self.append('{"event": "Stop"}\n' * 5)
+        _, offset = read_new_events(self.path, 0)
+        self.path.write_text('{"event": "SessionStart"}\n')
+        events, _ = read_new_events(self.path, offset)
+        self.assertEqual([e["event"] for e in events], ["SessionStart"])
+
+    def test_malformed_lines_are_skipped_not_fatal(self):
+        self.append('not json\n{"event": "Notification"}\n[1,2]\n')
+        events, _ = read_new_events(self.path, 0)
+        self.assertEqual([e["event"] for e in events], ["Notification"])
+
+    def test_missing_file_is_empty(self):
+        events, offset = read_new_events(self.path, 999)
+        self.assertEqual((events, offset), ([], 0))
+
+    def test_decide_pushes_only_notifications_coalesced(self):
+        events = [
+            {"event": "Stop", "session_id": "a"},
+            {"event": "Notification", "session_id": "a", "ts": "1"},
+            {"event": "Notification", "session_id": "a", "ts": "2"},
+            {"event": "Notification", "session_id": "b", "ts": "3"},
+            {"event": "SessionEnd", "session_id": "b"},
+        ]
+        pushes = decide_pushes(events)
+        self.assertEqual(
+            [(p["session_id"], p["ts"]) for p in pushes],
+            [("a", "2"), ("b", "3")],
+            "latest per session, order preserved, nothing else pushes",
+        )
+
+
+class HookDrainTest(InterfaceCase):
+    def setUp(self):
+        super().setUp()
+        self.pair()
+        self.events_path = self.tmp / "agent-events.jsonl"
+        self.config.agent_events_path = self.events_path
+
+    def emit(self, event, session="hook-sess-1"):
+        with self.events_path.open("a") as fh:
+            fh.write(json.dumps({
+                "ts": "2026-07-04T20:00:00Z", "agent": "claude",
+                "event": event, "session_id": session, "cwd": str(self.repo),
+            }) + "\n")
+
+    def test_notification_pushes_in_the_same_drain(self):
+        self.emit("Notification")
+        pushed = self.iface.drain_agent_events()
+        self.assertEqual(pushed, 1)
+        texts = self.sent_texts()
+        self.assertTrue(any("needs attention" in t for t in texts), texts)
+        # poll_tick ran right after: the fixture registry question rode along
+        self.assertTrue(
+            any("is asking:" in t for t in texts),
+            "the correlated question enriches the push",
+        )
+
+    def test_stop_records_but_does_not_push(self):
+        self.emit("Stop")
+        self.assertEqual(self.iface.drain_agent_events(), 0)
+        self.assertEqual(self.transport.sent, [])
+
+    def test_restart_never_repushes(self):
+        self.emit("Notification")
+        self.iface.drain_agent_events()
+        sent_before = len(self.transport.sent)
+        fresh_state = RuntimeState(self.config.resolved_state_path())
+        self.assertEqual(
+            fresh_state.events_offset, self.state.events_offset,
+            "the offset persisted",
+        )
+        arming = Arming(fresh_state)
+        fresh = TelegramInterface(
+            self.config, fresh_state, self.transport,
+            driver=TmuxDriver(arming, runner=self.tmux_runner),
+            clock=self.clock,
+        )
+        self.assertEqual(fresh.drain_agent_events(), 0)
+        self.assertEqual(len(self.transport.sent), sent_before)
+
+    def test_unpaired_drain_is_silent_and_consumes_nothing(self):
+        self.state.paired_chat = None
+        self.emit("Notification")
+        self.assertEqual(self.iface.drain_agent_events(), 0)
+        self.assertEqual(self.state.events_offset, 0,
+                         "unpaired leaves the stream for later")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -9,6 +9,7 @@ fallback behavior. Stdlib only.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -2767,6 +2768,95 @@ class RiderDocsTest(unittest.TestCase):
         )
         riderdocs.write_rider_docs(self.root)
         self.assertEqual(riderdocs.rider_docs_issues(self.root), [])
+
+
+
+
+class AgentHooksTest(unittest.TestCase):
+    """The agent hook seam (WLA-14-02): installer discipline, the
+    emit whitelist, and the guards — docs/absorption-ccgram.md §1."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-hooks-test."))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        from dw_pmo import agenthooks
+        self.hooks = agenthooks
+        self.settings = self.tmp / "settings.json"
+        self.events = self.tmp / "events.jsonl"
+
+    def test_install_is_idempotent(self):
+        self.assertEqual(self.hooks.install_agent("claude", self.settings), 0)
+        first = self.settings.read_text()
+        self.assertEqual(self.hooks.install_agent("claude", self.settings), 0)
+        self.assertEqual(first, self.settings.read_text())
+        doc = json.loads(first)
+        for event in self.hooks.HOOK_EVENTS:
+            self.assertIn(event, doc["hooks"])
+        end_entry = doc["hooks"]["SessionEnd"][0]["hooks"][0]
+        self.assertTrue(end_entry.get("async"), "SessionEnd must not delay exit")
+        self.assertNotIn("async", doc["hooks"]["Notification"][0]["hooks"][0])
+
+    def test_uninstall_is_surgical(self):
+        self.settings.write_text(json.dumps({
+            "hooks": {"Stop": [{"hooks": [
+                {"type": "command", "command": "somebody-elses-hook"}]}]}
+        }))
+        self.hooks.install_agent("claude", self.settings)
+        self.assertEqual(self.hooks.uninstall_agent("claude", self.settings), 0)
+        doc = json.loads(self.settings.read_text())
+        commands = [
+            entry["command"]
+            for groups in doc.get("hooks", {}).values()
+            for group in groups
+            for entry in group.get("hooks", [])
+        ]
+        self.assertEqual(commands, ["somebody-elses-hook"], "only ours removed")
+
+    def test_status_reports_per_event(self):
+        report = self.hooks.status_agent("claude", self.settings)
+        self.assertFalse(any(report["events"].values()))
+        self.hooks.install_agent("claude", self.settings)
+        report = self.hooks.status_agent("claude", self.settings)
+        self.assertTrue(all(report["events"].values()))
+
+    def test_codex_flag_opt_out_respected(self):
+        config = self.tmp / "config.toml"
+        config.write_text("[features]\ncodex_hooks = false\n")
+        rc = self.hooks.install_agent(
+            "codex", self.tmp / "hooks.json", codex_config=config)
+        self.assertEqual(rc, 1, "explicit false is the owner's opt-out")
+        self.assertIn("codex_hooks = false", config.read_text())
+
+    def test_emit_whitelists_and_never_leaks_content(self):
+        payload = json.dumps({
+            "session_id": "s1", "cwd": "/w",
+            "message": "TOP SECRET prompt content",
+            "transcript_path": "/private/things",
+        })
+        rc = self.hooks.emit("claude", "Notification", payload,
+                             events_path=self.events, env={})
+        self.assertEqual(rc, 0)
+        line = json.loads(self.events.read_text().strip())
+        self.assertEqual(
+            sorted(line), ["agent", "cwd", "event", "session_id", "ts"])
+        self.assertNotIn("SECRET", self.events.read_text())
+
+    def test_emit_quiet_guard_and_unknown_event(self):
+        rc = self.hooks.emit("claude", "Notification", "{}",
+                             events_path=self.events,
+                             env={"DW_HOOK_QUIET": "1"})
+        self.assertEqual(rc, 0)
+        self.assertFalse(self.events.exists(), "quiet means silent")
+        self.hooks.emit("claude", "SomethingNovel", "{}",
+                        events_path=self.events, env={})
+        self.assertFalse(self.events.exists(), "unknown events ignored")
+
+    def test_emit_never_raises_on_garbage(self):
+        rc = self.hooks.emit("claude", "Stop", "not json at all{{{",
+                             events_path=self.events, env={})
+        self.assertEqual(rc, 0)
+        line = json.loads(self.events.read_text().strip())
+        self.assertEqual(line["event"], "Stop")
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import INTERFACE_VERSION
+from .agentevents import decide_pushes, read_new_events, render_push
 from .config import Config
 from .consent import ARM_DEFAULT_MINUTES, Arming, ProposalBook
 from .lifecycle import LifecycleClient
@@ -74,6 +75,9 @@ class TelegramInterface:
         self.lifecycle = lifecycle or LifecycleClient(config, self.rails)
         self.proposals = ProposalBook()
         self._notified_questions: set[tuple[str, str]] = set()
+        import threading
+
+        self._lock = threading.RLock()  # drain thread vs update loop
 
     # -- plumbing -----------------------------------------------------
 
@@ -124,6 +128,33 @@ class TelegramInterface:
             chat = self.state.paired_chat
             if chat is not None:
                 self._say(chat, f"internal error: {type(exc).__name__}")
+
+    def drain_agent_events(self) -> int:
+        """Drain the dw hook stream and push instantly (§1 of the
+        absorption map): a Notification event reaches the paired
+        chat in the same drain it was appended, then poll_tick runs
+        immediately to enrich with the correlated question. The
+        byte offset persists in runtime state — a restart never
+        re-pushes. Returns the number of pushes made."""
+        with self._lock:
+            chat = self.state.paired_chat
+            if chat is None:
+                return 0
+            path = self.config.resolved_agent_events_path()
+            events, new_offset = read_new_events(
+                path, self.state.events_offset
+            )
+            if new_offset != self.state.events_offset:
+                self.state.events_offset = new_offset
+                self.state.save()
+            if not events:
+                return 0
+            pushes = decide_pushes(events)
+            for event in pushes:
+                self._say(chat, render_push(event))
+            if pushes:
+                self.poll_tick()  # enrich instantly from the correlation
+            return len(pushes)
 
     def poll_tick(self) -> None:
         """Push newly awaiting agent questions to the paired chat."""
@@ -624,20 +655,34 @@ class TelegramInterface:
     # -- the loop ---------------------------------------------------------
 
     def run_forever(self) -> None:
-        """Long-poll until interrupted. A transient transport failure
-        backs off and retries — a network blip must not take the
-        interface offline; only Ctrl-C (or a kill) stops serving."""
+        """Long-poll until interrupted. A daemon thread drains the
+        dw hook stream every second so pushes are instant even while
+        the long poll blocks; a transient transport failure backs
+        off and retries — only Ctrl-C (or a kill) stops serving."""
         import sys
+        import threading
         import time
 
         from .transport import TransportError
+
+        def _drain_loop() -> None:
+            while True:
+                time.sleep(1)
+                try:
+                    self.drain_agent_events()
+                except Exception:
+                    pass  # the drain must never kill the interface
+
+        threading.Thread(target=_drain_loop, daemon=True).start()
 
         backoff = 2
         while True:
             try:
                 for update in self.transport.get_updates():
-                    self.handle_update(update)
-                self.poll_tick()
+                    with self._lock:
+                        self.handle_update(update)
+                with self._lock:
+                    self.poll_tick()
                 backoff = 2
             except TransportError as exc:
                 print(

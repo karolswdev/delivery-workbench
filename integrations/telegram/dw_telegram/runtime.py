@@ -45,6 +45,7 @@ class RuntimeState:
         self.pairing: dict | None = None  # {token_sha256, expires_at, used}
         self.armed: dict[str, str] = {}  # tmux session -> expires_at iso
         self.active_repo: str | None = None
+        self.events_offset: int = 0  # byte offset into the hook stream
         self._load()
 
     def reload(self) -> None:
@@ -75,6 +76,8 @@ class RuntimeState:
         )
         repo = doc.get("active_repo")
         self.active_repo = str(repo) if repo else None
+        offset = doc.get("events_offset")
+        self.events_offset = offset if isinstance(offset, int) and offset >= 0 else 0
 
     def save(self) -> None:
         doc = {
@@ -83,6 +86,7 @@ class RuntimeState:
             "pairing": self.pairing,
             "armed": self.armed,
             "active_repo": self.active_repo,
+            "events_offset": self.events_offset,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(

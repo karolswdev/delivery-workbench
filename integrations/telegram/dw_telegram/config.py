@@ -14,7 +14,8 @@ Recognized keys::
       "default_repo": "~/dev/somerepo",  // initial active rails repo
       "state_path": "…",                 // runtime state (default beside config)
       "registry_path": "…",              // sessions registry override
-      "dw_cli": ["/path/to/dw"]          // explicit dw argv prefix
+      "dw_cli": ["/path/to/dw"],         // explicit dw argv prefix
+      "agent_events_path": "…"           // dw hook stream override
     }
 """
 
@@ -43,11 +44,17 @@ class Config:
     state_path: Path | None = None
     registry_path: Path | None = None
     dw_cli: list[str] | None = None
+    agent_events_path: Path | None = None
 
     def resolved_state_path(self) -> Path:
         if self.state_path is not None:
             return self.state_path
         return DEFAULT_CONFIG_PATH.parent / "telegram-state.json"
+
+    def resolved_agent_events_path(self) -> Path:
+        if self.agent_events_path is not None:
+            return self.agent_events_path
+        return DEFAULT_CONFIG_PATH.parent / "agent-events.jsonl"
 
 
 def _expand(raw: object) -> Path:
@@ -99,4 +106,9 @@ def load_config(
             else None
         ),
         dw_cli=dw_cli,
+        agent_events_path=(
+            _expand(doc["agent_events_path"])
+            if doc.get("agent_events_path")
+            else None
+        ),
     )
