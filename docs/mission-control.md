@@ -202,6 +202,15 @@ reading dw internals. Each client declares its proven
 Drift between a client and the substrate is a compatibility note
 on the client, not a silent break.
 
+*(Amended by the counterpart scaffold, 2026-07-04:)* the
+HoldSpeak-side phase is now specced against this section — their
+repo, `pm/roadmap/holdspeak/phase-82-mission-control-conveyor/`
+(branch `holdspeak/hs-82-mission-control-conveyor`, opened 0/5):
+a FastAPI bridge relays the three documents to the Desk island,
+the belt renders them, and the approval leg rides §4 ring 2
+through the Phase 12 connector. Their HS-82-05 carries the
+desk-side legs that WLA-13-05's exit exam cites.
+
 ## 6. The journal
 
 **Decided: the journal continues into Phase 13** under the same
