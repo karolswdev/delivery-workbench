@@ -1,0 +1,67 @@
+"""Owner binding by pairing (§4 ring 1, owner decision 2026-07-04).
+
+The interface generates a one-time, short-TTL pairing token that is
+printed only on the operator's own machine (``run.py pair``). The
+owner sends it in chat; the binding — a chat id — lands in runtime
+state (chmod 600, outside the repo). No chat or user ID is ever
+configuration we author.
+
+Refusal surface, all test-proven: wrong token, expired token, reused
+token, and no token outstanding. Re-pairing (generating and
+redeeming a new token) revokes the previous binding by overwrite.
+Only the token's sha256 is stored; the cleartext exists once, on the
+operator's terminal.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import secrets
+from datetime import datetime, timedelta
+
+from .runtime import RuntimeState, iso, parse_iso
+
+PAIRING_TTL_SECONDS = 300  # short by design; one tap on a phone
+
+
+def _digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def new_pairing_token(
+    state: RuntimeState, now: datetime, ttl_seconds: int = PAIRING_TTL_SECONDS
+) -> str:
+    token = secrets.token_urlsafe(9)
+    state.pairing = {
+        "token_sha256": _digest(token),
+        "expires_at": iso(now + timedelta(seconds=ttl_seconds)),
+        "used": False,
+    }
+    state.save()
+    return token
+
+
+def redeem(
+    state: RuntimeState, chat_id: int, token: str, now: datetime
+) -> tuple[bool, str]:
+    """Attempt to pair a chat. Returns (ok, message-for-chat)."""
+    outstanding = state.pairing
+    if not outstanding:
+        return False, "No pairing token is outstanding. Generate one on the operator machine first."
+    if outstanding.get("used"):
+        return False, "That pairing token was already used. Generate a fresh one."
+    expires = parse_iso(outstanding.get("expires_at"))
+    if expires is None or now > expires:
+        return False, "That pairing token has expired. Generate a fresh one."
+    if not hmac.compare_digest(
+        _digest(token.strip()), str(outstanding.get("token_sha256") or "")
+    ):
+        return False, "Wrong pairing token."
+    previous = state.paired_chat
+    state.pairing = {**outstanding, "used": True}
+    state.paired_chat = chat_id
+    state.save()
+    if previous is not None and previous != chat_id:
+        return True, "Paired. The previous binding has been revoked."
+    return True, "Paired. This chat now owns the interface."

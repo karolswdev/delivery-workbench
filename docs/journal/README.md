@@ -55,3 +55,4 @@ read as narrative and audited as history.
 - [Entry 11 — The first pipe](./entry-11-the-first-pipe.md)
 - [Entry 12 — The sentence becomes computable](./entry-12-the-sentence-becomes-computable.md)
 - [Entry 13 — The rails narrate themselves](./entry-13-the-rails-narrate-themselves.md)
+- [Entry 14 — The phone holds the keys, the gate keeps the lock](./entry-14-the-phone-holds-the-keys.md)

@@ -1,0 +1,747 @@
+#!/usr/bin/env python3
+"""Tests for the Telegram interface (WLA-13-06).
+
+Everything runs against a scripted transport and fixture rails
+repos — no live network, no live tmux, no real registry. The rails
+legs (state, events, the crown-case gate refusal) run the real dw
+CLI against real fixture repos; tmux and Telegram are the two
+things faked, each behind the seam the production code declares.
+
+Covers the story's test plan: message rendering from feed fixtures;
+the consent state machine (proposal → approval → execution, single
+use, expiry, arming expiry); the pairing state machine (TTL,
+single-use, revocation, unpaired-chat refusals); the tmux driver's
+unarmed refusal and per-harness launch argv; the lifecycle
+allow-list refusal and the full create step sequence; and the crown
+case — an approved dishonest done-flip refused by the rails with
+the banner relayed into chat.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import types
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+TESTS_DIR = Path(__file__).resolve().parent
+REPO_ROOT = TESTS_DIR.parent.parent
+BIN_DW = TESTS_DIR.parent / "bin" / "dw"
+
+sys.path.insert(0, str(REPO_ROOT / "integrations" / "telegram"))
+
+from dw_telegram.config import Config, ConfigError, load_config
+from dw_telegram.consent import Arming, ProposalBook
+from dw_telegram.interface import TelegramInterface
+from dw_telegram.lifecycle import LifecycleClient, within_roots
+from dw_telegram.pairing import new_pairing_token, redeem
+from dw_telegram.rails import RailsClient
+from dw_telegram.runtime import RuntimeState, utc_now
+from dw_telegram.tmuxdrive import TmuxDriver, Unarmed
+from dw_telegram.transport import HttpTransport, ScriptedTransport, TransportError
+
+# ---------------------------------------------------------------- fixtures
+
+README = """# Demo - Roadmap
+
+**Last updated:** 2026-07-04.
+**Current phase:** [phase-1-alpha](./phase-1-alpha/current-phase-status.md).
+**Status:** active.
+
+## Phase index
+
+| Phase | Goal (one line) | Status | Folder |
+|---|---|---|---|
+| 1 | Ship the alpha | active | [phase-1-alpha](./phase-1-alpha/) |
+
+## Project metadata
+
+- **Slug:** `demo`
+- **Story ID prefix:** DM
+"""
+
+STATUS_FILE = """# Phase 1 - Alpha
+
+**Last updated:** 2026-07-04.
+
+## Story status
+
+| ID | Story | Status | Story file | Evidence |
+|---|---|---|---|---|
+| DM-1-01 | First thing | done | [story-01-first](./story-01-first.md) | [evidence-story-01](./evidence-story-01.md) |
+| DM-1-02 | Second thing | in-progress | [story-02-second](./story-02-second.md) | - |
+"""
+
+STORY_TMPL = """# {sid} - {title}
+
+- **Project:** demo
+- **Phase:** 1
+- **Status:** {status}
+- **Owner:** unassigned
+
+## Problem
+
+Fixture story.
+"""
+
+EVIDENCE_01 = """# Evidence - DM-1-01
+
+- **Story:** DM-1-01 - First thing
+- **Status:** done
+- **Date:** 2026-07-04
+
+## Proof
+
+- fixture proof line
+"""
+
+
+def make_rails_repo(base: Path) -> Path:
+    repo = base / "demo-repo"
+    phase = repo / "pm" / "roadmap" / "demo" / "phase-1-alpha"
+    phase.mkdir(parents=True)
+    (repo / "pm" / "roadmap" / "demo" / "README.md").write_text(README)
+    (phase / "current-phase-status.md").write_text(STATUS_FILE)
+    (phase / "story-01-first.md").write_text(
+        STORY_TMPL.format(sid="DM-1-01", title="First thing", status="done")
+    )
+    (phase / "story-02-second.md").write_text(
+        STORY_TMPL.format(
+            sid="DM-1-02", title="Second thing", status="in-progress"
+        )
+    )
+    (phase / "evidence-story-01.md").write_text(EVIDENCE_01)
+    # Rails markers so the correlator counts this as a rails repo.
+    hooks = repo / ".githooks"
+    hooks.mkdir()
+    dw_stub = hooks / "dw"
+    dw_stub.write_text("#!/usr/bin/env python3\n")
+    dw_stub.chmod(0o755)
+    subprocess.run(
+        ["git", "init", "-q", str(repo)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return repo
+
+
+def make_registry(base: Path, repo: Path, *, awaiting=True) -> Path:
+    registry = base / "agent_sessions.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "sessions": {
+                    "claude:sess-1": {
+                        "agent": "claude",
+                        "session_id": "sess-1",
+                        "model": "test-model",
+                        "repo_root": str(repo),
+                        "project_name": "demo",
+                        "awaiting_response": awaiting,
+                        "last_assistant_text": "Should I delete the flag?",
+                        "tmux_session": "desk",
+                        "tmux_window": 0,
+                        "tmux_pane": "%7",
+                        "updated_at": utc_now().strftime(
+                            "%Y-%m-%dT%H:%M:%SZ"
+                        ),
+                    }
+                },
+            }
+        )
+    )
+    return registry
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = datetime(2026, 7, 4, 12, 0, 0, tzinfo=timezone.utc)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, **kwargs) -> None:
+        self.now += timedelta(**kwargs)
+
+
+class RecordingRunner:
+    """A subprocess seam double: records argv, returns success."""
+
+    def __init__(self, hook=None) -> None:
+        self.calls: list[list[str]] = []
+        self.hook = hook
+
+    def __call__(self, argv, cwd=None):
+        self.calls.append(list(argv))
+        if self.hook:
+            result = self.hook(argv, cwd)
+            if result is not None:
+                return result
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+
+def message(chat: int, text: str) -> dict:
+    return {"message": {"chat": {"id": chat}, "text": text}}
+
+
+def callback(chat: int, data: str, cb="cb-1") -> dict:
+    return {
+        "callback_query": {
+            "id": cb,
+            "data": data,
+            "message": {"chat": {"id": chat}},
+        }
+    }
+
+
+OWNER = 4242  # fixture chat id, not a real identity
+
+
+class InterfaceCase(unittest.TestCase):
+    """Shared harness: fixture repo, paired interface, fakes."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-telegram-test."))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.repo = make_rails_repo(self.tmp)
+        self.registry = make_registry(self.tmp, self.repo)
+        self.clock = FakeClock()
+        self.transport = ScriptedTransport()
+        self.tmux_runner = RecordingRunner()
+        self.config = Config(
+            bot_token="unit-test-token",
+            workspace_roots=[self.tmp],
+            default_repo=self.repo,
+            state_path=self.tmp / "state.json",
+            registry_path=self.registry,
+            dw_cli=[sys.executable, str(BIN_DW)],
+        )
+        self.state = RuntimeState(self.config.resolved_state_path())
+        arming = Arming(self.state)
+        self.iface = TelegramInterface(
+            self.config,
+            self.state,
+            self.transport,
+            driver=TmuxDriver(arming, runner=self.tmux_runner),
+            clock=self.clock,
+        )
+
+    def pair(self, chat: int = OWNER) -> None:
+        token = new_pairing_token(self.state, self.clock())
+        self.iface.handle_update(message(chat, f"/pair {token}"))
+        self.transport.sent.clear()
+
+    def sent_texts(self) -> list[str]:
+        return [item["text"] for item in self.transport.sent]
+
+    def last_text(self) -> str:
+        self.assertTrue(self.transport.sent, "expected a chat message")
+        return self.transport.sent[-1]["text"]
+
+    def last_proposal_id(self) -> str:
+        buttons = self.transport.sent[-1]["buttons"]
+        self.assertTrue(buttons, "expected approval buttons")
+        data = buttons[0][0][1]
+        self.assertTrue(data.startswith("ap:"))
+        return data.split(":", 1)[1]
+
+    def approve_last(self, chat: int = OWNER) -> None:
+        self.iface.handle_update(
+            callback(chat, f"ap:{self.last_proposal_id()}")
+        )
+
+
+# ---------------------------------------------------------------- pairing
+
+
+class PairingTest(InterfaceCase):
+    def test_unpaired_chat_gets_prompt_then_silence(self) -> None:
+        self.iface.handle_update(message(OWNER, "/start"))
+        self.assertIn("pairing", self.last_text().lower())
+        self.transport.sent.clear()
+        for text in ("/state", "/flip demo 1 DM-1-02 done", "hello"):
+            self.iface.handle_update(message(OWNER, text))
+        self.assertEqual(self.transport.sent, [], "unpaired chats get silence")
+
+    def test_no_outstanding_token_refused(self) -> None:
+        self.iface.handle_update(message(OWNER, "/pair anything"))
+        self.assertIn("No pairing token is outstanding", self.last_text())
+        self.assertIsNone(self.state.paired_chat)
+
+    def test_wrong_token_refused(self) -> None:
+        new_pairing_token(self.state, self.clock())
+        self.iface.handle_update(message(OWNER, "/pair wrong-token"))
+        self.assertIn("Wrong pairing token", self.last_text())
+        self.assertIsNone(self.state.paired_chat)
+
+    def test_expired_token_refused(self) -> None:
+        token = new_pairing_token(self.state, self.clock())
+        self.clock.advance(minutes=6)
+        self.iface.handle_update(message(OWNER, f"/pair {token}"))
+        self.assertIn("expired", self.last_text())
+        self.assertIsNone(self.state.paired_chat)
+
+    def test_pair_then_reuse_refused(self) -> None:
+        token = new_pairing_token(self.state, self.clock())
+        self.iface.handle_update(message(OWNER, f"/pair {token}"))
+        self.assertEqual(self.state.paired_chat, OWNER)
+        self.iface.handle_update(message(999, f"/pair {token}"))
+        self.assertIn("already used", self.last_text())
+        self.assertEqual(self.state.paired_chat, OWNER)
+
+    def test_repair_revokes_previous_binding(self) -> None:
+        self.pair(OWNER)
+        token = new_pairing_token(self.state, self.clock())
+        self.iface.handle_update(message(999, f"/pair {token}"))
+        self.assertEqual(self.state.paired_chat, 999)
+        self.transport.sent.clear()
+        self.iface.handle_update(message(OWNER, "/state"))
+        self.assertEqual(
+            self.transport.sent, [], "revoked chat is unpaired again"
+        )
+
+    def test_state_file_is_owner_only(self) -> None:
+        new_pairing_token(self.state, self.clock())
+        mode = (self.config.resolved_state_path()).stat().st_mode & 0o777
+        self.assertEqual(mode, 0o600)
+
+    def test_token_stored_hashed_not_cleartext(self) -> None:
+        token = new_pairing_token(self.state, self.clock())
+        raw = (self.config.resolved_state_path()).read_text()
+        self.assertNotIn(token, raw)
+
+
+# ---------------------------------------------------------------- consent
+
+
+class ConsentTest(InterfaceCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.pair()
+
+    def propose_flip(self) -> str:
+        self.iface.handle_update(
+            message(OWNER, "/flip demo 1 DM-1-02 in-progress")
+        )
+        return self.last_proposal_id()
+
+    def test_reject_executes_nothing(self) -> None:
+        proposal_id = self.propose_flip()
+        self.iface.handle_update(callback(OWNER, f"rj:{proposal_id}"))
+        self.assertIn("rejected", self.last_text())
+        self.iface.handle_update(callback(OWNER, f"ap:{proposal_id}"))
+        self.assertIn("nothing executed", self.last_text())
+
+    def test_proposal_is_single_use(self) -> None:
+        proposal_id = self.propose_flip()
+        self.iface.handle_update(callback(OWNER, f"ap:{proposal_id}"))
+        first = self.last_text()
+        self.assertIn("done:", first)
+        self.iface.handle_update(callback(OWNER, f"ap:{proposal_id}"))
+        self.assertIn("nothing executed", self.last_text())
+
+    def test_proposal_expires(self) -> None:
+        proposal_id = self.propose_flip()
+        self.clock.advance(minutes=16)
+        self.iface.handle_update(callback(OWNER, f"ap:{proposal_id}"))
+        self.assertIn("nothing executed", self.last_text())
+
+    def test_unpaired_callback_refused(self) -> None:
+        proposal_id = self.propose_flip()
+        self.iface.handle_update(callback(999, f"ap:{proposal_id}"))
+        self.assertEqual(self.transport.answered[-1]["text"], "not paired")
+        # And the proposal is still executable by the owner — the
+        # stranger's tap neither executed nor consumed it.
+        self.iface.handle_update(callback(OWNER, f"ap:{proposal_id}"))
+        self.assertIn("done:", self.last_text())
+
+
+# ---------------------------------------------------------------- rails read
+
+
+class ReadSurfaceTest(InterfaceCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.pair()
+
+    def test_state_renders_real_feed(self) -> None:
+        self.iface.handle_update(message(OWNER, "/state"))
+        text = self.last_text()
+        self.assertIn("demo", text)
+        self.assertIn("phase 1", text)
+        self.assertIn("DM-1-02", text)
+
+    def test_events_render_real_log(self) -> None:
+        # A real story flip through the real CLI emits story_status.
+        rails = RailsClient(dw_cli=self.config.dw_cli)
+        ok, out = rails.run_story_verb(
+            self.repo,
+            {
+                "verb": "status", "project": "demo", "phase": "1",
+                "story": "DM-1-02", "status": "blocked",
+            },
+        )
+        self.assertTrue(ok, out)
+        self.iface.handle_update(message(OWNER, "/events"))
+        text = self.last_text()
+        self.assertIn("story_status", text)
+        self.assertIn("DM-1-02", text)
+
+    def test_sessions_render_correlation(self) -> None:
+        self.iface.handle_update(message(OWNER, "/sessions"))
+        text = self.last_text()
+        self.assertIn("claude:sess-1", text)
+        self.assertIn("DM-1-02", text)  # on_story via the fixture repo
+        self.assertIn("awaiting a response", text)
+
+    def test_peek_is_read_only_capture(self) -> None:
+        self.iface.handle_update(message(OWNER, "/peek desk"))
+        self.assertEqual(
+            self.tmux_runner.calls,
+            [["tmux", "capture-pane", "-p", "-t", "desk"]],
+        )
+
+
+# ---------------------------------------------------------------- Q&A relay
+
+
+class QARelayTest(InterfaceCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.pair()
+
+    def test_question_surfaces_with_story_correlation(self) -> None:
+        self.iface.poll_tick()
+        text = self.last_text()
+        self.assertIn("Claude on DM-1-02 is asking:", text)
+        self.assertIn("Should I delete the flag?", text)
+        sent_before = len(self.transport.sent)
+        self.iface.poll_tick()  # same question is not re-pushed
+        self.assertEqual(len(self.transport.sent), sent_before)
+
+    def test_reply_reaches_the_right_pane_when_armed(self) -> None:
+        self.iface.handle_update(message(OWNER, "/arm desk"))
+        self.iface.handle_update(
+            message(OWNER, "/reply claude:sess-1 yes, delete it")
+        )
+        self.assertIn("Relay into", self.last_text())
+        self.approve_last()
+        self.assertIn("relayed", self.last_text())
+        sends = [c for c in self.tmux_runner.calls if c[1] == "send-keys"]
+        self.assertEqual(
+            sends,
+            [
+                ["tmux", "send-keys", "-t", "%7", "-l", "yes, delete it"],
+                ["tmux", "send-keys", "-t", "%7", "Enter"],
+            ],
+            "the driver targets the registry pane, literally",
+        )
+
+    def test_reply_into_unarmed_session_refused(self) -> None:
+        self.iface.handle_update(
+            message(OWNER, "/reply claude:sess-1 yes, delete it")
+        )
+        self.approve_last()
+        self.assertIn("not armed", self.last_text())
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"],
+            [],
+            "not one keystroke into an unarmed session",
+        )
+
+    def test_arming_expires(self) -> None:
+        self.iface.handle_update(message(OWNER, "/arm desk 15"))
+        self.clock.advance(minutes=16)
+        self.iface.handle_update(
+            message(OWNER, "/reply claude:sess-1 late answer")
+        )
+        self.approve_last()
+        self.assertIn("not armed", self.last_text())
+
+    def test_disarm_and_status(self) -> None:
+        self.iface.handle_update(message(OWNER, "/arm desk"))
+        self.iface.handle_update(message(OWNER, "/armed"))
+        self.assertIn("desk armed until", self.last_text())
+        self.iface.handle_update(message(OWNER, "/disarm desk"))
+        self.iface.handle_update(message(OWNER, "/armed"))
+        self.assertIn("nothing is armed", self.last_text())
+
+
+# ---------------------------------------------------------------- the crown
+
+
+class CrownCaseTest(InterfaceCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.pair()
+
+    def test_approved_dishonest_done_flip_is_refused_with_banner(self) -> None:
+        self.iface.handle_update(message(OWNER, "/flip demo 1 DM-1-02 done"))
+        self.assertIn("Flip DM-1-02", self.last_text())
+        self.approve_last()
+        text = self.last_text()
+        self.assertIn("the rails refused:", text)
+        self.assertIn(
+            "refusing to mark story done without evidence", text,
+            "the dw banner rides into chat verbatim",
+        )
+
+    def test_honest_flip_executes(self) -> None:
+        self.iface.handle_update(
+            message(OWNER, "/flip demo 1 DM-1-02 blocked")
+        )
+        self.approve_last()
+        self.assertIn("done:", self.last_text())
+        status = (
+            self.repo
+            / "pm/roadmap/demo/phase-1-alpha/current-phase-status.md"
+        ).read_text()
+        self.assertIn("| blocked |", status)
+
+    def test_unknown_story_never_becomes_a_proposal(self) -> None:
+        self.iface.handle_update(message(OWNER, "/flip demo 1 DM-9-99 done"))
+        self.assertIn("not on the demo roadmap", self.last_text())
+        self.assertIsNone(self.transport.sent[-1]["buttons"])
+
+
+# ---------------------------------------------------------------- driver
+
+
+class DriverTest(InterfaceCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.pair()
+
+    def test_launch_all_supported_harnesses(self) -> None:
+        for harness in ("claude", "codex", "pi"):
+            self.iface.handle_update(
+                message(OWNER, f"/launch {harness} {self.repo} run-{harness}")
+            )
+            self.approve_last()
+            self.assertIn(f"launched {harness}", self.last_text())
+        launches = [
+            c for c in self.tmux_runner.calls if c[1] == "new-session"
+        ]
+        self.assertEqual(
+            [c[-1] for c in launches], ["claude", "codex", "pi"]
+        )
+        for call in launches:
+            self.assertEqual(call[2], "-d", "sessions launch detached")
+
+    def test_unsupported_harness_refused(self) -> None:
+        self.iface.handle_update(
+            message(OWNER, f"/launch bash {self.repo}")
+        )
+        self.approve_last()
+        self.assertIn("not supported", self.last_text())
+
+    def test_launched_session_starts_unarmed(self) -> None:
+        self.iface.handle_update(
+            message(OWNER, f"/launch claude {self.repo} fresh")
+        )
+        self.approve_last()
+        driver = self.iface.driver
+        with self.assertRaises(Unarmed):
+            driver.send_text("fresh", "fresh", "hello", self.clock())
+
+
+# ---------------------------------------------------------------- lifecycle
+
+
+class LifecycleTest(InterfaceCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.pair()
+
+    def test_create_outside_roots_refused_before_proposal(self) -> None:
+        outside = Path(tempfile.mkdtemp(prefix="dw-outside."))
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        self.iface.handle_update(
+            message(OWNER, f"/newproject {outside}/x proj PX Project X")
+        )
+        self.assertIn("outside the allow-listed workspace roots", self.last_text())
+        self.assertIsNone(self.transport.sent[-1]["buttons"])
+
+    def test_open_requires_rails_repo_within_roots(self) -> None:
+        bare = self.tmp / "bare"
+        bare.mkdir()
+        self.iface.handle_update(message(OWNER, f"/open {bare}"))
+        self.assertIn("not a rails repo", self.last_text())
+        self.iface.handle_update(message(OWNER, f"/open {self.repo}"))
+        self.assertIn("active rails repo", self.last_text())
+
+    def test_create_step_sequence_with_scripted_runner(self) -> None:
+        target = self.tmp / "fresh-project"
+
+        def hook(argv, cwd):
+            if "contract" in argv:
+                contract = target / ".tmp" / "CONTRACT.md"
+                contract.parent.mkdir(parents=True, exist_ok=True)
+                contract.write_text("- [ ] No bypasses.\n")
+            if argv[-1] == "init" or (argv[0] == "git" and argv[1] == "init"):
+                target.mkdir(exist_ok=True)
+            return None
+
+        runner = RecordingRunner(hook)
+        lifecycle = LifecycleClient(
+            self.config,
+            RailsClient(dw_cli=self.config.dw_cli),
+            runner=runner,
+        )
+        steps, reason = lifecycle.plan_create(
+            target, "fresh", "FR", "Fresh Project"
+        )
+        self.assertIsNotNone(steps, reason)
+        ok, report = lifecycle.execute(target, steps)
+        self.assertTrue(ok, report)
+        labels = [line.lstrip("✓✗ ").split(":")[0] for line in report]
+        self.assertEqual(
+            labels,
+            [
+                "git init", "install rails", "roadmap skeleton", "doctor",
+                "stage", "contract", "certify bootstrap contract",
+                "first gated commit",
+            ],
+        )
+        self.assertIn(
+            "- [x] No bypasses.",
+            (target / ".tmp" / "CONTRACT.md").read_text(),
+        )
+
+    def test_create_for_real_lands_on_the_rails(self) -> None:
+        """The full leg, no fakes: scaffold → rails → doctor →
+        first gated commit, gate hooks live."""
+        gitconfig = self.tmp / "gitconfig"
+        gitconfig.write_text(
+            "[user]\n\tname = Fixture Owner\n\temail = fixture@example.test\n"
+        )
+        old = {
+            key: os.environ.get(key)
+            for key in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM")
+        }
+        os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
+        os.environ["GIT_CONFIG_SYSTEM"] = os.devnull
+
+        def restore() -> None:
+            for key, value in old.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+        self.addCleanup(restore)
+
+        target = self.tmp / "real-project"
+        lifecycle = LifecycleClient(
+            self.config, RailsClient(dw_cli=self.config.dw_cli)
+        )
+        steps, reason = lifecycle.plan_create(
+            target, "real", "RL", "Real Project"
+        )
+        self.assertIsNotNone(steps, reason)
+        ok, report = lifecycle.execute(target, steps)
+        self.assertTrue(ok, "\n".join(report))
+        head = subprocess.run(
+            ["git", "-C", str(target), "log", "--oneline"],
+            stdout=subprocess.PIPE,
+            text=True,
+            check=True,
+        ).stdout
+        self.assertIn("Adopt Delivery Workbench rails", head)
+        self.assertTrue((target / "pm" / "roadmap" / "real").is_dir())
+        self.assertTrue((target / ".githooks" / "dw").is_file())
+
+
+# ---------------------------------------------------------------- hygiene
+
+
+class TokenHygieneTest(unittest.TestCase):
+    def test_env_token_overrides_missing_config(self) -> None:
+        tmp = Path(tempfile.mkdtemp(prefix="dw-cfg."))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        config = load_config(
+            tmp / "absent.json", env={"TELEGRAM_BOT_TOKEN": "unit-test-token"}
+        )
+        self.assertEqual(config.bot_token, "unit-test-token")
+
+    def test_missing_token_error_names_path_not_content(self) -> None:
+        tmp = Path(tempfile.mkdtemp(prefix="dw-cfg."))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        with self.assertRaises(ConfigError) as caught:
+            load_config(tmp / "absent.json", env={})
+        self.assertIn("absent.json", str(caught.exception))
+
+    def test_transport_errors_never_carry_the_token(self) -> None:
+        import urllib.request
+
+        transport = HttpTransport("SECRET-TOKEN-VALUE")
+        original = urllib.request.urlopen
+
+        def explode(*_args, **_kwargs):
+            raise OSError("connect https://api.telegram.org/botSECRET-TOKEN-VALUE/x")
+
+        urllib.request.urlopen = explode
+        try:
+            with self.assertRaises(TransportError) as caught:
+                transport.send(1, "hello")
+        finally:
+            urllib.request.urlopen = original
+        self.assertNotIn("SECRET-TOKEN-VALUE", str(caught.exception))
+
+
+# ---------------------------------------------------------------- schemas
+
+
+class SchemaComplianceTest(unittest.TestCase):
+    def test_unproven_feed_schema_refused_politely(self) -> None:
+        def runner(argv, cwd=None):
+            return types.SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"feed_schema": 2, "projects": []}),
+                stderr="",
+            )
+
+        rails = RailsClient(dw_cli=["dw"], runner=runner)
+        doc, reason = rails.read_feed(Path("/anywhere"))
+        self.assertIsNone(doc)
+        self.assertIn("proven against", reason)
+
+    def test_unproven_sessions_schema_refused_politely(self) -> None:
+        def runner(argv, cwd=None):
+            return types.SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"sessions_schema": 99, "sessions": []}),
+                stderr="",
+            )
+
+        rails = RailsClient(dw_cli=["dw"], runner=runner)
+        doc, reason = rails.read_sessions(Path("/anywhere"))
+        self.assertIsNone(doc)
+        self.assertIn("proven against", reason)
+
+    def test_story_argv_allow_list_is_two_verbs(self) -> None:
+        rails = RailsClient(dw_cli=["dw"])
+        with self.assertRaises(ValueError):
+            rails.build_story_argv(
+                Path("/r"), {"verb": "delete", "project": "x"}
+            )
+        argv = rails.build_story_argv(
+            Path("/r"),
+            {
+                "verb": "status", "project": "p", "phase": 1,
+                "story": "S-1-01", "status": "done",
+            },
+        )
+        self.assertEqual(argv[:4], ["dw", "--root", "/r", "story"])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

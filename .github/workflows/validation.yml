@@ -107,6 +107,39 @@ jobs:
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
           python3 pmo-roadmap/tests/dw-core-tests.py
 
+  telegram-interface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Telegram interface tests (scripted transport, fixture rails, no network)
+        run: |
+          python3 --version
+          python3 -m compileall -q integrations/telegram
+          python3 pmo-roadmap/tests/telegram-interface-tests.py
+
+      - name: Credential grep-clean (WLA-13-06 acceptance)
+        # No bot token, pairing token, or chat ID may appear anywhere
+        # in the repo. A real Bot API token is <digits>:<35 url-safe
+        # chars>; pairing tokens exist only at runtime (hashed at
+        # rest); the operator config lives outside the repo and must
+        # never be tracked.
+        run: |
+          set -eu
+          if git grep -nE '[0-9]{6,}:[A-Za-z0-9_-]{30,}' -- ':!*.png' ':!*.gif'; then
+            echo "ERROR: bot-token-shaped string tracked in the repo" >&2
+            exit 1
+          fi
+          if git ls-files | grep -E '(^|/)telegram\.json$'; then
+            echo "ERROR: operator telegram config tracked in the repo" >&2
+            exit 1
+          fi
+          echo "credential grep-clean: ok"
+
   holdspeak-pack:
     runs-on: ubuntu-latest
     steps:

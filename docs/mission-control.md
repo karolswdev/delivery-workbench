@@ -115,6 +115,12 @@ is **its own document** (`dw sessions --json`, `sessions_schema`
 every repo on the desk and carry desk-runtime state. §5 already
 listed them as separate consumables; clients merge them.
 
+*(Amended by WLA-13-06:)* `dw sessions` grew `--registry <path>` —
+the correlator always took the path as a parameter; the CLI now
+exposes it, so fixture tests and any desk with a nonstandard
+registry location can point at a file without touching dw
+internals. The default remains the HoldSpeak desk registry.
+
 ## 3. The event log (implemented by WLA-13-04)
 
 **Decided: an append-only JSONL file at `.git/pmo-events.jsonl`**
@@ -160,6 +166,19 @@ Three rings, strictest last:
    (`~/.config/delivery-workbench/telegram.json`), lands only as
    rails-installed + doctor-green + first gated commit, and is
    refused outside the roots.
+   *(Amended by WLA-13-06, the bootstrap-certification decision:)*
+   the first gated commit of a freshly created project needs a
+   certified contract, and certification is human, always. Here the
+   human act is the owner's approval tap on a preview that names
+   exactly what will be certified; the interface records that
+   consent in the contract (`--consent yes --reasons`) and flips
+   the boxes of the **bootstrap contract only** — a commit in a
+   repo with no stories, no evidence, and no history, every rule
+   mechanically checkable, the dw gate re-verifying each stamped
+   fact downstream. Story-work certification is never delegated
+   this way, and the two allow-listed story verbs cannot commit at
+   all. Pairing tokens (ring 1) are decided at 5-minute TTL,
+   single-use, stored only as a sha256 at rest.
 3. **The tmux driver** — the sharpest edge, named honestly: once a
    tmux session is **armed**, `send-keys` relays free text, and no
    allow-list can bound free text into a terminal. Therefore the

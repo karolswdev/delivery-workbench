@@ -463,9 +463,9 @@ def command_sessions(args: argparse.Namespace) -> int:
     from dw_pmo.sessions import correlate_sessions, render_sessions
 
     if args.json:
-        print(render_sessions())
+        print(render_sessions(args.registry))
         return 0
-    doc = correlate_sessions()
+    doc = correlate_sessions(args.registry)
     if doc.get("registry") != "ok":
         print(f"sessions: registry {doc.get('registry')}")
         return 0 if doc.get("registry") == "absent" else 1
@@ -564,6 +564,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sessions = sub.add_parser("sessions", help="correlate live agent sessions to stories (docs/mission-control.md §2)")
     sessions.add_argument("--json", action="store_true", help="emit the sessions_schema JSON document")
+    sessions.add_argument("--registry", type=Path, default=None, help="registry file to read (default: the HoldSpeak desk registry)")
     sessions.set_defaults(func=command_sessions)
 
     rider = sub.add_parser("rider", help="agent-surface rider tooling (canonical brief renderers)")
