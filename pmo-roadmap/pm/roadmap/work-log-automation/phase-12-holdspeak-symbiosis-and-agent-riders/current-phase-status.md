@@ -42,7 +42,7 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-12-01 | Design the symbiosis contract and the journal charter | in-progress | [story-01-design-symbiosis-contract-and-journal-charter](./story-01-design-symbiosis-contract-and-journal-charter.md) | - |
+| WLA-12-01 | Design the symbiosis contract and the journal charter | done | [story-01-design-symbiosis-contract-and-journal-charter](./story-01-design-symbiosis-contract-and-journal-charter.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-12-02 | Build the HoldSpeak roadmap-alignment synthesizer | backlog | [story-02-holdspeak-roadmap-alignment-synthesizer](./story-02-holdspeak-roadmap-alignment-synthesizer.md) | - |
 | WLA-12-03 | Build the HoldSpeak story actuator | backlog | [story-03-holdspeak-story-actuator](./story-03-holdspeak-story-actuator.md) | - |
 | WLA-12-04 | Collapse the agent-surface duplication behind a canonical brief | backlog | [story-04-canonical-brief-collapse-duplication](./story-04-canonical-brief-collapse-duplication.md) | - |
@@ -52,10 +52,16 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 
 ## Where we are
 
-Phase opened 2026-07-03 with seven specced stories and the journal
-started (entry 0 covers this opening). WLA-12-01 is next: the
-design story that pins the capability matrix and the journal
-charter everything else builds on.
+WLA-12-01 landed 2026-07-03: `docs/riders.md` holds the
+live-verified four-surface matrix (which killed two assumptions —
+Codex commands render as skills, not `~/.codex/prompts`; and
+`shell:exec` is a connector permission, not a plugin capability),
+the canonical-brief architecture with the drift rule, and every
+later story's proof obligation. The journal charter is recorded
+and entries 0–1 stand under it. Shipping the story surfaced a real
+bug: evidence capture through `dw-mcp` inherits the server's
+JSON-RPC stdin, so a stdin-reading child wedges the single-threaded
+server — the fix is its own story, next. WLA-12-02 follows it.
 
 ## Active risks
 
@@ -72,9 +78,14 @@ charter everything else builds on.
 - 2026-07-03 - HoldSpeak integration ordered before the Codex/pi riders (value by story 3; riders depend only on the 12-04 seam) - Karol + agent.
 - 2026-07-03 - Every story ships a journal entry in its own commit; charter formalized in WLA-12-01 - the phase is itself the worked example - Karol.
 - 2026-07-03 - Actuator scope pinned to two `dw story` verbs; certification stays human, always - canon.
+- 2026-07-03 - Rendered command copies are committed, not build products; drift becomes a `dw check` ERROR (resolves the deferred question) - recorded in `docs/riders.md` - WLA-12-01.
+- 2026-07-03 - Codex rider renders commands as `.codex/skills/` skills, not custom prompts: live verification on codex-cli 0.142.4 showed `codex exec` never expands `~/.codex/prompts` - WLA-12-01 matrix, amends WLA-12-05.
+- 2026-07-03 - HoldSpeak pinned at released 0.3.1; desk runs main 575 commits ahead, so the pack MANIFEST declares its proven range - WLA-12-01.
+- 2026-07-03 - Agentic mission-control / Desk conveyor vision (rich web+iOS roadmap primitive fed by the agent hook + rails) lands as Phase 13, scaffolded after 12-01 ships; Phase 12 scope unchanged - Karol.
+- 2026-07-03 - MCP evidence-capture stdin bug (captured child inherits the JSON-RPC pipe; wedges the single-threaded server) found while shipping 12-01; fix is its own story with its own evidence - Karol + agent.
 
 ## Decisions deferred
 
-- Rendered command copies committed vs build products - decide in WLA-12-01, implement in WLA-12-04.
+- Rendered command copies committed vs build products - resolved 2026-07-03 by WLA-12-01 (committed; drift is a `dw check` ERROR) - see "Decisions made".
 - Who owns the pack copy step into `~/.holdspeak/plugin_packs/` (doctor vs install script) - decide in WLA-12-02.
 - Whether WLA-12-07 splits release into its own story - trigger if Desk/doctor halves grow - default is split rather than rush.
