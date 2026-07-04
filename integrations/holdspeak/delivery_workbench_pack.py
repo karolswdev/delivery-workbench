@@ -62,7 +62,7 @@ from holdspeak.plugin_sdk import validate_manifest
 
 IntelChat = Callable[[list[dict[str, str]]], str]
 
-PACK_VERSION = "0.1.0"
+PACK_VERSION = "0.1.1"
 
 MANIFEST = validate_manifest(
     {
@@ -201,15 +201,17 @@ class DeliveryWorkbenchAlignment:
         return None, "no project detected and no default rails repo configured"
 
     def _read_roadmap(self, repo: Path) -> tuple[Optional[dict[str, Any]], str]:
-        """Run dw context --compact against the repo; digest or reason."""
+        """Read the mission-control state feed (dw state --json,
+        feed_schema 1 — docs/mission-control.md §1); digest or reason.
+        Converted from private context scraping by WLA-13-02."""
         repo_dw = repo / ".githooks" / "dw"
         if repo_dw.is_file() and os.access(repo_dw, os.X_OK):
-            argv = [str(repo_dw), "context", "--compact"]
+            argv = [str(repo_dw), "state", "--json"]
         else:
             path_dw = shutil.which("dw")
             if not path_dw:
                 return None, f"no dw CLI in {repo}/.githooks or on PATH"
-            argv = [path_dw, "--root", str(repo), "context", "--compact"]
+            argv = [path_dw, "--root", str(repo), "state", "--json"]
         try:
             completed = subprocess.run(
                 argv,
@@ -230,23 +232,27 @@ class DeliveryWorkbenchAlignment:
         try:
             payload = json.loads(completed.stdout)
         except (json.JSONDecodeError, ValueError):
-            return None, "dw context did not return JSON"
+            return None, "dw state did not return JSON"
+        if payload.get("feed_schema") != 1:
+            return None, (
+                f"feed_schema {payload.get('feed_schema')!r} is not the "
+                "schema this pack was proven against (1)"
+            )
         projects = payload.get("projects")
         if not isinstance(projects, list) or not projects:
-            return None, "dw context returned no projects"
+            return None, "dw state returned no projects"
         stories: dict[str, dict[str, str]] = {}
         digests: list[dict[str, Any]] = []
         for project in projects:
             if not isinstance(project, dict):
                 continue
-            for phase in project.get("phases") or []:
-                for story in (phase or {}).get("stories") or []:
-                    story_id = str((story or {}).get("story_id") or "").strip()
-                    if story_id:
-                        stories[story_id] = {
-                            "title": str(story.get("title") or ""),
-                            "status": str(story.get("status") or ""),
-                        }
+            for story in project.get("stories") or []:
+                story_id = str((story or {}).get("story_id") or "").strip()
+                if story_id:
+                    stories[story_id] = {
+                        "title": str(story.get("title") or ""),
+                        "status": str(story.get("status") or ""),
+                    }
             digests.append(
                 {
                     "slug": str(project.get("slug") or ""),

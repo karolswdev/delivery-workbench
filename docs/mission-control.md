@@ -58,12 +58,21 @@ shape; the feed may not, without a version bump:
     "slug": "…", "prefix": "…",
     "current_phase": {"number": 12, "title": "…", "status": "…"},
     "next_story": {"story_id": "…", "title": "…", "status": "…"} ,
+    "phases": [{"number": 12, "title": "…", "status": "open|closed",
+                 "stories_done": 5, "stories_total": 8}],
     "stories": [{"story_id": "…", "title": "…", "status": "…",
                   "phase": 12, "evidence_exists": true}],
     "warnings": 2
   }]
 }
 ```
+
+*(Amended by WLA-13-02 in its own commit, per this document's
+rule: a per-project `phases` array joined the schema before
+freezing — the Desk conveyor renders phases as the belt, and the
+actuator pack validates create-targets against phases that may
+hold no stories yet; neither works from `current_phase` alone.
+`current_phase` uses the same phase shape.)*
 
 Schema-pinning tests fail on unannounced shape changes. Consumers
 declare the `feed_schema` they were proven against, the way the

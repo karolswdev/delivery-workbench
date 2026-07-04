@@ -2150,6 +2150,70 @@ class VerifyTest(unittest.TestCase):
                 self.assertIn(f"`{rule_id}`", doc_text, f"{rule_id} unclassified in remote-verification.md")
 
 
+class StateFeedTest(unittest.TestCase):
+    """WLA-13-02: the mission-control feed is schema-pinned. These
+    frozen key sets ARE the stability promise — changing the shape
+    without bumping FEED_SCHEMA must fail here."""
+
+    REPO_ROOT = TESTS_DIR.parent.parent
+
+    TOP_KEYS = ["feed_schema", "generated_at_tree", "projects"]
+    PROJECT_KEYS = [
+        "current_phase", "next_story", "phases", "prefix", "slug",
+        "stories", "warnings",
+    ]
+    PHASE_KEYS = ["number", "status", "stories_done", "stories_total", "title"]
+    STORY_KEYS = ["evidence_exists", "phase", "status", "story_id", "title"]
+    NEXT_KEYS = ["status", "story_id", "title"]
+
+    def setUp(self) -> None:
+        from dw_pmo.statefeed import FEED_SCHEMA, build_state_feed
+
+        self.assertEqual(FEED_SCHEMA, 1)
+        self.feed = build_state_feed(self.REPO_ROOT)
+
+    def test_schema_is_pinned(self) -> None:
+        self.assertEqual(sorted(self.feed.keys()), self.TOP_KEYS)
+        self.assertEqual(self.feed["feed_schema"], 1)
+        for project in self.feed["projects"]:
+            self.assertEqual(sorted(project.keys()), self.PROJECT_KEYS)
+            for phase in project["phases"]:
+                self.assertEqual(sorted(phase.keys()), self.PHASE_KEYS)
+            for story in project["stories"]:
+                self.assertEqual(sorted(story.keys()), self.STORY_KEYS)
+            if project["next_story"] is not None:
+                self.assertEqual(
+                    sorted(project["next_story"].keys()), self.NEXT_KEYS
+                )
+            if project["current_phase"] is not None:
+                self.assertEqual(
+                    sorted(project["current_phase"].keys()), self.PHASE_KEYS
+                )
+
+    def test_feed_reflects_real_state(self) -> None:
+        project = self.feed["projects"][0]
+        self.assertEqual(project["slug"], "work-log-automation")
+        closed_12 = [p for p in project["phases"] if p["number"] == 12]
+        self.assertEqual(closed_12[0]["status"], "closed")
+        self.assertTrue(
+            any(s["story_id"] == "WLA-12-01" and s["evidence_exists"]
+                for s in project["stories"])
+        )
+
+    def test_write_emits_the_same_document(self) -> None:
+        import json as _json
+
+        from dw_pmo.statefeed import render_state_feed
+
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "state.json"
+            target.write_text(
+                render_state_feed(self.REPO_ROOT) + "\n", encoding="utf-8"
+            )
+            reread = _json.loads(target.read_text(encoding="utf-8"))
+            self.assertEqual(sorted(reread.keys()), self.TOP_KEYS)
+
+
 class RiderDocsTest(unittest.TestCase):
     """WLA-12-04: one canonical brief, rendered per surface, drift is
     a check error."""

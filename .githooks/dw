@@ -418,6 +418,34 @@ def command_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_state(args: argparse.Namespace) -> int:
+    from dw_pmo.statefeed import build_state_feed, render_state_feed
+
+    if args.json or args.write:
+        rendered = render_state_feed(args.root)
+        if args.write:
+            args.write.parent.mkdir(parents=True, exist_ok=True)
+            args.write.write_text(rendered + "\n", encoding="utf-8")
+            print(f"{args.write}")
+        if args.json:
+            print(rendered)
+        return 0
+    for project in build_state_feed(args.root)["projects"]:
+        phase = project["current_phase"]
+        nxt = project["next_story"]
+        phase_part = (
+            f"phase {phase['number']} [{phase['status']}] "
+            f"{phase['stories_done']}/{phase['stories_total']}"
+            if phase
+            else "no phases"
+        )
+        next_part = (
+            f"next {nxt['story_id']} [{nxt['status']}]" if nxt else "nothing actionable"
+        )
+        print(f"{project['slug']}\t{phase_part}\t{next_part}\twarnings:{project['warnings']}")
+    return 0
+
+
 def command_rider_docs(args: argparse.Namespace) -> int:
     from dw_pmo.riderdocs import rider_docs_issues, write_rider_docs
 
@@ -486,6 +514,11 @@ def build_parser() -> argparse.ArgumentParser:
     adopt.add_argument("--project-prefix", help="story-ID prefix for a new README (default: from the report's story IDs)")
     adopt.add_argument("--apply", action="store_true", help="write the scaffold (default is a dry-run preview)")
     adopt.set_defaults(func=command_adopt)
+
+    state = sub.add_parser("state", help="the mission-control state feed (versioned; docs/mission-control.md §1)")
+    state.add_argument("--json", action="store_true", help="emit the feed_schema JSON document")
+    state.add_argument("--write", type=Path, default=None, help="also write the JSON document to this path")
+    state.set_defaults(func=command_state)
 
     rider = sub.add_parser("rider", help="agent-surface rider tooling (canonical brief renderers)")
     rider_sub = rider.add_subparsers(dest="rider_command", required=True)

@@ -71,7 +71,7 @@ consumes only what this phase exposes.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-13-01 | Design the mission-control contract | done | [story-01-design-the-mission-control-contract](./story-01-design-the-mission-control-contract.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-13-02 | Ship the roadmap state feed | backlog | [story-02-ship-the-roadmap-state-feed](./story-02-ship-the-roadmap-state-feed.md) | - |
+| WLA-13-02 | Ship the roadmap state feed | done | [story-02-ship-the-roadmap-state-feed](./story-02-ship-the-roadmap-state-feed.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-13-03 | Correlate live agent sessions to stories | backlog | [story-03-correlate-live-agent-sessions-to-stories](./story-03-correlate-live-agent-sessions-to-stories.md) | - |
 | WLA-13-04 | Emit the events worth showing | backlog | [story-04-emit-the-events-worth-showing](./story-04-emit-the-events-worth-showing.md) | - |
 | WLA-13-05 | Prove mission control end-to-end with the Desk | backlog | [story-05-prove-mission-control-end-to-end-with-the-desk](./story-05-prove-mission-control-end-to-end-with-the-desk.md) | - |
@@ -88,8 +88,13 @@ sitting in the same registry), the seven-event JSONL log with its
 rails-metadata-only consent stance, and the three-ring consent
 envelope whose center is stated plainly: arming IS the consent
 for the tmux driver, engineered with TTLs and revocation. Stories
-02–06 are re-pinned to their sections. WLA-13-02 (the feed) is
-next.
+02–06 are re-pinned to their sections. WLA-13-02 then shipped the
+feed: `dw state --json` (feed_schema 1, schema-pinned by tests,
+`--write` for file-watchers, a one-line human pulse for free),
+with the §1 schema amended before freezing to carry the full
+`phases` belt data — and both HoldSpeak packs converted from
+context scraping to the feed (0.1.1, live on the desk, 23 pack
+tests green). WLA-13-03 (the correlator) is next.
 
 ## Active risks
 

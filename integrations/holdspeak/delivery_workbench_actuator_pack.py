@@ -54,7 +54,7 @@ from holdspeak.plugins.gated_connector import (
 
 IntelChat = Callable[[list[dict[str, str]]], str]
 
-PACK_VERSION = "0.1.0"
+PACK_VERSION = "0.1.1"
 
 MANIFEST = validate_manifest(
     {
@@ -146,7 +146,7 @@ def _read_roadmap(repo: Path) -> tuple[Optional[dict[str, Any]], str]:
         return None, f"no dw CLI in {repo}/.githooks or on PATH"
     try:
         completed = subprocess.run(
-            [*base, "context", "--compact"],
+            [*base, "state", "--json"],
             cwd=str(repo),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
@@ -158,11 +158,16 @@ def _read_roadmap(repo: Path) -> tuple[Optional[dict[str, Any]], str]:
         return None, f"dw context failed to run: {exc}"
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "").strip()
-        return None, f"dw context exited {completed.returncode}: {detail[:200]}"
+        return None, f"dw state exited {completed.returncode}: {detail[:200]}"
     try:
         payload = json.loads(completed.stdout)
     except (json.JSONDecodeError, ValueError):
-        return None, "dw context did not return JSON"
+        return None, "dw state did not return JSON"
+    if payload.get("feed_schema") != 1:
+        return None, (
+            f"feed_schema {payload.get('feed_schema')!r} is not the schema "
+            "this pack was proven against (1)"
+        )
     projects: dict[str, dict[str, Any]] = {}
     for project in payload.get("projects") or []:
         if not isinstance(project, dict):
@@ -172,21 +177,21 @@ def _read_roadmap(repo: Path) -> tuple[Optional[dict[str, Any]], str]:
             continue
         stories: dict[str, dict[str, str]] = {}
         phases: dict[str, int] = {}
+        for story in project.get("stories") or []:
+            story_id = str((story or {}).get("story_id") or "").strip()
+            if story_id:
+                stories[story_id] = {
+                    "title": str(story.get("title") or ""),
+                    "status": str(story.get("status") or ""),
+                    "phase": str(story.get("phase")),
+                }
         for phase in project.get("phases") or []:
             number = (phase or {}).get("number")
-            for story in (phase or {}).get("stories") or []:
-                story_id = str((story or {}).get("story_id") or "").strip()
-                if story_id:
-                    stories[story_id] = {
-                        "title": str(story.get("title") or ""),
-                        "status": str(story.get("status") or ""),
-                        "phase": str(number),
-                    }
             if number is not None:
                 phases[str(number)] = number
         projects[slug] = {"stories": stories, "phases": phases}
     if not projects:
-        return None, "dw context returned no projects"
+        return None, "dw state returned no projects"
     return {"projects": projects}, "ok"
 
 
