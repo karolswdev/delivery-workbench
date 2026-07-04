@@ -128,6 +128,7 @@ is next on this side.
 - 2026-07-03 - Steering stays within Phase 12's actuator envelope: two verbs, propose-approve-execute, gate always final, certification human, always - canon.
 - 2026-07-04 - Telegram joins the phase as a second mission-control client (WLA-13-06), same substrate as the Desk - Karol.
 - 2026-07-04 - The component is named generically (the Telegram interface); the concrete bot identity and token are operator config in `~/.config/delivery-workbench/telegram.json`, never roadmap or repo content - Karol.
+- 2026-07-04 - Owner binding is pairing-based (one-time short-TTL token generated on the operator's machine, supplied in chat, revocable by re-pairing) — never hardcoded chat/user IDs - Karol.
 - 2026-07-04 - Interface scope broadened: it is the tmux CLI driver for all supported harnesses (claude, codex, pi) and can open/install/create rails-backed git projects — every act behind proposal-preview-approval, project creation path-allow-listed to workspace roots, terminal remains the only place anything runs - Karol.
 - 2026-07-04 - Bot credentials never enter the repo, bogus or real: token provisioned at `~/.config/delivery-workbench/telegram.json` (untracked, chmod 600), env override; CI greps the repo clean - Karol + agent.
 - 2026-07-04 - tmux `send-keys` steering is the program's sharpest edge: per-session visible expiring arming, proposal-preview-approval per act, default off; WLA-13-01 designs the envelope before any implementation - Karol + agent.

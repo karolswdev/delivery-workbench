@@ -144,8 +144,14 @@ human type."
 Three rings, strictest last:
 
 1. **Read** (state, events, correlation, `capture-pane` previews):
-   owner-identity allow-list only; previews are verbatim and
-   read-only.
+   owner-only, bound by **pairing rather than hardcoded identity**
+   *(amended by owner decision, 2026-07-04)*: the interface
+   generates a one-time, short-TTL pairing token visible only on
+   the operator's machine; the owner supplies it in chat; the
+   binding lives in the interface's runtime state (chmod 600,
+   outside the repo), is revoked by re-pairing, and no chat or
+   user ID is ever configuration we author. Previews are verbatim
+   and read-only.
 2. **Rails verbs** (story flips, story/project creation): every
    act is proposal → preview → in-chat approval, executed through
    the Phase 12 actuator/connector seam where it exists; project

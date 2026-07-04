@@ -51,8 +51,14 @@ allow-listed, evidenced property.
   codex, and pi sessions in named tmux sessions, every session
   under the same visible, expiring arming envelope, so the whole
   story loop can be conducted from the phone while the terminal
-  stays the single place where anything actually runs. Chat
-  identity allow-list: the bot answers its owner, nobody else.
+  stays the single place where anything actually runs. Owner
+  binding is by pairing, not by hardcoded IDs: the interface
+  generates a one-time, short-TTL pairing token visible only on
+  the operator's own machine; the owner sends it in chat; the
+  binding lands in the interface's runtime state (chmod 600,
+  outside the repo). Wrong, expired, or reused tokens are refused;
+  re-pairing revokes the previous binding; unpaired chats get
+  silence beyond the pairing prompt.
 - **Out:** Committing any credential to this repo — the bot token
   lives in `~/.config/delivery-workbench/telegram.json` (untracked,
   chmod 600; already provisioned) or `TELEGRAM_BOT_TOKEN`, and the
@@ -82,14 +88,20 @@ allow-listed, evidenced property.
   approved proposal → scaffolded git repo under an allow-listed
   workspace root → rails installed → `dw doctor` green → first
   gated commit; refused outside the allow-listed roots.
-- [ ] No token or chat ID appears anywhere in the repo (grep-clean
-  in CI); the config path and env override are documented.
+- [ ] Owner binding is pairing-based and test-proven: wrong,
+  expired, and reused pairing tokens are refused; re-pairing
+  revokes the prior binding; an unpaired chat can do nothing but
+  pair.
+- [ ] No bot token, pairing token, or chat ID appears anywhere in
+  the repo (grep-clean in CI); the config path and env override
+  are documented.
 
 ## Test plan
 
 - **Unit:** message rendering from feed fixtures; consent state
   machine (proposal → approval → execution, arming expiry);
-  owner-allow-list refusals.
+  pairing state machine (token TTL, single-use, revocation,
+  unpaired-chat refusals).
 - **Integration:** bot logic against a fixture rails repo with a
   scripted Telegram transport (no live network in CI).
 - **Manual / device:** the live loop from a phone — state, a
