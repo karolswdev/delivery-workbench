@@ -7,6 +7,27 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## v1.10.0 — 2026-07-04
+
+Mission control, whole: Phase 13 gave the rails one substrate — a
+frozen state feed (`dw state --json`, `feed_schema` 1), a
+session↔story correlation document (`dw sessions --json`, with
+`--registry` for fixtures and nonstandard desks), and an
+append-only event log (`dw events`, seven types, rails metadata
+only, consent enforced in code) — and three surfaces consuming it
+with the same gate above all of them. The Telegram interface
+(`integrations/telegram/`) steers from a pocket: pairing-based
+owner binding (single-use short-TTL tokens, hashed at rest),
+proposal→approval for every act, one-tap arming for replies into
+tmux sessions with pane-ownership verified before a single
+keystroke, project lifecycle path-allow-listed to workspace roots,
+and a credential grep in CI. The HoldSpeak Desk conveyor (their
+Phase 82) renders phases as the belt and steers through the same
+two allow-listed story verbs. The crown case held on every
+surface: an approved done-flip without evidence is refused, banner
+verbatim. Full detail:
+[phase 13 final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-13-agentic-mission-control/final-summary.md).
+
 ## v1.9.0 — 2026-07-04
 
 One canonical agent brief, every surface: Phase 12 made Delivery
