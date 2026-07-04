@@ -23,10 +23,10 @@ from .agentevents import decide_pushes, read_new_events, render_push
 from .config import Config
 from .consent import ARM_DEFAULT_MINUTES, Arming, ProposalBook
 from .lifecycle import LifecycleClient
+from .msgqueue import MessageQueue
 from .pairing import redeem
 from .rails import RailsClient
 from .render import (
-    clip,
     render_events,
     render_question,
     render_sessions,
@@ -74,6 +74,7 @@ class TelegramInterface:
         self.driver = driver or TmuxDriver(self.arming)
         self.lifecycle = lifecycle or LifecycleClient(config, self.rails)
         self.proposals = ProposalBook()
+        self.queue = MessageQueue(transport)
         self._notified_questions: set[tuple[str, str]] = set()
         import threading
 
@@ -85,7 +86,9 @@ class TelegramInterface:
         return self.clock()
 
     def _say(self, chat_id: int, text: str, buttons=None) -> None:
-        self.transport.send(chat_id, clip(text), buttons)
+        # Renderers keep full content; the queue's send layer merges,
+        # formats via entities, and chunks (absorption map §2).
+        self.queue.enqueue(chat_id, text, buttons=buttons)
 
     def _active_repo(self) -> Path | None:
         if self.state.active_repo:
@@ -120,14 +123,22 @@ class TelegramInterface:
                 chat = (
                     (callback.get("message") or {}).get("chat") or {}
                 ).get("id")
+                message_id = (callback.get("message") or {}).get("message_id")
                 data = str(callback.get("data") or "")
                 callback_id = str(callback.get("id") or "")
                 if isinstance(chat, int):
-                    self._handle_callback(chat, data, callback_id)
+                    self._handle_callback(
+                        chat,
+                        data,
+                        callback_id,
+                        message_id if isinstance(message_id, int) else None,
+                    )
         except Exception as exc:  # never kill the loop; never leak internals
             chat = self.state.paired_chat
             if chat is not None:
                 self._say(chat, f"internal error: {type(exc).__name__}")
+        finally:
+            self.queue.flush()
 
     def drain_agent_events(self) -> int:
         """Drain the dw hook stream and push instantly (§1 of the
@@ -154,6 +165,7 @@ class TelegramInterface:
                 self._say(chat, render_push(event))
             if pushes:
                 self.poll_tick()  # enrich instantly from the correlation
+            self.queue.flush()
             return len(pushes)
 
     def poll_tick(self) -> None:
@@ -176,6 +188,7 @@ class TelegramInterface:
                 continue
             self._notified_questions.add(key)
             self._say(chat, render_question(session))
+        self.queue.flush()
 
     # -- messages -------------------------------------------------------
 
@@ -573,8 +586,28 @@ class TelegramInterface:
 
     # -- callbacks: the approval taps -------------------------------------
 
+    def _card_update(
+        self, chat_id: int, message_id: int | None, text: str
+    ) -> None:
+        """Edit the proposal card in place through its lifecycle —
+        one card in the history, not a trail (absorption map §2).
+        Falls back to a plain send when the edit is impossible."""
+        from .transport import TransportError
+
+        if message_id is not None:
+            try:
+                self.transport.edit(chat_id, message_id, text)
+                return
+            except TransportError:
+                pass
+        self._say(chat_id, text)
+
     def _handle_callback(
-        self, chat_id: int, data: str, callback_id: str
+        self,
+        chat_id: int,
+        data: str,
+        callback_id: str,
+        message_id: int | None = None,
     ) -> None:
         if self.state.paired_chat != chat_id:
             self.transport.answer_callback(callback_id, "not paired")
@@ -583,7 +616,9 @@ class TelegramInterface:
         if action == "rj":
             self.proposals.discard(proposal_id)
             self.transport.answer_callback(callback_id, "rejected")
-            self._say(chat_id, f"proposal {proposal_id} rejected")
+            self._card_update(
+                chat_id, message_id, f"✕ proposal {proposal_id} rejected"
+            )
             return
         if action != "ap":
             self.transport.answer_callback(callback_id, "")
@@ -600,19 +635,25 @@ class TelegramInterface:
             )
             return
         self.transport.answer_callback(callback_id, "approved")
-        self._execute(chat_id, proposal)
+        outcome = self._execute(chat_id, proposal)
+        self._card_update(
+            chat_id, message_id, f"{proposal.preview}\n\n{outcome}"
+        )
 
-    def _execute(self, chat_id: int, proposal) -> None:
+    def _execute(self, chat_id: int, proposal) -> str:
+        """Execute an approved proposal; the outcome text lands on
+        the card via edit-in-place (never a second message)."""
         payload = proposal.payload
         if proposal.kind == "story":
             ok, output = self.rails.run_story_verb(
                 Path(payload["repo"]), payload
             )
-            self._say(
-                chat_id,
-                f"done:\n{output}" if ok else f"the rails refused:\n{output}",
+            return (
+                f"✓ done:\n{output}"
+                if ok
+                else f"✕ the rails refused:\n{output}"
             )
-        elif proposal.kind == "reply":
+        if proposal.kind == "reply":
             # The approval tap IS the arming grant when the session is
             # not yet armed — the preview said so explicitly. The
             # driver still refuses anything that skipped this grant.
@@ -627,30 +668,28 @@ class TelegramInterface:
                     session, payload["target"], payload["text"], now
                 )
             except Unarmed as exc:
-                self._say(chat_id, f"refused: {exc}")
-                return
-            self._say(
-                chat_id,
-                f"relayed{armed_note}" if ok else f"relay failed: {output}",
+                return f"✕ refused: {exc}"
+            return (
+                f"✓ relayed{armed_note}"
+                if ok
+                else f"✕ relay failed: {output}"
             )
-        elif proposal.kind == "launch":
+        if proposal.kind == "launch":
             ok, output = self.driver.launch(
                 payload["harness"], payload["session"], payload["cwd"]
             )
-            self._say(chat_id, output if ok else f"launch failed: {output}")
-        elif proposal.kind == "lifecycle":
+            return f"✓ {output}" if ok else f"✕ launch failed: {output}"
+        if proposal.kind == "lifecycle":
             ok, report = self.lifecycle.execute(
                 Path(payload["path"]), payload["steps"]
             )
             summary = "\n".join(report)
-            self._say(
-                chat_id,
-                f"on the rails:\n{summary}"
+            return (
+                f"✓ on the rails:\n{summary}"
                 if ok
-                else f"stopped honestly:\n{summary}",
+                else f"✕ stopped honestly:\n{summary}"
             )
-        else:
-            self._say(chat_id, f"unknown proposal kind {proposal.kind!r}")
+        return f"unknown proposal kind {proposal.kind!r}"
 
     # -- the loop ---------------------------------------------------------
 

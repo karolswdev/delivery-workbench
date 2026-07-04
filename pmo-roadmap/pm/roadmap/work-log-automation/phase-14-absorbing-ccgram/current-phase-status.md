@@ -44,7 +44,7 @@ Absorb and re-interpret ccgram's operational excellence under the consent spine:
 |---|---|---|---|---|
 | WLA-14-01 | Design: the absorption map | done | [story-01-design-the-absorption-map](./story-01-design-the-absorption-map.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-14-02 | The rails speak first: hook-driven push | done | [story-02-the-rails-speak-first-hook-driven-push](./story-02-the-rails-speak-first-hook-driven-push.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-14-03 | The message layer grows up | backlog | [story-03-the-message-layer-grows-up](./story-03-the-message-layer-grows-up.md) | - |
+| WLA-14-03 | The message layer grows up | done | [story-03-the-message-layer-grows-up](./story-03-the-message-layer-grows-up.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-14-04 | Topics are projects, and conversation flows | backlog | [story-04-topics-are-projects](./story-04-topics-are-projects.md) | - |
 | WLA-14-05 | The driver learns the desk's manners | backlog | [story-05-the-driver-learns-the-desk-s-manners](./story-05-the-driver-learns-the-desk-s-manners.md) | - |
 | WLA-14-06 | Send files through seven locks | backlog | [story-06-send-files-through-seven-locks](./story-06-send-files-through-seven-locks.md) | - |

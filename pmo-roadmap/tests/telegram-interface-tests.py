@@ -260,11 +260,13 @@ class InterfaceCase(unittest.TestCase):
         self.transport.sent.clear()
 
     def sent_texts(self) -> list[str]:
-        return [item["text"] for item in self.transport.sent]
+        # The chat as the user saw it: sends and in-place edits,
+        # chronological (the queue merges and the cards edit).
+        return [item["text"] for item in self.transport.feed_stream]
 
     def last_text(self) -> str:
-        self.assertTrue(self.transport.sent, "expected a chat message")
-        return self.transport.sent[-1]["text"]
+        self.assertTrue(self.transport.feed_stream, "expected a chat message")
+        return self.transport.feed_stream[-1]["text"]
 
     def last_proposal_id(self) -> str:
         buttons = self.transport.sent[-1]["buttons"]
@@ -989,6 +991,171 @@ class HookDrainTest(InterfaceCase):
         self.assertEqual(self.iface.drain_agent_events(), 0)
         self.assertEqual(self.state.events_offset, 0,
                          "unpaired leaves the stream for later")
+
+
+
+# ------------------------------------------------------- message layer
+
+
+from dw_telegram.entities import chunk, to_entities
+from dw_telegram.msgqueue import MessageQueue, OutMessage, plan_batch
+
+
+class EntitiesTest(unittest.TestCase):
+    def test_hostile_characters_need_no_escaping(self):
+        hostile = "a_b*c[d](e)~f`g>h#i+j-k=l|m{n}o.p!q"
+        plain, entities = to_entities(hostile)
+        self.assertEqual(plain, hostile)
+        self.assertEqual(entities, [])
+
+    def test_bold_code_pre_become_entities(self):
+        plain, entities = to_entities(
+            "**bold** then `code` then:\n```\npre block\n```"
+        )
+        self.assertEqual(plain, "bold then code then:\npre block")
+        self.assertEqual(
+            [(e["type"], e["offset"], e["length"]) for e in entities],
+            [("bold", 0, 4), ("code", 10, 4), ("pre", 21, 9)],
+        )
+
+    def test_offsets_are_utf16_after_emoji(self):
+        plain, entities = to_entities("🙋 **bold**")
+        # the emoji is TWO utf-16 units; a char count would say 2, not 3
+        self.assertEqual(entities, [{"type": "bold", "offset": 3, "length": 4}])
+        self.assertEqual(plain, "🙋 bold")
+
+    def test_chunk_prefers_line_boundaries_and_rescopes(self):
+        text = "\n".join(f"line {i}" for i in range(400))
+        plain, entities = to_entities("**" + text[:6] + "**" + text[6:])
+        pieces = chunk(plain, entities, limit=1000)
+        self.assertGreater(len(pieces), 1)
+        self.assertEqual("".join(piece for piece, _ in pieces), plain)
+        for piece, _ in pieces[:-1]:
+            self.assertTrue(piece.endswith("\n"), "cuts at line boundaries")
+        self.assertEqual(pieces[0][1][0]["offset"], 0, "entity rescoped")
+
+
+class PlanBatchTest(unittest.TestCase):
+    def test_adjacent_texts_merge_statuses_coalesce(self):
+        pending = [
+            OutMessage(1, "first"),
+            OutMessage(1, "second"),
+            OutMessage(1, "working… 10%", kind="status"),
+            OutMessage(1, "third with buttons", buttons=[[("A", "a")]]),
+            OutMessage(1, "working… 90%", kind="status"),
+            OutMessage(1, "fourth"),
+        ]
+        actions = plan_batch(pending)
+        self.assertEqual(
+            [(a.op, a.text) for a in actions],
+            [
+                ("send", "first\n\nsecond"),
+                ("send", "third with buttons"),
+                ("send", "fourth"),
+                ("edit_status", "working… 90%"),
+            ],
+            "merge adjacent, never merge buttons, only the latest status",
+        )
+
+    def test_merge_respects_the_cap(self):
+        big = "x" * 3000
+        actions = plan_batch([OutMessage(1, big), OutMessage(1, big)])
+        self.assertEqual(len(actions), 2, "over the cap stays separate")
+
+
+class MessageQueueTest(unittest.TestCase):
+    def setUp(self):
+        self.transport = ScriptedTransport()
+        self.naps = []
+        self.queue = MessageQueue(self.transport, sleeper=self.naps.append)
+
+    def test_burst_arrives_ordered_and_merged(self):
+        for i in range(4):
+            self.queue.enqueue(1, f"msg {i}")
+        self.queue.flush()
+        self.assertEqual(len(self.transport.sent), 1)
+        self.assertEqual(
+            self.transport.sent[0]["text"], "msg 0\n\nmsg 1\n\nmsg 2\n\nmsg 3"
+        )
+
+    def test_entity_rejection_falls_back_to_plain(self):
+        self.transport.reject_entities = True
+        self.queue.enqueue(1, "**bold** stays readable")
+        self.queue.flush()
+        self.assertEqual(len(self.transport.sent), 1)
+        sent = self.transport.sent[0]
+        self.assertEqual(sent["text"], "bold stays readable")
+        self.assertIsNone(sent["entities"], "second phase shipped plain")
+
+    def test_flood_control_pauses_and_retries(self):
+        self.transport.flood_after = (0, 7.0)
+        self.queue.enqueue(1, "patient message")
+        self.queue.flush()
+        self.assertEqual(self.naps, [7.0], "the retry_after pause was honored")
+        self.assertEqual(len(self.transport.sent), 1, "delivered after the pause")
+
+    def test_status_edits_in_place(self):
+        self.queue.enqueue(1, "working… 10%", kind="status")
+        self.queue.flush()
+        self.queue.enqueue(1, "working… 90%", kind="status")
+        self.queue.flush()
+        self.assertEqual(len(self.transport.sent), 1, "one bubble")
+        self.assertEqual(len(self.transport.edited), 1)
+        self.assertEqual(self.transport.edited[0]["text"], "working… 90%")
+
+    def test_oversize_text_chunks_at_send_layer(self):
+        self.queue.enqueue(1, "\n".join(f"row {i}" for i in range(900)))
+        self.queue.flush()
+        self.assertGreater(len(self.transport.sent), 1)
+        rebuilt = "".join(s["text"] for s in self.transport.sent)
+        self.assertIn("row 899", rebuilt, "nothing truncated, only split")
+
+
+class CardLifecycleTest(InterfaceCase):
+    def setUp(self):
+        super().setUp()
+        self.pair()
+
+    def _callback_with_message_id(self, data, message_id):
+        return {
+            "callback_query": {
+                "id": "cb-x", "data": data,
+                "message": {"chat": {"id": OWNER}, "message_id": message_id},
+            }
+        }
+
+    def test_one_card_edits_through_its_lifecycle(self):
+        self.iface.handle_update(
+            message(OWNER, "/flip demo 1 DM-1-02 blocked")
+        )
+        card = self.transport.sent[-1]
+        self.assertIsNotNone(card["buttons"])
+        proposal_id = card["buttons"][0][0][1].split(":", 1)[1]
+        self.iface.handle_update(
+            self._callback_with_message_id(
+                f"ap:{proposal_id}", card["message_id"]
+            )
+        )
+        edits = [
+            e for e in self.transport.edited
+            if e["message_id"] == card["message_id"]
+        ]
+        self.assertEqual(len(edits), 1, "the card itself was edited")
+        self.assertIn("✓ done:", edits[0]["text"])
+        self.assertIn("Flip DM-1-02", edits[0]["text"], "preview retained")
+
+    def test_rejection_edits_the_card_too(self):
+        self.iface.handle_update(
+            message(OWNER, "/flip demo 1 DM-1-02 blocked")
+        )
+        card = self.transport.sent[-1]
+        proposal_id = card["buttons"][0][0][1].split(":", 1)[1]
+        self.iface.handle_update(
+            self._callback_with_message_id(
+                f"rj:{proposal_id}", card["message_id"]
+            )
+        )
+        self.assertIn("rejected", self.transport.edited[-1]["text"])
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

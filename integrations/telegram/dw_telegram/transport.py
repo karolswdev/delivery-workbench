@@ -20,7 +20,13 @@ POLL_TIMEOUT_SECONDS = 50
 
 
 class TransportError(RuntimeError):
-    """A transport failure with any token content redacted."""
+    """A transport failure with any token content redacted.
+    `retry_after` carries Telegram's flood-control pause when the
+    API named one, so the send layer can wait instead of dropping."""
+
+    def __init__(self, message: str, retry_after: float | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class HttpTransport:
@@ -45,8 +51,17 @@ class HttpTransport:
                 body = exc.read().decode("utf-8", "replace")[:300]
             except Exception:
                 body = ""
+            retry_after = None
+            if exc.code == 429:
+                try:
+                    retry_after = float(
+                        json.loads(body)["parameters"]["retry_after"]
+                    )
+                except Exception:
+                    retry_after = 5.0
             raise TransportError(
-                f"telegram {method} failed: HTTP {exc.code} {body}"
+                f"telegram {method} failed: HTTP {exc.code} {body}",
+                retry_after=retry_after,
             ) from None
         except Exception as exc:
             raise TransportError(
@@ -82,8 +97,11 @@ class HttpTransport:
         chat_id: int,
         text: str,
         buttons: list[list[tuple[str, str]]] | None = None,
-    ) -> None:
+        entities: list[dict] | None = None,
+    ) -> int | None:
         payload: dict = {"chat_id": chat_id, "text": text}
+        if entities:
+            payload["entities"] = entities
         if buttons:
             payload["reply_markup"] = {
                 "inline_keyboard": [
@@ -94,7 +112,36 @@ class HttpTransport:
                     for row in buttons
                 ]
             }
-        self._call("sendMessage", payload)
+        result = self._call("sendMessage", payload)
+        message_id = (result or {}).get("message_id")
+        return message_id if isinstance(message_id, int) else None
+
+    def edit(
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        buttons: list[list[tuple[str, str]]] | None = None,
+        entities: list[dict] | None = None,
+    ) -> None:
+        payload: dict = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+        }
+        if entities:
+            payload["entities"] = entities
+        if buttons:
+            payload["reply_markup"] = {
+                "inline_keyboard": [
+                    [
+                        {"text": label, "callback_data": data}
+                        for label, data in row
+                    ]
+                    for row in buttons
+                ]
+            }
+        self._call("editMessageText", payload)
 
     def answer_callback(self, callback_id: str, text: str = "") -> None:
         self._call(
@@ -104,12 +151,22 @@ class HttpTransport:
 
 
 class ScriptedTransport:
-    """The CI transport: updates fed by the test, sends recorded."""
+    """The CI transport: updates fed by the test, sends recorded.
+    `feed_stream` interleaves sends and edits chronologically so
+    tests can assert what the chat actually looked like. Failure
+    injection: set `reject_entities=True` to refuse the entity
+    phase (forcing the plain fallback), or `flood_after=(n, s)` to
+    raise flood control after n sends."""
 
     def __init__(self, updates: list[dict] | None = None) -> None:
         self.queue: list[dict] = list(updates or [])
         self.sent: list[dict] = []
+        self.edited: list[dict] = []
+        self.feed_stream: list[dict] = []
         self.answered: list[dict] = []
+        self.reject_entities = False
+        self.flood_after: tuple[int, float] | None = None
+        self._next_id = 100
 
     def feed(self, update: dict) -> None:
         self.queue.append(update)
@@ -118,10 +175,36 @@ class ScriptedTransport:
         batch, self.queue = self.queue, []
         return batch
 
-    def send(self, chat_id, text, buttons=None) -> None:
-        self.sent.append(
-            {"chat_id": chat_id, "text": text, "buttons": buttons}
-        )
+    def send(self, chat_id, text, buttons=None, entities=None) -> int:
+        if self.reject_entities and entities:
+            raise TransportError("scripted: entities rejected")
+        if self.flood_after is not None:
+            count, pause = self.flood_after
+            if len(self.sent) >= count:
+                self.flood_after = None
+                raise TransportError("scripted: flood", retry_after=pause)
+        record = {
+            "chat_id": chat_id,
+            "text": text,
+            "buttons": buttons,
+            "entities": entities,
+            "message_id": self._next_id,
+        }
+        self._next_id += 1
+        self.sent.append(record)
+        self.feed_stream.append({**record, "op": "send"})
+        return record["message_id"]
+
+    def edit(self, chat_id, message_id, text, buttons=None, entities=None) -> None:
+        record = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "buttons": buttons,
+            "entities": entities,
+        }
+        self.edited.append(record)
+        self.feed_stream.append({**record, "op": "edit"})
 
     def answer_callback(self, callback_id: str, text: str = "") -> None:
         self.answered.append({"id": callback_id, "text": text})

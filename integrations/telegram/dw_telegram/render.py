@@ -37,7 +37,7 @@ def render_state(feed: dict) -> str:
         warnings = project.get("warnings")
         if warnings:
             lines.append(f"  ⚠ {warnings} warning(s)")
-    return clip("\n".join(lines) or "no projects on the rails here")
+    return "\n".join(lines) or "no projects on the rails here"
 
 
 def render_events(events: list) -> str:
@@ -56,7 +56,7 @@ def render_events(events: list) -> str:
             + (f"  {entry.get('story')}" if entry.get("story") else "")
             + (f"  {detail_part}" if detail_part else "")
         )
-    return clip("\n".join(lines))
+    return "\n".join(lines)
 
 
 def _session_line(session: dict) -> str:
@@ -92,7 +92,7 @@ def render_sessions(doc: dict) -> str:
     sessions = doc.get("sessions") or []
     if not sessions:
         return "no live agent sessions"
-    return clip("\n".join(_session_line(s) for s in sessions))
+    return "\n".join(_session_line(s) for s in sessions)
 
 
 def render_question(session: dict) -> str:
@@ -110,4 +110,4 @@ def render_question(session: dict) -> str:
         else "(not steerable from here — this session is not inside "
         "tmux; answer it at the desk)"
     )
-    return clip(f"{heading}\n\n{question}\n\n{hint}")
+    return f"{heading}\n\n{question}\n\n{hint}"
