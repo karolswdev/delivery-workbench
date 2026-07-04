@@ -61,3 +61,4 @@ read as narrative and audited as history.
 - [Entry 17 — The rails learn to knock](./entry-17-the-rails-learn-to-knock.md)
 - [Entry 18 — Nothing left to escape](./entry-18-nothing-left-to-escape.md)
 - [Entry 19 — A room of its own](./entry-19-a-room-of-its-own.md)
+- [Entry 20 — Manners at the keyboard](./entry-20-manners-at-the-keyboard.md)

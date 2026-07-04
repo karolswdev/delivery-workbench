@@ -92,11 +92,13 @@ class TopicRouter:
         target: str,
         tmux_session: str,
         now: datetime,
+        harness: str | None = None,
     ) -> None:
         self._state.topic_sessions[topic_key(chat_id, thread_id)] = {
             "session_key": session_key,
             "target": target,
             "tmux_session": tmux_session,
+            "harness": harness,
             "expires_at": iso(now + timedelta(minutes=BINDING_IDLE_MINUTES)),
         }
         self._state.save()

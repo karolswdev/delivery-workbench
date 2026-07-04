@@ -74,6 +74,19 @@ keystroke. Rails verbs (`/flip`, `/newstory`), project lifecycle,
 and session launches keep their approval tap — the boundaries the
 gate cares about. Design: docs/absorption-ccgram.md §0+§3.
 
+The driver knows the terminal it types into (§4). Text is sent
+literally, then — after a per-harness settle pause — a separate
+Enter, because a TUI treats a same-batch Enter as a newline, not a
+submit. Harnesses are capability data (`HARNESS`), not
+`if`-branches: claude and codex resume, pi launches fresh only.
+`/toolbar` posts Esc / Enter / arrows / refresh for the bound
+session; a press fires directly while the binding is live.
+`/live [target]` opens a read-only view of a pane that
+auto-refreshes by editing one message in place, and only when the
+content changed (a content hash gates it — no change, no edit, no
+API call); `/unlive` stops it. Steering a session whose pane has
+died offers capability-aware recovery instead of binding a corpse.
+
 ## The three consent rings (contract §4)
 
 1. **Read** — `/state`, `/events`, `/sessions`, `/questions`,

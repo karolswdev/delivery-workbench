@@ -257,7 +257,7 @@ class InterfaceCase(unittest.TestCase):
             self.config,
             self.state,
             self.transport,
-            driver=TmuxDriver(arming, runner=self.tmux_runner),
+            driver=TmuxDriver(arming, runner=self.tmux_runner, sleeper=lambda _s: None),
             clock=self.clock,
         )
 
@@ -986,7 +986,7 @@ class HookDrainTest(InterfaceCase):
         arming = Arming(fresh_state)
         fresh = TelegramInterface(
             self.config, fresh_state, self.transport,
-            driver=TmuxDriver(arming, runner=self.tmux_runner),
+            driver=TmuxDriver(arming, runner=self.tmux_runner, sleeper=lambda _s: None),
             clock=self.clock,
         )
         self.assertEqual(fresh.drain_agent_events(), 0)
@@ -1308,6 +1308,170 @@ class FlowingConversationTest(InterfaceCase):
             if "is asking:" in s["text"] and s["thread_id"] == 5
         ]
         self.assertTrue(homed, "the question landed in the repo's topic")
+
+
+
+# --------------------------------------------------- driver's manners
+
+
+from dw_telegram.tmuxdrive import HARNESS, content_hash
+
+
+class DriverMannersTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-driver-test."))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.state = RuntimeState(self.tmp / "state.json")
+        self.arming = Arming(self.state)
+        self.clock = FakeClock()
+        self.naps = []
+        self.runner = RecordingRunner(
+            lambda argv, cwd: types.SimpleNamespace(
+                returncode=0, stdout="desk\n", stderr="")
+            if argv[1] == "display-message" else None
+        )
+        self.driver = TmuxDriver(
+            self.arming, runner=self.runner, sleeper=self.naps.append
+        )
+        self.arming.arm("desk", self.clock())
+
+    def test_literal_then_settle_then_enter_separately(self):
+        ok, _ = self.driver.send_text("desk", "%1", "hello", self.clock(),
+                                      harness="claude")
+        self.assertTrue(ok)
+        sends = [c for c in self.runner.calls if c[1] == "send-keys"]
+        self.assertEqual(
+            sends,
+            [
+                ["tmux", "send-keys", "-t", "%1", "-l", "hello"],
+                ["tmux", "send-keys", "-t", "%1", "Enter"],
+            ],
+        )
+        self.assertEqual(self.naps, [0.5], "claude's settle pause between them")
+
+    def test_settle_is_per_harness_from_the_table(self):
+        self.driver.send_text("desk", "%1", "x", self.clock(), harness="codex")
+        self.assertEqual(self.naps, [0.3], "codex settle from the capability table")
+
+    def test_send_key_is_a_single_named_key(self):
+        ok, _ = self.driver.send_key("desk", "%1", "Escape", self.clock())
+        self.assertTrue(ok)
+        self.assertIn(["tmux", "send-keys", "-t", "%1", "Escape"], self.runner.calls)
+
+    def test_recovery_verbs_follow_capability(self):
+        self.assertEqual(HARNESS["claude"].recovery_verbs, ("resume", "fresh"))
+        self.assertEqual(HARNESS["pi"].recovery_verbs, ("fresh",))
+
+    def test_resume_launch_only_when_supported(self):
+        ok, msg = self.driver.launch("claude", "s1", "/tmp", resume=True)
+        self.assertTrue(ok)
+        newsess = [c for c in self.runner.calls if c[1] == "new-session"]
+        self.assertEqual(newsess[-1][-1], "claude --resume")
+        ok2, msg2 = self.driver.launch("pi", "s2", "/tmp", resume=True)
+        self.assertFalse(ok2)
+        self.assertIn("no resume", msg2)
+
+    def test_content_hash_gates(self):
+        self.assertEqual(content_hash("same"), content_hash("same"))
+        self.assertNotEqual(content_hash("a"), content_hash("b"))
+
+
+class LiveViewTest(InterfaceCase):
+    def setUp(self):
+        super().setUp()
+        self.pair()
+        self.frames = ["frame one", "frame one", "frame two"]
+        def cap(argv, cwd):
+            if argv[1] == "capture-pane":
+                text = self.frames.pop(0) if self.frames else "frame two"
+                return types.SimpleNamespace(returncode=0, stdout=text, stderr="")
+            if argv[1] == "display-message":
+                return types.SimpleNamespace(returncode=0, stdout="desk\n", stderr="")
+            return None
+        self.tmux_runner.hook = cap
+
+    def test_live_view_edits_only_on_change(self):
+        self.iface.handle_update(message(OWNER, "/live %7"))
+        first = self.transport.sent[-1]
+        self.assertIn("live, read-only", first["text"])
+        # second frame identical → no edit
+        self.iface.refresh_live_views()
+        self.assertEqual(len(self.transport.edited), 0, "no change, no edit")
+        # third frame differs → one edit
+        self.iface.refresh_live_views()
+        self.assertEqual(len(self.transport.edited), 1)
+        self.assertIn("frame two", self.transport.edited[-1]["text"])
+
+    def test_live_view_is_read_only(self):
+        self.iface.handle_update(message(OWNER, "/live %7"))
+        self.iface.refresh_live_views()
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], [],
+            "a live view never sends a keystroke",
+        )
+
+    def test_live_view_expires(self):
+        self.iface.handle_update(message(OWNER, "/live %7"))
+        self.clock.advance(minutes=6)
+        self.iface.refresh_live_views()
+        self.assertEqual(self.iface._live_views, {}, "expired view dropped")
+
+
+class ToolbarTest(InterfaceCase):
+    def setUp(self):
+        super().setUp()
+        self.pair()
+        self.iface.handle_update(topic_message(OWNER, f"/bind {self.repo}", 3))
+        self.iface.handle_update(topic_message(OWNER, "/steer claude:sess-1", 3))
+
+    def _kb(self, data, thread):
+        return {"callback_query": {
+            "id": "cb-kb", "data": data,
+            "message": {"chat": {"id": OWNER}, "message_id": 1,
+                        "message_thread_id": thread}}}
+
+    def test_toolbar_only_offered_when_bound(self):
+        self.iface.handle_update(topic_message(OWNER, "/toolbar", 3))
+        self.assertIsNotNone(self.transport.sent[-1]["buttons"])
+        # an unbound topic gets a refusal, no buttons
+        self.iface.handle_update(topic_message(OWNER, "/toolbar", 999))
+        self.assertIn("no session bound", self.last_text())
+        self.assertIsNone(self.transport.sent[-1]["buttons"])
+
+    def test_toolbar_press_fires_a_key_no_extra_tap(self):
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(self._kb("kb:Escape", 3))
+        keys = [c for c in self.tmux_runner.calls if c[1] == "send-keys"]
+        self.assertEqual(keys, [["tmux", "send-keys", "-t", "%7", "Escape"]])
+        self.assertEqual(self.transport.answered[-1]["text"], "Escape")
+
+    def test_toolbar_press_without_binding_refused(self):
+        self.iface.handle_update(topic_message(OWNER, "/unsteer", 3))
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(self._kb("kb:Enter", 3))
+        self.assertIn("no live binding", self.transport.answered[-1]["text"])
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], [])
+
+
+class RecoveryTest(InterfaceCase):
+    def setUp(self):
+        super().setUp()
+        self.pair()
+        self.iface.handle_update(message(OWNER, f"/open {self.repo}"))
+
+    def test_steer_a_dead_session_offers_capability_recovery(self):
+        # display-message returns a DIFFERENT session → the pane is stale
+        def stale(argv, cwd):
+            if argv[1] == "display-message":
+                return types.SimpleNamespace(
+                    returncode=1, stdout="", stderr="no such pane")
+            return None
+        self.tmux_runner.hook = stale
+        self.iface.handle_update(message(OWNER, "/steer claude:sess-1"))
+        text = self.last_text()
+        self.assertIn("looks gone", text)
+        self.assertIn("resume, fresh", text)  # claude supports resume
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

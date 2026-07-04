@@ -41,6 +41,8 @@ Topics are projects: /bind [path] ties this topic to a repo (commands
   here then need no repo arg); /unbind releases it.
 Converse: /steer <session-key> binds a session — then just type, and
   your words reach the pane (no tap per message); /unsteer stops.
+  /toolbar posts Esc/Enter/arrows for the bound session.
+Watch: /live [target] auto-refreshes a pane read-only; /unlive stops.
 Read: /state /events [n] /sessions /questions /peek <tmux-target> /status
 Steer (proposal → approval tap): /flip <project> <phase> <story> <status>
   /newstory <project> <phase> <title…>  /reply <session-key> <answer…>
@@ -83,6 +85,9 @@ class TelegramInterface:
         self.topics = TopicRouter(state)
         self._notified_questions: set[tuple[str, str]] = set()
         self._reply_thread: int | None = None  # topic of the update in flight
+        # Active live views: key -> {target, message_id, thread, last_hash,
+        # expires}. Refreshed by the drain loop, hash-gated.
+        self._live_views: dict[str, dict] = {}
         import threading
 
         self._lock = threading.RLock()  # drain thread vs update loop
@@ -188,6 +193,37 @@ class TelegramInterface:
             self.queue.flush()
             return len(pushes)
 
+    def refresh_live_views(self) -> None:
+        """Re-capture each active live view and edit its message in
+        place only when the pane content changed (§4: content-hash
+        gating — no change, no edit, no API call). Read-only: never a
+        keystroke. Expired views are dropped."""
+        from .tmuxdrive import content_hash
+
+        now = self._now()
+        for key in list(self._live_views):
+            view = self._live_views[key]
+            expires = view.get("expires")
+            if expires is not None and now.timestamp() > expires:
+                del self._live_views[key]
+                continue
+            ok, output = self.driver.capture_pane(view["target"])
+            if not ok:
+                continue
+            digest = content_hash(output)
+            if digest == view.get("last_hash"):
+                continue
+            view["last_hash"] = digest
+            body = f"── {view['target']} (live, read-only) ──\n{output}"
+            from .transport import TransportError
+
+            try:
+                self.transport.edit(
+                    self.state.paired_chat, view["message_id"], body
+                )
+            except TransportError:
+                pass
+
     def poll_tick(self) -> None:
         """Push newly awaiting agent questions — routed home to the
         topic bound to the session's repo when there is one (§3),
@@ -274,6 +310,9 @@ class TelegramInterface:
             "/unbind": self._cmd_unbind,
             "/steer": self._cmd_steer,
             "/unsteer": self._cmd_unsteer,
+            "/live": self._cmd_live,
+            "/unlive": self._cmd_unlive,
+            "/toolbar": self._cmd_toolbar,
             "/install": self._cmd_install,
             "/newproject": self._cmd_newproject,
             "/launch": self._cmd_launch,
@@ -300,7 +339,8 @@ class TelegramInterface:
             self.arming.arm(session, now)
         try:
             ok, output = self.driver.send_text(
-                session, binding["target"], text, now
+                session, binding["target"], text, now,
+                harness=binding.get("harness"),
             )
         except Unarmed as exc:
             self._say(chat_id, f"✕ {exc}")
@@ -685,9 +725,25 @@ class TelegramInterface:
             )
             return
         target = self._pane_target(tmux)
+        # Capability-aware recovery (§4): if the pane is gone, offer
+        # what the harness supports rather than binding a corpse.
+        owner_ok, _ = self.driver._verify_owner(str(tmux["session"]), target)
+        if not owner_ok:
+            from .tmuxdrive import HARNESS
+
+            descriptor = HARNESS.get(str(session.get("agent") or ""))
+            verbs = descriptor.recovery_verbs if descriptor else ("fresh",)
+            self._say(
+                chat_id,
+                f"session {key} looks gone (its pane is stale). "
+                f"Recovery options for {session.get('agent')}: "
+                f"{', '.join(verbs)} — use /launch to start one.",
+            )
+            return
         self.topics.bind_session(
             chat_id, self._reply_thread, key, target,
             str(tmux["session"]), self._now(),
+            harness=str(session.get("agent") or ""),
         )
         self.arming.arm(str(tmux["session"]), self._now())
         self._say(
@@ -707,6 +763,82 @@ class TelegramInterface:
         self._say(
             chat_id,
             "stopped steering this topic" if was else "no session was bound here",
+        )
+
+    # -- live view and toolbar (§4) -----------------------------------
+
+    LIVE_TTL_SECONDS = 300  # a live view auto-expires after 5 min
+
+    def _cmd_live(self, chat_id: int, args: list[str]) -> None:
+        """Auto-refreshing read-only view of a pane. Prefers the
+        bound session's pane; a bare target works too."""
+        target = args[0] if args else None
+        if target is None:
+            binding = self.topics.bound_session(
+                chat_id, self._reply_thread, self._now()
+            )
+            if binding is None:
+                self._say(chat_id, "usage: /live <tmux-target> (or /steer first)")
+                return
+            target = binding["target"]
+        ok, output = self.driver.capture_pane(target)
+        if not ok:
+            self._say(chat_id, f"live view unavailable: {output}")
+            return
+        from .tmuxdrive import content_hash
+
+        body = f"── {target} (live, read-only) ──\n{output}"
+        message_id = self.transport.send(
+            chat_id, body, thread_id=self._reply_thread
+        )
+        if message_id is None:
+            return
+        self._live_views[f"{chat_id}:{target}"] = {
+            "target": target,
+            "message_id": message_id,
+            "thread": self._reply_thread,
+            "last_hash": content_hash(output),
+            "expires": self._now().timestamp() + self.LIVE_TTL_SECONDS,
+        }
+
+    def _cmd_unlive(self, chat_id: int, args: list[str]) -> None:
+        removed = [
+            key for key in list(self._live_views)
+            if key.startswith(f"{chat_id}:")
+            and (not args or self._live_views[key]["target"] == args[0])
+        ]
+        for key in removed:
+            del self._live_views[key]
+        self._say(
+            chat_id,
+            f"stopped {len(removed)} live view(s)"
+            if removed
+            else "no live views here",
+        )
+
+    TOOLBAR = [
+        [("⏎ Enter", "kb:Enter"), ("⎋ Esc", "kb:Escape")],
+        [("↑", "kb:Up"), ("↓", "kb:Down"), ("🔄 live", "kb:refresh")],
+    ]
+
+    def _cmd_toolbar(self, chat_id: int, _args: list[str]) -> None:
+        """Post the steering toolbar for the topic's bound session.
+        Buttons fire directly while the binding is live — the binding
+        is the grant, no tap-per-tap (§4)."""
+        binding = self.topics.bound_session(
+            chat_id, self._reply_thread, self._now()
+        )
+        if binding is None:
+            self._say(
+                chat_id,
+                "no session bound here; /steer <session-key> first",
+            )
+            return
+        self._say(
+            chat_id,
+            f"toolbar for {binding['session_key']} (buttons act while "
+            "steering):",
+            buttons=self.TOOLBAR,
         )
 
     def _pane_target(self, tmux: dict) -> str:
@@ -778,6 +910,38 @@ class TelegramInterface:
 
     # -- callbacks: the approval taps -------------------------------------
 
+    def _handle_toolbar_key(
+        self, chat_id: int, key: str, callback_id: str
+    ) -> None:
+        """A toolbar press: fire one key into the topic's bound
+        session (the binding is the grant), or refresh its live view.
+        Ownership is verified in the driver, per press."""
+        binding = self.topics.bound_session(
+            chat_id, self._reply_thread, self._now()
+        )
+        if binding is None:
+            self.transport.answer_callback(
+                callback_id, "no live binding — /steer first"
+            )
+            return
+        if key == "refresh":
+            self.refresh_live_views()
+            self.transport.answer_callback(callback_id, "refreshed")
+            return
+        session = binding["tmux_session"]
+        if not self.arming.is_armed(session, self._now()):
+            self.arming.arm(session, self._now())
+        try:
+            ok, output = self.driver.send_key(
+                session, binding["target"], key, self._now()
+            )
+        except Unarmed as exc:
+            self.transport.answer_callback(callback_id, str(exc)[:180])
+            return
+        self.transport.answer_callback(
+            callback_id, key if ok else f"failed: {output}"[:180]
+        )
+
     def _card_update(
         self, chat_id: int, message_id: int | None, text: str
     ) -> None:
@@ -804,7 +968,11 @@ class TelegramInterface:
         if self.state.paired_chat != chat_id:
             self.transport.answer_callback(callback_id, "not paired")
             return
-        action, _, proposal_id = data.partition(":")
+        action, _, rest = data.partition(":")
+        if action == "kb":
+            self._handle_toolbar_key(chat_id, rest, callback_id)
+            return
+        proposal_id = rest
         if action == "rj":
             self.proposals.discard(proposal_id)
             self.transport.answer_callback(callback_id, "rejected")
@@ -900,7 +1068,10 @@ class TelegramInterface:
             while True:
                 time.sleep(1)
                 try:
-                    self.drain_agent_events()
+                    with self._lock:
+                        self.drain_agent_events()
+                        if self._live_views:
+                            self.refresh_live_views()
                 except Exception:
                     pass  # the drain must never kill the interface
 
