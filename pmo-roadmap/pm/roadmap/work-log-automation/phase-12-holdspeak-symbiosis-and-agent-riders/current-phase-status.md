@@ -49,6 +49,7 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 | WLA-12-05 | Prove the Codex rider end-to-end | backlog | [story-05-codex-rider](./story-05-codex-rider.md) | - |
 | WLA-12-06 | Prove the pi rider end-to-end | backlog | [story-06-pi-rider](./story-06-pi-rider.md) | - |
 | WLA-12-07 | Desk presence, doctor awareness, and release | backlog | [story-07-desk-presence-doctor-release](./story-07-desk-presence-doctor-release.md) | - |
+| WLA-12-08 | Fix evidence-capture stdin inheritance under dw-mcp | done | [story-08-mcp-capture-stdin-fix](./story-08-mcp-capture-stdin-fix.md) | [evidence-story-08](./evidence-story-08.md) |
 
 ## Where we are
 
@@ -61,7 +62,11 @@ later story's proof obligation. The journal charter is recorded
 and entries 0–1 stand under it. Shipping the story surfaced a real
 bug: evidence capture through `dw-mcp` inherits the server's
 JSON-RPC stdin, so a stdin-reading child wedges the single-threaded
-server — the fix is its own story, next. WLA-12-02 follows it.
+server. WLA-12-08 fixed it the same session: every framework child
+now gets explicit stdin (`DEVNULL` everywhere except the terminal
+launcher, which inherits deliberately), a regression test proves
+the sentinel can't leak, and the wedge scenario replays through a
+held-open pipe in 0.06s. WLA-12-02 is next.
 
 ## Active risks
 

@@ -22,6 +22,7 @@ def recent_commits(root: Path, paths: list[Path], limit: int = 5) -> list[dict[s
     try:
         out = subprocess.check_output(
             ["git", "-C", str(root), "log", f"--max-count={limit}", f"--format={fmt}", "--", *rel_paths],
+            stdin=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             text=True,
         )

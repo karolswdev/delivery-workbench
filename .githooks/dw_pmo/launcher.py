@@ -53,6 +53,7 @@ def repo_dw(cwd: Path) -> Path | None:
     try:
         out = subprocess.check_output(
             ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+            stdin=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             text=True,
         )
@@ -74,7 +75,10 @@ def vendored_version(dw_path: Path) -> str | None:
 
 def _run(argv: list[str]) -> int:
     try:
-        return subprocess.call(argv)
+        # stdin=None (inherit) is deliberate: this is the terminal
+        # launcher handing the TTY to the real CLI, which may
+        # prompt. Every other dw_pmo child gets DEVNULL (WLA-12-08).
+        return subprocess.call(argv, stdin=None)
     except KeyboardInterrupt:
         return 130
 

@@ -233,7 +233,7 @@ def extract_snippets(root: Path) -> "list[dict]":
 
 def _sh(args: "list[str]", cwd: Path) -> None:
     subprocess.run(
-        args, cwd=str(cwd), check=True,
+        args, cwd=str(cwd), check=True, stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT,
     )
 

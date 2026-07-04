@@ -288,6 +288,35 @@ class DwCoreTest(unittest.TestCase):
         }
         self.assertEqual(before_others, after_others, "capture must touch only the evidence file")
 
+    def test_capture_never_hands_stdin_to_the_child(self) -> None:
+        # WLA-12-08: under dw-mcp the parent's stdin is the JSON-RPC
+        # pipe. A captured child that reads stdin must get DEVNULL,
+        # not our pipe — otherwise it blocks on it (observed: a
+        # 29-minute wedge) and can consume protocol bytes. Simulate
+        # the server condition: swap this process's stdin for a pipe
+        # holding sentinel bytes, capture `cat`, and require that
+        # the sentinel never reaches the evidence file.
+        sentinel = b"leaked-from-parent-stdin"
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, sentinel + b"\n")
+        os.close(write_fd)  # EOF so even a regression cannot hang the suite
+        saved_stdin = os.dup(0)
+        os.dup2(read_fd, 0)
+        os.close(read_fd)
+        try:
+            code, path, _ts = core.run_capture(
+                self.root, self.project, self.phase, "DM-1-02", ["cat"]
+            )
+        finally:
+            os.dup2(saved_stdin, 0)
+            os.close(saved_stdin)
+        self.assertEqual(code, 0)
+        self.assertNotIn(
+            sentinel.decode(),
+            path.read_text(encoding="utf-8"),
+            "captured child read the parent's stdin — it must get DEVNULL",
+        )
+
     def test_capture_truncation_marker(self) -> None:
         block = core.render_capture_block(
             "cmd", ".", 0, "x" * 500, "2026-07-02T12:00:00Z", "tree", max_output_bytes=16

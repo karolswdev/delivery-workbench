@@ -17,6 +17,7 @@ def run_git(root: Path, *args: str) -> str | None:
     try:
         return subprocess.check_output(
             ["git", "-C", str(root), *args],
+            stdin=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             text=True,
         )

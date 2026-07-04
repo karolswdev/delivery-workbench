@@ -145,6 +145,11 @@ def run_capture(
         completed = subprocess.run(
             popen_args,
             cwd=str(root),
+            # Never inherit stdin: under dw-mcp it is the JSON-RPC
+            # pipe, and a stdin-reading child blocks forever on it
+            # (and can eat protocol bytes). Captures are
+            # non-interactive by design (WLA-12-08).
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

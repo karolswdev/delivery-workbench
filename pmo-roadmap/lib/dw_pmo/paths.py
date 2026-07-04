@@ -14,6 +14,7 @@ def run_git_root(cwd: Path) -> Path | None:
     try:
         out = subprocess.check_output(
             ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+            stdin=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             text=True,
         ).strip()
