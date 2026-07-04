@@ -458,26 +458,45 @@ class QARelayTest(InterfaceCase):
             "the driver targets the registry pane, literally",
         )
 
-    def test_reply_into_unarmed_session_refused(self) -> None:
+    def test_reply_approval_is_the_arming_grant(self) -> None:
+        # No prior /arm: the proposal preview names the arming, and
+        # the approval tap grants it — one explicit act, not two.
         self.iface.handle_update(
             message(OWNER, "/reply claude:sess-1 yes, delete it")
         )
+        self.assertIn("Approving also arms 'desk'", self.last_text())
         self.approve_last()
-        self.assertIn("not armed", self.last_text())
+        self.assertIn("relayed (armed 'desk' for 15 min)", self.last_text())
+        self.assertTrue(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"]
+        )
+        self.iface.handle_update(message(OWNER, "/armed"))
+        self.assertIn("desk armed until", self.last_text())
+
+    def test_no_keystroke_without_a_grant(self) -> None:
+        # The driver boundary is intact: text that never passed
+        # through an arming grant (no /arm, no approved reply) is
+        # refused below the chat layer.
+        with self.assertRaises(Unarmed):
+            self.iface.driver.send_text(
+                "desk", "%7", "sneaky", self.clock()
+            )
         self.assertEqual(
             [c for c in self.tmux_runner.calls if c[1] == "send-keys"],
             [],
-            "not one keystroke into an unarmed session",
+            "not one keystroke without a grant",
         )
 
     def test_arming_expires(self) -> None:
         self.iface.handle_update(message(OWNER, "/arm desk 15"))
         self.clock.advance(minutes=16)
+        self.iface.handle_update(message(OWNER, "/armed"))
+        self.assertIn("nothing is armed", self.last_text())
+        # A late reply needs (and gets) a fresh grant via its tap.
         self.iface.handle_update(
             message(OWNER, "/reply claude:sess-1 late answer")
         )
-        self.approve_last()
-        self.assertIn("not armed", self.last_text())
+        self.assertIn("Approving also arms", self.last_text())
 
     def test_disarm_and_status(self) -> None:
         self.iface.handle_update(message(OWNER, "/arm desk"))

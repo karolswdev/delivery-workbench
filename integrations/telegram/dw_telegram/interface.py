@@ -326,13 +326,18 @@ class TelegramInterface:
         )
         stories = session.get("stories") or []
         story_part = f" (on {stories[0]['story_id']})" if stories else ""
+        armed = self.arming.is_armed(str(tmux["session"]), self._now())
+        arming_part = (
+            ""
+            if armed
+            else f"\nApproving also arms {tmux['session']!r} for "
+            "15 minutes (visible via /armed, revocable via /disarm)."
+        )
         self._propose(
             chat_id,
             "reply",
             f"Relay into {session.get('agent')} session {key}{story_part}, "
-            f"tmux {target}:\n“{answer}”\n"
-            f"Requires the tmux session {tmux['session']!r} to be armed "
-            f"at execution time.",
+            f"tmux {target}:\n“{answer}”{arming_part}",
             {
                 "session": str(tmux["session"]),
                 "target": target,
@@ -565,18 +570,25 @@ class TelegramInterface:
                 f"done:\n{output}" if ok else f"the rails refused:\n{output}",
             )
         elif proposal.kind == "reply":
+            # The approval tap IS the arming grant when the session is
+            # not yet armed — the preview said so explicitly. The
+            # driver still refuses anything that skipped this grant.
+            session = payload["session"]
+            now = self._now()
+            armed_note = ""
+            if not self.arming.is_armed(session, now):
+                self.arming.arm(session, now)
+                armed_note = f" (armed {session!r} for 15 min)"
             try:
                 ok, output = self.driver.send_text(
-                    payload["session"],
-                    payload["target"],
-                    payload["text"],
-                    self._now(),
+                    session, payload["target"], payload["text"], now
                 )
             except Unarmed as exc:
                 self._say(chat_id, f"refused: {exc}")
                 return
             self._say(
-                chat_id, "relayed" if ok else f"relay failed: {output}"
+                chat_id,
+                f"relayed{armed_note}" if ok else f"relay failed: {output}",
             )
         elif proposal.kind == "launch":
             ok, output = self.driver.launch(

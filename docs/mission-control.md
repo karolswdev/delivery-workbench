@@ -191,6 +191,14 @@ Three rings, strictest last:
    the driver targets the agent's own pane, never "whatever is
    focused." The dw gate below remains the last word regardless
    of who typed.
+   *(Amended by owner decision, 2026-07-04, from the live phone
+   leg:)* the approval tap on a reply proposal doubles as the
+   arming grant when the session is not yet armed — the preview
+   names the arming explicitly, the default TTL and the
+   `/armed`-visibility and one-message revocation are unchanged,
+   and the driver-level refusal below the chat layer stands. Two
+   taps collapsed into one explicit one; the boundary did not
+   move.
 
 ## 5. The counterpart seam
 

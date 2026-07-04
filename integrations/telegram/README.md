@@ -66,16 +66,19 @@ an unpaired chat gets silence beyond the pairing prompt.
    "create" means scaffolded repo → rails installed → doctor green
    → first gated commit, or the failure is reported at the exact
    step it happened.
-3. **The tmux driver** — the sharpest edge. `/reply` (Q&A relay
-   back into an agent session) and anything else that types into a
-   terminal requires the target tmux session to be **armed**:
-   `/arm <session> [minutes]` (default 15, capped at 60), visible
-   via `/armed`, revoked by `/disarm`, auto-expiring at the moment
-   of use. An unarmed session cannot be steered — the refusal is
-   engineered in the driver, beneath the chat layer, and
-   test-proven. `/launch <claude|codex|pi> <path>` starts a named
-   tmux session for any supported harness; it starts unarmed like
-   everything else.
+3. **The tmux driver** — the sharpest edge. Anything that types
+   into a terminal requires the target tmux session to be
+   **armed** (default TTL 15 minutes, capped at 60), visible via
+   `/armed`, revoked by `/disarm`, auto-expiring at the moment of
+   use. For `/reply`, the approval tap doubles as the arming grant
+   when the session isn't armed yet — the proposal preview says so
+   explicitly, so answering an agent is one tap, not a ceremony.
+   `/arm <session> [minutes]` still exists for pre-arming. Text
+   that never passed through a grant is refused in the driver,
+   beneath the chat layer, test-proven.
+   `/launch <claude|codex|pi> <path>` starts a named tmux session
+   for any supported harness; it starts unarmed like everything
+   else.
 
 The bootstrap exception, named honestly: approving `/newproject`
 certifies the *bootstrap contract* of the freshly scaffolded repo —
