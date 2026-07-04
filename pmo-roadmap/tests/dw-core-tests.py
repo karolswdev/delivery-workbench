@@ -2269,6 +2269,52 @@ class RiderDocsTest(unittest.TestCase):
             "the framework repo's own rendered surfaces must match canon",
         )
 
+    # -- Codex rider (WLA-12-05) ------------------------------------
+
+    def test_codex_skill_renders_frontmatter_and_body(self) -> None:
+        from dw_pmo import riderdocs
+
+        skill = riderdocs.codex_skill("dw-next")
+        self.assertTrue(skill.startswith("---\nname: dw-next\ndescription: "))
+        self.assertIn("Orient yourself in this repository's", skill)
+        # The Claude frontmatter must not survive into the skill body.
+        self.assertEqual(skill.count("---\n"), 2)
+
+    def test_codex_installer_is_idempotent(self) -> None:
+        from dw_pmo import riderdocs
+
+        first = riderdocs.install_codex_rider(self.root)
+        created = [a for _p, a in first["actions"] if a in {"created", "added"}]
+        self.assertTrue(created, "first install must create surfaces")
+        self.assertIn("[mcp_servers.delivery-workbench]", first["mcp_snippet"])
+        second = riderdocs.install_codex_rider(self.root)
+        self.assertTrue(
+            all(a == "unchanged" for _p, a in second["actions"]),
+            f"second install must be a no-op, got {second['actions']}",
+        )
+        agents = (self.root / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertNotIn("Slash commands (Claude Code", agents)
+        for name in riderdocs.COMMAND_NAMES:
+            self.assertTrue(
+                (self.root / ".codex" / "skills" / name / "SKILL.md").exists()
+            )
+
+    def test_codex_skill_drift_is_a_check_error(self) -> None:
+        from dw_pmo import riderdocs
+
+        riderdocs.install_codex_rider(self.root)
+        victim = self.root / ".codex" / "skills" / "dw-contract" / "SKILL.md"
+        victim.write_text(
+            victim.read_text(encoding="utf-8") + "\nrogue\n", encoding="utf-8"
+        )
+        issues = riderdocs.rider_docs_issues(self.root)
+        self.assertTrue(
+            any(".codex/skills/dw-contract/SKILL.md" in i and "drifted" in i for i in issues),
+            issues,
+        )
+        riderdocs.write_rider_docs(self.root)
+        self.assertEqual(riderdocs.rider_docs_issues(self.root), [])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

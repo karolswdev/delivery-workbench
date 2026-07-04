@@ -47,3 +47,4 @@ read as narrative and audited as history.
 - [Entry 3 — First pack in the ecosystem](./entry-03-first-pack-in-the-ecosystem.md)
 - [Entry 4 — Two consent systems, stacked](./entry-04-two-consent-systems-stacked.md)
 - [Entry 5 — Parity becomes a property](./entry-05-parity-becomes-a-property.md)
+- [Entry 6 — The other agent rides](./entry-06-the-other-agent-rides.md)

@@ -189,7 +189,7 @@ def write_rider_docs(root: Path) -> list[tuple[Path, str]]:
     from .agentdocs import write_agent_docs
 
     actions: list[tuple[Path, str]] = []
-    for path, expected, _canon in _command_targets(root):
+    for path, expected, _canon in _command_targets(root) + _codex_targets(root):
         if not path.exists():
             write_text(path, expected)
             actions.append((path, "created"))
@@ -205,11 +205,96 @@ def write_rider_docs(root: Path) -> list[tuple[Path, str]]:
     return actions
 
 
+CODEX_SKILLS_DIR = ".codex/skills"
+
+
+def _spec_parts(name: str) -> tuple[str, str]:
+    """(description, body) parsed from a command spec's frontmatter."""
+    text = command_spec(name)
+    if text.startswith("---\n"):
+        end = text.find("\n---\n", 4)
+        if end != -1:
+            header = text[4:end]
+            body = text[end + 5 :].lstrip("\n")
+            for line in header.splitlines():
+                if line.startswith("description:"):
+                    return line.split(":", 1)[1].strip(), body
+            return "", body
+    return "", text
+
+
+def codex_skill(name: str) -> str:
+    """One command spec rendered as a Codex skill (SKILL.md).
+
+    Verified on codex-cli 0.142.4 (WLA-12-01 matrix): repo-level
+    `.codex/skills/<name>/SKILL.md` is discovered by `codex exec`
+    with no flags; `~/.codex/prompts` is not expanded there."""
+    description, body = _spec_parts(name)
+    return (
+        f"---\nname: {name}\ndescription: {description}\n---\n\n{body}"
+    )
+
+
+def codex_mcp_snippet(root: Path) -> str:
+    """The MCP registration for ~/.codex/config.toml — printed for
+    the operator, never written into their home config (recorded
+    decision, WLA-12-05)."""
+    dw_mcp = (root / ".githooks" / "dw-mcp").resolve()
+    return (
+        "# Add the Delivery Workbench MCP server to Codex (global config):\n"
+        f"#   codex mcp add delivery-workbench -- python3 {dw_mcp} --root {root.resolve()}\n"
+        "# or paste into ~/.codex/config.toml:\n"
+        "[mcp_servers.delivery-workbench]\n"
+        'command = "python3"\n'
+        f'args = ["{dw_mcp}", "--root", "{root.resolve()}"]\n'
+    )
+
+
+def install_codex_rider(root: Path) -> dict:
+    """Wire the Codex rider into a rails repo, idempotently:
+    AGENTS.md managed block (agents variant), the four commands as
+    repo-level Codex skills, and the MCP snippet (returned, not
+    installed). Re-running changes nothing."""
+    from .agentdocs import write_agent_docs
+
+    actions: list[tuple[Path, str]] = []
+    agents_path, action = write_agent_docs(root, root / "AGENTS.md")
+    actions.append((agents_path, action))
+    skills_root = root / CODEX_SKILLS_DIR
+    for name in COMMAND_NAMES:
+        directory = skills_root / name
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / "SKILL.md"
+        expected = codex_skill(name)
+        if not target.exists():
+            write_text(target, expected)
+            actions.append((target, "created"))
+        elif read_text(target) != expected:
+            write_text(target, expected)
+            actions.append((target, "refreshed"))
+        else:
+            actions.append((target, "unchanged"))
+    return {"actions": actions, "mcp_snippet": codex_mcp_snippet(root)}
+
+
+def _codex_targets(root: Path) -> list[tuple[Path, str, str]]:
+    """Rendered Codex skills that exist come under the drift rule."""
+    targets: list[tuple[Path, str, str]] = []
+    skills_root = root / CODEX_SKILLS_DIR
+    if not skills_root.is_dir():
+        return targets
+    for name in COMMAND_NAMES:
+        target = skills_root / name / "SKILL.md"
+        if target.parent.is_dir():
+            targets.append((target, codex_skill(name), command_canon_label(name)))
+    return targets
+
+
 def rider_docs_issues(root: Path) -> list[str]:
     """Drift between rendered copies and canon, as `dw check` issue
     strings (empty when clean)."""
     issues: list[str] = []
-    for path, expected, canon in _command_targets(root):
+    for path, expected, canon in _command_targets(root) + _codex_targets(root):
         rel = path.relative_to(root)
         if not path.exists():
             issues.append(f"{rel}: rendered command missing — run dw rider docs (canon: {canon})")

@@ -421,6 +421,46 @@ wiring for pack actuators (vs built-ins) is unverified — the E2E
 proof scripts HoldSpeak's own host/db/executor path, which is what
 their tests do too. Lands with the live-desk demo.
 
+## The Codex rider: install and operate
+
+Shipped by WLA-12-05, on the WLA-12-04 seam. In a rails repo:
+
+```sh
+.githooks/dw rider install codex
+```
+
+wires three things, idempotently: the AGENTS.md managed block
+(agents variant of the brief), the four commands as repo-level
+Codex skills (`.codex/skills/dw-*/SKILL.md` — the surface the
+matrix verified; Codex discovers them with no flags), and the MCP
+registration snippet for `~/.codex/config.toml`, printed for the
+operator and never silently written into their home config. All
+rendered Codex surfaces live under the same `dw check` drift rule
+as every other copy.
+
+Verified operational notes (codex-cli 0.142.4):
+
+- **`workspace-write` keeps `.git` read-only.** A non-interactive
+  loop (`codex exec`) cannot stage or commit under it — use
+  `-s danger-full-access` for automation; interactive users approve
+  the commit instead. The flip side is a real security property:
+  under the default sandbox the model cannot tamper with the gate
+  hooks. (When we hit this live, Codex itself declined to certify
+  the contract after staging failed — "flipping the contract boxes
+  would not be honest" — the rails' bar, upheld by another vendor's
+  model.)
+- **Hooks are trust-gated.** HoldSpeak's Codex hook template works
+  on 0.142.4 as shipped, but codex refuses untrusted hook sources
+  by default: trust once interactively, or pass
+  `--dangerously-bypass-hook-trust` in automation you have already
+  vetted. With the hook trusted, one captured run shows the hook
+  reporting the session and the dw gate stamping the commit —
+  coexistence proven, not assumed.
+- The full story loop (next → in-progress → work → evidence → done
+  → human-in-the-loop certification → gated commit) ran under real
+  Codex in a fixture repo; the commit carries the standard trailers
+  and `dw verify` re-derives it from history alone.
+
 ## Amendments this matrix forces
 
 Recorded here so the risk table's stop signal ("a rider story finds

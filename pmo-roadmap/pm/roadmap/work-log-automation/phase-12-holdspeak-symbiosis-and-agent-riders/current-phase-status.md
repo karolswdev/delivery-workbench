@@ -46,7 +46,7 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 | WLA-12-02 | Build the HoldSpeak roadmap-alignment synthesizer | done | [story-02-holdspeak-roadmap-alignment-synthesizer](./story-02-holdspeak-roadmap-alignment-synthesizer.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-12-03 | Build the HoldSpeak story actuator | done | [story-03-holdspeak-story-actuator](./story-03-holdspeak-story-actuator.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-12-04 | Collapse the agent-surface duplication behind a canonical brief | done | [story-04-canonical-brief-collapse-duplication](./story-04-canonical-brief-collapse-duplication.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-12-05 | Prove the Codex rider end-to-end | backlog | [story-05-codex-rider](./story-05-codex-rider.md) | - |
+| WLA-12-05 | Prove the Codex rider end-to-end | done | [story-05-codex-rider](./story-05-codex-rider.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-12-06 | Prove the pi rider end-to-end | backlog | [story-06-pi-rider](./story-06-pi-rider.md) | - |
 | WLA-12-07 | Desk presence, doctor awareness, and release | backlog | [story-07-desk-presence-doctor-release](./story-07-desk-presence-doctor-release.md) | - |
 | WLA-12-08 | Fix evidence-capture stdin inheritance under dw-mcp | done | [story-08-mcp-capture-stdin-fix](./story-08-mcp-capture-stdin-fix.md) | [evidence-story-08](./evidence-story-08.md) |
@@ -87,7 +87,19 @@ duplication: command-spec canon embedded in `dw_pmo/riderdocs.py`
 regenerates every surface, drift is now a `dw check` ERROR on both
 the CLI and MCP surfaces, and the AGENTS.md brief variant exists
 behind the same markers. First canon regeneration: byte-identical
-everywhere. The rider seam is open — WLA-12-05 (Codex) is next.
+everywhere. WLA-12-05 then proved the Codex rider end-to-end:
+`dw rider install codex` wires AGENTS.md + repo-level skills +
+printed MCP snippet idempotently, the full story loop ran under
+real Codex in a gated fixture (trailers stamped, `dw verify`
+clean), and coexistence with HoldSpeak's hook is captured in one
+run — hook reporting the session, gate stamping the commit. Two
+live findings: codex's `workspace-write` sandbox keeps `.git`
+read-only (automation uses `danger-full-access`; the model can't
+tamper with gate hooks by default), and hooks are trust-gated
+(their template is fine; trust once or bypass deliberately).
+Codex itself refused to certify a contract after staging failed —
+"would not be honest" — which says the contract reads as rules,
+not tickboxes. WLA-12-06 (pi) is next.
 
 ## Active risks
 
@@ -117,6 +129,8 @@ everywhere. The rider seam is open — WLA-12-05 (Codex) is next.
 - 2026-07-04 - Command-spec canon embedded in `dw_pmo` with `pmo-roadmap/agent/*.md` as the source-tree override (the agentdocs/template pattern), so consumer repos drift-check with only the vendored CLI - WLA-12-04.
 - 2026-07-04 - AGENTS.md keeps the same managed markers (never orphan deployed blocks) with variant content per filename; AGENTS.md files are created by rider installers, not by regeneration - WLA-12-04.
 - 2026-07-04 - Brief wording deliberately unchanged this story so the regeneration proof stays pure; the release story owns any wording refresh - WLA-12-04.
+- 2026-07-04 - Codex automation runs the loop under `-s danger-full-access` (workspace-write keeps `.git` read-only — verified live); interactive users approve commits instead - WLA-12-05.
+- 2026-07-04 - HoldSpeak's Codex hook template works on codex-cli 0.142.4; the one-time hook-trust gate is codex's, not theirs — trust interactively or bypass deliberately in vetted automation - WLA-12-05.
 
 ## Decisions deferred
 
