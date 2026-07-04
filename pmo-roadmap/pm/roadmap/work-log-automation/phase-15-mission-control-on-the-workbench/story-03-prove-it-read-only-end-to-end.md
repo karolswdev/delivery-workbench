@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 15
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-15-01, WLA-15-02.
 - **Unblocks:** phase close.
 - **Owner:** unassigned

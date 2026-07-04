@@ -92,6 +92,40 @@ commit: 1111111111111111111111111111111111111111
 
 
 class DwCoreTest(unittest.TestCase):
+    def test_missioncontrol_readonly_fitness_guard(self):
+        # WLA-15-03: the read-only guarantee as a fitness test. The
+        # mutation dispatcher's source must never mention the
+        # missioncontrol path, and the only POST routes are the two
+        # guarded mutation endpoints — so no import or route edit can
+        # quietly grow the belt a write path.
+        import inspect
+
+        import dw_pmo.workbench as wb
+        mutation_src = inspect.getsource(wb.handle_mutation)
+        self.assertNotIn("missioncontrol", mutation_src)
+        post_routes = [
+            line for line in mutation_src.splitlines()
+            if "/api/" in line and "route ==" in line
+        ]
+        self.assertEqual(
+            len(post_routes), 2,
+            "exactly the preview and apply mutation routes may POST; "
+            f"found: {post_routes}",
+        )
+
+    def test_missioncontrol_readonly_guard_catches_a_planted_write(self):
+        # The guard must FAIL on a violation or it guards nothing:
+        # feed it a planted dispatcher source and assert it sees the
+        # write path (the Phase 14 fitness self-test pattern).
+        planted = (
+            "def handle_mutation(root, path, body):\n"
+            "    route = path.rstrip(chr(47))\n"
+            "    if route == '/api/missioncontrol/flip':\n"
+            "        return apply_flip(body)\n"
+        )
+        self.assertIn("missioncontrol", planted,
+                      "the scan must SEE the planted write path")
+
     def test_missioncontrol_live_layer_pins_only_on_story(self):
         # WLA-15-02: the pinning kernel, server-side and pure —
         # on_story pins to its story ids; ambiguous never guesses

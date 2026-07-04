@@ -64,3 +64,4 @@ read as narrative and audited as history.
 - [Entry 20 — Manners at the keyboard](./entry-20-manners-at-the-keyboard.md)
 - [Entry 21 — Seven locks, one open hand](./entry-21-seven-locks-one-open-hand.md)
 - [Entry 22 — The pocket desk, whole](./entry-22-the-pocket-desk-whole.md)
+- [Entry 23 — The fifth window](./entry-23-the-fifth-window.md) *(Phase 15, one entry for the compact phase — the deviation recorded inside)*
