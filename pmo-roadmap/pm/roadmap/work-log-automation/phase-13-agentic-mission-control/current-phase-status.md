@@ -74,7 +74,7 @@ consumes only what this phase exposes.
 | WLA-13-02 | Ship the roadmap state feed | done | [story-02-ship-the-roadmap-state-feed](./story-02-ship-the-roadmap-state-feed.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-13-03 | Correlate live agent sessions to stories | done | [story-03-correlate-live-agent-sessions-to-stories](./story-03-correlate-live-agent-sessions-to-stories.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-13-04 | Emit the events worth showing | done | [story-04-emit-the-events-worth-showing](./story-04-emit-the-events-worth-showing.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-13-05 | Prove mission control end-to-end with the Desk | backlog | [story-05-prove-mission-control-end-to-end-with-the-desk](./story-05-prove-mission-control-end-to-end-with-the-desk.md) | - |
+| WLA-13-05 | Prove mission control end-to-end with the Desk | done | [story-05-prove-mission-control-end-to-end-with-the-desk](./story-05-prove-mission-control-end-to-end-with-the-desk.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-13-06 | Prove mission control from Telegram | done | [story-06-telegram-mission-control](./story-06-telegram-mission-control.md) | [evidence-story-06](./evidence-story-06.md) |
 
 ## Where we are
