@@ -69,7 +69,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 11 | Extend the gate's guarantees to work that arrives by pull request: a contribution contract defining how gated commits travel through forks and merges, an end-to-end contributor-flow proof with red paths for the merge methods that would corrupt the audit trail, repository enforcement and plain-language contributor docs, and a v1.8.0 release. | done | [phase-11-contribution-rails](./phase-11-contribution-rails/) |
 | 12 | Make Delivery Workbench a plug-n-play side rider for every surface a developer works from: one canonical agent brief rendered for Claude Code, Codex, and pi, plus a first-class HoldSpeak integration (roadmap synthesizer, story actuator, Desk presence) - with every step journaled in the moment as the flagship worked example for both ecosystems. | done | [phase-12-holdspeak-symbiosis-and-agent-riders](./phase-12-holdspeak-symbiosis-and-agent-riders/) |
 | 13 | Deliver Mission control: the Desk conveyor and the live roadmap. | done | [phase-13-agentic-mission-control](./phase-13-agentic-mission-control/) |
-| 14 | Absorb and re-interpret ccgram's operational excellence under the consent spine: hook-driven push, the message layer, topics-as-projects, the driver's craft, guarded file sending. | not-started | [phase-14-absorbing-ccgram](./phase-14-absorbing-ccgram/) |
+| 14 | Absorb and re-interpret ccgram's operational excellence under the consent spine: hook-driven push, the message layer, topics-as-projects, the driver's craft, guarded file sending. | done | [phase-14-absorbing-ccgram](./phase-14-absorbing-ccgram/) |
 
 ## Operating cadence
 

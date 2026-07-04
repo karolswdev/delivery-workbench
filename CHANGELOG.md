@@ -7,6 +7,29 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## v1.11.0 — 2026-07-04
+
+The Absorption: the pocket desk grows up. Phase 14 studied
+[alexei-led/ccgram](https://github.com/alexei-led/ccgram) (MIT,
+lineage six-ddc) in full and re-interpreted its operational
+excellence under the workbench's consent spine — twenty ideas
+mapped absorb/transmute/refuse in
+[docs/absorption-ccgram.md](./docs/absorption-ccgram.md). The
+Telegram interface gains: a **dw-native hook seam** (`dw hook
+install`) so a blocked agent reaches the phone in ~1 s;
+**entity-based message formatting** with nothing left to escape, a
+FIFO send queue, and edit-in-place cards; **topics-as-projects** —
+one forum topic per rails repo, and inside a `/steer`-bound
+session, **conversation flows** with no per-message tap (consent
+gates entry, not every utterance); the **driver's TUI manners**
+(settle-then-Enter, capability-flag harnesses, `/live` view,
+`/toolbar`); and **`/send` behind seven locks** (secrets,
+gitignore, gitleaks, and the workbench's own state files all
+refuse). Architecture fitness tests guard the consent floor in CI.
+ccgram's thesis — sit on the multiplexer, never wrap the SDK — is
+kept; its user-ID auth is refused (pairing stands). Full detail:
+[phase 14 final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-14-absorbing-ccgram/final-summary.md).
+
 ## v1.10.0 — 2026-07-04
 
 Mission control, whole: Phase 13 gave the rails one substrate — a
