@@ -202,6 +202,9 @@ def write_rider_docs(root: Path) -> list[tuple[Path, str]]:
     for target in doc_targets:
         path, action = write_agent_docs(root, target)
         actions.append((path, action))
+    hs = refresh_hs_context(root)
+    if hs is not None:
+        actions.append(hs)
     return actions
 
 
@@ -378,3 +381,171 @@ def rider_docs_issues(root: Path) -> list[str]:
                 f"{target.name}: managed block drifted from canon ({variant} variant) — run dw rider docs"
             )
     return issues
+
+# ---------------------------------------------------------------------
+# HoldSpeak Desk presence (WLA-12-07): a live-rendered roadmap block in
+# .hs/context.md — the project-context directory HoldSpeak reads for
+# dictation and project detection. Live state by definition, so it is
+# deliberately NOT under the byte-drift rule: `dw rider docs` and
+# `dw rider install holdspeak` refresh it; `dw doctor` notes staleness.
+
+HS_DIR = ".hs"
+HS_CONTEXT_FILE = "context.md"
+
+
+def hs_state_block(root: Path) -> str:
+    from .api import next_story
+    from .parse import discover_projects
+    from .validate import project_warnings
+
+    lines = ["## Delivery Workbench roadmap state", ""]
+    lines.append(
+        "This block is rendered from the rails by `dw rider docs`; "
+        "edit outside the markers only."
+    )
+    lines.append("")
+    for project in discover_projects(root):
+        found = next_story(project, root)
+        warnings = project_warnings(project, root)
+        lines.append(f"### {project.slug}")
+        lines.append("")
+        if found:
+            lines.append(
+                f"- Current phase: {found['phase']} ({found['phase_path']})"
+            )
+            lines.append(
+                f"- Next story: {found['story_id']} — {found['title']} "
+                f"[{found['status']}]"
+            )
+        else:
+            lines.append("- Next story: nothing actionable")
+        lines.append(f"- Open roadmap warnings: {len(warnings)}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def render_hs_block(root: Path) -> str:
+    from .agentdocs import BEGIN_MARKER, END_MARKER
+
+    return f"{BEGIN_MARKER}\n\n{hs_state_block(root)}\n\n{END_MARKER}"
+
+
+def refresh_hs_context(root: Path, *, create: bool = False) -> tuple[Path, str] | None:
+    """Refresh (or with create=True, establish) the managed roadmap
+    block in .hs/context.md, preserving operator content outside the
+    markers. Returns (path, action) or None when absent and not
+    creating."""
+    from .agentdocs import managed_region
+
+    target = root / HS_DIR / HS_CONTEXT_FILE
+    if not target.exists() and not create:
+        return None
+    block = render_hs_block(root)
+    if not target.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        write_text(target, block + "\n")
+        return target, "created"
+    text = read_text(target)
+    region = managed_region(text)
+    if region is None:
+        joined = (
+            text.rstrip("\n") + "\n\n" + block + "\n" if text.strip() else block + "\n"
+        )
+        write_text(target, joined)
+        return target, "added"
+    if text[region[0]:region[1]] == block:
+        return target, "unchanged"
+    write_text(target, text[: region[0]] + block + text[region[1] :])
+    return target, "refreshed"
+
+
+def install_holdspeak_presence(root: Path) -> dict:
+    result = refresh_hs_context(root, create=True)
+    assert result is not None
+    return {"actions": [result]}
+
+
+# ---------------------------------------------------------------------
+# Rider report (WLA-12-07): which surfaces are wired here, and are they
+# healthy. Consumed by `dw doctor`; honest about what it cannot see.
+
+
+def rider_report(root: Path) -> list[tuple[bool, str, str]]:
+    """(ok, name, detail) per rider surface. Absent surfaces are ok
+    ("not installed" is a state, not a failure); drifted ones are not."""
+    import shutil as _shutil
+
+    report: list[tuple[bool, str, str]] = []
+    issues = rider_docs_issues(root)
+
+    def surface(name: str, present: bool, prefixes: tuple[str, ...], extra: str = "") -> None:
+        if not present:
+            report.append((True, f"rider:{name}", "not installed (optional)"))
+            return
+        mine = [i for i in issues if any(i.startswith(p) for p in prefixes)]
+        if mine:
+            report.append((False, f"rider:{name}", f"drifted: {mine[0]}"))
+        else:
+            detail = "wired, matches canon"
+            if extra:
+                detail += f"; {extra}"
+            report.append((True, f"rider:{name}", detail))
+
+    surface(
+        "claude",
+        (root / ".claude" / "commands").is_dir(),
+        (".claude/commands/", "CLAUDE.md:"),
+    )
+    surface(
+        "codex",
+        (root / CODEX_SKILLS_DIR).is_dir(),
+        (".codex/skills/",),
+        extra=(
+            "codex CLI on PATH" if _shutil.which("codex") else "codex CLI not on PATH (cannot verify runtime)"
+        ),
+    )
+    surface(
+        "pi",
+        (root / PI_PROMPTS_DIR).is_dir(),
+        (".pi/prompts/",),
+        extra=(
+            "pi CLI on PATH" if _shutil.which("pi") else "pi CLI not on PATH (cannot verify runtime)"
+        ),
+    )
+
+    # HoldSpeak: pack staleness is only checkable where the canonical
+    # pack sources live (the framework repo / integrations dir).
+    pack_src = root / "integrations" / "holdspeak"
+    pack_dir = Path.home() / ".holdspeak" / "plugin_packs"
+    if pack_src.is_dir():
+        installed = []
+        stale = []
+        for pack in sorted(pack_src.glob("delivery_workbench*.py")):
+            target = pack_dir / pack.name
+            if not target.exists():
+                continue
+            installed.append(pack.name)
+            if read_text(target) != read_text(pack):
+                stale.append(pack.name)
+        if not installed:
+            report.append((True, "rider:holdspeak", "packs not installed on this desk (optional)"))
+        elif stale:
+            report.append(
+                (False, "rider:holdspeak", f"installed pack stale vs repo: {', '.join(stale)} — re-copy to {pack_dir}")
+            )
+        else:
+            report.append((True, "rider:holdspeak", f"packs installed and current: {', '.join(installed)}"))
+    hs_target = root / HS_DIR / HS_CONTEXT_FILE
+    if hs_target.exists():
+        from .agentdocs import managed_region
+
+        text = read_text(hs_target)
+        region = managed_region(text)
+        if region is not None and text[region[0]:region[1]] != render_hs_block(root):
+            report.append(
+                (True, "rider:hs-context", "roadmap block stale (live state moved) — run dw rider docs")
+            )
+        else:
+            report.append((True, "rider:hs-context", ".hs/context.md roadmap block current"))
+    return report
+

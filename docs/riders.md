@@ -506,6 +506,33 @@ three lines:
 Everything else — MCP, skills, slash commands, packs — is
 per-surface sugar over that core.
 
+## Desk presence and doctor awareness
+
+Shipped by WLA-12-07. Two halves:
+
+**Presence.** `dw rider install holdspeak` writes a live-rendered
+roadmap block (current phase, next actionable story, open warning
+count, per project) into `.hs/context.md` — the project-context
+directory HoldSpeak's dictation pipeline and project detection
+read — preserving any operator content outside the managed
+markers. `dw rider docs` refreshes it. Because the block is live
+state by definition, it is deliberately *outside* the byte-drift
+rule: `dw doctor` reports staleness softly instead
+(`rider:hs-context — roadmap block stale — run dw rider docs`).
+The Desk-visible half rides the projects API: the project record's
+description carries the rails one-liner, and the pack's alignment
+artifacts render on `/history`. The Projects tab itself is
+client-side state a headless screenshot cannot click — the
+captured evidence pairs the API JSON (the exact data that tab
+renders) with real-Desk screenshots.
+
+**Doctor.** `dw doctor` now reports one `rider:<surface>` line per
+rider — claude, codex, pi, holdspeak packs, and the `.hs` block —
+with three honest states: wired-and-matching-canon, not installed
+(a state, not a failure), and drifted (a finding that fails
+doctor). Where it cannot see (no CLI on PATH to verify runtime
+behavior), it says so in the detail rather than guessing.
+
 ## Amendments this matrix forces
 
 Recorded here so the risk table's stop signal ("a rider story finds

@@ -2354,6 +2354,61 @@ class RiderDocsTest(unittest.TestCase):
             "one AGENTS.md serves both riders; the second install must not rewrite it",
         )
 
+    # -- doctor rider awareness + Desk presence (WLA-12-07) ---------
+
+    def _rider_lines(self):
+        from dw_pmo import riderdocs
+
+        return {name: (ok, detail) for ok, name, detail in riderdocs.rider_report(self.root)}
+
+    def test_doctor_riders_wired_absent_and_broken(self) -> None:
+        from dw_pmo import riderdocs
+
+        lines = self._rider_lines()
+        self.assertTrue(lines["rider:claude"][0])
+        self.assertIn("wired", lines["rider:claude"][1])
+        self.assertIn("not installed", lines["rider:pi"][1])
+
+        riderdocs.install_codex_rider(self.root)
+        victim = self.root / ".codex" / "skills" / "dw-next" / "SKILL.md"
+        victim.write_text(
+            victim.read_text(encoding="utf-8") + "\nrogue\n", encoding="utf-8"
+        )
+        ok, detail = self._rider_lines()["rider:codex"]
+        self.assertFalse(ok, "a broken rider must flip its line to a finding")
+        self.assertIn("drifted", detail)
+        riderdocs.write_rider_docs(self.root)
+        ok_after, _ = self._rider_lines()["rider:codex"]
+        self.assertTrue(ok_after)
+
+    def test_hs_context_block_lifecycle(self) -> None:
+        from dw_pmo import riderdocs
+
+        (self.root / "pm" / "roadmap" / "shop").mkdir(parents=True)
+        (self.root / "pm" / "roadmap" / "shop" / "README.md").write_text(
+            "# Shop - Roadmap\n\n**Last updated:** 2026-07-04.\n"
+            "**Current phase:** n/a.\n**Status:** planning.\n\n"
+            "## Phase index\n\n| Phase | Goal (one line) | Status | Folder |\n"
+            "|---|---|---|---|\n\n## Project metadata\n\n"
+            "- **Slug:** `shop`\n- **Story ID prefix:** `SHP`\n",
+            encoding="utf-8",
+        )
+        target = self.root / ".hs" / "context.md"
+        target.parent.mkdir()
+        target.write_text("# Operator notes\n\nkeep me\n", encoding="utf-8")
+        result = riderdocs.install_holdspeak_presence(self.root)
+        self.assertEqual(result["actions"][0][1], "added")
+        text = target.read_text(encoding="utf-8")
+        self.assertIn("keep me", text, "operator content survives")
+        self.assertIn("Delivery Workbench roadmap state", text)
+        self.assertIn("### shop", text)
+        path, action = riderdocs.refresh_hs_context(self.root)
+        self.assertEqual(action, "unchanged")
+        # .hs is live state, deliberately outside the byte-drift rule.
+        self.assertEqual(
+            [i for i in riderdocs.rider_docs_issues(self.root) if ".hs" in i], []
+        )
+
     def test_codex_skill_drift_is_a_check_error(self) -> None:
         from dw_pmo import riderdocs
 

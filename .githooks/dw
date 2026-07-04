@@ -439,9 +439,9 @@ def command_rider_docs(args: argparse.Namespace) -> int:
 
 
 def command_rider_install(args: argparse.Namespace) -> int:
-    from dw_pmo.riderdocs import install_codex_rider, install_pi_rider
+    from dw_pmo.riderdocs import install_codex_rider, install_holdspeak_presence, install_pi_rider
 
-    installer = {"codex": install_codex_rider, "pi": install_pi_rider}[args.surface]
+    installer = {"codex": install_codex_rider, "pi": install_pi_rider, "holdspeak": install_holdspeak_presence}[args.surface]
     result = installer(args.root)
     for path, action in result["actions"]:
         try:
@@ -494,7 +494,7 @@ def build_parser() -> argparse.ArgumentParser:
     rider_docs.set_defaults(func=command_rider_docs)
 
     rider_install = rider_sub.add_parser("install", help="wire an agent rider into this repo from canon")
-    rider_install.add_argument("surface", choices=["codex", "pi"], help="rider surface to install")
+    rider_install.add_argument("surface", choices=["codex", "pi", "holdspeak"], help="rider surface to install")
     rider_install.set_defaults(func=command_rider_install)
 
     agent_docs = sub.add_parser("agent-docs", help="write or refresh the managed Delivery Workbench block in CLAUDE.md/AGENTS.md")

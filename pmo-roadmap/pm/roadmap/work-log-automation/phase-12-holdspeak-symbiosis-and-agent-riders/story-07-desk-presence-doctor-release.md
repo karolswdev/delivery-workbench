@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 12
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-12-03, WLA-12-05, WLA-12-06
 - **Unblocks:** none (closes the phase)
 - **Owner:** unassigned
@@ -30,14 +30,14 @@ example it was chartered to become.
   which surfaces are wired in this repo/environment (Claude, Codex,
   pi, HoldSpeak pack) and validates each installation the same way
   it validates hooks today, honest about what it cannot see.
-  (c) Release: CHANGELOG, `docs/riders.md` finalized, the journal
-  assembled with an index and cross-linked from README and
-  HoldSpeak-facing docs as the worked example of authoring a
-  HoldSpeak plugin pack on the rails, version bump to v1.9.0,
-  ship through the ritual in `docs/distribution.md` (PyPI via
-  release workflow, tap formula mirror, GitHub Release). Final
-  journal entry and phase close (`dw phase close`, real
-  final-summary). 
+  (c) *Amended 2026-07-04, enacting this story's own note and the
+  phase's deferred decision:* the Desk and doctor halves grew, so
+  the release and phase close split into WLA-12-09 rather than
+  rushing here. This story keeps: journal entry, README
+  cross-link to the journal, `docs/riders.md` gaining the
+  HoldSpeak-presence how-to. WLA-12-09 owns: CHANGELOG, version
+  bump to v1.9.0, the distribution ritual, final journal entry,
+  `dw phase close` with a real final-summary. 
 - **Out:** New Desk object types or HoldSpeak UI changes (their
   roadmap, not ours); multi-project dashboards (parked candidate);
   announcement post (parked candidate).
@@ -49,13 +49,12 @@ example it was chartered to become.
   evidence shows it on a real Desk.
 - [ ] `dw doctor` reports per-rider wiring status; deliberately
   breaking one rider in a fixture flips its line to a finding.
-- [ ] v1.9.0 is live on PyPI, the tap, and GitHub Releases per the
-  distribution ritual; `pip install delivery-workbench==1.9.0`
-  works.
+- [ ] *(moved to WLA-12-09 by the recorded split)* v1.9.0 release
+  criteria live there.
 - [ ] The journal has an index, one entry per story 0–7, and is
   linked from README; docs-lint passes.
-- [ ] Phase 12 closed with a final summary in the last story's
-  commit.
+- [ ] *(moved to WLA-12-09 by the recorded split)* phase close
+  criteria live there.
 
 ## Test plan
 

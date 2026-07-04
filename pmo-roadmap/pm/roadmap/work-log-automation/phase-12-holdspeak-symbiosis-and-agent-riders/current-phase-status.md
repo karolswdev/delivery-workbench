@@ -48,8 +48,9 @@ Make Delivery Workbench a plug-n-play side rider for every surface a developer w
 | WLA-12-04 | Collapse the agent-surface duplication behind a canonical brief | done | [story-04-canonical-brief-collapse-duplication](./story-04-canonical-brief-collapse-duplication.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-12-05 | Prove the Codex rider end-to-end | done | [story-05-codex-rider](./story-05-codex-rider.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-12-06 | Prove the pi rider end-to-end | done | [story-06-pi-rider](./story-06-pi-rider.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-12-07 | Desk presence, doctor awareness, and release | backlog | [story-07-desk-presence-doctor-release](./story-07-desk-presence-doctor-release.md) | - |
+| WLA-12-07 | Desk presence, doctor awareness, and release | done | [story-07-desk-presence-doctor-release](./story-07-desk-presence-doctor-release.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-12-08 | Fix evidence-capture stdin inheritance under dw-mcp | done | [story-08-mcp-capture-stdin-fix](./story-08-mcp-capture-stdin-fix.md) | [evidence-story-08](./evidence-story-08.md) |
+| WLA-12-09 | Release v1.9.0 and close the phase | backlog | [story-09-release-and-close](./story-09-release-and-close.md) | - |
 
 ## Where we are
 
@@ -106,8 +107,14 @@ no slash commands — with the commands rendered verbatim as
 purity mechanically checked, the shared-AGENTS.md answer recorded,
 and `docs/riders.md` carrying the "any other harness" recipe the
 proof earned. Three harnesses, three model vendors, one gate.
-WLA-12-07 (Desk presence, doctor awareness, release v1.9.0)
-closes the phase.
+WLA-12-07 then landed the last features: `dw doctor` reports a
+`rider:` line per surface (wired / not-installed / drifted-fails),
+`.hs/context.md` carries a live-rendered roadmap block outside the
+byte-drift rule, and the real Desk shows the rails on the project
+record — proven through the documented API with screenshots, the
+unclickable-tab limit stated plainly. The release split into
+WLA-12-09 per the story's own pre-decision. One story to close:
+ship v1.9.0 and close the phase over it.
 
 ## Active risks
 
@@ -146,4 +153,4 @@ closes the phase.
 
 - Rendered command copies committed vs build products - resolved 2026-07-03 by WLA-12-01 (committed; drift is a `dw check` ERROR) - see "Decisions made".
 - Who owns the pack copy step into `~/.holdspeak/plugin_packs/` (doctor vs install script) - resolved 2026-07-03 by WLA-12-02 (documented `cp`; doctor checks it in WLA-12-07) - see "Decisions made".
-- Whether WLA-12-07 splits release into its own story - trigger if Desk/doctor halves grow - default is split rather than rush.
+- Whether WLA-12-07 splits release into its own story - resolved 2026-07-04: the halves grew, WLA-12-09 owns release + close - see story 07's amendment.

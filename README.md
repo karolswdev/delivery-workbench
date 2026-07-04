@@ -193,6 +193,8 @@ trailers and an archived contract, the full history passing
 - [Remote verification design](./docs/remote-verification.md)
 - [Contribution rails](./docs/contribution-rails.md): what survives a pull request
 - [MCP surface design](./docs/mcp.md)
+- [Riders: the symbiosis contract](./docs/riders.md): one brief, every agent surface (Claude Code, Codex, pi, HoldSpeak)
+- [The Phase 12 journal](./docs/journal/README.md): the worked example — a phase delivered on its own rails, written in the moment, refusals and dead ends included
 - [Distribution design](./docs/distribution.md)
 - [Contributing](./CONTRIBUTING.md) and [changelog](./CHANGELOG.md)
 

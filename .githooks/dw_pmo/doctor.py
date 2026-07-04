@@ -113,6 +113,13 @@ def run_doctor(root: Path) -> list[DoctorCheck]:
             )
         )
 
+    # Rider surfaces (WLA-12-07): which agent riders are wired here,
+    # and do they match canon. Absent is a state, drifted is a finding.
+    from .riderdocs import rider_report
+
+    for ok, name, detail in rider_report(root):
+        checks.append(DoctorCheck(ok, name, detail))
+
     return checks
 
 
