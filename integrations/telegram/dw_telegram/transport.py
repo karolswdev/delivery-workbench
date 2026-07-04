@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 API_HOST = "https://api.telegram.org"
 POLL_TIMEOUT_SECONDS = 50
@@ -152,6 +153,72 @@ class HttpTransport:
             {"callback_query_id": callback_id, "text": text[:180]},
         )
 
+    def send_document(
+        self,
+        chat_id: int,
+        path: str,
+        caption: str = "",
+        thread_id: int | None = None,
+    ) -> None:
+        """Upload a file. Multipart, so it bypasses the JSON `_call`
+        path; errors are still redacted of the token."""
+        import mimetypes
+        import uuid
+
+        boundary = uuid.uuid4().hex
+        fields = [("chat_id", str(chat_id))]
+        if caption:
+            fields.append(("caption", caption[:1024]))
+        if thread_id is not None:
+            fields.append(("message_thread_id", str(thread_id)))
+        try:
+            with open(path, "rb") as handle:
+                file_bytes = handle.read()
+        except OSError as exc:
+            raise TransportError(f"cannot read file: {exc}") from None
+        parts: list[bytes] = []
+        for name, value in fields:
+            parts.append(
+                (
+                    f"--{boundary}\r\n"
+                    f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+                    f"{value}\r\n"
+                ).encode("utf-8")
+            )
+        filename = Path(path).name
+        content_type = (
+            mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        )
+        parts.append(
+            (
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="document"; '
+                f'filename="{filename}"\r\n'
+                f"Content-Type: {content_type}\r\n\r\n"
+            ).encode("utf-8")
+        )
+        body = b"".join(parts) + file_bytes + f"\r\n--{boundary}--\r\n".encode()
+        url = f"{API_HOST}/bot{self._token}/sendDocument"
+        request = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}"
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                doc = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            raise TransportError(
+                f"telegram sendDocument failed: {type(exc).__name__}"
+            ) from None
+        if not doc.get("ok"):
+            raise TransportError(
+                f"telegram sendDocument refused: "
+                f"{str(doc.get('description'))[:200]}"
+            )
+
 
 class ScriptedTransport:
     """The CI transport: updates fed by the test, sends recorded.
@@ -167,6 +234,7 @@ class ScriptedTransport:
         self.edited: list[dict] = []
         self.feed_stream: list[dict] = []
         self.answered: list[dict] = []
+        self.documents: list[dict] = []
         self.reject_entities = False
         self.flood_after: tuple[int, float] | None = None
         self._next_id = 100
@@ -212,3 +280,13 @@ class ScriptedTransport:
 
     def answer_callback(self, callback_id: str, text: str = "") -> None:
         self.answered.append({"id": callback_id, "text": text})
+
+    def send_document(self, chat_id, path, caption="", thread_id=None) -> None:
+        self.documents.append(
+            {
+                "chat_id": chat_id,
+                "path": path,
+                "caption": caption,
+                "thread_id": thread_id,
+            }
+        )

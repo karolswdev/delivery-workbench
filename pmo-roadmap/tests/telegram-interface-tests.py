@@ -1473,5 +1473,144 @@ class RecoveryTest(InterfaceCase):
         self.assertIn("looks gone", text)
         self.assertIn("resume, fresh", text)  # claude supports resume
 
+
+
+# ----------------------------------------------------- seven locks
+
+
+from dw_telegram.sendfiles import resolve_matches, validate_sendable
+
+try:
+    import tomllib as _tomllib  # noqa: F401
+    _HAS_TOMLLIB = True
+except ModuleNotFoundError:
+    _HAS_TOMLLIB = False
+
+
+class SendLocksTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-send-test."))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.repo = self.tmp / "repo"
+        (self.repo / "docs").mkdir(parents=True)
+        (self.repo / ".git").mkdir()
+        (self.repo / ".tmp").mkdir()
+        subprocess.run(["git", "init", "-q", str(self.repo)],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # a clean, sendable file
+        self.clean = self.repo / "docs" / "evidence.md"
+        self.clean.write_text("# proof\n")
+        # planted hazards
+        (self.repo / "secrets.pem").write_text("KEY")
+        (self.repo / ".env").write_text("TOKEN=x")
+        (self.repo / "telegram.json").write_text("{}")
+        (self.repo / ".tmp" / "CONTRACT.md").write_text("contract")
+        (self.repo / ".gitignore").write_text("build/\n")
+        (self.repo / "build").mkdir()
+        (self.repo / "build" / "artifact.bin").write_text("x")
+
+    def refusal(self, relpath):
+        return validate_sendable(self.repo / relpath, self.repo)
+
+    def test_a_clean_file_passes_all_locks(self):
+        self.assertIsNone(validate_sendable(self.clean, self.repo))
+
+    def test_lock1_traversal(self):
+        outside = self.tmp / "elsewhere.txt"
+        outside.write_text("x")
+        r = validate_sendable(outside, self.repo)
+        self.assertIn("lock 1", r)
+        self.assertIn("containment", r)
+
+    def test_lock2_hidden(self):
+        self.assertIn("lock 2", self.refusal(".env"))
+
+    def test_lock3_secret_pattern(self):
+        r = self.refusal("secrets.pem")
+        self.assertIn("lock 3", r)
+        self.assertIn("*.pem", r)
+
+    def test_lock4_size(self):
+        big = self.repo / "big.bin"
+        big.write_bytes(b"0" * 10)
+        import dw_telegram.sendfiles as sf
+        old = sf.SIZE_LIMIT_BYTES
+        sf.SIZE_LIMIT_BYTES = 5
+        try:
+            self.assertIn("lock 4", validate_sendable(big, self.repo))
+        finally:
+            sf.SIZE_LIMIT_BYTES = old
+
+    def test_lock7_state_file_by_name(self):
+        self.assertIn("lock 7", self.refusal("telegram.json"))
+
+    def test_lock7_state_dir(self):
+        # .tmp is hidden (lock 2) AND a state dir (lock 7) — either
+        # refusal is correct; assert it never passes.
+        self.assertIsNotNone(self.refusal(".tmp/CONTRACT.md"))
+
+    def test_lock5_gitignore(self):
+        r = validate_sendable(self.repo / "build" / "artifact.bin", self.repo)
+        self.assertIn("lock 5", r)
+
+    @unittest.skipUnless(
+        _HAS_TOMLLIB,
+        "the gitleaks lock needs tomllib (py3.11+); it abstains below that",
+    )
+    def test_lock6_gitleaks_rule(self):
+        (self.repo / ".gitleaks.toml").write_text(
+            '[[rules]]\nid = "no-maps"\npath = "treasure\\\\.map"\n'
+        )
+        (self.repo / "treasure.map").write_text("X")
+        r = validate_sendable(self.repo / "treasure.map", self.repo)
+        self.assertIn("lock 6", r)
+        self.assertIn("no-maps", r)
+
+    def test_resolve_exact_glob_and_substring(self):
+        self.assertEqual(
+            resolve_matches("docs/evidence.md", self.repo), [self.clean.resolve()])
+        self.assertIn(self.clean.resolve(), resolve_matches("docs/*.md", self.repo))
+        self.assertIn(self.clean.resolve(), resolve_matches("evidence", self.repo))
+
+
+class SendCommandTest(InterfaceCase):
+    def setUp(self):
+        super().setUp()
+        self.pair()
+        self.iface.handle_update(message(OWNER, f"/open {self.repo}"))
+        (self.repo / "note.txt").write_text("hello")
+        (self.repo / "id_rsa").write_text("PRIVATE")
+
+    def test_send_a_clean_file_goes_straight_through(self):
+        self.iface.handle_update(message(OWNER, "/send note.txt"))
+        self.assertEqual(len(self.transport.documents), 1)
+        doc = self.transport.documents[0]
+        self.assertTrue(doc["path"].endswith("note.txt"))
+        self.assertIn("note.txt", doc["caption"])
+        self.assertIn("✓ sent", self.last_text())
+
+    def test_send_a_secret_is_refused_by_name(self):
+        self.iface.handle_update(message(OWNER, "/send id_rsa"))
+        self.assertEqual(self.transport.documents, [])
+        self.assertIn("lock 3", self.last_text())
+
+    def test_send_the_config_by_name_is_refused(self):
+        # telegram.json is not in the fixture repo, but the state lock
+        # is name-based; plant it and prove lock 7.
+        (self.repo / "telegram.json").write_text("{}")
+        self.iface.handle_update(message(OWNER, "/send telegram.json"))
+        self.assertEqual(self.transport.documents, [])
+        self.assertIn("lock 7", self.last_text())
+
+    def test_ambiguous_match_lists_candidates(self):
+        (self.repo / "note2.txt").write_text("x")
+        self.iface.handle_update(message(OWNER, "/send note"))
+        self.assertEqual(self.transport.documents, [])
+        self.assertIn("files match", self.last_text())
+
+    def test_no_match_says_so(self):
+        self.iface.handle_update(message(OWNER, "/send nonesuch"))
+        self.assertIn("no file matches", self.last_text())
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

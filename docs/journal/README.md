@@ -62,3 +62,4 @@ read as narrative and audited as history.
 - [Entry 18 — Nothing left to escape](./entry-18-nothing-left-to-escape.md)
 - [Entry 19 — A room of its own](./entry-19-a-room-of-its-own.md)
 - [Entry 20 — Manners at the keyboard](./entry-20-manners-at-the-keyboard.md)
+- [Entry 21 — Seven locks, one open hand](./entry-21-seven-locks-one-open-hand.md)

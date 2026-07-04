@@ -43,6 +43,8 @@ Converse: /steer <session-key> binds a session — then just type, and
   your words reach the pane (no tap per message); /unsteer stops.
   /toolbar posts Esc/Enter/arrows for the bound session.
 Watch: /live [target] auto-refreshes a pane read-only; /unlive stops.
+Files: /send <glob|path|substring> — a clean repo file, behind seven
+  locks (secrets, gitignore, state files all refuse).
 Read: /state /events [n] /sessions /questions /peek <tmux-target> /status
 Steer (proposal → approval tap): /flip <project> <phase> <story> <status>
   /newstory <project> <phase> <title…>  /reply <session-key> <answer…>
@@ -313,6 +315,7 @@ class TelegramInterface:
             "/live": self._cmd_live,
             "/unlive": self._cmd_unlive,
             "/toolbar": self._cmd_toolbar,
+            "/send": self._cmd_send,
             "/install": self._cmd_install,
             "/newproject": self._cmd_newproject,
             "/launch": self._cmd_launch,
@@ -840,6 +843,51 @@ class TelegramInterface:
             "steering):",
             buttons=self.TOOLBAR,
         )
+
+    # -- the file leg: /send behind seven locks (§5) ------------------
+
+    def _cmd_send(self, chat_id: int, args: list[str]) -> None:
+        """Send a repo file to chat, behind seven locks. A clean exact
+        match sends straight through; an ambiguous match lists the
+        candidates; a hazard is refused by the lock that caught it."""
+        if not args:
+            self._say(chat_id, "usage: /send <glob|path|substring>")
+            return
+        repo = self._repo_or_complain(chat_id)
+        if repo is None:
+            return
+        from .sendfiles import resolve_matches, validate_sendable
+        from .transport import TransportError
+
+        matches = resolve_matches(args[0], repo)
+        if not matches:
+            self._say(chat_id, f"no file matches {args[0]!r} in {repo.name}")
+            return
+        if len(matches) > 1:
+            listing = "\n".join(
+                f"  /send {p.relative_to(repo.resolve())}" for p in matches[:20]
+            )
+            self._say(
+                chat_id,
+                f"{len(matches)} files match — pick one:\n{listing}",
+            )
+            return
+        path = matches[0]
+        refusal = validate_sendable(path, repo)
+        if refusal is not None:
+            self._say(chat_id, f"✕ refused: {refusal}")
+            return
+        rel = path.relative_to(repo.resolve())
+        size_kb = max(1, path.stat().st_size // 1024)
+        caption = f"{rel} — {repo.name} — {size_kb} KB"
+        try:
+            self.transport.send_document(
+                chat_id, str(path), caption, thread_id=self._reply_thread
+            )
+        except TransportError as exc:
+            self._say(chat_id, f"✕ send failed: {exc}")
+            return
+        self._say(chat_id, f"✓ sent {rel}")
 
     def _pane_target(self, tmux: dict) -> str:
         pane = tmux.get("pane")

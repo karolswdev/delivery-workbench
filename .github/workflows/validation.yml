@@ -138,6 +138,12 @@ jobs:
             echo "ERROR: operator telegram config tracked in the repo" >&2
             exit 1
           fi
+          # WLA-14-06: the /send file leg must never let a runtime
+          # secret ride out, and the same names must never be tracked.
+          if git ls-files | grep -E '(^|/)(telegram-state\.json|agent-events\.jsonl|\.env|.*\.pem|id_rsa)$'; then
+            echo "ERROR: a secret-shaped file is tracked in the repo" >&2
+            exit 1
+          fi
           echo "credential grep-clean: ok"
 
   holdspeak-pack:
