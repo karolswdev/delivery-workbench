@@ -22,7 +22,7 @@ from dw_telegram.config import ConfigError, load_config
 from dw_telegram.interface import TelegramInterface
 from dw_telegram.pairing import PAIRING_TTL_SECONDS, new_pairing_token
 from dw_telegram.runtime import RuntimeState, utc_now
-from dw_telegram.transport import HttpTransport
+from dw_telegram.transport import HttpTransport, TransportError
 
 
 def main(argv: list[str]) -> int:
@@ -42,10 +42,18 @@ def main(argv: list[str]) -> int:
         )
         return 0
     if verb == "serve":
-        interface = TelegramInterface(
-            config, state, HttpTransport(config.bot_token)
+        transport = HttpTransport(config.bot_token)
+        try:
+            me = transport.get_me()  # fail fast and loud on a bad token
+        except TransportError as exc:
+            print(f"telegram interface: {exc}", file=sys.stderr)
+            return 2
+        interface = TelegramInterface(config, state, transport)
+        print(
+            f"telegram interface: serving as @{me.get('username')} "
+            "(Ctrl-C stops)",
+            file=sys.stderr,
         )
-        print("telegram interface: serving (Ctrl-C stops)", file=sys.stderr)
         try:
             interface.run_forever()
         except KeyboardInterrupt:

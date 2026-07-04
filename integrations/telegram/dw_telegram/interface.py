@@ -600,7 +600,25 @@ class TelegramInterface:
     # -- the loop ---------------------------------------------------------
 
     def run_forever(self) -> None:
+        """Long-poll until interrupted. A transient transport failure
+        backs off and retries — a network blip must not take the
+        interface offline; only Ctrl-C (or a kill) stops serving."""
+        import sys
+        import time
+
+        from .transport import TransportError
+
+        backoff = 2
         while True:
-            for update in self.transport.get_updates():
-                self.handle_update(update)
-            self.poll_tick()
+            try:
+                for update in self.transport.get_updates():
+                    self.handle_update(update)
+                self.poll_tick()
+                backoff = 2
+            except TransportError as exc:
+                print(
+                    f"telegram interface: {exc}; retrying in {backoff}s",
+                    file=sys.stderr,
+                )
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60)

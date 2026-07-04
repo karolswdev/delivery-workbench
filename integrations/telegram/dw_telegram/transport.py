@@ -58,6 +58,12 @@ class HttpTransport:
             )
         return doc.get("result")
 
+    def get_me(self) -> dict:
+        """Identity check at startup — proves the token works and
+        names the bot. The username is public; the token never
+        appears in output or errors."""
+        return self._call("getMe", {}) or {}
+
     def get_updates(self) -> list[dict]:
         payload: dict = {
             "timeout": POLL_TIMEOUT_SECONDS,
