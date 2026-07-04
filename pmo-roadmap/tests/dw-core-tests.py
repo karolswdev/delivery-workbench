@@ -92,6 +92,32 @@ commit: 1111111111111111111111111111111111111111
 
 
 class DwCoreTest(unittest.TestCase):
+    def test_missioncontrol_live_layer_pins_only_on_story(self):
+        # WLA-15-02: the pinning kernel, server-side and pure —
+        # on_story pins to its story ids; ambiguous never guesses
+        # (unknown beats guessed); everything else is off-belt.
+        import dw_pmo.workbench as wb
+        doc = {"sessions": [
+            {"key": "a", "correlation": "on_story",
+             "stories": [{"story_id": "DM-1-02"}]},
+            {"key": "b", "correlation": "ambiguous",
+             "stories": [{"story_id": "X-1"}, {"story_id": "X-2"}]},
+            {"key": "c", "correlation": "off_rails", "stories": []},
+            {"key": "d", "correlation": "on_story",
+             "stories": [{"story_id": "DM-1-02"}, {"story_id": "DM-2-01"}]},
+        ]}
+        pins, off_belt = wb.mission_control_live_layer(doc)
+        self.assertEqual(sorted(pins), ["DM-1-02", "DM-2-01"])
+        self.assertEqual([s["key"] for s in pins["DM-1-02"]], ["a", "d"])
+        self.assertEqual([s["key"] for s in off_belt], ["b", "c"])
+
+    def test_missioncontrol_payload_carries_the_live_layer(self):
+        import dw_pmo.workbench as wb
+        status, body = wb.handle_api(self.root, "/api/missioncontrol", {})
+        self.assertEqual(status, 200)
+        self.assertIn("pins", body["data"])
+        self.assertIn("off_belt", body["data"])
+
     def test_missioncontrol_route_serves_the_three_documents(self):
         # WLA-15-01: the workbench is the fourth consumer of the
         # mission-control substrate — one read-only GET returning the

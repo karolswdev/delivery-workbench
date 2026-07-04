@@ -107,7 +107,12 @@ function stopMcPoll() {
   if (mcPoll) { clearInterval(mcPoll); mcPoll = null; }
 }
 
-function mcBelt(project) {
+function mcPin(s) {
+  return `<span class="mc-pin${s.awaiting_response ? " awaiting" : ""}${s.stale ? " stale" : ""}"
+    title="${esc(s.key)}${s.awaiting_response ? " — awaiting a response" : ""}${s.stale ? " (stale)" : ""}">${s.awaiting_response ? "🙋" : "🤖"}${esc(s.agent)}</span>`;
+}
+
+function mcBelt(project, pins) {
   const current = project.current_phase;
   const beltStories = current
     ? project.stories.filter((s) => s.phase === current.number) : [];
@@ -125,20 +130,21 @@ function mcBelt(project) {
         ${beltStories.map((s) => `
           <span class="mc-story st-${esc(s.status)}${s.story_id === nextId ? " next" : ""}"
                 title="${esc(s.title)} [${esc(s.status)}]${s.evidence_exists ? " ·evidence" : ""}">
-            <a href="#/p/${encodeURIComponent(project.slug)}/s/${encodeURIComponent(s.story_id)}">${esc(s.story_id)}</a>${s.evidence_exists ? " ✓" : ""}
+            <a href="#/p/${encodeURIComponent(project.slug)}/s/${encodeURIComponent(s.story_id)}">${esc(s.story_id)}</a>${s.evidence_exists ? " ✓" : ""}${(pins[s.story_id] || []).map(mcPin).join("")}
           </span>`).join("")}
       </div>
     </div>`;
 }
 
-function mcSessions(doc) {
+function mcOffBelt(doc, offBelt) {
   if (!doc || doc.registry !== "ok") {
     return `<div class="sub">sessions: registry ${esc(doc ? String(doc.registry) : "unavailable")}</div>`;
   }
-  if (!doc.sessions.length) return `<div class="sub">no live agent sessions</div>`;
-  return doc.sessions.map((s) => {
-    const where = s.correlation === "on_story" && s.stories.length
-      ? s.stories[0].story_id : s.correlation.replace(/_/g, " ");
+  if (!offBelt.length) return `<div class="sub">every live session is pinned to its story on the belt</div>`;
+  return offBelt.map((s) => {
+    const where = s.correlation === "ambiguous" && s.stories.length
+      ? `ambiguous: ${s.stories.map((st) => st.story_id).join(", ")}`
+      : s.correlation.replace(/_/g, " ");
     return `<div class="mc-session${s.awaiting_response ? " awaiting" : ""}${s.stale ? " stale" : ""}">
       <code>${esc(s.key)}</code> — ${esc(s.agent)} — ${esc(where)}
       ${s.awaiting_response ? badge("awaiting a response", "warn") : ""}
@@ -170,9 +176,9 @@ async function loadMissionControl() {
     if (!el) { stopMcPoll(); return; } // view left; stop polling
     el.innerHTML = `
       <div class="section"><h2>the belt</h2>
-        ${data.feed.projects.map(mcBelt).join("") || stateHtml("no projects on the rails here")}
+        ${data.feed.projects.map((p) => mcBelt(p, data.pins || {})).join("") || stateHtml("no projects on the rails here")}
       </div>
-      <div class="section"><h2>live sessions</h2>${mcSessions(data.sessions)}</div>
+      <div class="section"><h2>off the belt</h2>${mcOffBelt(data.sessions, data.off_belt || [])}</div>
       <div class="section"><h2>rail events</h2>${mcEvents(data.events)}</div>
       <div class="sub">read-only — the workbench never stages or commits; steering lives on the phone and the Desk.</div>`;
   } finally {

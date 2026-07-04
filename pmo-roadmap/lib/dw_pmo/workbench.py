@@ -161,6 +161,25 @@ def _worklog_read(root: Path, raw_path: str) -> tuple[int, dict[str, object]]:
         return _error(404, f"no such work-log entry: {raw_path}")
     return 200, envelope({"path": str(target), "content": read_text(target)})
 
+def mission_control_live_layer(sessions_doc: dict) -> tuple[dict, list]:
+    """The belt's live-layer decision kernel (WLA-15-02), server-side
+    so it is testable here: `on_story` sessions pin to their story
+    ids; every other correlation outcome stays off the belt in its
+    honest bucket — ambiguous never guesses a pin (unknown beats
+    guessed, the §2 rule). Returns (pins: story_id -> [session],
+    off_belt: [session])."""
+    pins: dict[str, list] = {}
+    off_belt: list = []
+    for session in sessions_doc.get("sessions") or []:
+        stories = session.get("stories") or []
+        if session.get("correlation") == "on_story" and stories:
+            for story in stories:
+                pins.setdefault(str(story.get("story_id")), []).append(session)
+        else:
+            off_belt.append(session)
+    return pins, off_belt
+
+
 def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
     parts = [part for part in path.strip("/").split("/") if part]
     try:
@@ -246,10 +265,14 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
                 tail = max(1, min(int(query.get("tail", ["20"])[0]), 100))
             except ValueError:
                 tail = 20
+            sessions_doc = correlate_sessions()
+            pins, off_belt = mission_control_live_layer(sessions_doc)
             return 200, envelope(
                 {
                     "feed": build_state_feed(root),
-                    "sessions": correlate_sessions(),
+                    "sessions": sessions_doc,
+                    "pins": pins,
+                    "off_belt": off_belt,
                     "events": read_events(root, tail=tail),
                 }
             )

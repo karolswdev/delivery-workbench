@@ -232,3 +232,16 @@ button.applybtn:hover { filter: brightness(1.2); }
 .mc-ticker { font-family: var(--mono, monospace); font-size: 12px; }
 .mc-event { padding: 1px 0; color: var(--muted, #667085); white-space: pre-wrap; }
 .mc-event.refusal { color: #c0362c; }
+
+/* live layer (WLA-15-02): sessions pinned to their story chips */
+.mc-pin {
+  display: inline-flex; align-items: center; gap: 2px;
+  margin-left: 6px; padding: 0 6px; border-radius: 999px;
+  background: rgba(127, 127, 127, .12); font-size: 11px;
+}
+.mc-pin.awaiting { color: #b7791f; animation: mc-pulse 1.6s ease-in-out infinite; }
+.mc-pin.stale { opacity: 0.5; }
+@keyframes mc-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 7px 0 rgba(183, 121, 31, .5); }
+}

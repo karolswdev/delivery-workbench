@@ -33,7 +33,7 @@ The local dw-workbench browser grows a mission-control belt: the same feed, corr
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-15-01 | Design and the belt panel | done | [story-01-design-and-the-belt-panel](./story-01-design-and-the-belt-panel.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-15-02 | Sessions and events, live in the browser | backlog | [story-02-sessions-and-events-live-in-the-browser](./story-02-sessions-and-events-live-in-the-browser.md) | - |
+| WLA-15-02 | Sessions and events, live in the browser | done | [story-02-sessions-and-events-live-in-the-browser](./story-02-sessions-and-events-live-in-the-browser.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-15-03 | Prove it read-only, end to end | backlog | [story-03-prove-it-read-only-end-to-end](./story-03-prove-it-read-only-end-to-end.md) | - |
 
 ## Where we are
