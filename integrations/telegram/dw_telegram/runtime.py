@@ -47,6 +47,13 @@ class RuntimeState:
         self.active_repo: str | None = None
         self._load()
 
+    def reload(self) -> None:
+        """Re-read the file. The pairing CLI and the serving process
+        are separate processes sharing this file; the server reloads
+        before judging a pairing attempt so a token generated while
+        it was already running is honored."""
+        self._load()
+
     def _load(self) -> None:
         if not self.path.exists():
             return

@@ -318,6 +318,19 @@ class PairingTest(InterfaceCase):
         raw = (self.config.resolved_state_path()).read_text()
         self.assertNotIn(token, raw)
 
+    def test_token_from_separate_pair_process_is_honored(self) -> None:
+        # The pair CLI and the server are separate processes sharing
+        # the state file; a token generated AFTER the server loaded
+        # its state must still redeem (the server reloads on pairing).
+        other = RuntimeState(self.config.resolved_state_path())
+        token = new_pairing_token(other, self.clock())
+        self.iface.handle_update(message(OWNER, f"/pair {token}"))
+        self.assertTrue(
+            any("Paired" in text for text in self.sent_texts()),
+            self.sent_texts(),
+        )
+        self.assertEqual(self.state.paired_chat, OWNER)
+
 
 # ---------------------------------------------------------------- consent
 
