@@ -2,7 +2,7 @@
 """Tests for the HoldSpeak plugin pack (WLA-12-02).
 
 Requires holdspeak importable (CI installs it from the pinned
-v0.3.1 tag; locally use HoldSpeak's venv python). Without it the
+v0.4.0 tag; locally use HoldSpeak's venv python). Without it the
 whole module skips loudly rather than passing vacuously.
 """
 
@@ -115,7 +115,7 @@ HALLUCINATED_RESPONSE = """```json
 
 @unittest.skipUnless(
     HAVE_HOLDSPEAK,
-    "holdspeak not importable — install it (CI pins the v0.3.1 tag) "
+    "holdspeak not importable — install it (CI pins the v0.4.0 tag) "
     "or run with HoldSpeak's venv python",
 )
 class PackUnitTest(unittest.TestCase):
@@ -216,7 +216,7 @@ class PackUnitTest(unittest.TestCase):
 
 @unittest.skipUnless(
     HAVE_HOLDSPEAK,
-    "holdspeak not importable — install it (CI pins the v0.3.1 tag) "
+    "holdspeak not importable — install it (CI pins the v0.4.0 tag) "
     "or run with HoldSpeak's venv python",
 )
 class PackHostIntegrationTest(unittest.TestCase):
@@ -329,7 +329,8 @@ class PackHostIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(len(drafts), 1)
         draft = drafts[0]
-        # Verified 0.3.1 reality: packs cannot register renderers or
+        # Verified reality (0.3.1 through 0.4.0, re-checked 2026-07-05):
+        # packs cannot register renderers or
         # artifact types, so the artifact lands as plugin_output and
         # the rich markdown summary IS the rendered body.
         self.assertEqual(draft.artifact_type, "plugin_output")
@@ -379,7 +380,7 @@ class _RecordingRunner:
 
 @unittest.skipUnless(
     HAVE_HOLDSPEAK,
-    "holdspeak not importable — install it (CI pins the v0.3.1 tag) "
+    "holdspeak not importable — install it (CI pins the v0.4.0 tag) "
     "or run with HoldSpeak's venv python",
 )
 class ActuatorProposalTest(unittest.TestCase):
@@ -478,7 +479,7 @@ class ActuatorProposalTest(unittest.TestCase):
 
 @unittest.skipUnless(
     HAVE_HOLDSPEAK,
-    "holdspeak not importable — install it (CI pins the v0.3.1 tag) "
+    "holdspeak not importable — install it (CI pins the v0.4.0 tag) "
     "or run with HoldSpeak's venv python",
 )
 class ActuatorConnectorTest(unittest.TestCase):
@@ -557,7 +558,7 @@ class ActuatorConnectorTest(unittest.TestCase):
 
 @unittest.skipUnless(
     HAVE_HOLDSPEAK,
-    "holdspeak not importable — install it (CI pins the v0.3.1 tag) "
+    "holdspeak not importable — install it (CI pins the v0.4.0 tag) "
     "or run with HoldSpeak's venv python",
 )
 class ActuatorEndToEndTest(unittest.TestCase):

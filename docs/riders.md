@@ -26,7 +26,7 @@ Verification date for everything below: 2026-07-03.
 | Claude Code | 2.1.200 | `CLAUDE.md` (managed block) | `.claude/commands/*.md` | `plugin/` (marketplace plugin) | stdio via `.mcp.json` | yes (not used by DW) |
 | Codex CLI | codex-cli 0.142.4 | `AGENTS.md` (native spec) | `.codex/skills/<name>/SKILL.md` | `codex plugin` marketplace | `[mcp_servers]` in `~/.codex/config.toml` | `hooks.json`, trust-gated |
 | pi | 0.70.6 | `AGENTS.md` or `CLAUDE.md` | `.pi/prompts/*.md` templates | `.pi/extensions/*.ts` | **none, by design** | none (extensions instead) |
-| HoldSpeak | 0.3.1 (pinned; see below) | `.hs/` directory | n/a (voice surface) | `~/.holdspeak/plugin_packs/*.py` | n/a | agent hook (watches Claude/Codex) |
+| HoldSpeak | 0.4.0 (pinned; see below) | `.hs/` directory | n/a (voice surface) | `~/.holdspeak/plugin_packs/*.py` | n/a | agent hook (watches Claude/Codex) |
 
 ### Claude Code — 2.1.200
 
@@ -109,9 +109,20 @@ shipped inside the installed package
   pi rider is CLI-first — plain `dw` invocations and exit codes,
   no MCP, no slash commands.
 
-### HoldSpeak — pinned to 0.3.1
+### HoldSpeak — pinned to 0.4.0
 
-**The pin.** We integrate against the released `holdspeak==0.3.1`
+**2026-07-05 update:** re-certified against the released
+`holdspeak==0.4.0` (previously 0.3.1). All 23 pack tests pass
+unmodified against the real installed package — the plugin surface
+(`plugin_sdk`, `plugins.host`, `plugin_pack_loader`, synthesis) is
+unchanged across 0.3.1 → 0.4.0. CI's pin and the MANIFEST
+descriptions are updated to match. The specific citations below
+(line numbers, commit-distance figures) were written against the
+0.3.1-era tree and have not been individually re-walked; treat them
+as historically accurate rather than current-tree-precise until a
+full citation refresh happens.
+
+**The pin.** We integrate against the released `holdspeak==0.4.0`
 (the only published artifact). The desk on this machine runs `main`
 at `v0.3.1-575-g f6fda7f` — 575 commits past the tag with an open
 `[Unreleased]` changelog, and HoldSpeak's own changelog warns the

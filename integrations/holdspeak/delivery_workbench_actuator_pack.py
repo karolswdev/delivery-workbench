@@ -27,12 +27,14 @@ Install (both pack files ride together)::
     cp delivery_workbench_pack.py delivery_workbench_actuator_pack.py \\
        ~/.holdspeak/plugin_packs/
 
-One plugin per pack file is the 0.3.1 loader contract (module
-exports one ``MANIFEST`` + ``create_plugin``), which is why the
-actuator lives beside, not inside, the synthesizer pack. Project
-resolution and the roadmap reader are duplicated from the
-synthesizer pack for the same reason: pack files are standalone.
-Proven against holdspeak 0.3.1.
+One plugin per pack file is the loader contract (module exports one
+``MANIFEST`` + ``create_plugin``; unchanged through 0.3.1 and current
+main), which is why the actuator lives beside, not inside, the
+synthesizer pack. Project resolution and the roadmap reader are
+duplicated from the synthesizer pack for the same reason: pack files
+are standalone.
+Proven against holdspeak 0.4.0 (re-certified 2026-07-05, commit
+ad5cb91: all 23 pack tests pass unmodified).
 """
 
 from __future__ import annotations
@@ -70,7 +72,7 @@ MANIFEST = validate_manifest(
             "Proposes exactly two rails actions from a delivery "
             "meeting - a story status flip or a story create - for "
             "human approval and allow-listed execution. The dw gate "
-            "keeps final say. Proven against holdspeak 0.3.1."
+            "keeps final say. Proven against holdspeak 0.4.0."
         ),
     }
 )

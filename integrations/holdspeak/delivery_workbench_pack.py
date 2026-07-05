@@ -16,9 +16,10 @@ Copy this file into HoldSpeak's user pack directory::
     cp delivery_workbench_pack.py ~/.holdspeak/plugin_packs/
 
 HoldSpeak discovers it on startup (``MANIFEST`` + ``create_plugin``).
-Proven against holdspeak 0.3.1 (the plugin surface is identical on
-0.3.1 and current main); the MANIFEST version pin below is the
-range this pack was tested with.
+Proven against holdspeak 0.4.0 (re-certified 2026-07-05, commit
+ad5cb91: all 23 pack tests pass unmodified — the plugin surface is
+identical across 0.3.1, 0.4.0, and current main); the MANIFEST
+version pin below is the range this pack was tested with.
 
 Project resolution
 ------------------
@@ -78,7 +79,7 @@ MANIFEST = validate_manifest(
             "Grounds a delivery meeting in the project's Delivery "
             "Workbench roadmap: decisions and action items mapped to "
             "story IDs, the next actionable story, and drift flags. "
-            "Read-only. Proven against holdspeak 0.3.1."
+            "Read-only. Proven against holdspeak 0.4.0."
         ),
     }
 )
