@@ -6,8 +6,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Current phase: 13 (phase-13-agentic-mission-control)
-- Next story: WLA-13-05 — Prove mission control end-to-end with the Desk [backlog]
+- Next story: nothing actionable
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->
