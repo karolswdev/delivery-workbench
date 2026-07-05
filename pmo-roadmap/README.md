@@ -552,11 +552,15 @@ acknowledge the issues. The server never commits.
   every workbench response derives from it live. There is no database
   or cache to migrate, back up, or trust — delete nothing, sync
   nothing.
-- **Permission boundary:** localhost only, one repo root per process,
-  writes only through preview→apply inside `pm/roadmap/**`, no
-  staging, no commits — committing (and the commit gate) stays in your
-  hands and hooks. Anything outside that boundary is a bug; the
-  refusal states above are tested per push.
+- **Permission boundary:** localhost, or a Host header ending in
+  `.ts.net` (Tailscale's MagicDNS suffix — a client can only reach
+  this process by that name through the requester's own
+  authenticated tailnet, so the DNS-rebinding guard's threat model
+  doesn't cross that boundary), one repo root per process, writes
+  only through preview→apply inside `pm/roadmap/**`, no staging, no
+  commits — committing (and the commit gate) stays in your hands
+  and hooks. Anything outside that boundary is a bug; the refusal
+  states above are tested per push.
 - **Work-log caveat:** the work-log viewer reads `PMO_WORK_LOG_DIR`
   (config > environment > default `~/.work/log`) and serves only
   capture/digest artifacts from inside it. Logs are supplementary

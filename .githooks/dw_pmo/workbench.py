@@ -64,13 +64,25 @@ def workbench_dir() -> Path | None:
 
 
 def host_allowed(host_header: str) -> bool:
-    """Default-deny for non-local Host headers (DNS-rebinding guard)."""
+    """Default-deny for non-local Host headers (DNS-rebinding guard).
+
+    A ``*.ts.net`` host (Tailscale's MagicDNS suffix) is also allowed:
+    unlike an arbitrary attacker-chosen domain, a ``.ts.net`` name can
+    only resolve and route to this process through the requester's
+    own authenticated tailnet (WireGuard-encrypted, node-identified)
+    via ``tailscale serve`` proxying to this same loopback port — the
+    DNS-rebinding threat this guard exists to stop (a hostile page
+    tricking a browser into sending a forged Host header at a
+    public IP) has no way to reach this branch at all. Owner
+    decision: the workbench is "localhost or your own tailnet,"
+    not "localhost only."
+    """
     raw = (host_header or "").strip().lower()
     if raw.startswith("["):  # bracketed IPv6, e.g. [::1]:8377
         host = raw.split("]")[0].lstrip("[")
     else:
         host = raw.split(":")[0]
-    return host in {"127.0.0.1", "localhost", "::1", ""}
+    return host in {"127.0.0.1", "localhost", "::1", ""} or host.endswith(".ts.net")
 
 
 def envelope(data: object, ok: bool = True, issues: list[str] | None = None, warnings: list[str] | None = None) -> dict[str, object]:
@@ -476,7 +488,7 @@ def create_handler(root: Path, static_dir: Path | None):
             if host_allowed(self.headers.get("Host", "")):
                 return True
             self._send_json(403, envelope(
-                {"error": "non-local Host header refused (the workbench serves localhost only)"}, ok=False))
+                {"error": "non-local Host header refused (localhost or a .ts.net tailnet host only)"}, ok=False))
             return False
 
         def do_GET(self) -> None:  # noqa: N802 (stdlib naming)
@@ -567,7 +579,7 @@ def serve(root: Path, port: int = 8377, quiet: bool = False) -> None:
             "the port is likely in use — stop the other process or pass --port <n>"
         )
     print(f"dw-workbench: serving {root}")
-    print(f"dw-workbench: http://127.0.0.1:{port}/ (localhost only; Ctrl-C to stop)")
+    print(f"dw-workbench: http://127.0.0.1:{port}/ (localhost or your own .ts.net tailnet; Ctrl-C to stop)")
     print("dw-workbench: writes happen only via /api/mutations preview→apply inside pm/roadmap; never commits")
 
     def _term(_sig, _frame):  # graceful SIGTERM

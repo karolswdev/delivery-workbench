@@ -159,11 +159,14 @@ Schemas and design are in [docs/mcp.md](./docs/mcp.md).
 
 ## The web view
 
-`dw-workbench --root /path/to/repo` serves a localhost-only page for
-browsing the roadmap: phase tables, story and evidence pairs, a
-health console, and the trace from a story to the commits that
-shipped it. It can edit roadmap files through a guarded
-preview-then-apply flow. It never stages or commits.
+`dw-workbench --root /path/to/repo` serves a page for browsing the
+roadmap: phase tables, story and evidence pairs, a health console,
+and the trace from a story to the commits that shipped it. It can
+edit roadmap files through a guarded preview-then-apply flow. It
+never stages or commits. Bound to localhost by default; reachable
+over your own Tailscale network too (a `.ts.net` Host header is
+allowed, since that name only resolves through your own
+authenticated tailnet).
 
 ![Workbench project overview: phase table with status badges, evidence counts, the next actionable story, and a validation warning](./assets/workbench-overview.png)
 

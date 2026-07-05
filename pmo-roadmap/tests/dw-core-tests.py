@@ -936,10 +936,13 @@ class DwCoreTest(unittest.TestCase):
     def test_host_header_allowlist(self) -> None:
         from dw_pmo.workbench import host_allowed
 
-        for ok in ("127.0.0.1:8377", "localhost:9000", "127.0.0.1", "localhost", "", "[::1]:8377"):
+        for ok in ("127.0.0.1:8377", "localhost:9000", "127.0.0.1", "localhost", "", "[::1]:8377",
+                   "karol-co-mac.tailad9943.ts.net", "karol-co-mac.tailad9943.ts.net:443"):
             self.assertTrue(host_allowed(ok), ok)
         for evil in ("evil.example.com", "evil.example.com:8377", "192.168.1.5:8377",
-                     "attacker.test:80", "0.0.0.0:8377"):
+                     "attacker.test:80", "0.0.0.0:8377",
+                     "ts.net.evil.example.com",  # suffix trick: must not match .ts.net
+                     "evilts.net"):  # no dot before ts.net: must not match either
             self.assertFalse(host_allowed(evil), evil)
 
     def test_mutation_slug_injection_refused(self) -> None:
