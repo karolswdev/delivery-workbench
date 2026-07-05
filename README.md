@@ -182,7 +182,9 @@ documents make it a substrate any client can consume:
 .githooks/dw events            # what happened on the rails (gate verdicts, flips)
 ```
 
-Two clients consume that substrate today. A **Telegram interface**
+Several clients consume that substrate today, including the
+workbench web view above, which renders it as a read-only belt at
+`#/mc`. A **Telegram interface**
 (`integrations/telegram/`) puts mission control in your pocket:
 bind a chat topic to a repo and it renders phases, stories, and
 gate refusals; a blocked agent's question reaches your phone in
@@ -214,7 +216,7 @@ The design is in
 ## This repo runs on it
 
 Every phase and story of the framework was shipped through its own
-gate: fifteen phases, each story with evidence, every commit with
+gate: sixteen phases, each story with evidence, every commit with
 trailers and an archived contract, the full history passing
 `dw verify --all`. The trail is in
 [pmo-roadmap/pm/roadmap/work-log-automation/](./pmo-roadmap/pm/roadmap/work-log-automation/).
@@ -240,4 +242,4 @@ floor), and history verification on every push.
 
 ## License
 
-[MIT](./LICENSE). Current version: 1.11.0.
+[MIT](./LICENSE). Current version: 1.12.0.

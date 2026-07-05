@@ -7,6 +7,20 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## v1.12.0 — 2026-07-05
+
+The fifth window: the local `dw-workbench` browser gains a
+read-only mission-control belt (`#/mc`, `GET /api/missioncontrol`)
+— phases as segments, stories as chips with the next actionable in
+accent, live agent sessions pinned to their stories by a
+server-side decision kernel, honest off-belt buckets, and a
+refusal-first rail-events ticker. Read-only under a fitness guard:
+the mutation dispatcher can never learn the mission-control path.
+One substrate now renders on the CLI, the phone, the HoldSpeak
+Desk, the workbench browser, and (contract landed) the iPhone.
+Full detail:
+[phase 15 final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-15-mission-control-on-the-workbench/final-summary.md).
+
 ## v1.11.0 — 2026-07-04
 
 The Absorption: the pocket desk grows up. Phase 14 studied
