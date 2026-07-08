@@ -207,6 +207,19 @@ def parse_current_phase_target(project: Project) -> str:
     return ""
 
 
+def parse_current_phase_dirname(project: Project) -> str:
+    """The phase directory the README's Current-phase pointer names, or
+    "" when absent/unresolvable. The methodology's own current-phase
+    receipt (WLA-16-03)."""
+    target = parse_current_phase_target(project)
+    if not target:
+        return ""
+    for part in Path(target).parts:
+        if PHASE_RE.match(part):
+            return part
+    return ""
+
+
 def current_phase_status_path(project: Project) -> Path | None:
     target = parse_current_phase_target(project)
     if not target:

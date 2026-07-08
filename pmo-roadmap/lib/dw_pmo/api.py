@@ -11,6 +11,7 @@ from .parse import (
     header_status,
     hook_snapshot,
     link_target,
+    parse_current_phase_dirname,
     parse_current_phase_target,
     parse_story_rows,
     story_num_from_file,
@@ -23,8 +24,19 @@ from .validate import check_project, project_warnings
 
 def next_story(project: Project, root: Path) -> dict[str, object] | None:
     preferred = ("in-progress", "ready", "backlog")
+    # Nothing in a closed phase is actionable (WLA-16-03) — a
+    # final-summary is the phase's terminal receipt. Within each status
+    # tier, the phase the README pointer names is consulted first.
+    phases = [
+        phase
+        for phase in discover_phases(project)
+        if not (phase.path / "final-summary.md").exists()
+    ]
+    pointer_dir = parse_current_phase_dirname(project)
+    if pointer_dir:
+        phases.sort(key=lambda phase: phase.path.name != pointer_dir)
     for status in preferred:
-        for phase in discover_phases(project):
+        for phase in phases:
             for row in parse_story_rows(phase.path / "current-phase-status.md"):
                 if normalize_status(row.status) == status:
                     story_target = link_target(row.story_file)
