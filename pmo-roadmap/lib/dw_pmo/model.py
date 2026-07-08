@@ -55,19 +55,21 @@ _STATUS_CANONICAL = {"in progress": "in-progress", "not started": "not-started"}
 def normalize_status(raw: str | None) -> str:
     """Resolve a possibly-decorated status string to a comparable token.
 
-    Returns the matched keyword (canonicalized), or the first
-    decoration-stripped token lowercased when no keyword is present,
-    or "" for empty input. Read-side only.
+    Only the HEAD of the string — everything before the first
+    decoration delimiter — is consulted: a keyword found there wins
+    (canonicalized); otherwise the head's first token, lowercased.
+    Narrative tails are never searched — a cell ending "…the request
+    never shipped)" must not read as shipped. Read-side only.
     """
     if not raw:
         return ""
     s = re.sub(r"\*|`|_{2}|~~", "", raw).strip().lower()
-    m = _STATUS_KEYWORD_RE.search(s)
+    head = re.split(r"[(—–:;,.!]", s, maxsplit=1)[0].strip()
+    m = _STATUS_KEYWORD_RE.search(head)
     if m:
         token = re.sub(r"\s+", " ", m.group(1))
         return _STATUS_CANONICAL.get(token, token)
-    s = re.split(r"[(—–:;,.!]", s, maxsplit=1)[0].strip()
-    parts = s.split()
+    parts = head.split()
     return parts[0] if parts else ""
 
 # The generator's stand-in body for evidence created without content.
