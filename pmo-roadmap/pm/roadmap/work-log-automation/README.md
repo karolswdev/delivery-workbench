@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-03.
-**Current phase:** n/a.
+**Last updated:** 2026-07-07.
+**Current phase:** [phase-16-flagship-tree](./phase-16-flagship-tree/current-phase-status.md).
 **Status:** active — framework shipped through v1.8.0 (phases 0-11); the gate's guarantees hold locally, remotely, across distribution channels, for agents, and across the pull-request boundary.
 
 ## Vision
@@ -71,6 +71,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 13 | Deliver Mission control: the Desk conveyor and the live roadmap. | done | [phase-13-agentic-mission-control](./phase-13-agentic-mission-control/) |
 | 14 | Absorb and re-interpret ccgram's operational excellence under the consent spine: hook-driven push, the message layer, topics-as-projects, the driver's craft, guarded file sending. | done | [phase-14-absorbing-ccgram](./phase-14-absorbing-ccgram/) |
 | 15 | The local dw-workbench browser grows a mission-control belt: the same feed, correlation, and events the phone and Desk render, now in the read-only roadmap view — no steering (that stays where the consent machinery lives), just the live picture at your desk. | done | [phase-15-mission-control-on-the-workbench](./phase-15-mission-control-on-the-workbench/) |
+| 16 | The flagship tree: receipts-first reading — header-mapped tables, status normalization, receipts-first evidence pairing, pointer-driven current phase; the write gate unchanged | not-started | [phase-16-flagship-tree](./phase-16-flagship-tree/) |
 
 ## Operating cadence
 
