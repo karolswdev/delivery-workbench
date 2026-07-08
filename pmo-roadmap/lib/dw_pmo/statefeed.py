@@ -27,6 +27,7 @@ from .parse import (
     discover_phases,
     discover_projects,
     header_status,
+    parse_current_phase_dirname,
     parse_story_rows,
     phase_story_files,
     story_id_from_header,
@@ -52,6 +53,9 @@ def _project_state(project: Project, root: Path) -> dict:
     phases_out: list[dict] = []
     stories_out: list[dict] = []
     current_phase: dict | None = None
+    pointer_state: dict | None = None
+    found_state: dict | None = None
+    pointer_dir = parse_current_phase_dirname(project)
     found = next_story(project, root)
     for phase in discover_phases(project):
         rows = parse_story_rows(phase.path / "current-phase-status.md")
@@ -115,8 +119,14 @@ def _project_state(project: Project, root: Path) -> dict:
             "stories_total": total,
         }
         phases_out.append(phase_state)
+        if phase.path.name == pointer_dir:
+            pointer_state = phase_state
         if found and found.get("phase") == phase.number:
-            current_phase = phase_state
+            found_state = phase_state
+    # The README pointer is the methodology's own current-phase receipt
+    # (WLA-16-03): it wins when it resolves, even onto a closed phase —
+    # that is the truth of the tree, not a guess.
+    current_phase = pointer_state or found_state
     if current_phase is None and phases_out:
         open_phases = [p for p in phases_out if p["status"] == "open"]
         current_phase = (open_phases or phases_out)[-1]

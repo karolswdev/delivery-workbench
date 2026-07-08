@@ -1441,6 +1441,71 @@ Prose after the table must not be parsed as rows.
         ids = {s["story_id"] for s in feed["projects"][0]["stories"]}
         self.assertIn("FX-86-01", ids)
 
+    # -- WLA-16-03: pointer-driven current phase --------------------------
+
+    def _close_phase_85(self) -> None:
+        (self.phase_dir / "final-summary.md").write_text("# Final\n\nDone.\n", encoding="utf-8")
+
+    def _add_open_phase_86(self) -> None:
+        phase2 = self.root / "pm" / "roadmap" / "fx" / "phase-86-next"
+        phase2.mkdir()
+        (phase2 / "current-phase-status.md").write_text(
+            "# Phase 86 - Next\n\n## Story status\n\n"
+            "| ID | Story | Status | Story file | Evidence |\n|---|---|---|---|---|\n"
+            "| FX-86-01 | Next thing | in-progress | [story-01-next](./story-01-next.md) | - |\n",
+            encoding="utf-8",
+        )
+        (phase2 / "story-01-next.md").write_text(
+            "# FX-86-01 - Next thing\n\n- **Status:** in-progress\n", encoding="utf-8"
+        )
+
+    def test_next_story_skips_closed_phases(self) -> None:
+        # Phase 85 closes with an open-looking row left behind (the
+        # flagship has hardware-gated backlog rows in closed phases).
+        status = self.LEGACY_STATUS.replace(
+            "| FX-85-02 | The edge worker | in-progress (3/6) | [story-02](./story-02-worker.md) |",
+            "| FX-85-02 | The edge worker | backlog | [story-02](./story-02-worker.md) |",
+        )
+        (self.phase_dir / "current-phase-status.md").write_text(status, encoding="utf-8")
+        self._close_phase_85()
+        self._add_open_phase_86()
+        found = core.next_story(self.project, self.root)
+        self.assertIsNotNone(found)
+        self.assertEqual(found["story_id"], "FX-86-01")
+
+    def test_next_story_none_when_only_closed_phases_have_open_rows(self) -> None:
+        status = self.LEGACY_STATUS.replace("in-progress (3/6)", "backlog")
+        (self.phase_dir / "current-phase-status.md").write_text(status, encoding="utf-8")
+        self._close_phase_85()
+        self.assertIsNone(core.next_story(self.project, self.root))
+
+    def test_pointer_names_current_phase_even_closed(self) -> None:
+        from dw_pmo.statefeed import build_state_feed
+
+        self._close_phase_85()
+        self._add_open_phase_86()
+        (self.root / "pm" / "roadmap" / "fx" / "README.md").write_text(
+            "# FX - Roadmap\n\n"
+            "**Current phase:** [phase-85-mesh-edge](./phase-85-mesh-edge/current-phase-status.md).\n\n"
+            "- **Story ID prefix:** FX\n",
+            encoding="utf-8",
+        )
+        feed = build_state_feed(self.root)
+        current = feed["projects"][0]["current_phase"]
+        self.assertEqual(current["number"], 85)
+        self.assertEqual(current["status"], "closed")
+
+    def test_pointer_absent_falls_back_to_next_story_phase(self) -> None:
+        from dw_pmo.statefeed import build_state_feed
+
+        self._add_open_phase_86()
+        feed = build_state_feed(self.root)
+        current = feed["projects"][0]["current_phase"]
+        # No pointer in the fixture README: the phase of the next story
+        # (FX-85-02, in-progress, oldest-first) wins.
+        self.assertEqual(current["number"], 85)
+        self.assertEqual(current["status"], "open")
+
     def test_file_only_evidence_vouched_by_header(self) -> None:
         # Evidence for a story that exists ONLY as a file (no row) whose
         # header says done is not premature; if the header is open, it is.
