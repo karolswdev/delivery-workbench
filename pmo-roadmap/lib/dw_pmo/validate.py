@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .model import DONE_STATUSES, EVIDENCE_PLACEHOLDER, OPEN_STATUSES, Project
+from .model import DONE_STATUSES, EVIDENCE_PLACEHOLDER, OPEN_STATUSES, Project, normalize_status
 from .parse import (
     current_phase_status_path,
     discover_phases,
@@ -59,10 +59,10 @@ def project_warnings(project: Project, root: Path) -> list[str]:
     uncaptured: list[str] = []
     for phase in discover_phases(project):
         rows = parse_story_rows(phase.path / "current-phase-status.md")
-        if any(row.status in OPEN_STATUSES for row in rows):
+        if any(normalize_status(row.status) in OPEN_STATUSES for row in rows):
             active.append(phase.path.name)
         for row in rows:
-            if row.status not in DONE_STATUSES:
+            if normalize_status(row.status) not in DONE_STATUSES:
                 continue
             target = link_target(row.evidence)
             if not target or target in {"-", "—"}:
@@ -106,20 +106,21 @@ def check_project(project: Project, root: Path) -> list[str]:
             story_target = link_target(row.story_file)
             story_path = (phase.path / story_target).resolve()
             story_num = story_num_from_file(row.story_file)
+            row_status = normalize_status(row.status)
             if story_num is not None:
                 story_nums.add(story_num)
-                if row.status in DONE_STATUSES:
+                if row_status in DONE_STATUSES:
                     done_nums.add(story_num)
             if not story_path.exists():
                 issues.append(f"{status_file.relative_to(root)}: broken story link for {row.story_id}: {story_target}")
                 continue
             status = header_status(story_path)
-            if status and status != row.status:
+            if status and normalize_status(status) != row_status:
                 issues.append(
                     f"{story_path.relative_to(root)}: header status {status!r} differs from phase table {row.status!r}"
                 )
             evidence_target = link_target(row.evidence)
-            if row.status in DONE_STATUSES:
+            if row_status in DONE_STATUSES:
                 evidence_file: Path | None = None
                 if row.evidence in {"-", "—", ""}:
                     issues.append(f"{status_file.relative_to(root)}: done story {row.story_id} has no evidence link")
@@ -142,7 +143,7 @@ def check_project(project: Project, root: Path) -> list[str]:
                 issues.append(f"{rel(evidence, root)}: orphan evidence has no matching story row")
             elif ev_num not in done_nums:
                 issues.append(f"{rel(evidence, root)}: evidence exists but matching story is not done")
-        if rows and all(row.status in DONE_STATUSES for row in rows) and not (phase.path / "final-summary.md").exists():
+        if rows and all(normalize_status(row.status) in DONE_STATUSES for row in rows) and not (phase.path / "final-summary.md").exists():
             issues.append(f"{rel(phase.path, root)}: all stories are done but final-summary.md is missing")
     return issues
 

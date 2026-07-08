@@ -1261,6 +1261,128 @@ RULES_DOC_MIN = """# PMO Contract
 """
 
 
+class FlagshipDialectTest(unittest.TestCase):
+    """WLA-16-01: legacy trees decorate statuses and drop the Evidence
+    column; the read layer parses them header-mapped and compares
+    statuses through normalization. Dialects distilled from the
+    flagship consumer's real tree (86 phases of drift)."""
+
+    LEGACY_STATUS = """# Phase 85 - The Mesh Edge
+
+**Last updated:** 2026-07-07.
+
+## The design (a table the parser must not mistake for stories)
+
+| Risk | Likelihood | Mitigation | Stop signal |
+|---|---|---|---|
+| drift | low | fixtures | red suite |
+
+## Story status
+
+| ID | Story | Status | Story file |
+|----|-------|--------|------------|
+| FX-85-01 | The relay queue | **done** (2026-07-07 — 12 new tests) | [story-01](./story-01-relay.md) |
+| FX-85-02 | The edge worker | in-progress (3/6) | [story-02](./story-02-worker.md) |
+
+## Where we are
+
+Prose after the table must not be parsed as rows.
+"""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-flagship-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.phase_dir = self.root / "pm" / "roadmap" / "fx" / "phase-85-mesh-edge"
+        self.phase_dir.mkdir(parents=True)
+        (self.root / "pm" / "roadmap" / "fx" / "README.md").write_text(
+            "# FX - Roadmap\n\n- **Story ID prefix:** FX\n", encoding="utf-8"
+        )
+        (self.phase_dir / "current-phase-status.md").write_text(self.LEGACY_STATUS, encoding="utf-8")
+        (self.phase_dir / "story-01-relay.md").write_text(
+            "# FX-85-01 - The relay queue\n\n- **Status:** done (2026-07-07 — merged)\n", encoding="utf-8"
+        )
+        (self.phase_dir / "story-02-worker.md").write_text(
+            "# FX-85-02 - The edge worker\n\n- **Status:** in-progress\n", encoding="utf-8"
+        )
+        (self.phase_dir / "evidence-story-01.md").write_text(
+            "# Evidence - FX-85-01\n\n- fixture proof line\n", encoding="utf-8"
+        )
+        self.project = core.get_project(self.root, "fx")
+
+    def test_normalize_status_pinned_mappings(self) -> None:
+        cases = {
+            "done": "done",
+            "**done** (2026-07-07 — twelve new tests)": "done",
+            "CLOSED ✅ (6/6)": "closed",
+            "**CLOSED (7/7)**": "closed",
+            "in-progress (3/6)": "in-progress",
+            "in progress": "in-progress",
+            "not-started": "not-started",
+            # deliberately-not-done decorations must never read as done
+            "host-complete (walkthrough deferred per owner)": "host-complete",
+            "paused": "paused",
+            "shipped → phase-49 (CLOSED 6/6)": "shipped",
+            "~~cut~~": "cut",
+            "scaffolded": "scaffolded",
+            "": "",
+        }
+        for raw, want in cases.items():
+            self.assertEqual(core.normalize_status(raw), want, f"normalize({raw!r})")
+
+    def test_four_column_decorated_table_parses(self) -> None:
+        rows = core.parse_story_rows(self.phase_dir / "current-phase-status.md")
+        self.assertEqual([r.story_id for r in rows], ["FX-85-01", "FX-85-02"])
+        self.assertEqual(rows[0].evidence, "")
+        self.assertEqual(core.normalize_status(rows[0].status), "done")
+        self.assertEqual(core.normalize_status(rows[1].status), "in-progress")
+
+    def test_canonical_header_maps_identically(self) -> None:
+        canonical = (
+            self.LEGACY_STATUS.replace(
+                "| ID | Story | Status | Story file |\n|----|-------|--------|------------|",
+                "| ID | Story | Status | Story file | Evidence |\n|---|---|---|---|---|",
+            )
+            .replace(
+                "| [story-01](./story-01-relay.md) |",
+                "| [story-01](./story-01-relay.md) | [evidence-story-01](./evidence-story-01.md) |",
+            )
+            .replace(
+                "| [story-02](./story-02-worker.md) |",
+                "| [story-02](./story-02-worker.md) | - |",
+            )
+        )
+        alt = self.phase_dir / "alt-status.md"
+        alt.write_text(canonical, encoding="utf-8")
+        legacy = core.parse_story_rows(self.phase_dir / "current-phase-status.md")
+        rows = core.parse_story_rows(alt)
+        self.assertEqual(
+            [(r.story_id, r.title, r.status, r.story_file) for r in rows],
+            [(r.story_id, r.title, r.status, r.story_file) for r in legacy],
+        )
+        self.assertEqual(rows[0].evidence, "[evidence-story-01](./evidence-story-01.md)")
+
+    def test_decorated_statuses_do_not_mismatch(self) -> None:
+        issues = core.check_project(self.project, self.root)
+        self.assertFalse([i for i in issues if "header status" in i], issues)
+
+    def test_genuine_mismatch_still_reported(self) -> None:
+        (self.phase_dir / "story-02-worker.md").write_text(
+            "# FX-85-02 - The edge worker\n\n- **Status:** blocked\n", encoding="utf-8"
+        )
+        issues = core.check_project(self.project, self.root)
+        self.assertTrue(any("header status" in i for i in issues), issues)
+
+    def test_decorated_done_counts_in_state_feed(self) -> None:
+        from dw_pmo.statefeed import build_state_feed
+
+        feed = build_state_feed(self.root)
+        project = feed["projects"][0]
+        phase = project["phases"][0]
+        self.assertEqual(phase["stories_total"], 2)
+        self.assertEqual(phase["stories_done"], 1)
+
+
 class GateTest(unittest.TestCase):
     """Gate v2: stamped-fact verification plus the structural rule set."""
 

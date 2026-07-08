@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .model import DONE_STATUSES, OPEN_STATUSES, Phase, Project, StoryRow
+from .model import DONE_STATUSES, OPEN_STATUSES, Phase, Project, StoryRow, normalize_status
 from .parse import (
     discover_phases,
     get_phase,
@@ -26,7 +26,7 @@ def next_story(project: Project, root: Path) -> dict[str, object] | None:
     for status in preferred:
         for phase in discover_phases(project):
             for row in parse_story_rows(phase.path / "current-phase-status.md"):
-                if row.status == status:
+                if normalize_status(row.status) == status:
                     story_target = link_target(row.story_file)
                     return {
                         "story_id": row.story_id,
@@ -108,7 +108,7 @@ def project_context(
         all_rows = parse_story_rows(phase.path / "current-phase-status.md")
         rows = []
         for row in all_rows:
-            if status_filter and row.status != status_filter:
+            if status_filter and normalize_status(row.status) != normalize_status(status_filter):
                 continue
             rows.append(story_context(row, phase, project, root, include_trace))
         phase_items.append(
@@ -120,7 +120,7 @@ def project_context(
                 "status_file_exists": (phase.path / "current-phase-status.md").exists(),
                 "final_summary": rel(phase.path / "final-summary.md", root),
                 "final_summary_exists": (phase.path / "final-summary.md").exists(),
-                "active": any(row.status in OPEN_STATUSES for row in all_rows),
+                "active": any(normalize_status(row.status) in OPEN_STATUSES for row in all_rows),
                 "stories": rows,
             }
         )
@@ -212,10 +212,10 @@ def story_timeline(row: StoryRow, phase: Phase, project: Project, root: Path) ->
     events.sort(key=lambda e: str(e["sort_key"]), reverse=True)
     status = str(context["status"])
     evidence_exists = bool(context["evidence_exists"])
-    shipped = status in DONE_STATUSES and evidence_exists
+    shipped = normalize_status(status) in DONE_STATUSES and evidence_exists
     reason = ""
     if not shipped:
-        if status not in DONE_STATUSES:
+        if normalize_status(status) not in DONE_STATUSES:
             reason = f"story status is {status!r}, not done"
         elif not evidence_exists:
             reason = "story is marked done but its evidence file does not exist"

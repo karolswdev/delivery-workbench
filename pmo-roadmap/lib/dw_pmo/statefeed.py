@@ -22,7 +22,7 @@ from pathlib import Path
 
 from .api import next_story
 from .gitio import write_tree
-from .model import Project
+from .model import DONE_STATUSES, Project, normalize_status
 from .parse import (
     discover_phases,
     discover_projects,
@@ -59,7 +59,7 @@ def _project_state(project: Project, root: Path) -> dict:
                 if story_num
                 else None
             )
-            if row.status in {"done", "complete", "closed", "shipped"}:
+            if normalize_status(row.status) in DONE_STATUSES:
                 done += 1
             stories_out.append(
                 {

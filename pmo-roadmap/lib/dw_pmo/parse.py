@@ -72,25 +72,58 @@ def split_table_row(line: str) -> list[str]:
     return [cell.strip() for cell in stripped.strip("|").split("|")]
 
 
+def _story_table_columns(cells: list[str]) -> dict[str, int] | None:
+    """Map story-table columns from a header row, or None if the row is
+    not a story-table header. Requires ID/Story/Status/Story file
+    (case-insensitive); Evidence is optional (legacy 4-column dialect,
+    WLA-16-01). The canonical 5-column header maps to the same indices
+    as the historical fixed-position parse."""
+    lowered = [re.sub(r"\s+", " ", cell.strip().lower()) for cell in cells]
+    index = {name: i for i, name in enumerate(lowered)}
+    required = ("id", "story", "status", "story file")
+    if not all(name in index for name in required):
+        return None
+    return {
+        "story_id": index["id"],
+        "title": index["story"],
+        "status": index["status"],
+        "story_file": index["story file"],
+        "evidence": index.get("evidence", -1),
+    }
+
+
+def _is_separator_row(cells: list[str]) -> bool:
+    return bool(cells) and all(re.fullmatch(r":?-{2,}:?|-", cell) for cell in cells)
+
+
 def parse_story_rows(status_file: Path) -> list[StoryRow]:
     if not status_file.exists():
         return []
     rows: list[StoryRow] = []
-    in_table = False
+    columns: dict[str, int] | None = None
     for line in read_text(status_file).splitlines():
-        if line.startswith("| ID | Story | Status | Story file | Evidence |"):
-            in_table = True
-            continue
-        if not in_table:
-            continue
-        if line.startswith("|---"):
-            continue
-        if not line.startswith("|"):
-            break
         cells = split_table_row(line)
-        if len(cells) != 5:
+        if columns is None:
+            if cells:
+                columns = _story_table_columns(cells)
             continue
-        rows.append(StoryRow(*cells))
+        if not line.strip().startswith("|"):
+            break
+        if not cells or _is_separator_row(cells):
+            continue
+        width = max(v for v in columns.values())
+        if len(cells) <= width:
+            continue
+        evidence_idx = columns["evidence"]
+        rows.append(
+            StoryRow(
+                cells[columns["story_id"]],
+                cells[columns["title"]],
+                cells[columns["status"]],
+                cells[columns["story_file"]],
+                cells[evidence_idx] if 0 <= evidence_idx < len(cells) else "",
+            )
+        )
     return rows
 
 
