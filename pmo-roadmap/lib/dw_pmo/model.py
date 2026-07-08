@@ -66,7 +66,7 @@ def normalize_status(raw: str | None) -> str:
     if m:
         token = re.sub(r"\s+", " ", m.group(1))
         return _STATUS_CANONICAL.get(token, token)
-    s = re.split(r"[(—–:;,.!]", s, 1)[0].strip()
+    s = re.split(r"[(—–:;,.!]", s, maxsplit=1)[0].strip()
     parts = s.split()
     return parts[0] if parts else ""
 

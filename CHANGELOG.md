@@ -7,6 +7,25 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## Unreleased
+
+The flagship tree: receipts-first reading. The read layer meets a
+decade-shaped legacy roadmap where it is — story tables are
+recognized by their header cells (the Evidence column optional),
+decorated statuses (`**done** (2026-07-07 — …)`, `CLOSED ✅ (6/6)`)
+normalize to comparable tokens at word boundaries (`host-complete`
+never reads as complete), evidence pairs against the
+`evidence-story-NN.md` receipts on disk rather than table prose,
+struck-through rows are retired history with no demands, table-less
+phases read file-derived under one legible warning, the README's
+Current-phase pointer names `current_phase` in the state feed, and
+`dw next` never proposes work from a phase holding a final-summary.
+The write gate is untouched and exactly as strict. Proven against
+the flagship consumer's real 86-phase tree: 397 reported errors
+fall to 31, every survivor a real desync.
+Full detail:
+[phase 16](./pmo-roadmap/pm/roadmap/work-log-automation/phase-16-flagship-tree/current-phase-status.md).
+
 ## v1.12.0 — 2026-07-05
 
 The fifth window: the local `dw-workbench` browser gains a

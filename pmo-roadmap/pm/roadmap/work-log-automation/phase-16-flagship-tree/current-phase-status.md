@@ -28,22 +28,25 @@ Reading a decade-shaped legacy roadmap (HoldSpeak: 86 phases, drifted table dial
 
 ## Exit criteria (evidence required)
 
-- [ ] A story table with the canonical 5-column header parses
+- [x] A story table with the canonical 5-column header parses
   byte-identically to today (existing `dw-core-tests.py` fixtures
   pass unmodified), and a 4-column header-mapped variant with
-  decorated statuses parses to the same rows (WLA-16-01).
-- [ ] `dw check` on a fixture carrying the flagship dialects
+  decorated statuses parses to the same rows (WLA-16-01 —
+  [evidence](./evidence-story-01.md)).
+- [x] `dw check` on a fixture carrying the flagship dialects
   (decorated statuses, prose evidence cells with receipts on disk,
   struck-through retired rows, a table-less phase with story
-  files) reports only the planted real desyncs (WLA-16-02).
-- [ ] `dw state --json` on a project whose README pointer names a
+  files) reports only the planted real desyncs (WLA-16-02 —
+  [evidence](./evidence-story-02.md)).
+- [x] `dw state --json` on a project whose README pointer names a
   closed phase reports that phase as `current_phase`, and
   `dw next` never proposes a story from a phase with a
-  `final-summary.md` (WLA-16-03).
-- [ ] The before/after against HoldSpeak's real tree is recorded in
+  `final-summary.md` (WLA-16-03 — [evidence](./evidence-story-03.md)).
+- [x] The before/after against HoldSpeak's real tree is recorded in
   evidence: error count, current-phase identity, and story
   coverage (phases no longer reading 0/0) — with every remaining
-  error a real desync in that repo, named (WLA-16-04).
+  error a real desync in that repo, named (WLA-16-04 —
+  [evidence](./evidence-story-04.md): 397 → 31, all 31 triaged real).
 
 ## Story status
 
@@ -52,17 +55,17 @@ Reading a decade-shaped legacy roadmap (HoldSpeak: 86 phases, drifted table dial
 | WLA-16-01 | Header-mapped story tables + status normalization | done | [story-01-header-mapped-tables](./story-01-header-mapped-tables.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-16-02 | Receipts-first evidence pairing + retired rows + file-derived stories | done | [story-02-receipts-first-pairing](./story-02-receipts-first-pairing.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-16-03 | The README pointer drives current phase; next-story skips closed phases | done | [story-03-pointer-current-phase](./story-03-pointer-current-phase.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-16-04 | The flagship dogfood: HoldSpeak's real tree, before/after | backlog | [story-04-flagship-dogfood](./story-04-flagship-dogfood.md) | - |
+| WLA-16-04 | The flagship dogfood: HoldSpeak's real tree, before/after | done | [story-04-flagship-dogfood](./story-04-flagship-dogfood.md) | [evidence-story-04](./evidence-story-04.md) |
 
 ## Where we are
 
-Phase scaffolded and story breakdown written 2026-07-07, from the
-flagship consumer's dogfood: `dw check` on HoldSpeak reported 397
-errors, most of them the reader going blind on legacy dialects (a
-4-column story table parses to zero rows, so phase 85 reads 0/0 and
-its evidence files count as orphans; `**done** (2026-07-07 — …)`
-never equals `done`; the state feed picks phase 17 of 86 as
-current). Next: WLA-16-01.
+All four stories done (2026-07-07, one sitting). The flagship
+re-run: 397 errors → 31, every survivor triaged real in
+[evidence-story-04](./evidence-story-04.md); current phase reads 85
+(the pointer's phase), next actionable HS-24-03 (closed phases no
+longer proposed). 183 core + 108 telegram tests green; gate-parity,
+package-smoke, workbench, canon/docs lints green. Next: close the
+phase.
 
 ## Active risks
 
