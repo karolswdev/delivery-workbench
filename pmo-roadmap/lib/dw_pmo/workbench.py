@@ -22,7 +22,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .api import build_context_payload, handoff_summary, next_story, phase_events, project_context, story_timeline
-from .model import DwError, OPEN_STATUSES
+from .model import DwError, OPEN_STATUSES, normalize_status
 from .parse import discover_phases, discover_projects, get_phase, get_project, parse_story_rows
 from .paths import read_text, rel, roadmap_dir, work_log_root
 from .mutations import (
@@ -107,10 +107,11 @@ def _project_summary(project, root: Path) -> dict[str, object]:
     status_counts: dict[str, int] = {}
     for phase in phases:
         rows = parse_story_rows(phase.path / "current-phase-status.md")
-        if any(row.status in OPEN_STATUSES for row in rows):
+        if any(normalize_status(row.status) in OPEN_STATUSES for row in rows):
             active += 1
         for row in rows:
-            status_counts[row.status] = status_counts.get(row.status, 0) + 1
+            token = normalize_status(row.status)
+            status_counts[token] = status_counts.get(token, 0) + 1
     issues = check_project(project, root)
     warnings = project_warnings(project, root)
     return {

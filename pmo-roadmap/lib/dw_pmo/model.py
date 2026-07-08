@@ -18,8 +18,57 @@ DONE_STATUSES = {"done", "complete", "closed", "shipped"}
 STORY_OPEN_STATUSES = {"backlog", "ready", "in-progress", "blocked"}
 STORY_STATUSES = DONE_STATUSES | STORY_OPEN_STATUSES
 # Phase-activity detection tolerates the looser phase-index vocabulary
-# (planned/not-started) that may appear in legacy story tables.
-OPEN_STATUSES = STORY_OPEN_STATUSES | {"planned", "not-started"}
+# (planned/not-started/planning/scaffolded/paused) that may appear in
+# legacy story tables and phase indexes.
+OPEN_STATUSES = STORY_OPEN_STATUSES | {"planned", "not-started", "planning", "scaffolded", "paused"}
+
+# Read-side terminal statuses for rows a legacy tree retired rather
+# than shipped (struck-through rows, cancelled work). Never accepted
+# by the write vocabulary above.
+CUT_STATUSES = {"cut", "cancelled", "superseded"}
+
+# ── read-side status normalization (WLA-16-01) ────────────────────────
+#
+# Legacy trees decorate statuses: "**done** (2026-07-07 — twelve new
+# tests)", "CLOSED ✅ (6/6)", "in-progress (3/6)". The read layer
+# resolves any such cell or header to one comparable token so that
+# membership tests and header↔table comparisons see through the
+# decoration. Matching happens at token boundaries, leftmost match
+# wins, longest keyword first at a given position — "host-complete"
+# must never read as "complete". The WRITE vocabulary stays
+# STORY_STATUSES, exact: `dw story status` rejects anything else.
+
+_STATUS_KEYWORDS = [
+    "in-progress", "in progress", "not-started", "not started",
+    "superseded", "cancelled", "scaffolded", "planning", "planned",
+    "complete", "shipped", "backlog", "blocked", "paused", "closed",
+    "ready", "done", "cut",
+]
+_STATUS_KEYWORD_RE = re.compile(
+    r"(?<![a-z0-9-])("
+    + "|".join(k.replace(" ", r"\s+") for k in sorted(_STATUS_KEYWORDS, key=len, reverse=True))
+    + r")(?![a-z0-9-])"
+)
+_STATUS_CANONICAL = {"in progress": "in-progress", "not started": "not-started"}
+
+
+def normalize_status(raw: str | None) -> str:
+    """Resolve a possibly-decorated status string to a comparable token.
+
+    Returns the matched keyword (canonicalized), or the first
+    decoration-stripped token lowercased when no keyword is present,
+    or "" for empty input. Read-side only.
+    """
+    if not raw:
+        return ""
+    s = re.sub(r"\*|`|_{2}|~~", "", raw).strip().lower()
+    m = _STATUS_KEYWORD_RE.search(s)
+    if m:
+        token = re.sub(r"\s+", " ", m.group(1))
+        return _STATUS_CANONICAL.get(token, token)
+    s = re.split(r"[(—–:;,.!]", s, 1)[0].strip()
+    parts = s.split()
+    return parts[0] if parts else ""
 
 # The generator's stand-in body for evidence created without content.
 # dw check treats a done story whose evidence still carries this line

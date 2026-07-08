@@ -24,6 +24,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .model import normalize_status
 from .parse import discover_phases, discover_projects, parse_story_rows
 
 SESSIONS_SCHEMA = 1
@@ -80,7 +81,7 @@ def _in_progress_stories(root: Path) -> list[dict] | None:
                 for row in parse_story_rows(
                     phase.path / "current-phase-status.md"
                 ):
-                    if row.status in _IN_PROGRESS:
+                    if normalize_status(row.status) in _IN_PROGRESS:
                         stories.append(
                             {
                                 "story_id": row.story_id,

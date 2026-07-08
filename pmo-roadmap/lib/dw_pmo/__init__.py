@@ -10,6 +10,7 @@ state outside the roadmap tree.
 from __future__ import annotations
 
 from .model import (
+    CUT_STATUSES,
     DONE_STATUSES,
     OPEN_STATUSES,
     PHASE_RE,
@@ -20,6 +21,7 @@ from .model import (
     Project,
     StoryRow,
     die,
+    normalize_status,
 )
 from .paths import (
     ensure_under,

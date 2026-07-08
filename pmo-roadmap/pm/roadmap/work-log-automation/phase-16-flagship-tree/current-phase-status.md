@@ -49,7 +49,7 @@ Reading a decade-shaped legacy roadmap (HoldSpeak: 86 phases, drifted table dial
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-16-01 | Header-mapped story tables + status normalization | backlog | [story-01-header-mapped-tables](./story-01-header-mapped-tables.md) | - |
+| WLA-16-01 | Header-mapped story tables + status normalization | done | [story-01-header-mapped-tables](./story-01-header-mapped-tables.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-16-02 | Receipts-first evidence pairing + retired rows + file-derived stories | backlog | [story-02-receipts-first-pairing](./story-02-receipts-first-pairing.md) | - |
 | WLA-16-03 | The README pointer drives current phase; next-story skips closed phases | backlog | [story-03-pointer-current-phase](./story-03-pointer-current-phase.md) | - |
 | WLA-16-04 | The flagship dogfood: HoldSpeak's real tree, before/after | backlog | [story-04-flagship-dogfood](./story-04-flagship-dogfood.md) | - |
