@@ -22,12 +22,16 @@ from pathlib import Path
 
 from .api import next_story
 from .gitio import write_tree
-from .model import DONE_STATUSES, Project, normalize_status
+from .model import DONE_STATUSES, Project, normalize_status, row_is_retired
 from .parse import (
     discover_phases,
     discover_projects,
+    header_status,
     parse_story_rows,
+    phase_story_files,
+    story_id_from_header,
     story_num_from_file,
+    story_title,
 )
 from .paths import read_text
 from .validate import project_warnings
@@ -52,8 +56,18 @@ def _project_state(project: Project, root: Path) -> dict:
     for phase in discover_phases(project):
         rows = parse_story_rows(phase.path / "current-phase-status.md")
         done = 0
+        total = 0
+        covered: set[int] = set()
         for row in rows:
+            if row_is_retired(row):
+                # Retired history is not on the belt.
+                num = story_num_from_file(row.story_file)
+                if num is not None:
+                    covered.add(num)
+                continue
             story_num = story_num_from_file(row.story_file)
+            if story_num is not None:
+                covered.add(story_num)
             evidence = (
                 phase.path / f"evidence-story-{story_num:02d}.md"
                 if story_num
@@ -61,6 +75,7 @@ def _project_state(project: Project, root: Path) -> dict:
             )
             if normalize_status(row.status) in DONE_STATUSES:
                 done += 1
+            total += 1
             stories_out.append(
                 {
                     "story_id": row.story_id,
@@ -68,6 +83,24 @@ def _project_state(project: Project, root: Path) -> dict:
                     "status": row.status,
                     "phase": phase.number,
                     "evidence_exists": bool(evidence and evidence.exists()),
+                }
+            )
+        # Story files no row covers are still receipts (WLA-16-02):
+        # derive their entries from the files themselves.
+        for num, story_path in phase_story_files(phase.path).items():
+            if num in covered:
+                continue
+            raw_status = header_status(story_path) or ""
+            if normalize_status(raw_status) in DONE_STATUSES:
+                done += 1
+            total += 1
+            stories_out.append(
+                {
+                    "story_id": story_id_from_header(story_path) or story_path.stem,
+                    "title": story_title(story_path),
+                    "status": raw_status,
+                    "phase": phase.number,
+                    "evidence_exists": (phase.path / f"evidence-story-{num:02d}.md").exists(),
                 }
             )
         phase_state = {
@@ -79,7 +112,7 @@ def _project_state(project: Project, root: Path) -> dict:
                 else "open"
             ),
             "stories_done": done,
-            "stories_total": len(rows),
+            "stories_total": total,
         }
         phases_out.append(phase_state)
         if found and found.get("phase") == phase.number:

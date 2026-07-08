@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .model import PHASE_RE, STORY_RE, Phase, Project, StoryRow, die
+from .model import PHASE_RE, STORY_ID_RE, STORY_RE, Phase, Project, StoryRow, die
 from .paths import read_text, rel, roadmap_dir, strip_code
 
 
@@ -146,6 +146,35 @@ def header_status(path: Path) -> str | None:
         if m:
             return m.group(1).strip()
     return None
+
+
+def story_id_from_header(path: Path) -> str:
+    """The story ID from a story file's H1 (`# FX-85-01 - Title`), or ""
+    when the file or a well-formed ID is absent. A receipt-side
+    identity for stories no table row covers (WLA-16-02)."""
+    if not path.exists():
+        return ""
+    lines = read_text(path).splitlines()
+    if not lines:
+        return ""
+    first = lines[0].lstrip("#").strip()
+    for sep in (" — ", " - "):
+        if sep in first:
+            candidate = first.split(sep, 1)[0].strip()
+            if STORY_ID_RE.match(candidate):
+                return candidate
+    return ""
+
+
+def phase_story_files(phase_path: Path) -> dict[int, Path]:
+    """On-disk story files by number — the receipts, independent of any
+    table (WLA-16-02)."""
+    files: dict[int, Path] = {}
+    for path in sorted(phase_path.glob("story-*.md")):
+        m = STORY_RE.match(path.name)
+        if m:
+            files[int(m.group(1))] = path
+    return files
 
 
 def story_title(path: Path) -> str:
