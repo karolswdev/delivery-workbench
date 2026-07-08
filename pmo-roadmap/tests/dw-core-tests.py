@@ -1326,6 +1326,11 @@ Prose after the table must not be parsed as rows.
             "~~cut~~": "cut",
             "scaffolded": "scaffolded",
             "": "",
+            # narrative tails are never searched for keywords — only
+            # the decoration-cut head speaks (flagship: a cell ending
+            # "…the request never shipped)" must not read as shipped)
+            "built + real-metal hydration proven (control-vs-treatment: grounded answers BLUE LANTERN from a transcript the request never shipped)": "built",
+            "**built + Simulator-proven** (waiting sorts first; the device walk joins the owner queue)": "built",
         }
         for raw, want in cases.items():
             self.assertEqual(core.normalize_status(raw), want, f"normalize({raw!r})")
