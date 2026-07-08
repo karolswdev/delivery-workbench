@@ -117,3 +117,14 @@ class StoryRow:
     status: str
     story_file: str
     evidence: str
+
+
+def row_is_retired(row: StoryRow) -> bool:
+    """A retired row is legacy history that will never ship: the ID is
+    struck through (`~~HS-1-01~~`) or the status normalizes to a cut
+    token. Read-side validators make no file or evidence demands of it
+    (WLA-16-02)."""
+    story_id = row.story_id.strip()
+    if story_id.startswith("~~") and story_id.endswith("~~") and len(story_id) > 4:
+        return True
+    return normalize_status(row.status) in CUT_STATUSES

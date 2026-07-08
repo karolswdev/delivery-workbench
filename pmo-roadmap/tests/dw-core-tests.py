@@ -1382,6 +1382,81 @@ Prose after the table must not be parsed as rows.
         self.assertEqual(phase["stories_total"], 2)
         self.assertEqual(phase["stories_done"], 1)
 
+    # -- WLA-16-02: receipts-first pairing ------------------------------
+
+    def test_flagship_fixture_reads_clean(self) -> None:
+        # The done row's Evidence column does not exist; the receipt on
+        # disk is what proves the story. Zero errors on the dialect.
+        self.assertEqual(core.check_project(self.project, self.root), [])
+
+    def test_struck_row_makes_no_demands(self) -> None:
+        status = self.LEGACY_STATUS.replace(
+            "| FX-85-02 | The edge worker | in-progress (3/6) | [story-02](./story-02-worker.md) |",
+            "| FX-85-02 | The edge worker | in-progress (3/6) | [story-02](./story-02-worker.md) |\n"
+            "| ~~FX-85-03~~ | Cut before it began | — | — |",
+        )
+        (self.phase_dir / "current-phase-status.md").write_text(status, encoding="utf-8")
+        issues = core.check_project(self.project, self.root)
+        self.assertFalse([i for i in issues if "FX-85-03" in i], issues)
+        from dw_pmo.statefeed import build_state_feed
+
+        feed = build_state_feed(self.root)
+        self.assertEqual(feed["projects"][0]["phases"][0]["stories_total"], 2)
+
+    def test_planted_desyncs_still_fire(self) -> None:
+        (self.phase_dir / "evidence-story-09.md").write_text("# Evidence\n\n- x\n", encoding="utf-8")
+        (self.phase_dir / "evidence-story-02.md").write_text("# Evidence\n\n- x\n", encoding="utf-8")
+        issues = core.check_project(self.project, self.root)
+        self.assertTrue(
+            any("orphan evidence" in i and "evidence-story-09" in i for i in issues), issues
+        )
+        self.assertTrue(
+            any("matching story is not done" in i and "evidence-story-02" in i for i in issues),
+            issues,
+        )
+
+    def test_done_row_with_no_receipt_still_errors(self) -> None:
+        (self.phase_dir / "evidence-story-01.md").unlink()
+        issues = core.check_project(self.project, self.root)
+        self.assertTrue(
+            any("FX-85-01" in i and "evidence" in i for i in issues), issues
+        )
+
+    def test_tableless_phase_reads_from_files(self) -> None:
+        phase2 = self.root / "pm" / "roadmap" / "fx" / "phase-86-tableless"
+        phase2.mkdir()
+        (phase2 / "current-phase-status.md").write_text("# Phase 86 - Tableless\n\nProse only.\n", encoding="utf-8")
+        (phase2 / "story-01-solo.md").write_text("# FX-86-01 - Solo\n\n- **Status:** done\n", encoding="utf-8")
+        (phase2 / "evidence-story-01.md").write_text("# Evidence - FX-86-01\n\n- proof\n", encoding="utf-8")
+        (phase2 / "story-02-open.md").write_text("# FX-86-02 - Open\n\n- **Status:** in-progress\n", encoding="utf-8")
+        issues = core.check_project(self.project, self.root)
+        self.assertFalse([i for i in issues if "phase-86" in i], issues)
+        warnings = core.project_warnings(self.project, self.root)
+        self.assertTrue(any("file-derived" in w for w in warnings), warnings)
+        from dw_pmo.statefeed import build_state_feed
+
+        feed = build_state_feed(self.root)
+        phase = [p for p in feed["projects"][0]["phases"] if p["number"] == 86][0]
+        self.assertEqual((phase["stories_total"], phase["stories_done"]), (2, 1))
+        ids = {s["story_id"] for s in feed["projects"][0]["stories"]}
+        self.assertIn("FX-86-01", ids)
+
+    def test_file_only_evidence_vouched_by_header(self) -> None:
+        # Evidence for a story that exists ONLY as a file (no row) whose
+        # header says done is not premature; if the header is open, it is.
+        phase2 = self.root / "pm" / "roadmap" / "fx" / "phase-87-fileonly"
+        phase2.mkdir()
+        (phase2 / "current-phase-status.md").write_text("# Phase 87 - File only\n", encoding="utf-8")
+        (phase2 / "story-01-a.md").write_text("# FX-87-01 - A\n\n- **Status:** in-progress\n", encoding="utf-8")
+        (phase2 / "evidence-story-01.md").write_text("# Evidence\n\n- x\n", encoding="utf-8")
+        issues = core.check_project(self.project, self.root)
+        self.assertTrue(
+            any("matching story is not done" in i and "phase-87" in i for i in issues), issues
+        )
+        (phase2 / "story-01-a.md").write_text("# FX-87-01 - A\n\n- **Status:** done\n", encoding="utf-8")
+        issues = core.check_project(self.project, self.root)
+        self.assertFalse([i for i in issues if "phase-87" in i], issues)
+
 
 class GateTest(unittest.TestCase):
     """Gate v2: stamped-fact verification plus the structural rule set."""
