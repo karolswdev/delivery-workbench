@@ -61,9 +61,12 @@ shows the whole picture, columns by status, swimlanes by phase.
   columns including on-hold, paused phases dimmed with their
   reason (WLA-17-05 — [evidence](./evidence-story-05.md): 199 tests
   green, 14-render viewport smoke, live screenshots in assets/).
-- [ ] Dragging a card between columns runs the guarded
+- [x] Dragging a card between columns runs the guarded
   preview→apply mutation with a reason prompt for parked columns;
-  a drop into done without evidence is refused (WLA-17-06).
+  a drop into done without evidence is refused (WLA-17-06 —
+  [evidence](./evidence-story-06.md): 199 tests green + the live
+  HTTP walk: park-without-reason 400, done-without-evidence 400,
+  stale fingerprint 409, nothing written).
 
 ## Story status
 
@@ -74,22 +77,19 @@ shows the whole picture, columns by status, swimlanes by phase.
 | WLA-17-03 | next tells the truth about parked work; dw holds is the ledger | done | [story-03-holds-ledger](./story-03-holds-ledger.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-17-04 | dw board — the kanban in the terminal | done | [story-04-terminal-board](./story-04-terminal-board.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-17-05 | The board on the workbench | done | [story-05-workbench-board](./story-05-workbench-board.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-17-06 | Guarded moves on the board | backlog | [story-06-board-moves](./story-06-board-moves.md) | - |
+| WLA-17-06 | Guarded moves on the board | done | [story-06-board-moves](./story-06-board-moves.md) | [evidence-story-06](./evidence-story-06.md) |
 
 ## Where we are
 
-WLA-17-05 done (2026-07-11): the board has glass —
-`/api/projects/<slug>/board` + `#/board`, swimlane per open phase
-(pointer leading), six columns with counts, cards carrying ✓
-receipts and hold reasons, paused lanes dimmed with the ⏸ banner,
-closed lanes folded behind one-line `<details>` receipts; topbar +
-project-view links; the viewport smoke grew to 7 views × 2 sizes;
-live screenshots in assets/. Earlier: WLA-17-04 (`dw board` in the
-terminal; the flagship renders in 0.1s, phase 92's pivot legible),
-WLA-17-03 (honest `next` + `dw holds`; HS-25-07 surfaced),
-WLA-17-02 (phase pause/resume), WLA-17-01 (the hold vocabulary).
-199 core tests green. Next: WLA-17-06 (guarded moves on the board)
-— the last story, then the phase closes.
+Phase CLOSED 6/6 (2026-07-11, one sitting) — see
+[final-summary](./final-summary.md). Work that waits is first-class
+end to end: the vocabulary (on-hold + mandatory reasons), the phase
+pause, the honest `next`, the `dw holds` ledger, and the board in
+both the terminal and the workbench with guarded drag moves through
+the one preview→apply write path. 183 → 199 core tests; every story
+proven by a captured suite run plus a live walk; the flagship tree
+served as both specimen and proof (HS-25-07 surfaced; phase 92's
+pivot made legible).
 
 Note for operators on this self-hosting repo: `.githooks/` is the
 installed snapshot and syncs at release time; between releases the

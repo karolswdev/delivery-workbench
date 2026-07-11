@@ -9,7 +9,27 @@ single-sourced from `dw_pmo.__version__` (test-asserted against
 
 ## Unreleased
 
-The flagship tree: receipts-first reading. The read layer meets a
+Work that waits: holds, pivots, and the board. Parked work becomes
+first-class — `on-hold` (synonym `paused`) joins the write
+vocabulary as an open status distinct from `blocked`, and every
+park carries a mandatory `--reason` written into the status cell as
+decoration the reader sees through (`status_note` recovers the
+why). Whole phases pause and resume (`dw phase pause --reason` /
+`resume`) with the state in the phase header and README index row;
+`dw next` skips parked work but names the counts; the new
+`dw holds` is the greppable ledger of everything waiting; and the
+new `dw board` + the workbench's `#/board` draw the kanban — a
+swimlane per phase, six status columns, evidence ticks, paused
+lanes dimmed behind their reason, closed lanes folded, and drag
+moves that ride the existing guarded preview→apply mutation flow
+(a park demands its reason; done still demands evidence; no new
+write path). The gate is untouched. Proven per story by captured
+suite runs plus live walks; the flagship tree served as specimen
+and proof — `dw holds` surfaced a hold forgotten for 68 phases.
+Full detail:
+[phase 17](./pmo-roadmap/pm/roadmap/work-log-automation/phase-17-work-that-waits/current-phase-status.md).
+
+Earlier in this release — the flagship tree: receipts-first reading. The read layer meets a
 decade-shaped legacy roadmap where it is — story tables are
 recognized by their header cells (the Evidence column optional),
 decorated statuses (`**done** (2026-07-07 — …)`, `CLOSED ✅ (6/6)`)

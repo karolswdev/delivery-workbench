@@ -299,3 +299,19 @@ details.blane.closed { opacity: 0.75; }
 details.blane.closed summary { cursor: pointer; color: var(--muted); }
 details.blane.closed[open] summary { margin-bottom: 8px; }
 .badge.on-hold, .badge.paused { color: var(--warn); border-color: var(--warn); }
+
+/* ── guarded moves on the board (WLA-17-06) ── */
+.bcard[draggable] { cursor: grab; }
+.bmove {
+  float: right;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.bmove:hover { color: var(--link); border-color: var(--link); }
+.moveform h2 { margin-top: 0; }
+#board-move .guard { margin: 10px 0; }

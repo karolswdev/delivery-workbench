@@ -1,6 +1,6 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-07.
+**Last updated:** 2026-07-11 (Phase 17 — Work that waits CLOSED 6/6: the hold vocabulary with mandatory reasons, phase pause/resume, honest `dw next` + the `dw holds` ledger, and the kanban board in the terminal and on the workbench with guarded drag moves).
 **Current phase:** n/a.
 **Status:** active — framework shipped through v1.8.0 (phases 0-11); the gate's guarantees hold locally, remotely, across distribution channels, for agents, and across the pull-request boundary.
 
@@ -72,7 +72,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 14 | Absorb and re-interpret ccgram's operational excellence under the consent spine: hook-driven push, the message layer, topics-as-projects, the driver's craft, guarded file sending. | done | [phase-14-absorbing-ccgram](./phase-14-absorbing-ccgram/) |
 | 15 | The local dw-workbench browser grows a mission-control belt: the same feed, correlation, and events the phone and Desk render, now in the read-only roadmap view — no steering (that stays where the consent machinery lives), just the live picture at your desk. | done | [phase-15-mission-control-on-the-workbench](./phase-15-mission-control-on-the-workbench/) |
 | 16 | The flagship tree: receipts-first reading — header-mapped tables, status normalization, receipts-first evidence pairing, pointer-driven current phase; the write gate unchanged | done | [phase-16-flagship-tree](./phase-16-flagship-tree/) |
-| 17 | Parked work becomes first-class: on-hold with a reason, phase pause/resume, an honest dw next, a holds ledger, and a kanban board in the terminal and on the workbench. | not-started | [phase-17-work-that-waits](./phase-17-work-that-waits/) |
+| 17 | Parked work becomes first-class: on-hold with a reason, phase pause/resume, an honest dw next, a holds ledger, and a kanban board in the terminal and on the workbench. | done | [phase-17-work-that-waits](./phase-17-work-that-waits/) |
 
 ## Operating cadence
 

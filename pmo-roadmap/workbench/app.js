@@ -489,28 +489,38 @@ async function viewWorklog(path) {
       <pre class="src">${esc(body.data.content)}</pre></div>`;
 }
 
-/* ── the board (WLA-17-05) ──────────────────────────────────────────
+/* ── the board (WLA-17-05/06) ───────────────────────────────────────
  * Kanban over the same read layer: swimlane per phase, six status
  * columns, paused lanes dimmed with their reason, closed lanes folded
- * behind a one-line receipt. Read-only in this slice — moves arrive
- * with WLA-17-06. */
+ * behind a one-line receipt. Moves (WLA-17-06) construct the same
+ * update_story_status intent as the editor and go through
+ * /api/mutations preview → apply — the board is never a second write
+ * path. Drops on paused or closed lanes refuse; a "⇄ move" affordance
+ * covers keyboards and touch. */
 
-function boardCard(slug, card) {
+const PARKED_COLUMNS = ["blocked", "on-hold"];
+
+function boardCard(slug, lane, card) {
   const parked = card.status === "blocked" || card.status === "on-hold" || card.status === "paused";
+  const movable = !lane.closed && !lane.paused;
   return `
-    <a class="bcard st-${esc(card.status)}" title="${esc(card.title)} [${esc(card.status)}]"
-       href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}">
-      <code>${esc(card.story_id)}</code>${card.evidence_exists ? ' <span class="tick">✓</span>' : ""}
+    <div class="bcard st-${esc(card.status)}" ${movable ? 'draggable="true"' : ""}
+         data-story="${esc(card.story_id)}" data-phase="${lane.number}"
+         data-status="${esc(card.status)}" data-evidence="${card.evidence_exists ? 1 : 0}"
+         title="${esc(card.title)} [${esc(card.status)}]">
+      <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}"><code>${esc(card.story_id)}</code></a>${card.evidence_exists ? ' <span class="tick">✓</span>' : ""}
+      ${movable ? `<button type="button" class="bmove" title="move to another column…">⇄</button>` : ""}
       <div class="bcard-title">${esc(card.title)}</div>
       ${parked ? `<div class="bcard-note">${esc(card.note || "no reason recorded")}</div>` : ""}
-    </a>`;
+    </div>`;
 }
 
 function boardLane(slug, columns, lane) {
+  const droppable = !lane.closed && !lane.paused;
   const cols = columns.map((col) => `
-    <div class="bcol">
+    <div class="bcol" data-col="${esc(col)}" data-phase="${lane.number}" data-droppable="${droppable ? 1 : 0}">
       <div class="bcol-head">${esc(col)} <span class="bcol-count">${lane.columns[col].length}</span></div>
-      ${lane.columns[col].map((card) => boardCard(slug, card)).join("")}
+      ${lane.columns[col].map((card) => boardCard(slug, lane, card)).join("")}
     </div>`).join("");
   const uncovered = lane.story_count === 0 && lane.uncovered_story_files
     ? `<span class="sub">no story table — ${lane.uncovered_story_files} story file${lane.uncovered_story_files === 1 ? "" : "s"} on disk, unlisted</span>` : "";
@@ -521,16 +531,163 @@ function boardLane(slug, columns, lane) {
     ${uncovered}`;
   if (lane.closed) {
     return `
-      <details class="blane closed">
+      <details class="blane closed" data-phase="${lane.number}">
         <summary>phase ${lane.number} · ${esc(lane.slug)} — closed, ${lane.done_count}/${lane.story_count} done</summary>
         <div class="bcols">${cols}</div>
       </details>`;
   }
   return `
-    <div class="blane${lane.paused ? " paused" : ""}">
+    <div class="blane${lane.paused ? " paused" : ""}" data-phase="${lane.number}" data-paused="${lane.paused ? 1 : 0}">
       <div class="blane-head">${head}</div>
       <div class="bcols">${cols}</div>
     </div>`;
+}
+
+function boardNotice(text) {
+  const out = document.getElementById("board-move");
+  if (out) out.innerHTML = `<div class="guard">${esc(text)}</div>`;
+}
+
+/* The move panel: the same structured intent the editor builds,
+ * pre-filled from a drop or the ⇄ affordance. Client mirrors of the
+ * server rules gate the preview button; the server stays the
+ * authority. */
+function openMovePanel(slug, move) {
+  const out = document.getElementById("board-move");
+  if (!out) return;
+  if (move.from === move.to) {
+    out.innerHTML = "";
+    return;
+  }
+  const needsReason = PARKED_COLUMNS.includes(move.to);
+  const needsEvidence = move.to === "done" && !move.evidenceExists;
+  out.innerHTML = `
+    <form class="edit moveform" id="move-form">
+      <h2>move <code>${esc(move.story)}</code>: ${esc(move.from)} → ${esc(move.to)}</h2>
+      ${needsReason ? field("reason (required for a park — recorded in the status cell)",
+        '<input type="text" name="reason" placeholder="why is this waiting?">') : ""}
+      ${move.to === "done" ? field(
+        `evidence body ${move.evidenceExists ? "(evidence exists — leave empty to keep it)" : "(required — no evidence exists yet)"}`,
+        '<textarea name="evidence_body" placeholder="- proof line…"></textarea>') : ""}
+      <button type="submit">preview — no files are written</button>
+      <button type="button" id="move-cancel">cancel</button>
+      <div class="hint">the move goes through the same preview → apply mutation flow as the editor; the fingerprint refuses stale previews.</div>
+    </form>
+    <div id="move-out"></div>`;
+  document.getElementById("move-cancel").addEventListener("click", () => { out.innerHTML = ""; });
+  const form = document.getElementById("move-form");
+  const runMovePreview = async () => {
+    const moveOut = document.getElementById("move-out");
+    const reason = form.elements.reason ? form.elements.reason.value.trim() : "";
+    const evidenceBody = form.elements.evidence_body ? form.elements.evidence_body.value.trim() : "";
+    if (needsReason && !reason) {
+      moveOut.innerHTML = `<div class="guard">refused client-side: a hold needs its why — fill the reason before previewing.</div>`;
+      return;
+    }
+    if (needsEvidence && !evidenceBody) {
+      moveOut.innerHTML = `<div class="guard">refused client-side: marking ${esc(move.story)} done requires evidence — none exists and no evidence body was provided.</div>`;
+      return;
+    }
+    const body = {
+      kind: "update_story_status", project: slug, phase: String(move.phase),
+      story: move.story, status: move.to,
+    };
+    if (reason) body.reason = reason;
+    if (evidenceBody) body.evidence_body = evidenceBody;
+    moveOut.innerHTML = stateHtml("Previewing…");
+    const { status, body: payload } = await postJson("/api/mutations/preview", body);
+    if (status >= 400 || payload.ok === false) {
+      const msg = (payload.data && payload.data.error) || (payload.issues && payload.issues[0]) || `error ${status}`;
+      moveOut.innerHTML = `<div class="guard">${esc(msg)}</div>`;
+      return;
+    }
+    const d = payload.data;
+    moveOut.innerHTML = `
+      <div class="section"><h2>Preview ${badge("nothing written yet", "ok")}</h2>
+        ${d.files.filter((f) => f.changed || f.action === "create").map((f) => `
+          <details class="filepreview" open>
+            <summary>${badge(f.action === "create" ? "new file" : "changed", f.action === "create" ? "ok" : "in-progress")}
+              <code>${esc(f.path)}</code></summary>
+            ${f.action === "create" ? `<pre class="src">${esc(f.new_content || "")}</pre>`
+              : `<pre class="diff">${diffHtml(f.diff || "")}</pre>`}
+          </details>`).join("")}
+        <button type="button" class="applybtn" id="move-apply">apply — writes the files above (no commit)</button>
+      </div>`;
+    document.getElementById("move-apply").addEventListener("click", async () => {
+      document.getElementById("move-apply").disabled = true;
+      const { status: st, body: applied } = await postJson("/api/mutations/apply", { ...body, fingerprint: d.fingerprint });
+      if (st === 409) {
+        moveOut.innerHTML = `<div class="guard">stale preview refused — the source files changed after this preview; nothing was written. Re-open the move for a fresh preview.</div>`;
+        return;
+      }
+      if (st >= 400 || applied.ok === false) {
+        const msg = (applied.data && applied.data.error) || `apply failed (${st})`;
+        moveOut.innerHTML = `<div class="guard">${esc(msg)}${applied.data && applied.data.rolled_back ? " — all writes were rolled back" : ""}</div>`;
+        return;
+      }
+      route(); // re-read the board from Markdown
+    });
+  };
+  form.addEventListener("submit", (e) => { e.preventDefault(); runMovePreview(); });
+  out.scrollIntoView({ block: "nearest" });
+  if (SNAPSHOT_MODE && new URLSearchParams(location.search).has("autopreview")) {
+    runMovePreview();
+  }
+}
+
+function wireBoardMoves(slug) {
+  const board = document.querySelector(".board");
+  if (!board) return;
+  let dragging = null;
+  board.addEventListener("dragstart", (e) => {
+    const card = e.target.closest && e.target.closest(".bcard[draggable]");
+    if (!card) return;
+    dragging = card.dataset;
+    e.dataTransfer.setData("text/plain", card.dataset.story);
+    e.dataTransfer.effectAllowed = "move";
+  });
+  board.addEventListener("dragover", (e) => {
+    if (!dragging) return;
+    const col = e.target.closest && e.target.closest(".bcol");
+    if (col) e.preventDefault();
+  });
+  board.addEventListener("drop", (e) => {
+    if (!dragging) return;
+    const col = e.target.closest && e.target.closest(".bcol");
+    if (!col) return;
+    e.preventDefault();
+    const from = dragging;
+    dragging = null;
+    if (col.dataset.droppable !== "1") {
+      boardNotice("this lane refuses drops: it is paused or closed — resume the phase (dw phase resume / the edit view) before moving its stories.");
+      return;
+    }
+    if (col.dataset.phase !== from.phase) {
+      boardNotice("a story moves between columns of its own phase — the board never moves stories across phases.");
+      return;
+    }
+    openMovePanel(slug, {
+      story: from.story, phase: from.phase, from: from.status,
+      to: col.dataset.col, evidenceExists: from.evidence === "1",
+    });
+  });
+  board.addEventListener("click", (e) => {
+    const btn = e.target.closest && e.target.closest(".bmove");
+    if (!btn) return;
+    const card = btn.closest(".bcard");
+    const colNames = PARKED_COLUMNS.concat(["backlog", "ready", "in-progress", "done"]);
+    const target = prompt(`move ${card.dataset.story} to which column?\n(${colNames.join(" | ")})`, "");
+    if (!target) return;
+    const to = target.trim().toLowerCase();
+    if (!colNames.includes(to)) {
+      boardNotice(`unknown column: ${to}`);
+      return;
+    }
+    openMovePanel(slug, {
+      story: card.dataset.story, phase: card.dataset.phase,
+      from: card.dataset.status, to, evidenceExists: card.dataset.evidence === "1",
+    });
+  });
 }
 
 async function viewBoard(slug) {
@@ -556,10 +713,27 @@ async function viewBoard(slug) {
   const closed = model.phases.filter((lane) => lane.closed);
   app.innerHTML = `
     <div class="board">
+      <div id="board-move"></div>
       ${open.map((lane) => boardLane(slug, model.columns, lane)).join("") || stateHtml("no open phases")}
       ${closed.length ? `<div class="section"><h2>closed phases (${closed.length})</h2>
         ${closed.map((lane) => boardLane(slug, model.columns, lane)).join("")}</div>` : ""}
     </div>`;
+  wireBoardMoves(slug);
+  // Screenshot affordance (mirrors the editor's autopreview): ?snapshot=1
+  // &automove=<story>:<column> opens the move panel synchronously.
+  if (SNAPSHOT_MODE) {
+    const automove = new URLSearchParams(location.search).get("automove");
+    if (automove) {
+      const [story, to] = automove.split(":");
+      const card = document.querySelector(`.bcard[data-story="${story}"]`);
+      if (card && to) {
+        openMovePanel(slug, {
+          story, phase: card.dataset.phase, from: card.dataset.status,
+          to, evidenceExists: card.dataset.evidence === "1",
+        });
+      }
+    }
+  }
 }
 
 /* ── structured editor (WLA-5-06) ───────────────────────────────────
@@ -576,7 +750,7 @@ const EDIT_ACTIONS = {
   close_phase: "close phase",
 };
 
-const STATUS_VOCAB = ["backlog", "ready", "in-progress", "blocked", "done"];
+const STATUS_VOCAB = ["backlog", "ready", "in-progress", "blocked", "on-hold", "done"];
 
 function field(label, inner, err) {
   return `<label><b>${esc(label)}</b>${inner}
@@ -626,6 +800,8 @@ async function viewEdit(action) {
       field("phase", selectHtml("phase", phaseOpts)),
       field("story", selectHtml("story", stories)),
       field("new status", selectHtml("status", STATUS_VOCAB)),
+      field("reason (required for blocked/on-hold parks — recorded in the status cell)",
+        '<input type="text" name="reason" placeholder="why is this waiting?">'),
       field("evidence body (required for done when no evidence exists)",
         '<textarea name="evidence_body" placeholder="- proof line…"></textarea>'),
       `<div class="checkline"><input type="checkbox" name="force" id="f-force">
@@ -673,6 +849,10 @@ async function viewEdit(action) {
       else body[el.name] = el.value.trim();
     }
     // client-side refusals before the server's authoritative ones
+    if (action === "update_story_status" && body.status === "on-hold" && !body.reason) {
+      out.innerHTML = `<div class="guard">refused client-side: a hold needs its why — fill the reason before previewing.</div>`;
+      return;
+    }
     if (action === "update_story_status" && body.status === "done" && !body.evidence_body) {
       const st = phases.flatMap((ph) => ph.stories).find((s) => s.story_id === body.story);
       if (st && !st.evidence_exists) {
