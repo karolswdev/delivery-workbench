@@ -5,7 +5,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .model import DONE_STATUSES, EVIDENCE_PLACEHOLDER, OPEN_STATUSES, Project
+from .model import (
+    DONE_STATUSES,
+    EVIDENCE_PLACEHOLDER,
+    OPEN_STATUSES,
+    PARKED_STATUSES,
+    Project,
+    normalize_status,
+    row_is_retired,
+    status_note,
+)
 from .parse import (
     current_phase_status_path,
     discover_phases,
@@ -14,6 +23,7 @@ from .parse import (
     link_target,
     parse_current_phase_target,
     parse_story_rows,
+    phase_story_files,
     story_num_from_file,
 )
 from .paths import read_text, rel
@@ -57,12 +67,25 @@ def project_warnings(project: Project, root: Path) -> list[str]:
     warnings: list[str] = []
     active = []
     uncaptured: list[str] = []
+    file_derived: list[str] = []
+    bare_parks: list[str] = []
     for phase in discover_phases(project):
         rows = parse_story_rows(phase.path / "current-phase-status.md")
-        if any(row.status in OPEN_STATUSES for row in rows):
+        covered = {story_num_from_file(row.story_file) for row in rows}
+        uncovered = [num for num in phase_story_files(phase.path) if num not in covered]
+        if uncovered:
+            file_derived.append(f"{phase.path.name} ({len(uncovered)})")
+        if any(normalize_status(row.status) in OPEN_STATUSES for row in rows):
             active.append(phase.path.name)
+        if not (phase.path / "final-summary.md").exists():
+            # A park without a why is where work goes to be forgotten
+            # (WLA-17-03). Warning, never an error — legacy trees
+            # parked before reasons existed.
+            for row in rows:
+                if normalize_status(row.status) in PARKED_STATUSES and not status_note(row.status):
+                    bare_parks.append(row.story_id)
         for row in rows:
-            if row.status not in DONE_STATUSES:
+            if normalize_status(row.status) not in DONE_STATUSES:
                 continue
             target = link_target(row.evidence)
             if not target or target in {"-", "—"}:
@@ -82,6 +105,14 @@ def project_warnings(project: Project, root: Path) -> list[str]:
         shown = ", ".join(uncaptured[:8])
         more = f" (+{len(uncaptured) - 8} more)" if len(uncaptured) > 8 else ""
         warnings.append(f"narrative-only evidence (no captured runs): {shown}{more}")
+    if file_derived:
+        shown = ", ".join(file_derived[:8])
+        more = f" (+{len(file_derived) - 8} more)" if len(file_derived) > 8 else ""
+        warnings.append(f"story files not in the story table (read file-derived): {shown}{more}")
+    if bare_parks:
+        shown = ", ".join(bare_parks[:8])
+        more = f" (+{len(bare_parks) - 8} more)" if len(bare_parks) > 8 else ""
+        warnings.append(f"parked without a recorded reason (dw story status --reason): {shown}{more}")
     snapshot = hook_snapshot(root)
     if snapshot["appears_older_snapshot"]:
         warnings.append("installed pre-commit hook appears older than current Delivery Workbench seams")
@@ -100,39 +131,65 @@ def check_project(project: Project, root: Path) -> list[str]:
             issues.append(f"{rel(phase.path, root)}: missing current-phase-status.md")
             continue
         rows = parse_story_rows(status_file)
-        story_nums: set[int] = set()
+        # Receipts first (WLA-16-02): a story exists when its FILE
+        # exists, whether or not a table row covers it.
+        story_files = phase_story_files(phase.path)
+        story_nums: set[int] = set(story_files)
+        row_nums: set[int] = set()
         done_nums: set[int] = set()
+        retired_nums: set[int] = set()
         for row in rows:
             story_target = link_target(row.story_file)
             story_path = (phase.path / story_target).resolve()
             story_num = story_num_from_file(row.story_file)
+            row_status = normalize_status(row.status)
+            retired = row_is_retired(row)
             if story_num is not None:
                 story_nums.add(story_num)
-                if row.status in DONE_STATUSES:
+                row_nums.add(story_num)
+                if retired:
+                    retired_nums.add(story_num)
+                elif row_status in DONE_STATUSES:
                     done_nums.add(story_num)
+            if retired:
+                # Retired history makes no file or evidence demands.
+                continue
             if not story_path.exists():
                 issues.append(f"{status_file.relative_to(root)}: broken story link for {row.story_id}: {story_target}")
                 continue
             status = header_status(story_path)
-            if status and status != row.status:
+            if status and normalize_status(status) != row_status:
                 issues.append(
                     f"{story_path.relative_to(root)}: header status {status!r} differs from phase table {row.status!r}"
                 )
-            evidence_target = link_target(row.evidence)
-            if row.status in DONE_STATUSES:
+            if row_status in DONE_STATUSES:
                 evidence_file: Path | None = None
-                if row.evidence in {"-", "—", ""}:
-                    issues.append(f"{status_file.relative_to(root)}: done story {row.story_id} has no evidence link")
-                elif evidence_target and evidence_target not in {"-", "—"}:
+                default_evidence = (
+                    phase.path / f"evidence-story-{story_num:02d}.md"
+                    if story_num is not None
+                    else None
+                )
+                evidence_target = link_target(row.evidence)
+                if "](" in row.evidence:
                     evidence_path = (phase.path / evidence_target).resolve()
                     if not evidence_path.exists():
                         issues.append(f"{status_file.relative_to(root)}: broken evidence link for {row.story_id}: {evidence_target}")
                     else:
                         evidence_file = evidence_path
-                elif story_num is not None and not (phase.path / f"evidence-story-{story_num:02d}.md").exists():
-                    issues.append(f"{status_file.relative_to(root)}: done story {row.story_id} missing evidence-story-{story_num:02d}.md")
+                elif default_evidence is not None and default_evidence.exists():
+                    # Empty cell, dash, or a legacy prose cell — the
+                    # receipt on disk is what proves the story.
+                    evidence_file = default_evidence
+                elif row.evidence in {"-", "—", ""}:
+                    issues.append(f"{status_file.relative_to(root)}: done story {row.story_id} has no evidence link")
+                else:
+                    issues.append(f"{status_file.relative_to(root)}: broken evidence link for {row.story_id}: {evidence_target}")
                 if evidence_file is not None:
                     issues.extend(evidence_content_issues(evidence_file, phase.path, root))
+        # A story file no row covers vouches for itself via its header.
+        for num, path in story_files.items():
+            if num not in row_nums and normalize_status(header_status(path)) in DONE_STATUSES:
+                done_nums.add(num)
         for evidence in sorted(phase.path.glob("evidence-story-*.md")):
             m = re.match(r"^evidence-story-(\d+)\.md$", evidence.name)
             if not m:
@@ -140,9 +197,14 @@ def check_project(project: Project, root: Path) -> list[str]:
             ev_num = int(m.group(1))
             if ev_num not in story_nums:
                 issues.append(f"{rel(evidence, root)}: orphan evidence has no matching story row")
-            elif ev_num not in done_nums:
+            elif ev_num not in done_nums and ev_num not in retired_nums:
                 issues.append(f"{rel(evidence, root)}: evidence exists but matching story is not done")
-        if rows and all(row.status in DONE_STATUSES for row in rows) and not (phase.path / "final-summary.md").exists():
+        live_rows = [row for row in rows if not row_is_retired(row)]
+        if (
+            live_rows
+            and all(normalize_status(row.status) in DONE_STATUSES for row in live_rows)
+            and not (phase.path / "final-summary.md").exists()
+        ):
             issues.append(f"{rel(phase.path, root)}: all stories are done but final-summary.md is missing")
     return issues
 
@@ -172,6 +234,7 @@ _ISSUE_KINDS = [
 _WARNING_KINDS = [
     ("multiple open phases detected", "multiple-open-phases", "phase"),
     ("narrative-only evidence", "narrative-only-evidence", "story-evidence"),
+    ("story files not in the story table", "file-derived-stories", "phase"),
     ("appears older than current Delivery Workbench seams", "older-hook-snapshot", "hook-runtime"),
 ]
 
@@ -185,6 +248,7 @@ _EXPLANATIONS = {
     "orphan-evidence": "An evidence file exists with no matching story row.",
     "premature-evidence": "Evidence exists but its story is not done; flip the story or remove the file.",
     "narrative-only-evidence": "Done stories whose evidence has no captured run; legal but unverifiable — prefer dw evidence capture.",
+    "file-derived-stories": "Story files exist that no story-table row covers; readers derive them from the files. Add rows to make the table authoritative.",
 }
 
 

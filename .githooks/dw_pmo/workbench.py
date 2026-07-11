@@ -22,14 +22,16 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .api import build_context_payload, handoff_summary, next_story, phase_events, project_context, story_timeline
-from .model import DwError, OPEN_STATUSES
-from .parse import discover_phases, discover_projects, get_phase, get_project, parse_story_rows
+from .model import DwError, OPEN_STATUSES, normalize_status
+from .parse import discover_phases, discover_projects, get_phase, get_project, parse_story_rows, phase_is_paused
 from .paths import read_text, rel, roadmap_dir, work_log_root
 from .mutations import (
     apply_plan,
     plan_fingerprint,
     plan_phase_close,
     plan_phase_create,
+    plan_phase_pause,
+    plan_phase_resume,
     plan_story_create,
     plan_story_evidence,
     plan_story_status,
@@ -104,13 +106,17 @@ def _error(status: int, message: str) -> tuple[int, dict[str, object]]:
 def _project_summary(project, root: Path) -> dict[str, object]:
     phases = discover_phases(project)
     active = 0
+    paused = 0
     status_counts: dict[str, int] = {}
     for phase in phases:
         rows = parse_story_rows(phase.path / "current-phase-status.md")
-        if any(row.status in OPEN_STATUSES for row in rows):
+        if any(normalize_status(row.status) in OPEN_STATUSES for row in rows):
             active += 1
+        if phase_is_paused(phase.path):
+            paused += 1
         for row in rows:
-            status_counts[row.status] = status_counts.get(row.status, 0) + 1
+            token = normalize_status(row.status)
+            status_counts[token] = status_counts.get(token, 0) + 1
     issues = check_project(project, root)
     warnings = project_warnings(project, root)
     return {
@@ -119,6 +125,7 @@ def _project_summary(project, root: Path) -> dict[str, object]:
         "path": rel(project.path, root),
         "phase_count": len(phases),
         "active_phase_count": active,
+        "paused_phase_count": paused,
         "story_status_counts": status_counts,
         "issue_count": len(issues),
         "warning_count": len(warnings),
@@ -207,6 +214,12 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
         if len(parts) == 3 and parts[:2] == ["api", "projects"]:
             project = get_project(root, parts[2])
             return 200, envelope(project_context(project, root))
+
+        if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "board":
+            from .board import board_model
+
+            project = get_project(root, parts[2])
+            return 200, envelope(board_model(project, root))
 
         if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3] == "phases":
             project = get_project(root, parts[2])
@@ -309,6 +322,8 @@ MUTATION_KINDS = (
     "create_phase",
     "create_story",
     "update_story_status",
+    "pause_phase",
+    "resume_phase",
     "attach_evidence",
     "close_phase",
 )
@@ -361,6 +376,7 @@ def build_mutation_plan(root: Path, body: dict[str, object]):
             root, project, phase, story, status,
             evidence_body=str(body.get("evidence_body", "") or ""),
             force=force,
+            reason=str(body.get("reason", "") or ""),
         )
     if kind == "attach_evidence":
         phase_sel, story = _require(body, "phase", "story")
@@ -370,6 +386,17 @@ def build_mutation_plan(root: Path, body: dict[str, object]):
             body=str(body.get("body", "") or ""),
             force=force,
         )
+    if kind == "pause_phase":
+        (phase_sel,) = _require(body, "phase")
+        phase = get_phase(project, phase_sel)
+        return plan_phase_pause(
+            root, project, phase,
+            reason=str(body.get("reason", "") or ""),
+        )
+    if kind == "resume_phase":
+        (phase_sel,) = _require(body, "phase")
+        phase = get_phase(project, phase_sel)
+        return plan_phase_resume(root, project, phase)
     # close_phase
     (phase_sel,) = _require(body, "phase")
     phase = get_phase(project, phase_sel)

@@ -35,8 +35,10 @@ Orient before working:
 - `.githooks/dw check [project]` — structural and evidence-content
   lint; greppable `ERROR <path>: <issue>` lines, exit 1 on issues.
 
-Work a story (statuses: backlog | ready | in-progress | blocked | done;
-done-synonyms complete/closed/shipped gate identically):
+Work a story (statuses: backlog | ready | in-progress | blocked |
+on-hold | done; done-synonyms complete/closed/shipped gate identically,
+paused = on-hold; parking a story on-hold requires `--reason "why"`,
+recorded in the status cell):
 
 1. `.githooks/dw story status <project> <phase> <story> in-progress`
 2. Do the work.

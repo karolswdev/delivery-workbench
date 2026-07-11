@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .model import PHASE_RE, STORY_RE, Phase, Project, StoryRow, die
+from .model import PHASE_RE, STORY_ID_RE, STORY_RE, Phase, Project, StoryRow, die
 from .paths import read_text, rel, roadmap_dir, strip_code
 
 
@@ -72,25 +72,58 @@ def split_table_row(line: str) -> list[str]:
     return [cell.strip() for cell in stripped.strip("|").split("|")]
 
 
+def _story_table_columns(cells: list[str]) -> dict[str, int] | None:
+    """Map story-table columns from a header row, or None if the row is
+    not a story-table header. Requires ID/Story/Status/Story file
+    (case-insensitive); Evidence is optional (legacy 4-column dialect,
+    WLA-16-01). The canonical 5-column header maps to the same indices
+    as the historical fixed-position parse."""
+    lowered = [re.sub(r"\s+", " ", cell.strip().lower()) for cell in cells]
+    index = {name: i for i, name in enumerate(lowered)}
+    required = ("id", "story", "status", "story file")
+    if not all(name in index for name in required):
+        return None
+    return {
+        "story_id": index["id"],
+        "title": index["story"],
+        "status": index["status"],
+        "story_file": index["story file"],
+        "evidence": index.get("evidence", -1),
+    }
+
+
+def _is_separator_row(cells: list[str]) -> bool:
+    return bool(cells) and all(re.fullmatch(r":?-{2,}:?|-", cell) for cell in cells)
+
+
 def parse_story_rows(status_file: Path) -> list[StoryRow]:
     if not status_file.exists():
         return []
     rows: list[StoryRow] = []
-    in_table = False
+    columns: dict[str, int] | None = None
     for line in read_text(status_file).splitlines():
-        if line.startswith("| ID | Story | Status | Story file | Evidence |"):
-            in_table = True
-            continue
-        if not in_table:
-            continue
-        if line.startswith("|---"):
-            continue
-        if not line.startswith("|"):
-            break
         cells = split_table_row(line)
-        if len(cells) != 5:
+        if columns is None:
+            if cells:
+                columns = _story_table_columns(cells)
             continue
-        rows.append(StoryRow(*cells))
+        if not line.strip().startswith("|"):
+            break
+        if not cells or _is_separator_row(cells):
+            continue
+        width = max(v for v in columns.values())
+        if len(cells) <= width:
+            continue
+        evidence_idx = columns["evidence"]
+        rows.append(
+            StoryRow(
+                cells[columns["story_id"]],
+                cells[columns["title"]],
+                cells[columns["status"]],
+                cells[columns["story_file"]],
+                cells[evidence_idx] if 0 <= evidence_idx < len(cells) else "",
+            )
+        )
     return rows
 
 
@@ -113,6 +146,60 @@ def header_status(path: Path) -> str | None:
         if m:
             return m.group(1).strip()
     return None
+
+
+_PHASE_STATUS_RE = re.compile(r"^-?\s*\*\*Status:\*\*\s*(.+)$")
+
+
+def phase_header_status(status_file: Path) -> str | None:
+    """The phase file's ``**Status:**`` line, raw with decoration.
+
+    Both shapes count: the bullet (`- **Status:**`) and the bare line
+    the flagship writes (`**Status:** IN PROGRESS (9/10).`). None when
+    the phase declares no status — most trees don't until paused.
+    """
+    if not status_file.exists():
+        return None
+    for line in read_text(status_file).splitlines():
+        m = _PHASE_STATUS_RE.match(line.strip())
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+def phase_is_paused(phase_path: Path) -> bool:
+    from .model import normalize_status
+
+    return normalize_status(phase_header_status(phase_path / "current-phase-status.md")) == "paused"
+
+
+def story_id_from_header(path: Path) -> str:
+    """The story ID from a story file's H1 (`# FX-85-01 - Title`), or ""
+    when the file or a well-formed ID is absent. A receipt-side
+    identity for stories no table row covers (WLA-16-02)."""
+    if not path.exists():
+        return ""
+    lines = read_text(path).splitlines()
+    if not lines:
+        return ""
+    first = lines[0].lstrip("#").strip()
+    for sep in (" — ", " - "):
+        if sep in first:
+            candidate = first.split(sep, 1)[0].strip()
+            if STORY_ID_RE.match(candidate):
+                return candidate
+    return ""
+
+
+def phase_story_files(phase_path: Path) -> dict[int, Path]:
+    """On-disk story files by number — the receipts, independent of any
+    table (WLA-16-02)."""
+    files: dict[int, Path] = {}
+    for path in sorted(phase_path.glob("story-*.md")):
+        m = STORY_RE.match(path.name)
+        if m:
+            files[int(m.group(1))] = path
+    return files
 
 
 def story_title(path: Path) -> str:
@@ -142,6 +229,19 @@ def parse_current_phase_target(project: Project) -> str:
         if target == raw and raw.lower() in {"complete", "n/a", "none"}:
             return ""
         return target
+    return ""
+
+
+def parse_current_phase_dirname(project: Project) -> str:
+    """The phase directory the README's Current-phase pointer names, or
+    "" when absent/unresolvable. The methodology's own current-phase
+    receipt (WLA-16-03)."""
+    target = parse_current_phase_target(project)
+    if not target:
+        return ""
+    for part in Path(target).parts:
+        if PHASE_RE.match(part):
+            return part
     return ""
 
 

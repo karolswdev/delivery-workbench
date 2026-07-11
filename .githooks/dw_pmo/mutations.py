@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .model import DONE_STATUSES, STORY_RE, STORY_STATUSES, Phase, Project, die
+from .model import DONE_STATUSES, HOLD_STATUSES, STORY_RE, STORY_STATUSES, Phase, Project, die
 
 
 _SLUG_RE_STRICT = __import__("re").compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -49,6 +49,7 @@ from .render import (
     render_story_template,
     replace_phase_index_content,
     replace_story_table_content,
+    set_phase_header_status_content,
     update_phase_index_status_content,
     update_story_header_status_content,
     update_story_table_row_content,
@@ -254,6 +255,12 @@ def apply_plan(plan: MutationPlan, validate_after: bool = True) -> dict[str, obj
     elif plan.kind == "phase-close":
         emit(plan.root, "phase_closed", project=plan.project_slug,
              detail={"phase": summary.get("phase_number")})
+    elif plan.kind == "phase-pause":
+        emit(plan.root, "phase_paused", project=plan.project_slug,
+             detail={"phase": summary.get("phase_number")})
+    elif plan.kind == "phase-resume":
+        emit(plan.root, "phase_resumed", project=plan.project_slug,
+             detail={"phase": summary.get("phase_number")})
 
     return {
         "kind": plan.kind,
@@ -273,8 +280,16 @@ def plan_story_status(
     status: str,
     evidence_body: str = "",
     force: bool = False,
+    reason: str = "",
 ) -> MutationPlan:
     status = validate_story_status(status)
+    reason = " ".join(reason.split())
+    if status in HOLD_STATUSES and not reason:
+        die("a hold needs its why; pass --reason when parking a story on-hold/paused")
+    if status in DONE_STATUSES and reason:
+        # A decorated done would evade the gate's exact flip
+        # detection; done's reason is the evidence file.
+        die("done takes no --reason; the evidence file is the reason")
     row, story_num, story_path = find_story(project, phase, story_selector)
     status_file = phase.path / "current-phase-status.md"
     evidence_path = phase.path / f"evidence-story-{story_num:02d}.md"
@@ -283,11 +298,17 @@ def plan_story_status(
     if evidence_path.exists() and evidence_body and not force:
         die(f"evidence already exists; pass --force to replace: {rel(evidence_path, root)}")
 
+    # The reason rides as decoration in the cell/header tail — the
+    # convention normalize_status reads through and status_note
+    # recovers. No reason → the plain token, byte-identical to before.
+    from datetime import date
+
+    written_status = f"{status} ({reason} — since {date.today().isoformat()})" if reason else status
     evidence_link = evidence_link_for(story_num) if (evidence_body or status in DONE_STATUSES) else None
     plan = MutationPlan(kind="story-status", root=root, project_slug=project.slug)
-    plan.changes.append(_change(story_path, update_story_header_status_content(story_path, status)))
+    plan.changes.append(_change(story_path, update_story_header_status_content(story_path, written_status)))
     plan.changes.append(
-        _change(status_file, update_story_table_row_content(status_file, row.story_id, status=status, evidence=evidence_link))
+        _change(status_file, update_story_table_row_content(status_file, row.story_id, status=written_status, evidence=evidence_link))
     )
     if evidence_body:
         plan.changes.append(_change(evidence_path, render_evidence(row, story_num, evidence_body)))
@@ -298,6 +319,8 @@ def plan_story_status(
         "story_path": rel(story_path, root),
         "evidence_path": rel(evidence_path, root),
     }
+    if reason:
+        plan.summary["reason"] = reason
     return plan
 
 
@@ -386,6 +409,64 @@ def plan_story_create(
     plan.summary = {
         "story_id": story_id,
         "story_path": rel(story_file, root),
+    }
+    return plan
+
+
+def plan_phase_pause(
+    root: Path,
+    project: Project,
+    phase: Phase,
+    reason: str,
+) -> MutationPlan:
+    """Park a whole phase: header + README index row read
+    ``paused (<why> — since <date>)``. The pivot the flagship wrote
+    in prose ("Phase 91 remains active"), machine-readable."""
+    reason = " ".join((reason or "").split())
+    if not reason:
+        die("a pause needs its why; pass --reason")
+    if (phase.path / "final-summary.md").exists():
+        die(f"phase {phase.number} is closed (final-summary.md exists); a closed phase cannot pause")
+    from datetime import date
+
+    status_text = f"paused ({reason} — since {date.today().isoformat()})"
+    status_file = phase.path / "current-phase-status.md"
+    readme = project.path / "README.md"
+    plan = MutationPlan(kind="phase-pause", root=root, project_slug=project.slug)
+    plan.changes.append(_change(status_file, set_phase_header_status_content(status_file, status_text)))
+    plan.changes.append(_change(readme, update_phase_index_status_content(readme, phase.number, status_text)))
+    plan.summary = {
+        "phase_number": phase.number,
+        "status": "paused",
+        "reason": reason,
+    }
+    return plan
+
+
+def plan_phase_resume(
+    root: Path,
+    project: Project,
+    phase: Phase,
+) -> MutationPlan:
+    """The way back: a paused phase returns to ``in-progress`` in the
+    header and the README index row. Refuses a phase that is not
+    actually paused — resume is a release, not a status editor."""
+    from .model import normalize_status
+    from .parse import phase_header_status
+
+    if (phase.path / "final-summary.md").exists():
+        die(f"phase {phase.number} is closed (final-summary.md exists); nothing to resume")
+    status_file = phase.path / "current-phase-status.md"
+    current = phase_header_status(status_file)
+    if normalize_status(current) != "paused":
+        die(f"phase {phase.number} is not paused (status: {current or 'none declared'})")
+    plan = MutationPlan(kind="phase-resume", root=root, project_slug=project.slug)
+    plan.changes.append(_change(status_file, set_phase_header_status_content(status_file, "in-progress")))
+    plan.changes.append(_change(project.path / "README.md", update_phase_index_status_content(project.path / "README.md", phase.number, "in-progress")))
+    plan.summary = {
+        "phase_number": phase.number,
+        "status": "in-progress",
+        "previous_status": current,
     }
     return plan
 

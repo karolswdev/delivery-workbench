@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .model import DONE_STATUSES, OPEN_STATUSES, Phase, Project, StoryRow
+from .model import DONE_STATUSES, OPEN_STATUSES, PARKED_STATUSES, Phase, Project, StoryRow, normalize_status, status_note
 from .parse import (
     discover_phases,
     get_phase,
     header_status,
     hook_snapshot,
     link_target,
+    parse_current_phase_dirname,
     parse_current_phase_target,
     parse_story_rows,
+    phase_header_status,
     story_num_from_file,
     supplemental_canon,
 )
@@ -23,10 +25,24 @@ from .validate import check_project, project_warnings
 
 def next_story(project: Project, root: Path) -> dict[str, object] | None:
     preferred = ("in-progress", "ready", "backlog")
+    # Nothing in a closed phase is actionable (WLA-16-03) — a
+    # final-summary is the phase's terminal receipt. Nothing in a
+    # PAUSED phase is actionable either (WLA-17-03) — the pause is a
+    # recorded decision, and next honors it. Within each status tier,
+    # the phase the README pointer names is consulted first.
+    phases = [
+        phase
+        for phase in discover_phases(project)
+        if not (phase.path / "final-summary.md").exists()
+        and normalize_status(phase_header_status(phase.path / "current-phase-status.md")) != "paused"
+    ]
+    pointer_dir = parse_current_phase_dirname(project)
+    if pointer_dir:
+        phases.sort(key=lambda phase: phase.path.name != pointer_dir)
     for status in preferred:
-        for phase in discover_phases(project):
+        for phase in phases:
             for row in parse_story_rows(phase.path / "current-phase-status.md"):
-                if row.status == status:
+                if normalize_status(row.status) == status:
                     story_target = link_target(row.story_file)
                     return {
                         "story_id": row.story_id,
@@ -37,6 +53,69 @@ def next_story(project: Project, root: Path) -> dict[str, object] | None:
                         "story_path": rel((phase.path / story_target).resolve(), root),
                     }
     return None
+
+
+def parked_summary(project: Project, root: Path) -> dict[str, object]:
+    """The ledger of work that waits (WLA-17-03): paused phases and
+    blocked/on-hold stories in open phases, each with its recorded
+    why. Closed phases are history, never holds."""
+    paused_phases: list[dict[str, object]] = []
+    parked_stories: list[dict[str, object]] = []
+    for phase in discover_phases(project):
+        if (phase.path / "final-summary.md").exists():
+            continue
+        status_file = phase.path / "current-phase-status.md"
+        header = phase_header_status(status_file)
+        phase_paused = normalize_status(header) == "paused"
+        if phase_paused:
+            paused_phases.append(
+                {
+                    "phase": phase.number,
+                    "phase_path": phase.path.name,
+                    "note": status_note(header),
+                }
+            )
+        for row in parse_story_rows(status_file):
+            token = normalize_status(row.status)
+            if token not in PARKED_STATUSES:
+                continue
+            parked_stories.append(
+                {
+                    "story_id": row.story_id,
+                    "title": row.title,
+                    "status": token,
+                    "note": status_note(row.status),
+                    "phase": phase.number,
+                    "phase_path": phase.path.name,
+                    "phase_paused": phase_paused,
+                }
+            )
+    blocked = sum(1 for s in parked_stories if s["status"] == "blocked")
+    on_hold = len(parked_stories) - blocked
+    return {
+        "paused_phases": paused_phases,
+        "parked_stories": parked_stories,
+        "counts": {
+            "blocked": blocked,
+            "on_hold": on_hold,
+            "paused_phases": len(paused_phases),
+        },
+    }
+
+
+def parked_headline(parked: dict[str, object]) -> str:
+    """One honest clause for exit-2 messages: '2 blocked, 1 on-hold,
+    1 phase paused'. Empty when nothing waits."""
+    counts = parked.get("counts", {})  # type: ignore[union-attr]
+    parts = []
+    if counts.get("blocked"):
+        parts.append(f"{counts['blocked']} blocked")
+    if counts.get("on_hold"):
+        parts.append(f"{counts['on_hold']} on-hold")
+    if counts.get("paused_phases"):
+        n = counts["paused_phases"]
+        parts.append(f"{n} phase{'s' if n != 1 else ''} paused")
+    return ", ".join(parts)
 
 
 def story_context(row: StoryRow, phase: Phase, project: Project, root: Path, include_trace: bool = False) -> dict[str, object]:
@@ -70,6 +149,8 @@ def story_context(row: StoryRow, phase: Phase, project: Project, root: Path, inc
         "story_id": row.story_id,
         "title": row.title,
         "status": row.status,
+        "status_token": normalize_status(row.status),
+        "status_note": status_note(row.status),
         "header_status": header,
         "story_file": story_target,
         "story_path": rel(story_path, root),
@@ -106,9 +187,11 @@ def project_context(
     phase_items: list[dict[str, object]] = []
     for phase in phases:
         all_rows = parse_story_rows(phase.path / "current-phase-status.md")
+        phase_header = phase_header_status(phase.path / "current-phase-status.md")
+        paused = normalize_status(phase_header) == "paused"
         rows = []
         for row in all_rows:
-            if status_filter and row.status != status_filter:
+            if status_filter and normalize_status(row.status) != normalize_status(status_filter):
                 continue
             rows.append(story_context(row, phase, project, root, include_trace))
         phase_items.append(
@@ -120,7 +203,9 @@ def project_context(
                 "status_file_exists": (phase.path / "current-phase-status.md").exists(),
                 "final_summary": rel(phase.path / "final-summary.md", root),
                 "final_summary_exists": (phase.path / "final-summary.md").exists(),
-                "active": any(row.status in OPEN_STATUSES for row in all_rows),
+                "active": any(normalize_status(row.status) in OPEN_STATUSES for row in all_rows),
+                "paused": paused,
+                "pause_note": status_note(phase_header) if paused else "",
                 "stories": rows,
             }
         )
@@ -133,6 +218,7 @@ def project_context(
         "readme_exists": (project.path / "README.md").exists(),
         "current_phase_target": parse_current_phase_target(project),
         "next_story": next_story(project, root),
+        "parked": parked_summary(project, root),
         "issues": check_project(project, root),
         "warnings": project_warnings(project, root),
         "supplemental_canon": supplemental_canon(root, project),
@@ -212,10 +298,10 @@ def story_timeline(row: StoryRow, phase: Phase, project: Project, root: Path) ->
     events.sort(key=lambda e: str(e["sort_key"]), reverse=True)
     status = str(context["status"])
     evidence_exists = bool(context["evidence_exists"])
-    shipped = status in DONE_STATUSES and evidence_exists
+    shipped = normalize_status(status) in DONE_STATUSES and evidence_exists
     reason = ""
     if not shipped:
-        if status not in DONE_STATUSES:
+        if normalize_status(status) not in DONE_STATUSES:
             reason = f"story status is {status!r}, not done"
         elif not evidence_exists:
             reason = "story is marked done but its evidence file does not exist"

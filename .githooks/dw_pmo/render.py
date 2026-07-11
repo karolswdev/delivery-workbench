@@ -248,6 +248,31 @@ def update_story_table_row_content(status_file: Path, story_id: str, status: str
     return "\n".join(lines) + "\n"
 
 
+def set_phase_header_status_content(status_file: Path, status_text: str) -> str:
+    """Set (or insert) the phase file's ``**Status:**`` line.
+
+    An existing line keeps its shape (bullet or bare); a phase that
+    never declared a status gets a bare line right under the H1 —
+    the flagship's shape.
+    """
+    if not status_file.exists():
+        die(f"phase status file not found: {status_file}")
+    lines = read_text(status_file).splitlines()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("- **Status:**"):
+            lines[i] = f"- **Status:** {status_text}"
+            return "\n".join(lines) + "\n"
+        if stripped.startswith("**Status:**"):
+            lines[i] = f"**Status:** {status_text}"
+            return "\n".join(lines) + "\n"
+    insert_at = 1
+    if len(lines) > 1 and lines[1].strip() == "":
+        insert_at = 2
+    lines[insert_at:insert_at] = [f"**Status:** {status_text}", ""]
+    return "\n".join(lines) + "\n"
+
+
 def update_phase_index_status_content(readme: Path, phase_number: int, status: str) -> str:
     lines = read_text(readme).splitlines()
     changed = False
