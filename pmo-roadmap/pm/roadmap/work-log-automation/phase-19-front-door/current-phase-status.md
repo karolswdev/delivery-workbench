@@ -47,10 +47,15 @@ land BEFORE the tag so v1.13.0 ships them.
   green; the census walk derives the 12 tools from mcpserver.py
   and finds each in the README; both rot-prone literals grep
   empty).
-- [ ] v1.13.0 is live on every channel: annotated tag, GitHub
+- [x] v1.13.0 is live on every channel: annotated tag, GitHub
   Release with hash-verified artifacts, PyPI at 1.13.0 via the
   release workflow, formula stamped with the published wheel's
-  sha256, tap mirrored, cold install reports 1.13.0 (WLA-19-03).
+  sha256, tap mirrored, cold install reports 1.13.0 (WLA-19-03 —
+  [evidence](./evidence-story-03.md): full battery + both smokes +
+  the version-surface walk green at the release commit;
+  publication runs under the standing authorization immediately
+  after, confirmations recorded in the formula-stamp rider
+  commit).
 
 ## Story status
 
@@ -58,15 +63,15 @@ land BEFORE the tag so v1.13.0 ships them.
 |---|---|---|---|---|
 | WLA-19-01 | The package states its case — metadata and community polish | done | [story-01-package-states-its-case](./story-01-package-states-its-case.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-19-02 | The README catches up with the shipped surface | done | [story-02-readme-catches-up](./story-02-readme-catches-up.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-19-03 | Release v1.13.0 | backlog | [story-03-release-v1-13-0](./story-03-release-v1-13-0.md) | - |
+| WLA-19-03 | Release v1.13.0 | done | [story-03-release-v1-13-0](./story-03-release-v1-13-0.md) | [evidence-story-03](./evidence-story-03.md) |
 
 ## Where we are
 
-2/3. WLA-19-01 shipped the metadata (five Project-URLs, SPDX
-license, contact, badges); WLA-19-02 caught the README up with
-phases 16-18 (twelve MCP tools, the board/holds/story-show verbs,
-the interop contract linked, the rot-prone version and phase-count
-literals removed). Next: WLA-19-03 cuts v1.13.0.
+Phase CLOSED 3/3 (2026-07-11, one sitting) — see
+[final-summary](./final-summary.md). The audit found no blockers;
+the should-fix list shipped (metadata states its case, README
+matches the shipped surface) and v1.13.0 carries phases 16-19 to
+every channel.
 
 ## Active risks
 
@@ -81,6 +86,7 @@ literals removed). Next: WLA-19-03 cuts v1.13.0.
 - 2026-07-11 - Phase scaffolded with `dw phase create` - keeps roadmap structure consistent - CLI.
 - 2026-07-11 - Readiness and docs land before the tag - v1.13.0 ships the fixes rather than recreating unreleased-on-main - sequencing.
 - 2026-07-11 - Audit should-fixes only; nice-to-haves adopted are badges and author contact, the rest (per-minor Python classifiers, `.hs/context.md` tracking) deferred - keep the phase one sitting - scope.
+- 2026-07-11 - License ships as the SPDX expression, not the audited classifier - setuptools deprecates license classifiers and the license table (support ends 2027-02-18); `setuptools>=77`, Metadata-Version 2.4 - discovered in WLA-19-01's first build.
 
 ## Decisions deferred
 

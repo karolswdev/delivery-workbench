@@ -7,9 +7,20 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
-## Unreleased
+## v1.13.0 — 2026-07-11
 
-Every element answers: the interop layer. The board's elements are
+The front door: open-source readiness. An audit of everything a
+stranger meets (no blockers found) drove the fixes that ship here —
+PyPI metadata completed (Repository/Changelog/Issues links, the
+license as an SPDX expression `License-Expression: MIT`, author
+contact), the LICENSE holder normalized, badges on the README, and
+the README caught up with the shipped surface: twelve MCP tools,
+the `dw board` / `dw holds` / `dw story show` verbs, parked work
+and the receipts-and-links walk in prose, and the interop contract
+linked. Full detail:
+[phase 19](./pmo-roadmap/pm/roadmap/work-log-automation/phase-19-front-door/current-phase-status.md).
+
+Earlier in this release — every element answers: the interop layer. The board's elements are
 browsable by machines — every card, lane, and holds-ledger entry
 carries `paths` (repo-relative story/evidence/phase-status
 receipts) and `links` (workbench story/trace routes), minted by one
