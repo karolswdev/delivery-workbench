@@ -324,8 +324,37 @@ class TelegramInterface:
                 if session_repo
                 else None
             )
-            self._say(chat, render_question(session), thread_id=home)
+            self._say(
+                chat,
+                render_question(session),
+                buttons=self._question_nav_buttons(chat, home, session),
+                thread_id=home,
+            )
         self.queue.flush()
+
+    NAV_KEYBOARD = [
+        [("↑", "qn:Up"), ("↓", "qn:Down"), ("📸", "qn:peek")],
+        [("⏎ Enter", "qn:Enter"), ("⎋ Esc", "qn:Escape")],
+    ]
+
+    def _question_nav_buttons(
+        self, chat: int, home: int | None, session: dict
+    ) -> list | None:
+        """The nav keyboard rides a question card only when its
+        session is BOUND in the home topic AND ARMED — the two
+        grants that already exist. Anything less keeps today's
+        card: the proposal path with its one-tap arming, because a
+        nav tap never arms."""
+        binding = self.topics.bound_session(chat, home, self._now())
+        if binding is None:
+            return None
+        if binding.get("session_key") != session.get("key"):
+            return None
+        if not self.arming.is_armed(
+            str(binding.get("tmux_session") or ""), self._now()
+        ):
+            return None
+        return self.NAV_KEYBOARD
 
     # -- messages -------------------------------------------------------
 
@@ -1094,6 +1123,56 @@ class TelegramInterface:
             action.payload if ok else f"failed: {output}"[:180],
         )
 
+    def _handle_question_nav(
+        self, chat_id: int, key: str, callback_id: str,
+        message_id: int | None,
+    ) -> None:
+        """A qn: tap drives the TUI prompt the question came from.
+        Deliberately dumb: it never claims to know what the menu
+        says — 📸 shows the truth, arrows move, Enter commits. And
+        deliberately strict: a nav tap NEVER arms; an unarmed or
+        unbound session refuses (the proposal path with its one-tap
+        arming is how consent enters)."""
+        binding = self.topics.bound_session(
+            chat_id, self._reply_thread, self._now()
+        )
+        if binding is None:
+            self.transport.answer_callback(
+                callback_id, "no live binding — /steer first"
+            )
+            return
+        if key == "peek":
+            ok = self._send_screen(chat_id, binding["target"])
+            self.transport.answer_callback(
+                callback_id, "captured" if ok else "capture failed"
+            )
+            return
+        if key not in {"Up", "Down", "Enter", "Escape"}:
+            self.transport.answer_callback(callback_id, "")
+            return
+        session = binding["tmux_session"]
+        try:
+            ok, output = self.driver.send_key(
+                session, binding["target"], key, self._now()
+            )
+        except Unarmed:
+            self.transport.answer_callback(
+                callback_id,
+                "session unarmed — a nav tap never arms; approve a "
+                "reply or /arm first",
+            )
+            return
+        if ok and key in {"Enter", "Escape"}:
+            self._card_update(
+                chat_id,
+                message_id,
+                f"{key} sent to {binding['session_key']} — /questions "
+                "to re-check what it is waiting on now",
+            )
+        self.transport.answer_callback(
+            callback_id, key if ok else f"failed: {output}"[:180]
+        )
+
     def register_command_menu(self) -> bool:
         """Register the slash menu with Telegram (setMyCommands) so
         the client offers completion. Config `command_menu: false`
@@ -1294,6 +1373,9 @@ class TelegramInterface:
             return
         if action == "tb":
             self._handle_toolbar_action(chat_id, rest, callback_id, message_id)
+            return
+        if action == "qn":
+            self._handle_question_nav(chat_id, rest, callback_id, message_id)
             return
         if action == "ss":
             # Screenshot refresh: re-capture and edit the same photo

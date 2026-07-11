@@ -1988,6 +1988,93 @@ class ToolbarUpgradeTest(InterfaceCase):
         self.assertEqual(len(self.transport.commands_set), 1, "no second call")
 
 
+# ------------------------------------------- question nav keyboards
+
+
+class QuestionNavTest(InterfaceCase):
+    """Questions answer with buttons — only where both grants
+    already exist (bound + armed), and a nav tap never arms."""
+
+    def setUp(self):
+        super().setUp()
+        self.pair()
+
+    def steer(self):
+        self.iface.handle_update(topic_message(OWNER, f"/bind {self.repo}", 3))
+        self.iface.handle_update(topic_message(OWNER, "/steer claude:sess-1", 3))
+        self.transport.sent.clear()
+
+    def _tap(self, data, thread=3, message_id=90):
+        return {"callback_query": {
+            "id": f"cb-{data}", "data": data,
+            "message": {"chat": {"id": OWNER}, "message_id": message_id,
+                        "message_thread_id": thread}}}
+
+    def test_bound_and_armed_question_carries_the_keyboard(self):
+        self.steer()
+        self.iface.poll_tick()
+        card = self.transport.sent[-1]
+        self.assertIn("Should I delete the flag?", card["text"])
+        self.assertEqual(card["thread_id"], 3, "routed home")
+        data = {d for row in card["buttons"] for _, d in row}
+        self.assertEqual(
+            data, {"qn:Up", "qn:Down", "qn:peek", "qn:Enter", "qn:Escape"}
+        )
+
+    def test_unbound_question_keeps_todays_card(self):
+        self.iface.poll_tick()
+        card = self.transport.sent[-1]
+        self.assertIn("Should I delete the flag?", card["text"])
+        self.assertIsNone(card["buttons"], "no keyboard without a binding")
+
+    def test_unarmed_question_keeps_todays_card(self):
+        self.steer()
+        self.iface.handle_update(message(OWNER, "/disarm desk"))
+        self.transport.sent.clear()
+        self.iface.poll_tick()
+        self.assertIsNone(self.transport.sent[-1]["buttons"])
+
+    def test_nav_taps_drive_the_prompt_and_enter_notes_it(self):
+        self.steer()
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(self._tap("qn:Down"))
+        keys = [c for c in self.tmux_runner.calls if c[1] == "send-keys"]
+        self.assertEqual(keys, [["tmux", "send-keys", "-t", "%7", "Down"]])
+        self.assertEqual(self.transport.answered[-1]["text"], "Down")
+        self.iface.handle_update(self._tap("qn:Enter"))
+        self.assertIn("Enter sent to claude:sess-1", self.transport.edited[-1]["text"])
+
+    def test_peek_delivers_the_screen_flow(self):
+        self.steer()
+        saved = (screenshot_mod.AVAILABLE, screenshot_mod._PIL_ERROR)
+        screenshot_mod.AVAILABLE = False
+        screenshot_mod._PIL_ERROR = "off for test"
+        try:
+            self.iface.handle_update(self._tap("qn:peek"))
+        finally:
+            screenshot_mod.AVAILABLE, screenshot_mod._PIL_ERROR = saved
+        self.assertIn("rendering unavailable", self.last_text())
+        self.assertEqual(self.transport.answered[-1]["text"], "captured")
+
+    def test_forged_tap_without_binding_refuses_and_never_arms(self):
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(self._tap("qn:Enter", thread=999))
+        self.assertIn("no live binding", self.transport.answered[-1]["text"])
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], [])
+        self.assertEqual(self.state.armed, {}, "the tap armed nothing")
+
+    def test_tap_on_unarmed_binding_refuses_and_never_arms(self):
+        self.steer()
+        self.iface.handle_update(message(OWNER, "/disarm desk"))
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(self._tap("qn:Enter"))
+        self.assertIn("never arms", self.transport.answered[-1]["text"])
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], [])
+        self.assertNotIn("desk", self.state.armed)
+
+
 # ---------------------------------------------------------- screenshots
 
 

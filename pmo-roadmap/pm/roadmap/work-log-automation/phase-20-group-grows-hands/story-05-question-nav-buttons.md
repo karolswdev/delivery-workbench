@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 20
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-20-01, WLA-20-03
 - **Unblocks:** (optional)
 - **Owner:** unassigned
@@ -22,8 +22,10 @@ this story assembles them.
 - **In:** the pushed question card (hook-drain + poll_tick
   enrichment) gains a nav keyboard when the question's session is
   BOUND in a topic and ARMED: `qn:` callbacks for up/down/enter/esc
-  and a refresh that re-captures the pane (text, or photo via
-  story 01 when Pillow present) and edits the card. Keys route
+  and a 📸 refresh that delivers a fresh capture through the
+  story-01 flow whole (photo with its own refresh button, or the
+  stated text fallback — cleaner than overloading the text card
+  with media it cannot hold). Keys route
   through `TmuxDriver.send_key` (existing floors: armed, owned).
   Unarmed/unbound question cards keep today's shape (the proposal
   path with one-tap arming stands — a nav tap NEVER arms). Taps

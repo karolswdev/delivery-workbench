@@ -100,7 +100,7 @@ use those assets."
 | WLA-20-02 | The live view learns to show, not tell | done | [story-02-live-image-view](./story-02-live-image-view.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-20-03 | Consent belongs to a person — groups get faces | done | [story-03-per-person-consent](./story-03-per-person-consent.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-20-04 | The toolbar grows up — grids, builtins, and the command menu | done | [story-04-toolbar-grows-up](./story-04-toolbar-grows-up.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-20-05 | Questions answer with buttons | backlog | [story-05-question-nav-buttons](./story-05-question-nav-buttons.md) | - |
+| WLA-20-05 | Questions answer with buttons | done | [story-05-question-nav-buttons](./story-05-question-nav-buttons.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-20-06 | The exit exam — fitness, ledger, and the contract amended | backlog | [story-06-exit-exam](./story-06-exit-exam.md) | - |
 
 ## Where we are
