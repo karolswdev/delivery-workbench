@@ -1395,6 +1395,71 @@ class DwCoreTest(unittest.TestCase):
         warnings = core.project_warnings(self.project, self.root)
         self.assertFalse(any("parked without a recorded reason" in w for w in warnings), warnings)
 
+    # -- the board (WLA-17-04) --------------------------------------------
+
+    def test_board_bucketing_pinned(self) -> None:
+        cases = {
+            "done": "done", "complete": "done", "shipped": "done", "closed": "done",
+            "in-progress": "in-progress", "ready": "ready",
+            "blocked": "blocked", "on-hold": "on-hold", "paused": "on-hold",
+            "backlog": "backlog",
+            # loose legacy vocabulary is visible, never lost
+            "planned": "backlog", "scaffolded": "backlog", "not-started": "backlog",
+            "host-complete": "backlog",
+            # retired history leaves the columns (counted separately)
+            "cut": None, "cancelled": None, "superseded": None,
+        }
+        for token, want in cases.items():
+            self.assertEqual(core.board_bucket(token), want, token)
+
+    def test_board_model_columns_and_receipts(self) -> None:
+        core.apply_plan(core.plan_story_status(
+            self.root, self.project, self.phase, "DM-1-02", "on-hold",
+            reason="pivot"), validate_after=False)
+        model = core.board_model(self.project, self.root)
+        self.assertEqual(model["columns"], list(core.BOARD_COLUMNS))
+        lane = model["phases"][0]
+        for key in ("number", "slug", "path", "closed", "paused", "pause_note",
+                    "is_pointer", "retired", "uncovered_story_files",
+                    "done_count", "story_count", "columns"):
+            self.assertIn(key, lane)
+        self.assertTrue(lane["is_pointer"])
+        ids = {c: [card["story_id"] for card in lane["columns"][c]] for c in core.BOARD_COLUMNS}
+        self.assertEqual(ids["done"], ["DM-1-01"])
+        self.assertEqual(ids["on-hold"], ["DM-1-02"])
+        self.assertTrue(lane["columns"]["done"][0]["evidence_exists"])
+        self.assertIn("pivot", lane["columns"]["on-hold"][0]["note"])
+
+    def test_board_retired_rows_counted_not_shown(self) -> None:
+        status_file = self.phase_dir / "current-phase-status.md"
+        text = status_file.read_text(encoding="utf-8")
+        status_file.write_text(
+            text + "| ~~DM-1-99~~ | Cut thing | cut | [story-99-cut](./story-99-cut.md) | - |\n",
+            encoding="utf-8",
+        )
+        lane = core.board_model(self.project, self.root)["phases"][0]
+        self.assertEqual(lane["retired"], 1)
+        all_ids = [card["story_id"] for cards in lane["columns"].values() for card in cards]
+        self.assertNotIn("~~DM-1-99~~", all_ids)
+        self.assertIn("retired row", core.render_board(core.board_model(self.project, self.root)))
+
+    def test_board_render_paused_folds_and_truncation(self) -> None:
+        core.apply_plan(core.plan_story_create(
+            self.root, self.project, self.phase, "Third thing"), validate_after=False)
+        core.apply_plan(core.plan_story_create(
+            self.root, self.project, self.phase, "Fourth thing"), validate_after=False)
+        core.apply_plan(core.plan_phase_pause(
+            self.root, self.project, self.phase, "yields"), validate_after=False)
+        rendered = core.render_board(core.board_model(self.project, self.root), max_rows=1)
+        self.assertIn("⏸ paused (yields — since ", rendered)
+        self.assertIn("+1 more", rendered)  # two backlog cards, one row shown
+        # a closed lane folds to a one-line receipt, --all expands it
+        (self.phase_dir / "final-summary.md").write_text("# Phase 1 Final Summary\n", encoding="utf-8")
+        folded = core.render_board(core.board_model(self.project, self.root))
+        self.assertIn("closed, 1/4 done", folded)
+        expanded = core.render_board(core.board_model(self.project, self.root), expand_closed=True)
+        self.assertIn("DM-1-01", expanded)
+
     def test_status_note_extraction(self) -> None:
         cases = {
             "on-hold (pivot to X — since 2026-07-11)": "pivot to X — since 2026-07-11",

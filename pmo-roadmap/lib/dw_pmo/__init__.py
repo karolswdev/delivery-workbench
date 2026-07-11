@@ -88,6 +88,7 @@ from .mutations import (
     projected_issues,
     write_changes,
 )
+from .board import BOARD_COLUMNS, board_bucket, board_model, render_board
 from .api import (
     build_context_payload,
     handoff_summary,

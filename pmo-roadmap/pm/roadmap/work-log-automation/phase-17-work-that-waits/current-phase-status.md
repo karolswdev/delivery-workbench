@@ -52,9 +52,11 @@ shows the whole picture, columns by status, swimlanes by phase.
   story and paused phase with reason (WLA-17-03 —
   [evidence](./evidence-story-03.md): 194 tests green + live walk;
   the flagship read surfaced HS-25-07, a real forgotten hold).
-- [ ] `dw board` renders phase × status columns for this repo AND
+- [x] `dw board` renders phase × status columns for this repo AND
   for the flagship tree (HoldSpeak) without error — parked work
-  visibly parked (WLA-17-04).
+  visibly parked (WLA-17-04 — [evidence](./evidence-story-04.md):
+  198 tests green; the flagship's ~90 phases render in 163 lines,
+  83 closed lanes folded, phase 92's pivot visible).
 - [ ] The workbench `#/board` shows swimlanes per phase, status
   columns including on-hold, paused phases dimmed with their
   reason (WLA-17-05).
@@ -69,26 +71,23 @@ shows the whole picture, columns by status, swimlanes by phase.
 | WLA-17-01 | on-hold enters the write vocabulary; every park carries a reason | done | [story-01-hold-vocabulary](./story-01-hold-vocabulary.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-17-02 | Pause and resume a phase | done | [story-02-phase-pause](./story-02-phase-pause.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-17-03 | next tells the truth about parked work; dw holds is the ledger | done | [story-03-holds-ledger](./story-03-holds-ledger.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-17-04 | dw board — the kanban in the terminal | backlog | [story-04-terminal-board](./story-04-terminal-board.md) | - |
+| WLA-17-04 | dw board — the kanban in the terminal | done | [story-04-terminal-board](./story-04-terminal-board.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-17-05 | The board on the workbench | backlog | [story-05-workbench-board](./story-05-workbench-board.md) | - |
 | WLA-17-06 | Guarded moves on the board | backlog | [story-06-board-moves](./story-06-board-moves.md) | - |
 
 ## Where we are
 
-WLA-17-03 done (2026-07-11): `next` tells the truth and `dw holds`
-is the ledger — paused phases and parked stories are skipped but
-named ("parked: 1 blocked, 1 on-hold, 1 phase paused — see dw
-holds") on CLI and MCP alike; `dw holds [--json]` prints one
-greppable line per hold; context carries `parked`; a park without a
-visible reason warns (never errors). The flagship read-only pass
-immediately earned its keep: HS-25-07 has sat blocked with no
-recorded reason since phase 25 of a 93-phase project. 194 core
-tests green. Earlier: WLA-17-02 (phase pause/resume, header + README
-row, pause_phase/resume_phase editor kinds, phase_paused/resumed
-events), WLA-17-01 (the hold vocabulary: on-hold/paused +
-`--reason` decoration; status_note/status_token; CLI + MCP +
-workbench parity; §2.3 three-group parity test). Next: WLA-17-04
-(the terminal board).
+WLA-17-04 done (2026-07-11): `dw board` — swimlane per phase, six
+status columns, ✓ evidence receipts, hold reasons footnoted, honest
+folds (`+N more`, retired counted, table-less phases named), closed
+lanes one-line with `--all` to expand, `--phase`/`--json` for
+machines. The flagship's ~90 phases render in 0.1s and 163 lines;
+phase 92's prose-hidden pivot reads as ten identical bare
+in-progress cards. Earlier: WLA-17-03 (honest `next` + `dw holds`;
+the flagship read surfaced HS-25-07, blocked and reasonless since
+phase 25), WLA-17-02 (phase pause/resume end to end), WLA-17-01
+(the hold vocabulary with mandatory reasons). 198 core tests green.
+Next: WLA-17-05 (the board on the workbench).
 
 Note for operators on this self-hosting repo: `.githooks/` is the
 installed snapshot and syncs at release time; between releases the
