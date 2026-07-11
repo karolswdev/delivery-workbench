@@ -43,11 +43,13 @@ and is pinned by tests.
   [evidence](./evidence-story-01.md): 201 tests green incl. the
   no-rot link walk; live HTTP walk card → story → evidence →
   trace with zero tree knowledge).
-- [ ] `dw story show <project> <phase> <story>` prints one story
+- [x] `dw story show <project> <phase> <story>` prints one story
   whole — header fields, normalized status + note, story body,
   evidence body, captured runs, trace paths — and `--json` returns
   the same as one object; the workbench story route serves the
-  same `story_detail` core (WLA-18-02).
+  same `story_detail` core (WLA-18-02 —
+  [evidence](./evidence-story-02.md): 204 tests green + live browse
+  of WLA-17-03 with its real captured runs).
 - [ ] MCP exposes `dw_board`, `dw_holds`, `dw_story_show` as
   read-only tools returning the same models as the CLI `--json`
   verbs; refusals identical (WLA-18-03).
@@ -60,20 +62,20 @@ and is pinned by tests.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-18-01 | Self-describing cards: the board and the ledger carry their receipts | done | [story-01-self-describing-cards](./story-01-self-describing-cards.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-18-02 | dw story show — one story, whole | backlog | [story-02-story-show](./story-02-story-show.md) | - |
+| WLA-18-02 | dw story show — one story, whole | done | [story-02-story-show](./story-02-story-show.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-18-03 | The MCP read surface: board, holds, story | backlog | [story-03-mcp-read-surface](./story-03-mcp-read-surface.md) | - |
 | WLA-18-04 | The interop contract, versioned and pinned | backlog | [story-04-interop-contract](./story-04-interop-contract.md) | - |
 
 ## Where we are
 
-WLA-18-01 done (2026-07-11): cards and holds are doors — `paths`
-(story/evidence/phase-status receipts, evidence address stable
-before the file exists) + `links` (workbench story/trace routes) on
-every board card, lane, parked story, and paused phase; one helper
-mints all link shapes; the board model stamped
-`kind`/`schema_version: 1`; a no-rot test resolves every emitted
-link through handle_api. 201 core tests green. Next: WLA-18-02
-(`dw story show`).
+WLA-18-02 done (2026-07-11): one story, whole — `api.story_detail`
+is the one core (bodies + captured runs + paths/links + honest
+absences), the workbench story route refactored onto it
+(additive-only), and `dw story show [--json]` browses it from the
+CLI with every `find_story` selector form. 204 core tests green.
+Earlier: WLA-18-01 (self-describing cards: paths + links on every
+card/lane/hold, one link-minting helper, stamped board model,
+no-rot link walk). Next: WLA-18-03 (the MCP read surface).
 
 ## Active risks
 

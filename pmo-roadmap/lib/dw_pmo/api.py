@@ -8,6 +8,7 @@ from .board import phase_links, story_links, story_paths
 from .model import DONE_STATUSES, OPEN_STATUSES, PARKED_STATUSES, Phase, Project, StoryRow, normalize_status, status_note
 from .parse import (
     discover_phases,
+    find_story,
     get_phase,
     header_status,
     hook_snapshot,
@@ -54,6 +55,33 @@ def next_story(project: Project, root: Path) -> dict[str, object] | None:
                         "story_path": rel((phase.path / story_target).resolve(), root),
                     }
     return None
+
+
+def story_detail(project: Project, phase: Phase, selector: str, root: Path) -> dict[str, object]:
+    """One story, whole (WLA-18-02): everything ``story_context``
+    carries plus the bodies (story + evidence markdown), the parsed
+    captured runs, and the WLA-18-01 ``paths``/``links``
+    self-description. The one core behind the workbench story route,
+    ``dw story show``, and the MCP browse tool — absences render as
+    honest empties, never inventions."""
+    from .evidence import parse_captured_runs
+    from .paths import read_text
+
+    row, story_num, story_path = find_story(project, phase, selector)
+    detail = story_context(row, phase, project, root)
+    detail["phase_number"] = phase.number
+    detail["story_markdown"] = read_text(story_path) if story_path.is_file() else ""
+    evidence_rel = str(detail["evidence_path"])
+    evidence_file = (root / evidence_rel) if evidence_rel else None
+    detail["evidence_markdown"] = (
+        read_text(evidence_file) if evidence_file is not None and evidence_file.is_file() else ""
+    )
+    detail["captured_runs"] = (
+        parse_captured_runs(detail["evidence_markdown"]) if detail["evidence_markdown"] else []
+    )
+    detail["paths"] = story_paths(phase.path, row.story_file, story_num, root)
+    detail["links"] = story_links(project.slug, row.story_id)
+    return detail
 
 
 def parked_summary(project: Project, root: Path) -> dict[str, object]:

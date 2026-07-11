@@ -98,6 +98,7 @@ from .api import (
     phase_events,
     project_context,
     story_context,
+    story_detail,
     story_timeline,
 )
 from .contract import (

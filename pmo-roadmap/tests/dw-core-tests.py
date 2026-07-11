@@ -1409,6 +1409,52 @@ class DwCoreTest(unittest.TestCase):
         status, _body = wb.handle_api(self.root, "/api/projects/nope/board", {})
         self.assertEqual(status, 400)
 
+    # -- one story, whole (WLA-18-02) -------------------------------------
+
+    def test_story_detail_whole_and_absences(self) -> None:
+        detail = core.story_detail(self.project, self.phase, "DM-1-01", self.root)
+        self.assertEqual(detail["story_id"], "DM-1-01")
+        self.assertEqual(detail["phase_number"], 1)
+        self.assertTrue(str(detail["story_markdown"]).startswith("# DM-1-01"))
+        self.assertIn("fixture proof line", str(detail["evidence_markdown"]))
+        self.assertEqual(detail["captured_runs"], [])  # narrative-only fixture
+        self.assertEqual(detail["paths"]["story"], "pm/roadmap/demo/phase-1-alpha/story-01-first.md")
+        self.assertEqual(detail["links"]["trace"], "/api/projects/demo/trace/DM-1-01")
+        # the selector forms find_story accepts all resolve
+        for selector in ("1", "01", "story-01-first.md", "story-01-first"):
+            self.assertEqual(
+                core.story_detail(self.project, self.phase, selector, self.root)["story_id"],
+                "DM-1-01", selector,
+            )
+        # honest absences, never inventions
+        bare = core.story_detail(self.project, self.phase, "DM-1-02", self.root)
+        self.assertEqual(bare["evidence_markdown"], "")
+        self.assertEqual(bare["captured_runs"], [])
+        self.assertFalse(bare["evidence_exists"])
+
+    def test_story_detail_carries_captured_runs(self) -> None:
+        exit_code, _path, timestamp = core.run_capture(
+            self.root, self.project, self.phase, "DM-1-02", ["sh", "-c", "true"]
+        )
+        self.assertEqual(exit_code, 0)
+        detail = core.story_detail(self.project, self.phase, "DM-1-02", self.root)
+        runs = detail["captured_runs"]
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["timestamp"], timestamp)
+        self.assertEqual(runs[0]["exit_code"], 0)
+
+    def test_workbench_story_route_serves_story_detail(self) -> None:
+        import dw_pmo.workbench as wb
+        status, body = wb.handle_api(self.root, "/api/projects/demo/stories/DM-1-01", {})
+        self.assertEqual(status, 200)
+        detail = body["data"]
+        for key in ("story_markdown", "evidence_markdown", "captured_runs",
+                    "paths", "links", "phase_number", "status_token", "status_note"):
+            self.assertIn(key, detail)
+        self.assertEqual(detail["phase_number"], 1)
+        status, _body = wb.handle_api(self.root, "/api/projects/demo/stories/NOPE-1-99", {})
+        self.assertEqual(status, 404)
+
     # -- self-describing cards (WLA-18-01) --------------------------------
 
     def test_board_and_holds_carry_receipts_and_links(self) -> None:

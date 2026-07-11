@@ -233,21 +233,15 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             return 200, envelope(detail)
 
         if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3] == "stories":
+            # One core (api.story_detail) serves this route, the CLI's
+            # `dw story show`, and the MCP browse tool (WLA-18-02).
+            from .api import story_detail
+
             project = get_project(root, parts[2])
-            context = project_context(project, root)
-            for phase in context["phases"]:  # type: ignore[union-attr]
-                for story in phase["stories"]:
-                    if story["story_id"] == parts[4]:
-                        detail = dict(story)
-                        story_path = root / str(story["story_path"])
-                        detail["story_markdown"] = read_text(story_path) if story_path.is_file() else ""
-                        evidence_rel = str(story["evidence_path"])
-                        evidence_path = root / evidence_rel if evidence_rel else None
-                        detail["evidence_markdown"] = (
-                            read_text(evidence_path) if evidence_path and evidence_path.is_file() else ""
-                        )
-                        detail["phase_number"] = phase["number"]
-                        return 200, envelope(detail)
+            for phase in discover_phases(project):
+                for row in parse_story_rows(phase.path / "current-phase-status.md"):
+                    if row.story_id == parts[4]:
+                        return 200, envelope(story_detail(project, phase, parts[4], root))
             return _error(404, f"story not found: {parts[4]}")
 
         if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3] == "trace":
