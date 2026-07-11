@@ -39,11 +39,14 @@ land BEFORE the tag so v1.13.0 ships them.
   pyproject; README carries CI + PyPI + license badges
   (WLA-19-01 — [evidence](./evidence-story-01.md): 208 core tests,
   package smoke, and a METADATA inspection, all green).
-- [ ] The README matches the shipped surface: twelve MCP tools
+- [x] The README matches the shipped surface: twelve MCP tools
   listed, `dw board` / `dw holds` / `dw story show` in the CLI
   table, `docs/interop.md` linked, phase count current, and the
   version line no longer hand-maintained ahead of the parity tests
-  (WLA-19-02).
+  (WLA-19-02 — [evidence](./evidence-story-02.md): 208 core tests
+  green; the census walk derives the 12 tools from mcpserver.py
+  and finds each in the README; both rot-prone literals grep
+  empty).
 - [ ] v1.13.0 is live on every channel: annotated tag, GitHub
   Release with hash-verified artifacts, PyPI at 1.13.0 via the
   release workflow, formula stamped with the published wheel's
@@ -54,15 +57,16 @@ land BEFORE the tag so v1.13.0 ships them.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-19-01 | The package states its case — metadata and community polish | done | [story-01-package-states-its-case](./story-01-package-states-its-case.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-19-02 | The README catches up with the shipped surface | backlog | [story-02-readme-catches-up](./story-02-readme-catches-up.md) | - |
+| WLA-19-02 | The README catches up with the shipped surface | done | [story-02-readme-catches-up](./story-02-readme-catches-up.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-19-03 | Release v1.13.0 | backlog | [story-03-release-v1-13-0](./story-03-release-v1-13-0.md) | - |
 
 ## Where we are
 
-1/3. WLA-19-01 shipped: the package states its case — five
-Project-URLs, SPDX license expression (Metadata-Version 2.4),
-author contact, LICENSE holder normalized, badges on the README.
-Next: WLA-19-02, the README catches up.
+2/3. WLA-19-01 shipped the metadata (five Project-URLs, SPDX
+license, contact, badges); WLA-19-02 caught the README up with
+phases 16-18 (twelve MCP tools, the board/holds/story-show verbs,
+the interop contract linked, the rot-prone version and phase-count
+literals removed). Next: WLA-19-03 cuts v1.13.0.
 
 ## Active risks
 

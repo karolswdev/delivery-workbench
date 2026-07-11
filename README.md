@@ -141,20 +141,33 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 | `dw contract new` | Writes `.tmp/CONTRACT.md` with stamped, machine-verified facts. |
 | `dw gate` | Dry-runs the commit gate against the current stage. |
 | `dw verify [--all]` | Re-checks the gate's structural rules over pushed history. |
+| `dw board [--json]` | The kanban in the terminal: a swimlane per phase, six status columns, evidence ticks. |
+| `dw holds [--json]` | The ledger of parked work: every on-hold story and paused phase, each with its recorded reason. |
+| `dw story show <p> <ph> <st> [--json]` | One story whole: header, status and why, story and evidence bodies, captured runs, receipts. |
 | `dw phase create`, `dw story create` | Scaffolding for new roadmap work. |
 | `dw doctor` | Checks the wiring in this clone. |
 
 All commands have stable exit codes. The orientation commands
 support `--json` or `--porcelain` output.
 
+Parked work is first-class: a story goes on-hold only with a
+recorded reason, whole phases pause and resume (`dw phase pause
+--reason` / `resume`), and `dw next` skips parked work while naming
+what it skipped. Every board card and holds entry carries its
+receipt paths and workbench links, so a machine can walk card →
+story → evidence without knowing the tree layout; the contract over
+every read surface — CLI, HTTP, and MCP — is
+[docs/interop.md](./docs/interop.md).
+
 ## The MCP server
 
 `dw install` also vendors `.githooks/dw-mcp` and writes an entry into
 the repo's `.mcp.json`, which Claude Code and other MCP clients pick
-up automatically. The server exposes nine tools backed by the same
-code as the CLI: `dw_context`, `dw_next`, `dw_check`, `dw_doctor`,
-`dw_verify`, `dw_gate`, `dw_story_status`, `dw_evidence_capture`, and
-`dw_contract_new`.
+up automatically. The server exposes twelve tools backed by the same
+code as the CLI: orientation (`dw_context`, `dw_next`, `dw_check`,
+`dw_doctor`), browse (`dw_board`, `dw_holds`, `dw_story_show`),
+verification (`dw_verify`, `dw_gate`), and guarded mutations
+(`dw_story_status`, `dw_evidence_capture`, `dw_contract_new`).
 
 An agent can take a story from backlog to done through tool calls
 alone, with the same refusals the CLI gives. Two operations are
@@ -165,7 +178,10 @@ Schemas and design are in [docs/mcp.md](./docs/mcp.md).
 
 `dw-workbench --root /path/to/repo` serves a page for browsing the
 roadmap: phase tables, story and evidence pairs, a health console,
-and the trace from a story to the commits that shipped it. It can
+the kanban board at `#/board` (drag moves ride the same guarded
+preview-then-apply flow — a park demands its reason, done still
+demands evidence), and the trace from a story to the commits that
+shipped it. It can
 edit roadmap files through a guarded preview-then-apply flow. It
 never stages or commits. Bound to localhost by default; reachable
 over your own Tailscale network too (a `.ts.net` Host header is
@@ -223,7 +239,7 @@ The design is in
 ## This repo runs on it
 
 Every phase and story of the framework was shipped through its own
-gate: sixteen phases, each story with evidence, every commit with
+gate: each story with evidence, every commit with
 trailers and an archived contract, the full history passing
 `dw verify --all`. The trail is in
 [pmo-roadmap/pm/roadmap/work-log-automation/](./pmo-roadmap/pm/roadmap/work-log-automation/).
@@ -236,6 +252,7 @@ trailers and an archived contract, the full history passing
 - [Remote verification design](./docs/remote-verification.md)
 - [Contribution rails](./docs/contribution-rails.md): what survives a pull request
 - [MCP surface design](./docs/mcp.md)
+- [The interop contract](./docs/interop.md): every read surface over CLI, HTTP, and MCP, with its schema version
 - [Riders: the symbiosis contract](./docs/riders.md): one brief, every agent surface (Claude Code, Codex, pi, HoldSpeak)
 - [The journal](./docs/journal/README.md): the worked example, phases delivered on their own rails, written in the moment with refusals and dead ends included (through the mission-control and ccgram-absorption phases)
 - [Distribution design](./docs/distribution.md)
@@ -249,4 +266,5 @@ floor), and history verification on every push.
 
 ## License
 
-[MIT](./LICENSE). Current version: 1.12.0.
+[MIT](./LICENSE). The PyPI badge above states the current version;
+the [changelog](./CHANGELOG.md) tells each release's story.
