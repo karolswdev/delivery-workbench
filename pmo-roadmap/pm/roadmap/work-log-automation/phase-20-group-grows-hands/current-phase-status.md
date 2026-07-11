@@ -72,12 +72,15 @@ use those assets."
   [evidence](./evidence-story-03.md): 129 tests OK incl. the seven
   consent legs; the executed truth table covers the strict corner —
   an anonymous update against a recorded owner is refused).
-- [ ] The toolbar renders from config (grid, style, key/text/builtin
+- [x] The toolbar renders from config (grid, style, key/text/builtin
   actions), unknown harnesses fall back to the claude grid,
   malformed config entries are skipped with a warning and never
   raise, the builtin table is closed (a config cannot invent one),
   and the slash-command menu is registered with Telegram at serve
-  start (WLA-20-04).
+  start (WLA-20-04 — [evidence](./evidence-story-04.md): 140 tests
+  OK incl. the twelve-shape garbage fuzz; the closed-table refusal
+  executed live; setMyCommands pinned to one call, zero on
+  opt-out).
 - [ ] A pushed agent question carries a nav keyboard that drives the
   bound session's TUI prompt through the driver — armed and
   pane-ownership floors intact — and taps from an unarmed or
@@ -96,19 +99,17 @@ use those assets."
 | WLA-20-01 | The pane becomes a picture — the screenshot engine | done | [story-01-screenshot-engine](./story-01-screenshot-engine.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-20-02 | The live view learns to show, not tell | done | [story-02-live-image-view](./story-02-live-image-view.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-20-03 | Consent belongs to a person — groups get faces | done | [story-03-per-person-consent](./story-03-per-person-consent.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-20-04 | The toolbar grows up — grids, builtins, and the command menu | backlog | [story-04-toolbar-grows-up](./story-04-toolbar-grows-up.md) | - |
+| WLA-20-04 | The toolbar grows up — grids, builtins, and the command menu | done | [story-04-toolbar-grows-up](./story-04-toolbar-grows-up.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-20-05 | Questions answer with buttons | backlog | [story-05-question-nav-buttons](./story-05-question-nav-buttons.md) | - |
 | WLA-20-06 | The exit exam — fitness, ledger, and the contract amended | backlog | [story-06-exit-exam](./story-06-exit-exam.md) | - |
 
 ## Where we are
 
-3/6. The picture pipeline is whole (01: screenshot leaf + /screen;
-02: image live view, hash-gated) and consent now has a face (03:
-/pair records the owner-of-record; consent commands, every tap,
-and the steering relay answer to that one identity in a group;
-reads stay chat-scoped; legacy pairings keep today's behavior with
-a /status warning). Next: WLA-20-04, the toolbar grows up — born
-owner-checked.
+4/6. Pictures (01, 02), consent with a face (03), and now the
+toolbar as data (04): per-harness grids reshaped by JSON config,
+key/text/builtin actions with the builtin table closed, tb: taps
+resolved at tap time, and the slash menu registered with Telegram
+at serve start. Next: WLA-20-05, questions answer with buttons.
 
 ## Active risks
 

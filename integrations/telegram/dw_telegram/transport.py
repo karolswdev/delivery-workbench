@@ -153,6 +153,18 @@ class HttpTransport:
             {"callback_query_id": callback_id, "text": text[:180]},
         )
 
+    def set_my_commands(self, commands: list[tuple[str, str]]) -> None:
+        """Register the slash-command menu with the client."""
+        self._call(
+            "setMyCommands",
+            {
+                "commands": [
+                    {"command": name.lstrip("/"), "description": desc[:256]}
+                    for name, desc in commands
+                ]
+            },
+        )
+
     def _multipart(
         self,
         method: str,
@@ -331,6 +343,7 @@ class ScriptedTransport:
         self.documents: list[dict] = []
         self.photos: list[dict] = []
         self.media_edits: list[dict] = []
+        self.commands_set: list[list] = []
         self.reject_entities = False
         self.flood_after: tuple[int, float] | None = None
         self._next_id = 100
@@ -376,6 +389,9 @@ class ScriptedTransport:
 
     def answer_callback(self, callback_id: str, text: str = "") -> None:
         self.answered.append({"id": callback_id, "text": text})
+
+    def set_my_commands(self, commands) -> None:
+        self.commands_set.append(list(commands))
 
     def send_document(self, chat_id, path, caption="", thread_id=None) -> None:
         self.documents.append(

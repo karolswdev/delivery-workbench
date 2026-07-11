@@ -31,7 +31,7 @@ PKG = (
 
 LEAVES = {
     "transport", "entities", "sendfiles", "runtime", "config",
-    "screenshot",
+    "screenshot", "toolbarcfg",
 }
 # `lifecycle` is the only module allowed to build on `rails` (it runs
 # doctor/contract through the same CLI); everything else reaches the

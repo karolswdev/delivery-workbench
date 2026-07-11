@@ -63,6 +63,25 @@ PAIRING_PROMPT = (
     "operator machine and send: /pair <token>"
 )
 
+# The slash menu registered with Telegram (setMyCommands) so clients
+# offer completion. Read surfaces and entry points only — the
+# steering verbs demand arguments a menu tap cannot supply, and
+# leaving them out keeps the menu honest about what one tap can do.
+COMMAND_MENU = [
+    ("/status", "interface, repo, owner, screenshots, live views"),
+    ("/state", "the roadmap: phases, stories, next actionable"),
+    ("/sessions", "which live agent is on which story"),
+    ("/events", "what happened on the rails"),
+    ("/questions", "agents waiting for an answer"),
+    ("/bind", "tie this topic to a repo"),
+    ("/steer", "bind a live session — then just type"),
+    ("/screen", "the pane as a picture, refresh button included"),
+    ("/live", "auto-refreshing pane view (picture where possible)"),
+    ("/toolbar", "buttons for the bound session"),
+    ("/send", "a repo file, behind seven locks"),
+    ("/help", "the full verb list"),
+]
+
 
 class TelegramInterface:
     def __init__(
@@ -89,6 +108,11 @@ class TelegramInterface:
         self.proposals = ProposalBook()
         self.queue = MessageQueue(transport)
         self.topics = TopicRouter(state)
+        from .toolbarcfg import load_toolbar
+
+        self.toolbar_cfg, self.toolbar_warnings = load_toolbar(
+            config.toolbar
+        )
         self._notified_questions: set[tuple[str, str]] = set()
         self._reply_thread: int | None = None  # topic of the update in flight
         self._sender_id: int | None = None  # from.id of the update in flight
@@ -445,6 +469,13 @@ class TelegramInterface:
                 )
                 or "none"
             ),
+        ]
+        if self.toolbar_warnings:
+            lines.append(
+                "toolbar config warnings:\n  "
+                + "\n  ".join(self.toolbar_warnings)
+            )
+        lines += [
             "armed sessions: "
             + (
                 ", ".join(f"{s} (until {t})" for s, t in armed)
@@ -986,15 +1017,12 @@ class TelegramInterface:
             else "no live views here",
         )
 
-    TOOLBAR = [
-        [("⏎ Enter", "kb:Enter"), ("⎋ Esc", "kb:Escape")],
-        [("↑", "kb:Up"), ("↓", "kb:Down"), ("🔄 live", "kb:refresh")],
-    ]
-
     def _cmd_toolbar(self, chat_id: int, _args: list[str]) -> None:
         """Post the steering toolbar for the topic's bound session.
         Buttons fire directly while the binding is live — the binding
-        is the grant, no tap-per-tap (§4)."""
+        is the grant, no tap-per-tap (§4). The grid is data: built-in
+        per-harness layouts, reshaped by the operator's config
+        (toolbarcfg; the builtin table is closed)."""
         binding = self.topics.bound_session(
             chat_id, self._reply_thread, self._now()
         )
@@ -1004,12 +1032,81 @@ class TelegramInterface:
                 "no session bound here; /steer <session-key> first",
             )
             return
+        harness = str(binding.get("session_key") or "").split(":")[0]
+        note = (
+            f" ({len(self.toolbar_warnings)} config warning(s) — /status)"
+            if self.toolbar_warnings
+            else ""
+        )
         self._say(
             chat_id,
             f"toolbar for {binding['session_key']} (buttons act while "
-            "steering):",
-            buttons=self.TOOLBAR,
+            f"steering):{note}",
+            buttons=self.toolbar_cfg.buttons_for(harness),
         )
+
+    def _handle_toolbar_action(
+        self, chat_id: int, action_id: str, callback_id: str,
+        message_id: int | None,
+    ) -> None:
+        """A tb: tap — text/builtin actions resolved through the
+        CURRENT config at tap time. Keys ride kb:, one door."""
+        action = self.toolbar_cfg.action(action_id)
+        if action is None:
+            self.transport.answer_callback(
+                callback_id, f"no such toolbar action {action_id!r}"
+            )
+            return
+        binding = self.topics.bound_session(
+            chat_id, self._reply_thread, self._now()
+        )
+        if binding is None:
+            self.transport.answer_callback(
+                callback_id, "no live binding — /steer first"
+            )
+            return
+        if action.kind == "builtin":
+            if action.payload == "screen":
+                ok = self._send_screen(chat_id, binding["target"])
+                self.transport.answer_callback(
+                    callback_id, "screenshot" if ok else "capture failed"
+                )
+            elif action.payload == "live":
+                self._cmd_live(chat_id, [])
+                self.transport.answer_callback(callback_id, "live view up")
+            else:  # dismiss — the closed table has exactly three
+                self._card_update(chat_id, message_id, "toolbar dismissed")
+                self.transport.answer_callback(callback_id, "dismissed")
+            return
+        # text action: the binding is the grant, same as the relay
+        session = binding["tmux_session"]
+        if not self.arming.is_armed(session, self._now()):
+            self.arming.arm(session, self._now())
+        try:
+            ok, output = self.driver.send_text(
+                session, binding["target"], action.payload, self._now()
+            )
+        except Unarmed as exc:
+            self.transport.answer_callback(callback_id, str(exc)[:180])
+            return
+        self.transport.answer_callback(
+            callback_id,
+            action.payload if ok else f"failed: {output}"[:180],
+        )
+
+    def register_command_menu(self) -> bool:
+        """Register the slash menu with Telegram (setMyCommands) so
+        the client offers completion. Config `command_menu: false`
+        opts out. Returns True when registered."""
+        if not self.config.command_menu:
+            return False
+        from .transport import TransportError
+
+        try:
+            self.transport.set_my_commands(COMMAND_MENU)
+        except TransportError:
+            return False  # cosmetic surface: never block serving
+        return True
 
     # -- the file leg: /send behind seven locks (§5) ------------------
 
@@ -1194,6 +1291,9 @@ class TelegramInterface:
         action, _, rest = data.partition(":")
         if action == "kb":
             self._handle_toolbar_key(chat_id, rest, callback_id)
+            return
+        if action == "tb":
+            self._handle_toolbar_action(chat_id, rest, callback_id, message_id)
             return
         if action == "ss":
             # Screenshot refresh: re-capture and edit the same photo

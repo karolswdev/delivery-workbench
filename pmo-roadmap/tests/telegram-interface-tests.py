@@ -1828,6 +1828,166 @@ class PerPersonConsentTest(InterfaceCase):
         self.assertIn("owner: recorded", self.last_text())
 
 
+# ------------------------------------------------- toolbar as data
+
+
+class ToolbarConfigTest(unittest.TestCase):
+    """The toolbarcfg leaf: defaults, overrides, degradation, and
+    the closed builtin table."""
+
+    def test_default_grids_per_harness_and_fallback(self):
+        from dw_telegram.toolbarcfg import load_toolbar
+
+        cfg, warnings = load_toolbar(None)
+        self.assertEqual(warnings, [])
+        self.assertEqual(len(cfg.grid_for("claude")), 3)
+        self.assertEqual(len(cfg.grid_for("pi")), 2)
+        self.assertEqual(cfg.grid_for("mystery"), cfg.grid_for("claude"))
+
+    def test_buttons_route_keys_to_kb_and_the_rest_to_tb(self):
+        from dw_telegram.toolbarcfg import load_toolbar
+
+        cfg, _ = load_toolbar(None)
+        flat = [b for row in cfg.buttons_for("claude") for b in row]
+        data = {d for _, d in flat}
+        self.assertIn("kb:Enter", data)
+        self.assertIn("kb:Escape", data)
+        self.assertIn("tb:screen", data)
+        self.assertIn("tb:dismiss", data)
+        self.assertTrue(all(d.startswith(("kb:", "tb:")) for d in data))
+
+    def test_config_reshapes_grid_and_adds_text_action(self):
+        from dw_telegram.toolbarcfg import load_toolbar
+
+        cfg, warnings = load_toolbar({
+            "style": "text",
+            "actions": {
+                "clear": {"emoji": "🧹", "text": "Clear",
+                          "type": "text", "payload": "/clear"},
+            },
+            "grids": {"claude": [["clear", "esc"]]},
+        })
+        self.assertEqual(warnings, [])
+        self.assertEqual(cfg.grid_for("claude"), [["clear", "esc"]])
+        labels = [lbl for row in cfg.buttons_for("claude") for lbl, _ in row]
+        self.assertEqual(labels, ["Clear", "Esc"], "text style strips emoji")
+        self.assertEqual(cfg.grid_for("pi"), load_toolbar(None)[0].grid_for("pi"),
+                         "untouched harness keeps its default")
+
+    def test_builtin_table_is_closed(self):
+        from dw_telegram.toolbarcfg import load_toolbar
+
+        cfg, warnings = load_toolbar({
+            "actions": {
+                "shell": {"type": "builtin", "payload": "run_shell"},
+            },
+            "grids": {"claude": [["shell"]]},
+        })
+        self.assertIsNone(cfg.action("shell"), "no minted builtin")
+        self.assertTrue(any("closed" in w for w in warnings))
+        self.assertEqual(cfg.grid_for("claude"),
+                         load_toolbar(None)[0].grid_for("claude"),
+                         "the empty override fell back to the default")
+
+    def test_loader_never_raises_on_garbage(self):
+        from dw_telegram.toolbarcfg import load_toolbar
+
+        for garbage in (
+            42, "text", [], {"style": 7}, {"actions": 3},
+            {"actions": {"x": 5}}, {"actions": {"x": {}}},
+            {"actions": {"x": {"type": "weird", "payload": "y"}}},
+            {"actions": {"x": {"type": "key"}}},
+            {"grids": "nope"}, {"grids": {"claude": "nope"}},
+            {"grids": {"claude": [["ghost"], "row?"]}},
+        ):
+            cfg, warnings = load_toolbar(garbage)
+            self.assertTrue(warnings, f"garbage {garbage!r} warned")
+            self.assertTrue(cfg.buttons_for("claude"), "grid survives")
+
+
+class ToolbarUpgradeTest(InterfaceCase):
+    """/toolbar rides the config; tb: taps dispatch by action type;
+    the command menu registers at serve start."""
+
+    def steer(self):
+        self.pair()
+        self.iface.handle_update(topic_message(OWNER, f"/bind {self.repo}", 3))
+        self.iface.handle_update(topic_message(OWNER, "/steer claude:sess-1", 3))
+
+    def _tap(self, data, thread=3):
+        return {"callback_query": {
+            "id": f"cb-{data}", "data": data,
+            "message": {"chat": {"id": OWNER}, "message_id": 71,
+                        "message_thread_id": thread}}}
+
+    def test_toolbar_renders_the_harness_grid(self):
+        self.steer()
+        self.iface.handle_update(topic_message(OWNER, "/toolbar", 3))
+        buttons = self.transport.sent[-1]["buttons"]
+        data = {d for row in buttons for _, d in row}
+        self.assertIn("tb:screen", data)
+        self.assertIn("kb:Enter", data)
+        self.assertEqual(len(buttons), 3, "the claude grid has 3 rows")
+
+    def test_text_action_types_through_the_driver(self):
+        self.config.toolbar = {
+            "actions": {"clear": {"emoji": "🧹", "text": "Clear",
+                                   "type": "text", "payload": "/clear"}},
+            "grids": {"claude": [["clear"]]},
+        }
+        arming = Arming(self.state)
+        iface = TelegramInterface(
+            self.config, self.state, self.transport,
+            driver=TmuxDriver(arming, runner=self.tmux_runner,
+                              sleeper=lambda _s: None),
+            clock=self.clock,
+        )
+        token = new_pairing_token(self.state, self.clock())
+        iface.handle_update(message(OWNER, f"/pair {token}"))
+        iface.handle_update(topic_message(OWNER, f"/bind {self.repo}", 3))
+        iface.handle_update(topic_message(OWNER, "/steer claude:sess-1", 3))
+        self.tmux_runner.calls.clear()
+        iface.handle_update(self._tap("tb:clear"))
+        typed = [c for c in self.tmux_runner.calls if c[1] == "send-keys"]
+        self.assertEqual(typed[0][:5], ["tmux", "send-keys", "-t", "%7", "-l"])
+        self.assertIn("/clear", typed[0])
+        self.assertEqual(self.transport.answered[-1]["text"], "/clear")
+
+    def test_builtin_screen_tap_produces_the_screen_flow(self):
+        self.steer()
+        saved = (screenshot_mod.AVAILABLE, screenshot_mod._PIL_ERROR)
+        screenshot_mod.AVAILABLE = False
+        screenshot_mod._PIL_ERROR = "off for test"
+        try:
+            self.iface.handle_update(self._tap("tb:screen"))
+        finally:
+            screenshot_mod.AVAILABLE, screenshot_mod._PIL_ERROR = saved
+        self.assertIn("rendering unavailable", self.last_text())
+        self.assertEqual(self.transport.answered[-1]["text"], "screenshot")
+
+    def test_dismiss_edits_the_card_and_unknown_action_refused(self):
+        self.steer()
+        self.iface.handle_update(self._tap("tb:dismiss"))
+        self.assertEqual(self.transport.edited[-1]["text"], "toolbar dismissed")
+        self.iface.handle_update(self._tap("tb:ghost"))
+        self.assertIn("no such toolbar action", self.transport.answered[-1]["text"])
+
+    def test_tap_without_binding_refused(self):
+        self.pair()
+        self.iface.handle_update(self._tap("tb:screen", thread=999))
+        self.assertIn("no live binding", self.transport.answered[-1]["text"])
+
+    def test_command_menu_registers_and_opts_out(self):
+        self.assertTrue(self.iface.register_command_menu())
+        self.assertEqual(len(self.transport.commands_set), 1)
+        registered = dict(self.transport.commands_set[0])
+        self.assertIn("/screen", registered)
+        self.assertIn("/toolbar", registered)
+        self.config.command_menu = False
+        self.assertFalse(self.iface.register_command_menu())
+        self.assertEqual(len(self.transport.commands_set), 1, "no second call")
+
+
 # ---------------------------------------------------------- screenshots
 
 

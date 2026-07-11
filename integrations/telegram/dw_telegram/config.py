@@ -15,7 +15,9 @@ Recognized keys::
       "state_path": "…",                 // runtime state (default beside config)
       "registry_path": "…",              // sessions registry override
       "dw_cli": ["/path/to/dw"],         // explicit dw argv prefix
-      "agent_events_path": "…"           // dw hook stream override
+      "agent_events_path": "…",          // dw hook stream override
+      "toolbar": { … },                  // button grids (see toolbarcfg)
+      "command_menu": true               // register the slash menu
     }
 """
 
@@ -45,6 +47,8 @@ class Config:
     registry_path: Path | None = None
     dw_cli: list[str] | None = None
     agent_events_path: Path | None = None
+    toolbar: dict | None = None  # raw "toolbar" object; parsed by toolbarcfg
+    command_menu: bool = True  # register the slash menu at serve start
 
     def resolved_state_path(self) -> Path:
         if self.state_path is not None:
@@ -111,4 +115,8 @@ def load_config(
             if doc.get("agent_events_path")
             else None
         ),
+        toolbar=(
+            doc["toolbar"] if isinstance(doc.get("toolbar"), dict) else None
+        ),
+        command_menu=doc.get("command_menu") is not False,
     )

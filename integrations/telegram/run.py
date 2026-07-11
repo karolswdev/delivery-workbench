@@ -49,9 +49,11 @@ def main(argv: list[str]) -> int:
             print(f"telegram interface: {exc}", file=sys.stderr)
             return 2
         interface = TelegramInterface(config, state, transport)
+        registered = interface.register_command_menu()
         print(
             f"telegram interface: serving as @{me.get('username')} "
-            "(Ctrl-C stops)",
+            f"(command menu {'registered' if registered else 'off'}; "
+            "Ctrl-C stops)",
             file=sys.stderr,
         )
         try:
