@@ -91,11 +91,13 @@ proven by a captured suite run plus a live walk; the flagship tree
 served as both specimen and proof (HS-25-07 surfaced; phase 92's
 pivot made legible).
 
-Note for operators on this self-hosting repo: `.githooks/` is the
-installed snapshot and syncs at release time; between releases the
-source CLI (`pmo-roadmap/bin/dw`, what CI runs) is authoritative for
-`check` — the installed copy may report CLAUDE.md canon drift until
-the next sync.
+Note for operators on this self-hosting repo (corrected after a red
+CI run): the committed `.githooks/` snapshot is not free to go stale
+— the contributor quickstart snippet clones this repo and runs
+`.githooks/dw doctor` verbatim in CI, so any commit that changes the
+CLAUDE.md canon must carry a snapshot refresh
+(`pmo-roadmap/install.sh . --skip-bootstrap`). Synced through phase
+17 in the rider commit after the close.
 
 ## Active risks
 
