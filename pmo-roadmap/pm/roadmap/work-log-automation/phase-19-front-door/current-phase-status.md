@@ -31,11 +31,14 @@ land BEFORE the tag so v1.13.0 ships them.
 
 ## Exit criteria (evidence required)
 
-- [ ] PyPI-facing metadata is complete: `[project.urls]` carries
-  Repository, Changelog, and Issues; classifiers include the MIT
-  OSI license classifier; author contact set; LICENSE holder name
-  matches pyproject; README carries CI + PyPI + license badges
-  (WLA-19-01).
+- [x] PyPI-facing metadata is complete: `[project.urls]` carries
+  Repository, Changelog, and Issues; the license ships as the SPDX
+  expression `License-Expression: MIT` (upgraded from the audit's
+  classifier suggestion — setuptools deprecates classifiers, see
+  the story); author contact set; LICENSE holder name matches
+  pyproject; README carries CI + PyPI + license badges
+  (WLA-19-01 — [evidence](./evidence-story-01.md): 208 core tests,
+  package smoke, and a METADATA inspection, all green).
 - [ ] The README matches the shipped surface: twelve MCP tools
   listed, `dw board` / `dw holds` / `dw story show` in the CLI
   table, `docs/interop.md` linked, phase count current, and the
@@ -50,15 +53,16 @@ land BEFORE the tag so v1.13.0 ships them.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-19-01 | The package states its case — metadata and community polish | backlog | [story-01-package-states-its-case](./story-01-package-states-its-case.md) | - |
+| WLA-19-01 | The package states its case — metadata and community polish | done | [story-01-package-states-its-case](./story-01-package-states-its-case.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-19-02 | The README catches up with the shipped surface | backlog | [story-02-readme-catches-up](./story-02-readme-catches-up.md) | - |
 | WLA-19-03 | Release v1.13.0 | backlog | [story-03-release-v1-13-0](./story-03-release-v1-13-0.md) | - |
 
 ## Where we are
 
-Scaffolded from the 2026-07-11 open-source-readiness audit. Stories
-01 and 02 carry the audit's should-fix list; story 03 cuts the
-release last so the fixes ship inside it.
+1/3. WLA-19-01 shipped: the package states its case — five
+Project-URLs, SPDX license expression (Metadata-Version 2.4),
+author contact, LICENSE holder normalized, badges on the README.
+Next: WLA-19-02, the README catches up.
 
 ## Active risks
 

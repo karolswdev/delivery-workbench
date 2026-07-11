@@ -1,18 +1,19 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "delivery-workbench"
 description = "Evidence-first rails for agentic software delivery: Markdown roadmaps, paired evidence, and a machine-verified commit gate."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 # Runtime is stdlib-only by design (proof: the python-floor CI job);
 # an empty dependency list is a distribution feature, not an omission.
 dependencies = []
 dynamic = ["version"]
-authors = [{ name = "Karol Sane" }]
+authors = [{ name = "Karol Sane", email = "karolsane@gmail.com" }]
 keywords = ["delivery", "roadmap", "commit-gate", "evidence", "agents"]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -27,6 +28,9 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/karolswdev/delivery-workbench"
 Documentation = "https://github.com/karolswdev/delivery-workbench/tree/main/docs"
+Repository = "https://github.com/karolswdev/delivery-workbench"
+Changelog = "https://github.com/karolswdev/delivery-workbench/blob/main/CHANGELOG.md"
+Issues = "https://github.com/karolswdev/delivery-workbench/issues"
 
 [project.scripts]
 dw = "dw_pmo.launcher:main"

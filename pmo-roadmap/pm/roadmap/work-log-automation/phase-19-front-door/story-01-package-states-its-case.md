@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 19
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** none
 - **Unblocks:** WLA-19-03
 - **Owner:** unassigned
@@ -21,11 +21,15 @@ the index render them.
 ## Scope
 
 - **In:** `pyproject.toml` — add `Repository`, `Changelog`, and
-  `Issues` to `[project.urls]`; add
-  `License :: OSI Approved :: MIT License` to classifiers; add the
-  author email. `LICENSE` — holder becomes "Karol Sane". README —
-  badges (validation workflow status, PyPI version, license) near
-  the title.
+  `Issues` to `[project.urls]`; state the license as the SPDX
+  expression `license = "MIT"` with `license-files` (chosen over
+  the audit's classifier suggestion — the first build surfaced
+  setuptools deprecating both the license table and license
+  classifiers, support ends 2027-02-18; requires
+  `setuptools>=77`, which the 3.9 floor build already resolves);
+  add the author email. `LICENSE` — holder becomes "Karol Sane".
+  README — badges (validation workflow status, PyPI version,
+  license) near the title.
 - **Out:** any packaging-layout change (MANIFEST.in, package-dir);
   per-minor Python classifiers; renaming the project or touching
   the description/keywords; CODE_OF_CONDUCT/SECURITY/templates
@@ -33,9 +37,9 @@ the index render them.
 
 ## Acceptance criteria
 
-- [ ] `python3 -m build` (or the package smoke) succeeds and the
-  built metadata shows the three new urls, the MIT classifier, and
-  the author email.
+- [ ] `python3 -m build` (or the package smoke) succeeds with no
+  license deprecation warnings, and the built METADATA shows the
+  three new urls, `License-Expression: MIT`, and the author email.
 - [ ] LICENSE holder reads "Karol Sane"; no surface still carries
   the bare-name inconsistency.
 - [ ] README renders three badges pointing at the validation
