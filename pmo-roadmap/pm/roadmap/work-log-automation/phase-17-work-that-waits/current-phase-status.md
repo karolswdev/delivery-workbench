@@ -57,9 +57,10 @@ shows the whole picture, columns by status, swimlanes by phase.
   visibly parked (WLA-17-04 — [evidence](./evidence-story-04.md):
   198 tests green; the flagship's ~90 phases render in 163 lines,
   83 closed lanes folded, phase 92's pivot visible).
-- [ ] The workbench `#/board` shows swimlanes per phase, status
+- [x] The workbench `#/board` shows swimlanes per phase, status
   columns including on-hold, paused phases dimmed with their
-  reason (WLA-17-05).
+  reason (WLA-17-05 — [evidence](./evidence-story-05.md): 199 tests
+  green, 14-render viewport smoke, live screenshots in assets/).
 - [ ] Dragging a card between columns runs the guarded
   preview→apply mutation with a reason prompt for parked columns;
   a drop into done without evidence is refused (WLA-17-06).
@@ -72,22 +73,23 @@ shows the whole picture, columns by status, swimlanes by phase.
 | WLA-17-02 | Pause and resume a phase | done | [story-02-phase-pause](./story-02-phase-pause.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-17-03 | next tells the truth about parked work; dw holds is the ledger | done | [story-03-holds-ledger](./story-03-holds-ledger.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-17-04 | dw board — the kanban in the terminal | done | [story-04-terminal-board](./story-04-terminal-board.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-17-05 | The board on the workbench | backlog | [story-05-workbench-board](./story-05-workbench-board.md) | - |
+| WLA-17-05 | The board on the workbench | done | [story-05-workbench-board](./story-05-workbench-board.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-17-06 | Guarded moves on the board | backlog | [story-06-board-moves](./story-06-board-moves.md) | - |
 
 ## Where we are
 
-WLA-17-04 done (2026-07-11): `dw board` — swimlane per phase, six
-status columns, ✓ evidence receipts, hold reasons footnoted, honest
-folds (`+N more`, retired counted, table-less phases named), closed
-lanes one-line with `--all` to expand, `--phase`/`--json` for
-machines. The flagship's ~90 phases render in 0.1s and 163 lines;
-phase 92's prose-hidden pivot reads as ten identical bare
-in-progress cards. Earlier: WLA-17-03 (honest `next` + `dw holds`;
-the flagship read surfaced HS-25-07, blocked and reasonless since
-phase 25), WLA-17-02 (phase pause/resume end to end), WLA-17-01
-(the hold vocabulary with mandatory reasons). 198 core tests green.
-Next: WLA-17-05 (the board on the workbench).
+WLA-17-05 done (2026-07-11): the board has glass —
+`/api/projects/<slug>/board` + `#/board`, swimlane per open phase
+(pointer leading), six columns with counts, cards carrying ✓
+receipts and hold reasons, paused lanes dimmed with the ⏸ banner,
+closed lanes folded behind one-line `<details>` receipts; topbar +
+project-view links; the viewport smoke grew to 7 views × 2 sizes;
+live screenshots in assets/. Earlier: WLA-17-04 (`dw board` in the
+terminal; the flagship renders in 0.1s, phase 92's pivot legible),
+WLA-17-03 (honest `next` + `dw holds`; HS-25-07 surfaced),
+WLA-17-02 (phase pause/resume), WLA-17-01 (the hold vocabulary).
+199 core tests green. Next: WLA-17-06 (guarded moves on the board)
+— the last story, then the phase closes.
 
 Note for operators on this self-hosting repo: `.githooks/` is the
 installed snapshot and syncs at release time; between releases the

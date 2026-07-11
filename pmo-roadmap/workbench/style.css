@@ -245,3 +245,57 @@ button.applybtn:hover { filter: brightness(1.2); }
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
   50% { box-shadow: 0 0 7px 0 rgba(183, 121, 31, .5); }
 }
+
+/* ── the board (WLA-17-05): swimlane per phase, columns by status ── */
+.board { padding: 4px 0; }
+.blane {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 12px 0;
+  background: var(--panel);
+}
+.blane.paused { opacity: 0.55; border-style: dashed; }
+.blane-head { font-weight: 600; margin-bottom: 8px; }
+.pause-banner { color: var(--warn); font-weight: 400; margin-left: 8px; }
+.blane-head .sub, .blane .sub { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 12px; }
+.bcols { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.bcol {
+  flex: 1 0 160px;
+  min-width: 160px;
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 6px;
+}
+.bcol-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 2px 2px 8px;
+  display: flex;
+  justify-content: space-between;
+}
+.bcard {
+  display: block;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 5px;
+  padding: 5px 7px;
+  margin-bottom: 6px;
+  color: var(--text);
+  background: var(--bg);
+}
+.bcard:hover { text-decoration: none; border-color: var(--link); }
+.bcard .tick { color: var(--accent); }
+.bcard-title { font-size: 12px; color: var(--muted); }
+.bcard-note { font-size: 11px; color: var(--warn); margin-top: 2px; }
+.bcard.st-done { border-left-color: var(--accent); }
+.bcard.st-in-progress { border-left-color: var(--link); }
+.bcard.st-ready { border-left-color: var(--text); }
+.bcard.st-blocked { border-left-color: var(--err); }
+.bcard.st-on-hold, .bcard.st-paused { border-left-color: var(--warn); }
+details.blane.closed { opacity: 0.75; }
+details.blane.closed summary { cursor: pointer; color: var(--muted); }
+details.blane.closed[open] summary { margin-bottom: 8px; }
+.badge.on-hold, .badge.paused { color: var(--warn); border-color: var(--warn); }

@@ -1395,6 +1395,20 @@ class DwCoreTest(unittest.TestCase):
         warnings = core.project_warnings(self.project, self.root)
         self.assertFalse(any("parked without a recorded reason" in w for w in warnings), warnings)
 
+    def test_workbench_board_route(self) -> None:
+        import dw_pmo.workbench as wb
+        status, body = wb.handle_api(self.root, "/api/projects/demo/board", {})
+        self.assertEqual(status, 200)
+        model = body["data"]
+        self.assertEqual(model["columns"], list(core.BOARD_COLUMNS))
+        self.assertEqual(model["phases"][0]["number"], 1)
+        self.assertEqual(
+            [card["story_id"] for card in model["phases"][0]["columns"]["done"]],
+            ["DM-1-01"],
+        )
+        status, _body = wb.handle_api(self.root, "/api/projects/nope/board", {})
+        self.assertEqual(status, 400)
+
     # -- the board (WLA-17-04) --------------------------------------------
 
     def test_board_bucketing_pinned(self) -> None:

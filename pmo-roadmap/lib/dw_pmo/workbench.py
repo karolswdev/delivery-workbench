@@ -215,6 +215,12 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             project = get_project(root, parts[2])
             return 200, envelope(project_context(project, root))
 
+        if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "board":
+            from .board import board_model
+
+            project = get_project(root, parts[2])
+            return 200, envelope(board_model(project, root))
+
         if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3] == "phases":
             project = get_project(root, parts[2])
             context = project_context(project, root, phase_selector=parts[4])

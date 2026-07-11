@@ -245,7 +245,7 @@ async function viewProject(slug) {
     ${p.next_story ? `<div class="next"><span class="lbl">next</span>
       <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(p.next_story.story_id)}">
         <code>${esc(p.next_story.story_id)}</code></a> ${esc(p.next_story.title)} ${badge(p.next_story.status)}</div>` : ""}
-    <div class="section"><h2>Phases</h2>
+    <div class="section"><h2>Phases <a class="badge" href="#/board/${encodeURIComponent(slug)}">board view</a></h2>
       <div class="tblwrap"><table class="tbl">
         <tr><th>Phase</th><th>State</th><th>Stories</th><th>Evidence</th><th>Summary</th></tr>
         ${phases || '<tr><td colspan="5">no phases yet</td></tr>'}
@@ -489,6 +489,79 @@ async function viewWorklog(path) {
       <pre class="src">${esc(body.data.content)}</pre></div>`;
 }
 
+/* ── the board (WLA-17-05) ──────────────────────────────────────────
+ * Kanban over the same read layer: swimlane per phase, six status
+ * columns, paused lanes dimmed with their reason, closed lanes folded
+ * behind a one-line receipt. Read-only in this slice — moves arrive
+ * with WLA-17-06. */
+
+function boardCard(slug, card) {
+  const parked = card.status === "blocked" || card.status === "on-hold" || card.status === "paused";
+  return `
+    <a class="bcard st-${esc(card.status)}" title="${esc(card.title)} [${esc(card.status)}]"
+       href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}">
+      <code>${esc(card.story_id)}</code>${card.evidence_exists ? ' <span class="tick">✓</span>' : ""}
+      <div class="bcard-title">${esc(card.title)}</div>
+      ${parked ? `<div class="bcard-note">${esc(card.note || "no reason recorded")}</div>` : ""}
+    </a>`;
+}
+
+function boardLane(slug, columns, lane) {
+  const cols = columns.map((col) => `
+    <div class="bcol">
+      <div class="bcol-head">${esc(col)} <span class="bcol-count">${lane.columns[col].length}</span></div>
+      ${lane.columns[col].map((card) => boardCard(slug, card)).join("")}
+    </div>`).join("");
+  const uncovered = lane.story_count === 0 && lane.uncovered_story_files
+    ? `<span class="sub">no story table — ${lane.uncovered_story_files} story file${lane.uncovered_story_files === 1 ? "" : "s"} on disk, unlisted</span>` : "";
+  const head = `
+    ${lane.is_pointer ? "▶ " : ""}<a href="#/p/${encodeURIComponent(slug)}/ph/${lane.number}">phase ${lane.number} · ${esc(lane.slug)}</a>
+    ${lane.paused ? `<span class="pause-banner">⏸ paused — ${esc(lane.pause_note || "no reason recorded")}</span>` : ""}
+    ${lane.retired ? `<span class="sub">${lane.retired} retired row${lane.retired === 1 ? "" : "s"} not shown</span>` : ""}
+    ${uncovered}`;
+  if (lane.closed) {
+    return `
+      <details class="blane closed">
+        <summary>phase ${lane.number} · ${esc(lane.slug)} — closed, ${lane.done_count}/${lane.story_count} done</summary>
+        <div class="bcols">${cols}</div>
+      </details>`;
+  }
+  return `
+    <div class="blane${lane.paused ? " paused" : ""}">
+      <div class="blane-head">${head}</div>
+      <div class="bcols">${cols}</div>
+    </div>`;
+}
+
+async function viewBoard(slug) {
+  if (!slug) {
+    const ctx = await api("/api/projects");
+    const projects = ctx.data.projects;
+    if (!projects.length) {
+      app.innerHTML = stateHtml("No roadmap projects found under pm/roadmap/.");
+      return;
+    }
+    slug = projects[0].slug;
+    if (projects.length > 1) {
+      location.hash = `#/board/${encodeURIComponent(slug)}`;
+      return;
+    }
+  }
+  setCrumbs([{ label: "overview", href: "#/" },
+    { label: slug, href: `#/p/${encodeURIComponent(slug)}` },
+    { label: "board" }]);
+  const body = await api(`/api/projects/${encodeURIComponent(slug)}/board`);
+  const model = body.data;
+  const open = model.phases.filter((lane) => !lane.closed);
+  const closed = model.phases.filter((lane) => lane.closed);
+  app.innerHTML = `
+    <div class="board">
+      ${open.map((lane) => boardLane(slug, model.columns, lane)).join("") || stateHtml("no open phases")}
+      ${closed.length ? `<div class="section"><h2>closed phases (${closed.length})</h2>
+        ${closed.map((lane) => boardLane(slug, model.columns, lane)).join("")}</div>` : ""}
+    </div>`;
+}
+
 /* ── structured editor (WLA-5-06) ───────────────────────────────────
  * The editor constructs structured intent and POSTs it to
  * /api/mutations/preview. It never applies: the apply/diff workflow
@@ -700,6 +773,7 @@ async function route() {
     if (parts[0] === "p" && parts[2] === "s") return await viewStory(parts[1], parts[3]);
     if (parts[0] === "p" && parts[2] === "t") return await viewTrace(parts[1], parts[3]);
     if (parts[0] === "wl") return await viewWorklog(parts.slice(1).join("/"));
+    if (parts[0] === "board") return await viewBoard(parts[1]);
     if (parts[0] === "edit") return await viewEdit(parts[1]);
     if (parts[0] === "health") return await viewHealth();
     if (parts[0] === "mc") return await viewMissionControl();

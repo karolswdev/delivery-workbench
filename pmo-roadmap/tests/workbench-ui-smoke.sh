@@ -89,7 +89,7 @@ shot() { # name geometry url
   [ "$size" -gt 20000 ] || fail "$1 appears unrendered (only $size bytes)"
 }
 
-VIEWS="overview:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample"
+VIEWS="overview:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample"
 for spec in $VIEWS; do
   name="${spec%%:*}"
   route="${spec#*:}"
@@ -99,4 +99,4 @@ for spec in $VIEWS; do
   shot "$name-mobile" 390,844 "$BASE/?snapshot=1$extra$route"
 done
 
-echo "workbench-ui-smoke.sh: ok (12 viewport renders: 6 views x desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (14 viewport renders: 7 views x desktop+mobile)"
