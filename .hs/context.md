@@ -6,7 +6,8 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Next story: nothing actionable
+- Current phase: 17 (phase-17-work-that-waits)
+- Next story: WLA-17-01 — on-hold enters the write vocabulary; every park carries a reason [in-progress]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

@@ -179,7 +179,10 @@ def _tool_story_status(root: Path, args: dict) -> tuple[str, dict]:
 
     project = get_project(root, args["project"])
     phase = get_phase(project, str(args["phase"]))
-    plan = plan_story_status(root, project, phase, str(args["story"]), args["status"])
+    plan = plan_story_status(
+        root, project, phase, str(args["story"]), args["status"],
+        reason=str(args.get("reason", "") or ""),
+    )
     apply_plan(plan, validate_after=False)
     summary = dict(plan.summary)
     text = f"{summary['story_id']}\t{summary['status']}\t{summary['story_path']}"
@@ -334,7 +337,11 @@ TOOLS: dict[str, dict] = {
                 "story": {"type": ["string", "integer"], "description": "Story id, number, or filename"},
                 "status": {
                     "type": "string",
-                    "description": "backlog | ready | in-progress | blocked | done (synonyms complete/closed/shipped)",
+                    "description": "backlog | ready | in-progress | blocked | on-hold | done (done-synonyms complete/closed/shipped; hold-synonym paused)",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "why this status — required for on-hold/paused (recorded in the status cell as decoration); refused with done",
                 },
             },
             "required": ["project", "phase", "story", "status"],

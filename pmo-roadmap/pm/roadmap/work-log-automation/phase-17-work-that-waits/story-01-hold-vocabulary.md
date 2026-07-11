@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 17
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** none
 - **Unblocks:** WLA-17-02, WLA-17-03, WLA-17-04, WLA-17-05, WLA-17-06
 - **Owner:** unassigned
@@ -27,8 +27,9 @@ now use that same convention to record honest holds.
   `reason: str`; a park (`on-hold`/`paused`) without a reason is
   refused; when a reason is given the table cell and story header
   are written as `<status> (<reason> — since <YYYY-MM-DD>)`.
-  `parse.py` — `status_note(raw)` extracts the decoration tail so
-  read surfaces can show the why. `api.py` — `story_context` gains
+  `model.py` — `status_note(raw)` (beside `normalize_status`, its
+  read-side companion) extracts the decoration tail so read
+  surfaces can show the why. `api.py` — `story_context` gains
   `status_note` + normalized `status_token`. CLI `dw story status`
   gains `--reason`; MCP `dw_story_status` gains the `reason` param
   and the enum description names on-hold. Docs: roadmap-builder
@@ -47,10 +48,12 @@ now use that same convention to record honest holds.
 - [ ] `dw story status … on-hold` (no reason) is refused with a
   message naming `--reason`; `paused` behaves identically to
   `on-hold` at the gate of `validate_story_status`.
-- [ ] `--reason` composes with every status (a blocked reason is
-  recorded the same way); statuses without a reason write plain
-  tokens exactly as today (byte-identical — existing fixtures pass
-  unmodified).
+- [ ] `--reason` composes with every open status (a blocked reason
+  is recorded the same way) and is refused with done — a decorated
+  done would evade the gate's exact flip detection, and done's
+  reason is the evidence file. Statuses without a reason write
+  plain tokens exactly as today (byte-identical — existing
+  fixtures pass unmodified).
 - [ ] The §2.3 doc-parity test passes with the new vocabulary; MCP
   schema text and agent docs name on-hold.
 - [ ] `/usr/bin/python3 pmo-roadmap/tests/dw-core-tests.py` green.

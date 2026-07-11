@@ -12,7 +12,9 @@ from __future__ import annotations
 from .model import (
     CUT_STATUSES,
     DONE_STATUSES,
+    HOLD_STATUSES,
     OPEN_STATUSES,
+    PARKED_STATUSES,
     PHASE_RE,
     STORY_ID_RE,
     STORY_RE,
@@ -22,6 +24,7 @@ from .model import (
     StoryRow,
     die,
     normalize_status,
+    status_note,
 )
 from .paths import (
     ensure_under,

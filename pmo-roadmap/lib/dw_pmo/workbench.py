@@ -362,6 +362,7 @@ def build_mutation_plan(root: Path, body: dict[str, object]):
             root, project, phase, story, status,
             evidence_body=str(body.get("evidence_body", "") or ""),
             force=force,
+            reason=str(body.get("reason", "") or ""),
         )
     if kind == "attach_evidence":
         phase_sel, story = _require(body, "phase", "story")

@@ -1205,14 +1205,17 @@ class DwCoreTest(unittest.TestCase):
 
         builder = (TESTS_DIR.parent / "templates" / "roadmap-builder.md").read_text(encoding="utf-8")
         m = _re.search(
-            r"- \*\*Status:\*\* ([a-z| -]+)\n\s+\(the canonical story-status vocabulary[^)]*done-synonyms\n\s+accepted by tooling: ([a-z| ]+)\.",
+            r"- \*\*Status:\*\* ([a-z| -]+)\n\s+\(the canonical story-status vocabulary[^)]*done-synonyms\n\s+accepted by tooling: ([a-z| ]+); hold-synonym: ([a-z]+)\.",
             builder,
         )
         self.assertIsNotNone(m, "canonical vocabulary declaration missing from roadmap-builder §2.3")
         declared = {s.strip() for s in m.group(1).split("|")}
-        synonyms = {s.strip() for s in m.group(2).split("|")}
-        self.assertEqual(declared | synonyms, core.STORY_STATUSES,
+        done_synonyms = {s.strip() for s in m.group(2).split("|")}
+        hold_synonyms = {s.strip() for s in m.group(3).split("|")}
+        self.assertEqual(declared | done_synonyms | hold_synonyms, core.STORY_STATUSES,
                          "doc vocabulary and STORY_STATUSES constant have drifted")
+        self.assertTrue(hold_synonyms <= core.HOLD_STATUSES,
+                        "declared hold-synonyms and HOLD_STATUSES have drifted")
 
 
     # -- agent surface (WLA-6-05) ----------------------------------------
@@ -1226,6 +1229,63 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(plan.summary["status"], "blocked")
         with self.assertRaises(DwError):
             core.plan_story_create(self.root, self.project, self.phase, "T", status="wip")
+
+    # -- holds carry their why (WLA-17-01) --------------------------------
+
+    def test_park_without_reason_refused(self) -> None:
+        for park in ("on-hold", "paused"):
+            with self.assertRaises(DwError) as ctx:
+                core.plan_story_status(self.root, self.project, self.phase, "DM-1-02", park)
+            self.assertIn("--reason", ctx.exception.message)
+
+    def test_hold_reason_round_trip(self) -> None:
+        plan = core.plan_story_status(
+            self.root, self.project, self.phase, "DM-1-02", "on-hold",
+            reason="pivot to phase 2",
+        )
+        self.assertEqual(plan.summary["status"], "on-hold")
+        self.assertEqual(plan.summary["reason"], "pivot to phase 2")
+        core.apply_plan(plan, validate_after=False)
+        rows = core.parse_story_rows(self.phase_dir / "current-phase-status.md")
+        row = next(r for r in rows if r.story_id == "DM-1-02")
+        self.assertEqual(core.normalize_status(row.status), "on-hold")
+        note = core.status_note(row.status)
+        self.assertIn("pivot to phase 2", note)
+        self.assertIn("since", note)
+        # header and table decorate identically — dw check stays clean
+        self.assertEqual(core.check_project(self.project, self.root), [])
+
+    def test_reason_composes_with_open_statuses_and_refuses_done(self) -> None:
+        plan = core.plan_story_status(
+            self.root, self.project, self.phase, "DM-1-02", "blocked",
+            reason="waiting on API keys",
+        )
+        table = next(c for c in plan.changes if c.path.name == "current-phase-status.md")
+        self.assertIn("blocked (waiting on API keys — since ", table.new_content)
+        # a decorated done would evade the gate's exact flip detection
+        with self.assertRaises(DwError) as ctx:
+            core.plan_story_status(
+                self.root, self.project, self.phase, "DM-1-01", "done",
+                reason="nope",
+            )
+        self.assertIn("no --reason", ctx.exception.message)
+
+    def test_plain_statuses_write_byte_identical(self) -> None:
+        plan = core.plan_story_status(self.root, self.project, self.phase, "DM-1-02", "in-progress")
+        table = next(c for c in plan.changes if c.path.name == "current-phase-status.md")
+        self.assertIn("| in-progress |", table.new_content)
+        self.assertNotIn("in-progress (", table.new_content)
+
+    def test_status_note_extraction(self) -> None:
+        cases = {
+            "on-hold (pivot to X — since 2026-07-11)": "pivot to X — since 2026-07-11",
+            "**done** (2026-07-07 — twelve new tests)": "2026-07-07 — twelve new tests",
+            "blocked — waiting on keys": "waiting on keys",
+            "done": "",
+            "": "",
+        }
+        for raw, want in cases.items():
+            self.assertEqual(core.status_note(raw), want, f"status_note({raw!r})")
 
     def test_agent_docs_block_lifecycle(self) -> None:
         path, action = core.write_agent_docs(self.root)
@@ -1322,6 +1382,9 @@ Prose after the table must not be parsed as rows.
             # deliberately-not-done decorations must never read as done
             "host-complete (walkthrough deferred per owner)": "host-complete",
             "paused": "paused",
+            "paused (yields to phase 91 — since 2026-07-11)": "paused",
+            "on-hold (pivot to phase 18 — since 2026-07-11)": "on-hold",
+            "ON HOLD": "on-hold",
             "shipped → phase-49 (CLOSED 6/6)": "shipped",
             "~~cut~~": "cut",
             "scaffolded": "scaffolded",

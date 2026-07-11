@@ -11,16 +11,24 @@ PHASE_RE = re.compile(r"^phase-(\d+)-(.+)$")
 STORY_RE = re.compile(r"^story-(\d+)-(.+)\.md$")
 STORY_ID_RE = re.compile(r"^([A-Z][A-Z0-9]*)-(\d+)-(\d+)$")
 DONE_STATUSES = {"done", "complete", "closed", "shipped"}
+# Deliberately parked work (WLA-17-01): `on-hold` is the canonical
+# token, `paused` its synonym — both gate identically, mirroring the
+# done-synonym pattern. Distinct from `blocked`: a hold is a choice
+# (a pivot, a deprioritization), a block is an impediment. Holds are
+# OPEN statuses — the gate's done rules never see them.
+HOLD_STATUSES = {"on-hold", "paused"}
 # The single story-status vocabulary (declared for humans in
 # roadmap-builder §2.3; a unit test asserts doc/constant parity).
 # Write commands reject anything else so a typo can never strand a
 # story outside every view.
-STORY_OPEN_STATUSES = {"backlog", "ready", "in-progress", "blocked"}
+STORY_OPEN_STATUSES = {"backlog", "ready", "in-progress", "blocked"} | HOLD_STATUSES
 STORY_STATUSES = DONE_STATUSES | STORY_OPEN_STATUSES
+# Statuses that mean "parked": skipped by next, listed by dw holds.
+PARKED_STATUSES = {"blocked"} | HOLD_STATUSES
 # Phase-activity detection tolerates the looser phase-index vocabulary
-# (planned/not-started/planning/scaffolded/paused) that may appear in
+# (planned/not-started/planning/scaffolded) that may appear in
 # legacy story tables and phase indexes.
-OPEN_STATUSES = STORY_OPEN_STATUSES | {"planned", "not-started", "planning", "scaffolded", "paused"}
+OPEN_STATUSES = STORY_OPEN_STATUSES | {"planned", "not-started", "planning", "scaffolded"}
 
 # Read-side terminal statuses for rows a legacy tree retired rather
 # than shipped (struck-through rows, cancelled work). Never accepted
@@ -41,6 +49,7 @@ CUT_STATUSES = {"cut", "cancelled", "superseded"}
 _STATUS_KEYWORDS = [
     "in-progress", "in progress", "not-started", "not started",
     "superseded", "cancelled", "scaffolded", "planning", "planned",
+    "on-hold", "on hold",
     "complete", "shipped", "backlog", "blocked", "paused", "closed",
     "ready", "done", "cut",
 ]
@@ -49,7 +58,11 @@ _STATUS_KEYWORD_RE = re.compile(
     + "|".join(k.replace(" ", r"\s+") for k in sorted(_STATUS_KEYWORDS, key=len, reverse=True))
     + r")(?![a-z0-9-])"
 )
-_STATUS_CANONICAL = {"in progress": "in-progress", "not started": "not-started"}
+_STATUS_CANONICAL = {
+    "in progress": "in-progress",
+    "not started": "not-started",
+    "on hold": "on-hold",
+}
 
 
 def normalize_status(raw: str | None) -> str:
@@ -71,6 +84,29 @@ def normalize_status(raw: str | None) -> str:
         return _STATUS_CANONICAL.get(token, token)
     parts = head.split()
     return parts[0] if parts else ""
+
+
+_NOTE_DELIM_RE = re.compile(r"[(—–:;]")
+
+
+def status_note(raw: str | None) -> str:
+    """The human tail of a decorated status cell — the why behind it.
+
+    ``on-hold (pivot to X — since 2026-07-11)`` → ``pivot to X —
+    since 2026-07-11``; a bare token → ``""``. The companion of
+    :func:`normalize_status`: normalize reads the head, this reads the
+    tail. Display prose only — never parsed back into logic.
+    """
+    if not raw:
+        return ""
+    s = re.sub(r"\*|`|_{2}|~~", "", raw).strip()
+    m = _NOTE_DELIM_RE.search(s)
+    if not m:
+        return ""
+    note = s[m.end():].strip()
+    if m.group(0) == "(" and note.endswith(")"):
+        note = note[:-1].strip()
+    return note
 
 # The generator's stand-in body for evidence created without content.
 # dw check treats a done story whose evidence still carries this line

@@ -173,6 +173,7 @@ def command_story_status(args: argparse.Namespace) -> int:
         args.status,
         evidence_body=evidence_body,
         force=args.force,
+        reason=args.reason or "",
     )
     apply_plan(plan, validate_after=False)
     print(f"{plan.summary['story_id']}\t{plan.summary['status']}\t{plan.summary['story_path']}")
@@ -729,6 +730,10 @@ def build_parser() -> argparse.ArgumentParser:
     story_status.add_argument("--evidence-body")
     story_status.add_argument("--evidence-from-file", type=Path)
     story_status.add_argument("--force", action="store_true")
+    story_status.add_argument(
+        "--reason",
+        help="why this status (required for on-hold/paused; recorded in the cell as decoration)",
+    )
     story_status.set_defaults(func=command_story_status)
     story_evidence = story_sub.add_parser("evidence", help="create or attach paired story evidence")
     story_evidence.add_argument("project")

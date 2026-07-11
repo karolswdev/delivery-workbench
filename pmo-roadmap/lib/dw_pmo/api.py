@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .model import DONE_STATUSES, OPEN_STATUSES, Phase, Project, StoryRow, normalize_status
+from .model import DONE_STATUSES, OPEN_STATUSES, Phase, Project, StoryRow, normalize_status, status_note
 from .parse import (
     discover_phases,
     get_phase,
@@ -82,6 +82,8 @@ def story_context(row: StoryRow, phase: Phase, project: Project, root: Path, inc
         "story_id": row.story_id,
         "title": row.title,
         "status": row.status,
+        "status_token": normalize_status(row.status),
+        "status_note": status_note(row.status),
         "header_status": header,
         "story_file": story_target,
         "story_path": rel(story_path, root),

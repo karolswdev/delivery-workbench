@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .model import DONE_STATUSES, STORY_RE, STORY_STATUSES, Phase, Project, die
+from .model import DONE_STATUSES, HOLD_STATUSES, STORY_RE, STORY_STATUSES, Phase, Project, die
 
 
 _SLUG_RE_STRICT = __import__("re").compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -273,8 +273,16 @@ def plan_story_status(
     status: str,
     evidence_body: str = "",
     force: bool = False,
+    reason: str = "",
 ) -> MutationPlan:
     status = validate_story_status(status)
+    reason = " ".join(reason.split())
+    if status in HOLD_STATUSES and not reason:
+        die("a hold needs its why; pass --reason when parking a story on-hold/paused")
+    if status in DONE_STATUSES and reason:
+        # A decorated done would evade the gate's exact flip
+        # detection; done's reason is the evidence file.
+        die("done takes no --reason; the evidence file is the reason")
     row, story_num, story_path = find_story(project, phase, story_selector)
     status_file = phase.path / "current-phase-status.md"
     evidence_path = phase.path / f"evidence-story-{story_num:02d}.md"
@@ -283,11 +291,17 @@ def plan_story_status(
     if evidence_path.exists() and evidence_body and not force:
         die(f"evidence already exists; pass --force to replace: {rel(evidence_path, root)}")
 
+    # The reason rides as decoration in the cell/header tail — the
+    # convention normalize_status reads through and status_note
+    # recovers. No reason → the plain token, byte-identical to before.
+    from datetime import date
+
+    written_status = f"{status} ({reason} — since {date.today().isoformat()})" if reason else status
     evidence_link = evidence_link_for(story_num) if (evidence_body or status in DONE_STATUSES) else None
     plan = MutationPlan(kind="story-status", root=root, project_slug=project.slug)
-    plan.changes.append(_change(story_path, update_story_header_status_content(story_path, status)))
+    plan.changes.append(_change(story_path, update_story_header_status_content(story_path, written_status)))
     plan.changes.append(
-        _change(status_file, update_story_table_row_content(status_file, row.story_id, status=status, evidence=evidence_link))
+        _change(status_file, update_story_table_row_content(status_file, row.story_id, status=written_status, evidence=evidence_link))
     )
     if evidence_body:
         plan.changes.append(_change(evidence_path, render_evidence(row, story_num, evidence_body)))
@@ -298,6 +312,8 @@ def plan_story_status(
         "story_path": rel(story_path, root),
         "evidence_path": rel(evidence_path, root),
     }
+    if reason:
+        plan.summary["reason"] = reason
     return plan
 
 

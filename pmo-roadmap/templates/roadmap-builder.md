@@ -179,10 +179,12 @@ Required header + sections:
 
 - **Project:** {project-slug}
 - **Phase:** {n}
-- **Status:** backlog | ready | in-progress | blocked | done
+- **Status:** backlog | ready | in-progress | blocked | on-hold | done
   (the canonical story-status vocabulary — single source; done-synonyms
-  accepted by tooling: complete | closed | shipped. Other docs and
-  templates reference this line, never restate it.)
+  accepted by tooling: complete | closed | shipped; hold-synonym: paused.
+  `blocked` is an impediment, `on-hold` a deliberate park — holds
+  require a recorded reason. Other docs and templates reference this
+  line, never restate it.)
 - **Depends on:** {comma-separated IDs, or "none"}
 - **Unblocks:** {comma-separated IDs} (optional)
 - **Owner:** {initials or "unassigned"}

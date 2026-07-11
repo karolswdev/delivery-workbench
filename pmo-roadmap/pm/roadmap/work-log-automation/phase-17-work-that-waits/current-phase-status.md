@@ -35,10 +35,12 @@ shows the whole picture, columns by status, swimlanes by phase.
 
 ## Exit criteria (evidence required)
 
-- [ ] `dw story status <…> on-hold --reason "<why>"` writes the
+- [x] `dw story status <…> on-hold --reason "<why>"` writes the
   reason as decoration the reader can see (`status_note`) and
   `normalize_status` reads through; `on-hold` without a reason is
-  refused; `paused` gates as its synonym (WLA-17-01).
+  refused; `paused` gates as its synonym (WLA-17-01 —
+  [evidence](./evidence-story-01.md): 188 tests green + live CLI
+  walk on a scratch tree).
 - [ ] `dw phase pause <n> --reason` / `dw phase resume <n>` flip the
   phase header and README index row; a paused phase reads
   `paused: true` with its note in context (WLA-17-02).
@@ -60,7 +62,7 @@ shows the whole picture, columns by status, swimlanes by phase.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-17-01 | on-hold enters the write vocabulary; every park carries a reason | backlog | [story-01-hold-vocabulary](./story-01-hold-vocabulary.md) | - |
+| WLA-17-01 | on-hold enters the write vocabulary; every park carries a reason | done | [story-01-hold-vocabulary](./story-01-hold-vocabulary.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-17-02 | Pause and resume a phase | backlog | [story-02-phase-pause](./story-02-phase-pause.md) | - |
 | WLA-17-03 | next tells the truth about parked work; dw holds is the ledger | backlog | [story-03-holds-ledger](./story-03-holds-ledger.md) | - |
 | WLA-17-04 | dw board — the kanban in the terminal | backlog | [story-04-terminal-board](./story-04-terminal-board.md) | - |
@@ -69,11 +71,21 @@ shows the whole picture, columns by status, swimlanes by phase.
 
 ## Where we are
 
-Phase scaffolded 2026-07-11 from the owner's direction ("sometimes
-teams pause things to pivot… what if we also built a visual layer,
-like a kanban board, divided by phase?") and the flagship specimen
-(HoldSpeak phases 91/92/93 holding their ordering in prose the
-machinery cannot read). Six stories written; nothing started.
+WLA-17-01 done (2026-07-11): the hold vocabulary is live —
+`on-hold`/`paused` in the write vocabulary, `--reason` decoration on
+every park (refused bare; refused on done, which would evade the
+gate's exact flip detection), `status_note`/`status_token` on every
+read surface, CLI + MCP + workbench mutation parity, §2.3 and the
+CLAUDE.md block regenerated with the three-group parity test. 188
+core tests green; gate-parity, mcp-server, roadmap-cli, canon-lint,
+docs-lint, agent-surface, package-smoke all green. Next: WLA-17-02
+(phase pause/resume).
+
+Note for operators on this self-hosting repo: `.githooks/` is the
+installed snapshot and syncs at release time; between releases the
+source CLI (`pmo-roadmap/bin/dw`, what CI runs) is authoritative for
+`check` — the installed copy may report CLAUDE.md canon drift until
+the next sync.
 
 ## Active risks
 
