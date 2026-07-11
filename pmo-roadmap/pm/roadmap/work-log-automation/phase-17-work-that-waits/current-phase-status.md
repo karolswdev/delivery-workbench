@@ -41,9 +41,11 @@ shows the whole picture, columns by status, swimlanes by phase.
   refused; `paused` gates as its synonym (WLA-17-01 —
   [evidence](./evidence-story-01.md): 188 tests green + live CLI
   walk on a scratch tree).
-- [ ] `dw phase pause <n> --reason` / `dw phase resume <n>` flip the
+- [x] `dw phase pause <n> --reason` / `dw phase resume <n>` flip the
   phase header and README index row; a paused phase reads
-  `paused: true` with its note in context (WLA-17-02).
+  `paused: true` with its note in context (WLA-17-02 —
+  [evidence](./evidence-story-02.md): 192 tests green + live
+  pause→resume walk with all four refusals).
 - [ ] `dw next` never proposes a story that is blocked or on-hold,
   never proposes from a paused phase, and its nothing-actionable
   exit names the parked counts; `dw holds` lists every parked
@@ -63,7 +65,7 @@ shows the whole picture, columns by status, swimlanes by phase.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-17-01 | on-hold enters the write vocabulary; every park carries a reason | done | [story-01-hold-vocabulary](./story-01-hold-vocabulary.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-17-02 | Pause and resume a phase | backlog | [story-02-phase-pause](./story-02-phase-pause.md) | - |
+| WLA-17-02 | Pause and resume a phase | done | [story-02-phase-pause](./story-02-phase-pause.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-17-03 | next tells the truth about parked work; dw holds is the ledger | backlog | [story-03-holds-ledger](./story-03-holds-ledger.md) | - |
 | WLA-17-04 | dw board — the kanban in the terminal | backlog | [story-04-terminal-board](./story-04-terminal-board.md) | - |
 | WLA-17-05 | The board on the workbench | backlog | [story-05-workbench-board](./story-05-workbench-board.md) | - |
@@ -71,15 +73,18 @@ shows the whole picture, columns by status, swimlanes by phase.
 
 ## Where we are
 
-WLA-17-01 done (2026-07-11): the hold vocabulary is live —
-`on-hold`/`paused` in the write vocabulary, `--reason` decoration on
-every park (refused bare; refused on done, which would evade the
-gate's exact flip detection), `status_note`/`status_token` on every
-read surface, CLI + MCP + workbench mutation parity, §2.3 and the
-CLAUDE.md block regenerated with the three-group parity test. 188
-core tests green; gate-parity, mcp-server, roadmap-cli, canon-lint,
-docs-lint, agent-surface, package-smoke all green. Next: WLA-17-02
-(phase pause/resume).
+WLA-17-02 done (2026-07-11): phases pause and resume —
+`dw phase pause --reason` / `resume` write the header (bullet or
+bare shape preserved; the flagship's bare shape inserted when
+absent) and the README index row together; context carries
+`paused`/`pause_note`; the workbench editor gained
+`pause_phase`/`resume_phase` on the same preview→apply fingerprint
+discipline; the event taxonomy grew `phase_paused`/`phase_resumed`.
+192 core tests green. Earlier: WLA-17-01 (the hold vocabulary:
+on-hold/paused + `--reason` decoration, refused bare and refused on
+done; `status_note`/`status_token` on every read surface; CLI + MCP
++ workbench parity; §2.3 three-group parity test). Next: WLA-17-03
+(honest next + the holds ledger).
 
 Note for operators on this self-hosting repo: `.githooks/` is the
 installed snapshot and syncs at release time; between releases the

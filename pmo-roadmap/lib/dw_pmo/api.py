@@ -14,6 +14,7 @@ from .parse import (
     parse_current_phase_dirname,
     parse_current_phase_target,
     parse_story_rows,
+    phase_header_status,
     story_num_from_file,
     supplemental_canon,
 )
@@ -120,6 +121,8 @@ def project_context(
     phase_items: list[dict[str, object]] = []
     for phase in phases:
         all_rows = parse_story_rows(phase.path / "current-phase-status.md")
+        phase_header = phase_header_status(phase.path / "current-phase-status.md")
+        paused = normalize_status(phase_header) == "paused"
         rows = []
         for row in all_rows:
             if status_filter and normalize_status(row.status) != normalize_status(status_filter):
@@ -135,6 +138,8 @@ def project_context(
                 "final_summary": rel(phase.path / "final-summary.md", root),
                 "final_summary_exists": (phase.path / "final-summary.md").exists(),
                 "active": any(normalize_status(row.status) in OPEN_STATUSES for row in all_rows),
+                "paused": paused,
+                "pause_note": status_note(phase_header) if paused else "",
                 "stories": rows,
             }
         )

@@ -33,6 +33,9 @@ EVENT_TYPES: dict[str, frozenset[str]] = {
     "contract_generated": frozenset({"stories"}),
     "phase_created": frozenset({"phase"}),
     "phase_closed": frozenset({"phase"}),
+    # v1.1 (WLA-17-02): the pause/resume moments.
+    "phase_paused": frozenset({"phase"}),
+    "phase_resumed": frozenset({"phase"}),
 }
 
 

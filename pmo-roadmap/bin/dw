@@ -47,6 +47,8 @@ try:
         parse_story_rows,
         plan_phase_close,
         plan_phase_create,
+        plan_phase_pause,
+        plan_phase_resume,
         plan_story_create,
         plan_story_evidence,
         plan_story_status,
@@ -142,6 +144,24 @@ def command_phase_close(args: argparse.Namespace) -> int:
     )
     apply_plan(plan, validate_after=False)
     print(plan.summary["summary_path"])
+    return 0
+
+
+def command_phase_pause(args: argparse.Namespace) -> int:
+    project = get_project(args.root, args.project)
+    phase = get_phase(project, args.phase)
+    plan = plan_phase_pause(args.root, project, phase, args.reason or "")
+    apply_plan(plan, validate_after=False)
+    print(f"phase-{phase.number}\tpaused\t{plan.summary['reason']}")
+    return 0
+
+
+def command_phase_resume(args: argparse.Namespace) -> int:
+    project = get_project(args.root, args.project)
+    phase = get_phase(project, args.phase)
+    plan = plan_phase_resume(args.root, project, phase)
+    apply_plan(plan, validate_after=False)
+    print(f"phase-{phase.number}\tin-progress\t(was: {plan.summary['previous_status']})")
     return 0
 
 
@@ -694,6 +714,15 @@ def build_parser() -> argparse.ArgumentParser:
     phase_close.add_argument("--status", default="done")
     phase_close.add_argument("--force", action="store_true")
     phase_close.set_defaults(func=command_phase_close)
+    phase_pause = phase_sub.add_parser("pause", help="park a phase with a recorded reason (header + README index row)")
+    phase_pause.add_argument("project")
+    phase_pause.add_argument("phase")
+    phase_pause.add_argument("--reason", help="why the phase is pausing (required)")
+    phase_pause.set_defaults(func=command_phase_pause)
+    phase_resume = phase_sub.add_parser("resume", help="release a paused phase back to in-progress")
+    phase_resume.add_argument("project")
+    phase_resume.add_argument("phase")
+    phase_resume.set_defaults(func=command_phase_resume)
 
     evidence = sub.add_parser("evidence", help="evidence commands")
     evidence_sub = evidence.add_subparsers(dest="evidence_command", required=True)

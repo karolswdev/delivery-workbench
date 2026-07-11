@@ -148,6 +148,31 @@ def header_status(path: Path) -> str | None:
     return None
 
 
+_PHASE_STATUS_RE = re.compile(r"^-?\s*\*\*Status:\*\*\s*(.+)$")
+
+
+def phase_header_status(status_file: Path) -> str | None:
+    """The phase file's ``**Status:**`` line, raw with decoration.
+
+    Both shapes count: the bullet (`- **Status:**`) and the bare line
+    the flagship writes (`**Status:** IN PROGRESS (9/10).`). None when
+    the phase declares no status — most trees don't until paused.
+    """
+    if not status_file.exists():
+        return None
+    for line in read_text(status_file).splitlines():
+        m = _PHASE_STATUS_RE.match(line.strip())
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+def phase_is_paused(phase_path: Path) -> bool:
+    from .model import normalize_status
+
+    return normalize_status(phase_header_status(phase_path / "current-phase-status.md")) == "paused"
+
+
 def story_id_from_header(path: Path) -> str:
     """The story ID from a story file's H1 (`# FX-85-01 - Title`), or ""
     when the file or a well-formed ID is absent. A receipt-side

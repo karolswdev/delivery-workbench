@@ -1276,6 +1276,82 @@ class DwCoreTest(unittest.TestCase):
         self.assertIn("| in-progress |", table.new_content)
         self.assertNotIn("in-progress (", table.new_content)
 
+    # -- phases pause and resume (WLA-17-02) ------------------------------
+
+    def test_phase_pause_and_resume_round_trip(self) -> None:
+        plan = core.plan_phase_pause(self.root, self.project, self.phase, "yields to phase 2")
+        core.apply_plan(plan, validate_after=False)
+        status_file = self.phase_dir / "current-phase-status.md"
+        header = core.phase_header_status(status_file)
+        self.assertEqual(core.normalize_status(header), "paused")
+        self.assertIn("yields to phase 2", core.status_note(header))
+        self.assertTrue(core.phase_is_paused(self.phase_dir))
+        readme_path = self.root / "pm" / "roadmap" / "demo" / "README.md"
+        self.assertIn("paused (yields to phase 2 — since ", readme_path.read_text(encoding="utf-8"))
+        # a paused phase raises no new issues
+        self.assertEqual(core.check_project(self.project, self.root), [])
+        # context reads the pause; paused is open, never closed
+        ctx = core.project_context(self.project, self.root)
+        ph = ctx["phases"][0]
+        self.assertTrue(ph["paused"])
+        self.assertIn("yields to phase 2", str(ph["pause_note"]))
+        self.assertTrue(ph["active"])
+        # resume restores in-progress in both places
+        core.apply_plan(core.plan_phase_resume(self.root, self.project, self.phase), validate_after=False)
+        self.assertFalse(core.phase_is_paused(self.phase_dir))
+        self.assertEqual(core.phase_header_status(status_file), "in-progress")
+        self.assertIn("| in-progress |", readme_path.read_text(encoding="utf-8"))
+
+    def test_phase_pause_inserts_bare_status_under_h1(self) -> None:
+        # the fixture phase file declares no Status line — the pause
+        # inserts the flagship's bare shape right under the H1
+        plan = core.plan_phase_pause(self.root, self.project, self.phase, "why")
+        content = next(c for c in plan.changes if c.path.name == "current-phase-status.md").new_content
+        lines = content.splitlines()
+        self.assertTrue(lines[0].startswith("# Phase 1"))
+        self.assertTrue(lines[2].startswith("**Status:** paused (why — since "), lines[:4])
+
+    def test_phase_pause_and_resume_refusals(self) -> None:
+        with self.assertRaises(DwError) as no_reason:
+            core.plan_phase_pause(self.root, self.project, self.phase, "  ")
+        self.assertIn("--reason", no_reason.exception.message)
+        with self.assertRaises(DwError) as not_paused:
+            core.plan_phase_resume(self.root, self.project, self.phase)
+        self.assertIn("not paused", not_paused.exception.message)
+        (self.phase_dir / "final-summary.md").write_text("# Phase 1 Final Summary\n", encoding="utf-8")
+        with self.assertRaises(DwError) as closed_pause:
+            core.plan_phase_pause(self.root, self.project, self.phase, "why")
+        self.assertIn("closed", closed_pause.exception.message)
+        with self.assertRaises(DwError) as closed_resume:
+            core.plan_phase_resume(self.root, self.project, self.phase)
+        self.assertIn("closed", closed_resume.exception.message)
+
+    def test_workbench_pause_and_resume_mutations(self) -> None:
+        import dw_pmo.workbench as wb
+        # done stories only in the fixture? DM-1-02 is ready — the
+        # project is issue-free, so no acknowledge dance is needed
+        status, body = wb.handle_mutation(self.root, "/api/mutations/preview", {
+            "kind": "pause_phase", "project": "demo", "phase": "1", "reason": "pivot",
+        })
+        self.assertEqual(status, 200, body)
+        fingerprint = body["data"]["fingerprint"]
+        status, body = wb.handle_mutation(self.root, "/api/mutations/apply", {
+            "kind": "pause_phase", "project": "demo", "phase": "1", "reason": "pivot",
+            "fingerprint": fingerprint,
+        })
+        self.assertEqual(status, 200, body)
+        self.assertTrue(core.phase_is_paused(self.phase_dir))
+        status, body = wb.handle_mutation(self.root, "/api/mutations/preview", {
+            "kind": "resume_phase", "project": "demo", "phase": "1",
+        })
+        self.assertEqual(status, 200, body)
+        status, body = wb.handle_mutation(self.root, "/api/mutations/apply", {
+            "kind": "resume_phase", "project": "demo", "phase": "1",
+            "fingerprint": body["data"]["fingerprint"],
+        })
+        self.assertEqual(status, 200, body)
+        self.assertFalse(core.phase_is_paused(self.phase_dir))
+
     def test_status_note_extraction(self) -> None:
         cases = {
             "on-hold (pivot to X — since 2026-07-11)": "pivot to X — since 2026-07-11",

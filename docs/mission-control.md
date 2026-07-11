@@ -136,7 +136,9 @@ repo content). One line per event:
 Taxonomy v1 — exactly the moments the machinery already observes:
 `story_status` (with from/to), `evidence_capture` (with exit
 code), `gate_pass`, `gate_refusal` (with rule id),
-`contract_generated`, `phase_created`, `phase_closed`.
+`contract_generated`, `phase_created`, `phase_closed`. Grown in
+v1.1 (WLA-17-02) with the pause/resume moments: `phase_paused`,
+`phase_resumed` (each with phase).
 
 **The consent stance, binding:** events carry rails metadata only —
 story IDs, statuses, rule ids, exit codes, tree hashes. Never

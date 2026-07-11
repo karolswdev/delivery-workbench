@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 17
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-17-01
 - **Unblocks:** WLA-17-03, WLA-17-04, WLA-17-05
 - **Owner:** unassigned
