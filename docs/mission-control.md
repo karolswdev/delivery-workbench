@@ -164,6 +164,25 @@ Three rings, strictest last:
    outside the repo), is revoked by re-pairing, and no chat or
    user ID is ever configuration we author. Previews are verbatim
    and read-only.
+   *(Amended by WLA-20-01/02, owner direction 2026-07-11:)* the
+   read ring gained pictures — `/screen` renders the pane to a PNG
+   (ANSI colors honored, in-place 🔄 refresh) and `/live` serves an
+   auto-refreshing photo behind the same content-hash gate the text
+   view always had. Rendering is an optional capability (Pillow):
+   absent, both fall back to text with the reason stated. Still
+   read-only, still never a keystroke.
+   *(Amended by WLA-20-03, owner direction 2026-07-11 — groups:)*
+   pairing now records WHO redeemed the token (`from.id`) as the
+   **owner-of-record**. In a chat where other humans exist, the
+   consent-bearing commands, every callback tap, and the steering
+   relay answer only to that identity — refusal by name; reads
+   stay chat-scoped. This transmutes the refused user-ID allowlist
+   rather than repealing it: no allowlist exists anywhere; the
+   pairing act itself names the owner, and re-pairing renames it.
+   A state paired before this field existed keeps chat-granularity
+   behavior and `/status` says so. An update carrying no sender
+   identity against a recorded owner is refused — unproven
+   identity is not identity.
 2. **Rails verbs** (story flips, story/project creation): every
    act is proposal → preview → in-chat approval, executed through
    the Phase 12 actuator/connector seam where it exists; project
@@ -217,6 +236,19 @@ Three rings, strictest last:
    verification per keystroke and the dw gate's final say are
    unchanged. Full map:
    [absorption-ccgram.md](./absorption-ccgram.md) §0.
+   *(Amended by WLA-20-04/05, owner direction 2026-07-11 — the
+   button surfaces:)* inside a live binding the buttons grew up:
+   the toolbar is per-harness configuration (key/text/builtin
+   actions; the builtin table is CLOSED — a config can rearrange
+   and relabel, never mint capability), and a pushed question from
+   a bound AND armed session carries a nav keyboard (arrows,
+   Enter, Esc, 📸) that drives the actual TUI prompt. Every
+   key/text action still enters the terminal through the one
+   driver door with its per-keystroke ownership check; a nav tap
+   NEVER arms (eligibility is the two grants that already exist);
+   and every tap is owner-checked upstream. The slash menu is
+   registered with Telegram (`setMyCommands`, read-and-entry verbs
+   only, config opt-out).
 
 ## 5. The counterpart seam
 

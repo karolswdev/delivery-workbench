@@ -81,16 +81,22 @@ use those assets."
   OK incl. the twelve-shape garbage fuzz; the closed-table refusal
   executed live; setMyCommands pinned to one call, zero on
   opt-out).
-- [ ] A pushed agent question carries a nav keyboard that drives the
+- [x] A pushed agent question carries a nav keyboard that drives the
   bound session's TUI prompt through the driver — armed and
   pane-ownership floors intact — and taps from an unarmed or
-  unbound context are refused (WLA-20-05).
-- [ ] The fitness suite pins the new shape: `screenshot.py` and
+  unbound context are refused (WLA-20-05 —
+  [evidence](./evidence-story-05.md): 147 tests OK in both
+  environments; both refusal corners hold with zero keystrokes and
+  zero arming).
+- [x] The fitness suite pins the new shape: `screenshot.py` and
   `toolbarcfg.py` are leaves, photo/media verbs live only in the
   transport, the send-keys census is unchanged, and the planted
   self-test still bites; the absorption ledger names every new
   row absorb/transmute/refuse at v4.3.11; the mission-control
-  contract documents the new surfaces (WLA-20-06).
+  contract documents the new surfaces (WLA-20-06 —
+  [evidence](./evidence-story-06.md): full battery green — core
+  208, interface 147, fitness 10, docs-lint, plugin; the census
+  greppable in the captured run).
 
 ## Story status
 
@@ -101,15 +107,19 @@ use those assets."
 | WLA-20-03 | Consent belongs to a person — groups get faces | done | [story-03-per-person-consent](./story-03-per-person-consent.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-20-04 | The toolbar grows up — grids, builtins, and the command menu | done | [story-04-toolbar-grows-up](./story-04-toolbar-grows-up.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-20-05 | Questions answer with buttons | done | [story-05-question-nav-buttons](./story-05-question-nav-buttons.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-20-06 | The exit exam — fitness, ledger, and the contract amended | backlog | [story-06-exit-exam](./story-06-exit-exam.md) | - |
+| WLA-20-06 | The exit exam — fitness, ledger, and the contract amended | done | [story-06-exit-exam](./story-06-exit-exam.md) | [evidence-story-06](./evidence-story-06.md) |
 
 ## Where we are
 
-4/6. Pictures (01, 02), consent with a face (03), and now the
-toolbar as data (04): per-harness grids reshaped by JSON config,
-key/text/builtin actions with the builtin table closed, tb: taps
-resolved at tap time, and the slash menu registered with Telegram
-at serve start. Next: WLA-20-05, questions answer with buttons.
+Phase CLOSED 6/6 (2026-07-11, one sitting) — see
+[final-summary](./final-summary.md). The group grew hands: the
+pane is a picture on demand and live, the toolbar is data with a
+closed builtin table, questions answer with buttons, and consent
+in a group belongs to the person who paired. 108 → 147 interface
+tests; the consent spine did not move. Owed: the live phone-leg
+screenshots (recorded in evidence-story-06). (The 05 criterion
+tick rode this file one commit late — the transactional status
+flip raced the edit; noted honestly here.)
 
 ## Active risks
 

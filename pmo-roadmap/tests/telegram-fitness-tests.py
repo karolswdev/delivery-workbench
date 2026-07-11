@@ -131,6 +131,27 @@ class ConsentFloorTest(unittest.TestCase):
             "second door into a terminal",
         )
 
+    def test_bot_api_strings_live_only_in_the_transport(self):
+        # The quoted API method names are the wire markers; the
+        # snake_case wrappers may be CALLED anywhere, but the strings
+        # Telegram sees exist in exactly one file. (Phase 20: the
+        # photo/media/menu verbs joined the census.)
+        for verb in (
+            '"sendPhoto"', '"editMessageMedia"', '"setMyCommands"',
+            '"sendMessage"', '"sendDocument"', '"editMessageText"',
+            '"answerCallbackQuery"', '"getUpdates"',
+        ):
+            offenders = [
+                p.name
+                for p in PKG.glob("*.py")
+                if p.stem != "transport" and verb in p.read_text()
+            ]
+            self.assertEqual(
+                offenders, [],
+                f"{verb} appears outside transport.py — Telegram I/O "
+                "has exactly one home",
+            )
+
     def test_keystroke_methods_are_defined_only_in_the_driver(self):
         for other in PKG.glob("*.py"):
             if other.stem == "tmuxdrive":
@@ -163,6 +184,21 @@ class FitnessSelfTest(unittest.TestCase):
             }
             self.assertIn("rails", graph["transport"],
                           "the parser must SEE the planted violation")
+
+    def test_layering_catches_a_planted_violation_in_a_new_leaf(self):
+        # Phase 20 added leaves (screenshot, toolbarcfg); the parser
+        # must bite there too, not only on the founding members.
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp)
+            (fake / "screenshot.py").write_text(
+                "from .interface import TelegramInterface\n"
+            )
+            self.assertIn(
+                "interface", internal_imports(fake / "screenshot.py"),
+                "a planted leaf violation in a NEW leaf must be seen",
+            )
 
     def test_consent_floor_catches_planted_send_keys(self):
         import tempfile

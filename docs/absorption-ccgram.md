@@ -144,6 +144,36 @@ CI: the transport never imports rails, handlers read through the
 query surface, and no import path bypasses the pane-ownership
 check.
 
+## The second absorption — upstream v4.3.11 (phase 20)
+
+The owner's direction (2026-07-11): robust groups, screenshots
+over the wire, button-based interfaces — "ccgram is MIT, feel free
+to use those assets." Upstream had moved v4.3.5 → v4.3.11; a fresh
+clone was read at the source level. Same discipline as the first
+absorption: transmute onto the urllib transport and stdlib, never
+vendor the stack (PTB, structlog, asyncio all stayed behind), and
+every feature rides the consent spine that already existed.
+
+| # | ccgram idea (v4.3.11 source) | Verdict | What we did (story) |
+|---|---|---|---|
+| 21 | `screenshot.py` — pane text → PNG, ANSI SGR, three-tier font chain | **absorb/transmute** | `dw_telegram/screenshot.py`, import-pure leaf: SGR machine and 256-color math carry over; async/structlog dropped; ONE font (JetBrains Mono, OFL) — CJK/Symbola deferred as repo heft; Pillow optional with honest text fallback; upstream's charset-designator half-strip fixed (WLA-20-01) |
+| 22 | live view — auto-refresh screenshots via `editMessageMedia`, hash-gated, auto-stop | **absorb** (closes row 11's "image later if wanted") | `/live` image mode behind the SAME text-content hash gate — no change, no render, no API call; `/live text` keeps the text view (WLA-20-02) |
+| 23 | user-ID allowlist (row 15, refused at 4.3.5) | **transmute** — still no allowlist | `/pair`'s redeemer becomes the owner-of-record; consent commands, every tap, and the relay answer to that one identity in group chats; legacy states keep chat granularity, `/status` says so (WLA-20-03) |
+| 24 | `toolbar_config.py` — per-provider grids from TOML, key/text/builtin | **absorb/transmute** | `dw_telegram/toolbarcfg.py` leaf: JSON in `telegram.json` (3.9 floor, no tomllib), per-HARNESS grids, builtin table CLOSED (screen/live/dismiss — a config can never mint capability), tb: taps resolve at tap time (WLA-20-04) |
+| 25 | `setMyCommands` slash menu | **absorb** | read-and-entry verbs only; config opt-out; registered at serve start, never blocking (WLA-20-04) |
+| 26 | interactive UI — arrows/enter/esc buttons on TUI prompts | **absorb/transmute** | nav keyboard on pushed question cards, bound + armed ONLY, a nav tap never arms; deliberately dumb (📸 shows the truth, no menu parsing) (WLA-20-05) |
+| 27 | screenshot control keys under the photo (`kb:` under `ss:`) | **transmute down** | one 🔄 refresh button editing the same message; steering keys stay on the toolbar where the binding is visible |
+| 28 | directory browser (`db:` menus) | **defer again** | `/bind`'s numbered list stands until it outgrows a screenful |
+| 29 | sessions dashboard (kill/new buttons) | **defer** | `/sessions` text stands until real multi-session pain |
+| 30 | voice/Whisper, TTS, web dashboard, herdr | **refusals stand** | rows 16–19 unchanged |
+
+The exit exam grew with the surface (WLA-20-06): `screenshot` and
+`toolbarcfg` joined the LEAVES census; the quoted Bot API strings
+(`"sendPhoto"`, `"editMessageMedia"`, `"setMyCommands"`, and the
+five originals) are pinned to `transport.py` alone; the planted
+self-test now also bites inside a NEW leaf; the send-keys census is
+unchanged — the driver is still the only door into a terminal.
+
 ## The journal
 
 **Decided:** the journal continues into Phase 14 under the same

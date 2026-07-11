@@ -75,7 +75,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 17 | Parked work becomes first-class: on-hold with a reason, phase pause/resume, an honest dw next, a holds ledger, and a kanban board in the terminal and on the workbench. | done | [phase-17-work-that-waits](./phase-17-work-that-waits/) |
 | 18 | Every element on the board is browsable by machines: cards and holds carry their receipts and links, dw story show browses one story whole, MCP gains the read surface (board, holds, story), and one versioned contract names it all. | done | [phase-18-interop-layer](./phase-18-interop-layer/) |
 | 19 | A stranger arriving from PyPI, Homebrew, or GitHub meets a package that states its case: complete metadata, a README that matches the shipped surface, and phases 16-18 published as v1.13.0. | done | [phase-19-front-door](./phase-19-front-door/) |
-| 20 | The Telegram interface becomes a first-class group surface: the pane becomes a picture (on demand and live), the buttons become a configurable toolbar and question-steering keyboards, and consent in a group belongs to a person, not a room — the second ccgram absorption (v4.3.11), every feature riding the existing consent spine. | not-started | [phase-20-group-grows-hands](./phase-20-group-grows-hands/) |
+| 20 | The Telegram interface becomes a first-class group surface: the pane becomes a picture (on demand and live), the buttons become a configurable toolbar and question-steering keyboards, and consent in a group belongs to a person, not a room — the second ccgram absorption (v4.3.11), every feature riding the existing consent spine. | done | [phase-20-group-grows-hands](./phase-20-group-grows-hands/) |
 
 ## Operating cadence
 

@@ -211,9 +211,14 @@ workbench web view above, which renders it as a read-only belt at
 (`integrations/telegram/`) puts mission control in your pocket:
 bind a chat topic to a repo and it renders phases, stories, and
 gate refusals; a blocked agent's question reaches your phone in
-about a second through an installed hook; and once you bind a
-session, you talk to the agent by just typing, and your words
-relay into its terminal pane. A **Desk conveyor** on the
+about a second through an installed hook — with arrow/Enter
+buttons that drive the agent's actual prompt when the session is
+bound and armed; and once you bind a session, you talk to the
+agent by just typing, and your words relay into its terminal pane.
+The pane itself arrives as a picture: `/screen` renders it to a
+PNG with colors intact, `/live` keeps the picture refreshing, and
+a configurable button toolbar covers the common keys. In a group,
+consent belongs to the person who paired, not to the room. A **Desk conveyor** on the
 [HoldSpeak](https://github.com/karolswdev/HoldSpeak) side renders
 the same feed as a belt.
 
