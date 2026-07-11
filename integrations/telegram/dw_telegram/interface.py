@@ -91,6 +91,7 @@ class TelegramInterface:
         self.topics = TopicRouter(state)
         self._notified_questions: set[tuple[str, str]] = set()
         self._reply_thread: int | None = None  # topic of the update in flight
+        self._sender_id: int | None = None  # from.id of the update in flight
         # Active live views: key -> {target, message_id, thread, last_hash,
         # expires}. Refreshed by the drain loop, hash-gated.
         self._live_views: dict[str, dict] = {}
@@ -102,6 +103,26 @@ class TelegramInterface:
 
     def _now(self) -> datetime:
         return self.clock()
+
+    # Commands that steer, mutate, arm, or move bytes off the machine.
+    # In a chat with more than one human, only the owner-of-record may
+    # use them; reads stay chat-scoped (§0: consent gates entry, and
+    # the entry belongs to a person).
+    CONSENT_COMMANDS = frozenset({
+        "/steer", "/unsteer", "/reply", "/flip", "/newstory", "/launch",
+        "/install", "/newproject", "/arm", "/disarm", "/open", "/send",
+        "/bind", "/unbind",
+    })
+    OWNER_REFUSAL = "✕ refused: consent belongs to the paired owner"
+
+    def _not_owner(self) -> bool:
+        """True when the update in flight is NOT from the
+        owner-of-record. Legacy states (paired before the owner was
+        recorded) keep chat-granularity behavior — /status says so."""
+        owner = self.state.owner_user_id
+        if owner is None:
+            return False
+        return self._sender_id != owner
 
     def _say(self, chat_id: int, text: str, buttons=None, thread_id=...) -> None:
         # Renderers keep full content; the queue's send layer merges,
@@ -145,6 +166,8 @@ class TelegramInterface:
                 chat = (message.get("chat") or {}).get("id")
                 text = str(message.get("text") or "")
                 thread = message.get("message_thread_id")
+                sender = (message.get("from") or {}).get("id")
+                self._sender_id = sender if isinstance(sender, int) else None
                 self._reply_thread = thread if isinstance(thread, int) else None
                 if isinstance(chat, int) and text:
                     self._handle_message(chat, text)
@@ -153,6 +176,8 @@ class TelegramInterface:
                 chat = (cb_message.get("chat") or {}).get("id")
                 message_id = cb_message.get("message_id")
                 thread = cb_message.get("message_thread_id")
+                sender = (callback.get("from") or {}).get("id")
+                self._sender_id = sender if isinstance(sender, int) else None
                 self._reply_thread = thread if isinstance(thread, int) else None
                 data = str(callback.get("data") or "")
                 callback_id = str(callback.get("id") or "")
@@ -169,6 +194,7 @@ class TelegramInterface:
                 self._say(chat, f"internal error: {type(exc).__name__}")
         finally:
             self._reply_thread = None
+            self._sender_id = None
             self.queue.flush()
 
     def drain_agent_events(self) -> int:
@@ -291,7 +317,8 @@ class TelegramInterface:
             # Unpaired chats: the pairing prompt and nothing else.
             if command == "/pair" and args:
                 ok, message = redeem(
-                    self.state, chat_id, args[0], self._now()
+                    self.state, chat_id, args[0], self._now(),
+                    user_id=self._sender_id,
                 )
                 self._say(chat_id, message)
                 if ok:
@@ -346,6 +373,9 @@ class TelegramInterface:
         if handler is None:
             self._say(chat_id, f"unknown command {command}; /help lists them")
             return
+        if command in self.CONSENT_COMMANDS and self._not_owner():
+            self._say(chat_id, self.OWNER_REFUSAL)
+            return
         handler(chat_id, args)
 
     def _relay_if_bound(self, chat_id: int, text: str) -> bool:
@@ -356,6 +386,11 @@ class TelegramInterface:
         )
         if binding is None:
             return False
+        if self._not_owner():
+            # The flow stays flowing for the OWNER; a second human
+            # typing into a steered topic is exactly who this stops.
+            self._say(chat_id, self.OWNER_REFUSAL)
+            return True
         session = binding["tmux_session"]
         now = self._now()
         if not self.arming.is_armed(session, now):
@@ -392,6 +427,13 @@ class TelegramInterface:
         lines = [
             f"interface v{INTERFACE_VERSION}, paired",
             f"active repo: {repo or 'none (use /open <path>)'}",
+            "owner: recorded"
+            if self.state.owner_user_id is not None
+            else (
+                "owner: NOT recorded (legacy pairing — every member "
+                "of this chat can steer; /pair again to bind consent "
+                "to a person)"
+            ),
             "screenshots: png"
             if screenshot.AVAILABLE
             else f"screenshots: text only ({screenshot.unavailable_reason()})",
@@ -1140,6 +1182,14 @@ class TelegramInterface:
     ) -> None:
         if self.state.paired_chat != chat_id:
             self.transport.answer_callback(callback_id, "not paired")
+            return
+        if self._not_owner():
+            # Every tap is consent-bearing: approvals execute,
+            # toolbar keys reach a terminal, refreshes cost API
+            # calls. One identity holds them all.
+            self.transport.answer_callback(
+                callback_id, "consent belongs to the paired owner"
+            )
             return
         action, _, rest = data.partition(":")
         if action == "kb":

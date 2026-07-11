@@ -201,23 +201,32 @@ class RecordingRunner:
 
 
 
-def topic_message(chat: int, text: str, thread: int) -> dict:
-    return {"message": {"chat": {"id": chat}, "text": text,
-                        "message_thread_id": thread}}
+def topic_message(chat: int, text: str, thread: int, user: int | None = None) -> dict:
+    doc = {"message": {"chat": {"id": chat}, "text": text,
+                       "message_thread_id": thread}}
+    if user is not None:
+        doc["message"]["from"] = {"id": user}
+    return doc
 
 
-def message(chat: int, text: str) -> dict:
-    return {"message": {"chat": {"id": chat}, "text": text}}
+def message(chat: int, text: str, user: int | None = None) -> dict:
+    doc = {"message": {"chat": {"id": chat}, "text": text}}
+    if user is not None:
+        doc["message"]["from"] = {"id": user}
+    return doc
 
 
-def callback(chat: int, data: str, cb="cb-1") -> dict:
-    return {
+def callback(chat: int, data: str, cb="cb-1", user: int | None = None) -> dict:
+    doc = {
         "callback_query": {
             "id": cb,
             "data": data,
             "message": {"chat": {"id": chat}},
         }
     }
+    if user is not None:
+        doc["callback_query"]["from"] = {"id": user}
+    return doc
 
 
 OWNER = 4242  # fixture chat id, not a real identity
@@ -1700,6 +1709,124 @@ class PocketDeskExitExamTest(InterfaceCase):
         refusal = self.transport.edited[-1]["text"]
         self.assertIn("the rails refused", refusal)
         self.assertIn("refusing to mark story done without evidence", refusal)
+
+# ------------------------------------------------- per-person consent
+
+
+OWNER_ID = 777  # the human who redeemed the token
+STRANGER_ID = 888  # another member of the same group
+
+
+class PerPersonConsentTest(InterfaceCase):
+    """Consent belongs to a person: the /pair redeemer is the
+    owner-of-record; in a chat with other humans, consent-bearing
+    commands, every callback tap, and the steering relay answer only
+    to that identity. Reads stay chat-scoped. A legacy state (no
+    owner recorded) keeps chat-granularity behavior — the rest of
+    this suite, whose fixtures carry no from.id, pins that."""
+
+    def pair_as_owner(self) -> None:
+        token = new_pairing_token(self.state, self.clock())
+        self.iface.handle_update(
+            message(OWNER, f"/pair {token}", user=OWNER_ID)
+        )
+        self.transport.sent.clear()
+
+    def steer_as_owner(self) -> None:
+        self.iface.handle_update(
+            topic_message(OWNER, f"/bind {self.repo}", 3, user=OWNER_ID)
+        )
+        self.iface.handle_update(
+            topic_message(OWNER, "/steer claude:sess-1", 3, user=OWNER_ID)
+        )
+
+    def test_pair_records_owner_and_it_round_trips(self):
+        self.pair_as_owner()
+        self.assertEqual(self.state.owner_user_id, OWNER_ID)
+        reloaded = RuntimeState(self.config.resolved_state_path())
+        self.assertEqual(reloaded.owner_user_id, OWNER_ID)
+
+    def test_consent_command_refused_for_stranger_owner_fine(self):
+        self.pair_as_owner()
+        self.iface.handle_update(
+            message(OWNER, "/arm desk 5", user=STRANGER_ID)
+        )
+        self.assertIn("consent belongs to the paired owner", self.last_text())
+        self.assertEqual(self.state.armed, {}, "nothing armed")
+        self.iface.handle_update(message(OWNER, "/arm desk 5", user=OWNER_ID))
+        self.assertIn("armed", self.last_text().lower())
+        self.assertIn("desk", self.state.armed)
+
+    def test_every_tap_refused_for_stranger(self):
+        self.pair_as_owner()
+        self.steer_as_owner()
+        self.iface.handle_update(
+            message(OWNER, "/flip demo 1 DM-1-01 in-progress", user=OWNER_ID)
+        )
+        proposal_id = self.last_proposal_id()
+        self.tmux_runner.calls.clear()
+        for data in (f"ap:{proposal_id}", "kb:Enter", "ss:%7"):
+            self.iface.handle_update(
+                callback(OWNER, data, cb=f"cb-{data}", user=STRANGER_ID)
+            )
+            self.assertIn(
+                "consent belongs to the paired owner",
+                self.transport.answered[-1]["text"],
+            )
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], [],
+            "no stranger tap reached the terminal",
+        )
+        # the proposal is still alive: the owner's tap executes it
+        self.iface.handle_update(
+            callback(OWNER, f"ap:{proposal_id}", cb="cb-own", user=OWNER_ID)
+        )
+        self.assertEqual(self.transport.answered[-1]["text"], "approved")
+
+    def test_relay_refused_for_stranger_flows_for_owner(self):
+        self.pair_as_owner()
+        self.steer_as_owner()
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(
+            topic_message(OWNER, "please stop", 3, user=STRANGER_ID)
+        )
+        self.assertIn("consent belongs to the paired owner", self.last_text())
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], [],
+            "the stranger's words never reached the pane",
+        )
+        self.iface.handle_update(
+            topic_message(OWNER, "carry on", 3, user=OWNER_ID)
+        )
+        typed = [c for c in self.tmux_runner.calls if c[1] == "send-keys"]
+        self.assertTrue(typed, "the owner's words flow with no tap")
+
+    def test_reads_stay_chat_scoped(self):
+        self.pair_as_owner()
+        for cmd in ("/status", "/state", "/sessions", "/armed", "/help"):
+            self.transport.feed_stream.clear()
+            self.iface.handle_update(message(OWNER, cmd, user=STRANGER_ID))
+            self.assertTrue(
+                self.transport.feed_stream,
+                f"{cmd} answers any chat member",
+            )
+            self.assertNotIn(
+                "consent belongs", self.transport.feed_stream[-1]["text"]
+            )
+
+    def test_status_warns_on_legacy_pairing(self):
+        self.pair()  # the shared helper pairs with NO from.id
+        self.assertIsNone(self.state.owner_user_id)
+        self.iface.handle_update(message(OWNER, "/status"))
+        self.assertIn("legacy pairing", self.last_text())
+        self.iface.handle_update(message(OWNER, "/status", user=OWNER_ID))
+        self.assertIn("legacy pairing", self.last_text())
+
+    def test_owner_recorded_status_says_so(self):
+        self.pair_as_owner()
+        self.iface.handle_update(message(OWNER, "/status", user=OWNER_ID))
+        self.assertIn("owner: recorded", self.last_text())
+
 
 # ---------------------------------------------------------- screenshots
 

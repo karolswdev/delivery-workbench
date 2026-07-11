@@ -42,6 +42,10 @@ class RuntimeState:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.paired_chat: int | None = None
+        # The person who redeemed the pairing token (from.id of the
+        # /pair message) — consent's face. None on states paired
+        # before this field existed (legacy: chat-granularity).
+        self.owner_user_id: int | None = None
         self.pairing: dict | None = None  # {token_sha256, expires_at, used}
         self.armed: dict[str, str] = {}  # tmux session -> expires_at iso
         self.active_repo: str | None = None
@@ -68,6 +72,8 @@ class RuntimeState:
             return
         chat = doc.get("paired_chat")
         self.paired_chat = int(chat) if isinstance(chat, int) else None
+        owner = doc.get("owner_user_id")
+        self.owner_user_id = int(owner) if isinstance(owner, int) else None
         pairing = doc.get("pairing")
         self.pairing = pairing if isinstance(pairing, dict) else None
         armed = doc.get("armed")
@@ -97,6 +103,7 @@ class RuntimeState:
         doc = {
             "state_version": STATE_VERSION,
             "paired_chat": self.paired_chat,
+            "owner_user_id": self.owner_user_id,
             "pairing": self.pairing,
             "armed": self.armed,
             "active_repo": self.active_repo,
