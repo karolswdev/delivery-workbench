@@ -43,6 +43,8 @@ Converse: /steer <session-key> binds a session — then just type, and
   your words reach the pane (no tap per message); /unsteer stops.
   /toolbar posts Esc/Enter/arrows for the bound session.
 Watch: /live [target] auto-refreshes a pane read-only; /unlive stops.
+  /screen [target] sends the pane as a picture (colors and all) with
+  a refresh button; falls back to text where rendering is unavailable.
 Files: /send <glob|path|substring> — a clean repo file, behind seven
   locks (secrets, gitignore, state files all refuse).
 Read: /state /events [n] /sessions /questions /peek <tmux-target> /status
@@ -314,6 +316,7 @@ class TelegramInterface:
             "/unsteer": self._cmd_unsteer,
             "/live": self._cmd_live,
             "/unlive": self._cmd_unlive,
+            "/screen": self._cmd_screen,
             "/toolbar": self._cmd_toolbar,
             "/send": self._cmd_send,
             "/install": self._cmd_install,
@@ -363,11 +366,16 @@ class TelegramInterface:
         self._say(chat_id, HELP_TEXT.format(version=INTERFACE_VERSION))
 
     def _cmd_status(self, chat_id: int, _args: list[str]) -> None:
+        from . import screenshot
+
         repo = self._active_repo(chat_id)
         armed = self.arming.status(self._now())
         lines = [
             f"interface v{INTERFACE_VERSION}, paired",
             f"active repo: {repo or 'none (use /open <path>)'}",
+            "screenshots: png"
+            if screenshot.AVAILABLE
+            else f"screenshots: text only ({screenshot.unavailable_reason()})",
             "armed sessions: "
             + (
                 ", ".join(f"{s} (until {t})" for s, t in armed)
@@ -804,6 +812,69 @@ class TelegramInterface:
             "expires": self._now().timestamp() + self.LIVE_TTL_SECONDS,
         }
 
+    def _screen_target(self, chat_id: int, args: list[str]) -> str | None:
+        """Resolve /screen's target exactly as /live does: explicit
+        argument, else the topic's bound session pane."""
+        if args:
+            return args[0]
+        binding = self.topics.bound_session(
+            chat_id, self._reply_thread, self._now()
+        )
+        return binding["target"] if binding else None
+
+    def _cmd_screen(self, chat_id: int, args: list[str]) -> None:
+        """One shot of the pane as a picture, with a refresh button.
+        Read-only: capture → render → sendPhoto. Where Pillow is
+        absent the text capture goes out instead, reason stated."""
+        target = self._screen_target(chat_id, args)
+        if target is None:
+            self._say(chat_id, "usage: /screen <tmux-target> (or /steer first)")
+            return
+        self._send_screen(chat_id, target)
+
+    def _send_screen(
+        self, chat_id: int, target: str, message_id: int | None = None
+    ) -> bool:
+        """Capture and deliver one screenshot; edits the existing
+        photo message in place when `message_id` is given (the
+        refresh button's path). Returns True when a picture (or its
+        stated fallback) went out."""
+        from . import screenshot
+        from .transport import TransportError
+
+        ok, output = self.driver.capture_pane(
+            target, ansi=screenshot.AVAILABLE
+        )
+        if not ok:
+            self._say(chat_id, f"screenshot unavailable: {output}")
+            return False
+        png = screenshot.text_to_image(output)
+        if png is None:
+            reason = screenshot.unavailable_reason() or "renderer unavailable"
+            self._say(
+                chat_id,
+                f"rendering unavailable ({reason}) — text capture "
+                f"instead:\n── {target} (read-only) ──\n{output}",
+            )
+            return True
+        caption = f"{target} — {self._now().strftime('%H:%M:%S')} UTC"
+        buttons = [[("🔄 refresh", f"ss:{target}")]]
+        try:
+            if message_id is not None:
+                self.transport.edit_message_media(
+                    chat_id, message_id, png, caption=caption,
+                    buttons=buttons,
+                )
+            else:
+                self.transport.send_photo(
+                    chat_id, png, caption=caption, buttons=buttons,
+                    thread_id=self._reply_thread,
+                )
+        except TransportError as exc:
+            self._say(chat_id, f"screenshot send failed: {exc}")
+            return False
+        return True
+
     def _cmd_unlive(self, chat_id: int, args: list[str]) -> None:
         removed = [
             key for key in list(self._live_views)
@@ -1019,6 +1090,14 @@ class TelegramInterface:
         action, _, rest = data.partition(":")
         if action == "kb":
             self._handle_toolbar_key(chat_id, rest, callback_id)
+            return
+        if action == "ss":
+            # Screenshot refresh: re-capture and edit the same photo
+            # message in place — read-only, no keystroke involved.
+            refreshed = self._send_screen(chat_id, rest, message_id)
+            self.transport.answer_callback(
+                callback_id, "refreshed" if refreshed else "capture failed"
+            )
             return
         proposal_id = rest
         if action == "rj":

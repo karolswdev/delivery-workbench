@@ -90,12 +90,16 @@ class TmuxDriver:
         self._run = runner or subprocess_runner
         self._sleep = sleeper  # injectable so tests assert the settle
 
-    def capture_pane(self, target: str) -> tuple[bool, str]:
-        """Read-only snapshot of a pane (or a session's active pane)."""
+    def capture_pane(self, target: str, ansi: bool = False) -> tuple[bool, str]:
+        """Read-only snapshot of a pane (or a session's active pane).
+        ``ansi=True`` keeps escape sequences (`-e`) so a renderer can
+        reproduce the colors; plain text remains the default."""
+        argv = ["tmux", "capture-pane", "-p"]
+        if ansi:
+            argv.append("-e")
+        argv += ["-t", target]
         try:
-            completed = self._run(
-                ["tmux", "capture-pane", "-p", "-t", target]
-            )
+            completed = self._run(argv)
         except (OSError, subprocess.TimeoutExpired) as exc:
             return False, f"tmux failed: {exc}"
         if completed.returncode != 0:

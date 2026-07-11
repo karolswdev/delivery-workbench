@@ -29,7 +29,10 @@ PKG = (
     / "integrations" / "telegram" / "dw_telegram"
 )
 
-LEAVES = {"transport", "entities", "sendfiles", "runtime", "config"}
+LEAVES = {
+    "transport", "entities", "sendfiles", "runtime", "config",
+    "screenshot",
+}
 # `lifecycle` is the only module allowed to build on `rails` (it runs
 # doctor/contract through the same CLI); everything else reaches the
 # rails only through the interface's orchestration.

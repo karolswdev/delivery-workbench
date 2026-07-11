@@ -117,8 +117,12 @@ jobs:
           python-version: "3.9"
 
       - name: Telegram interface tests (scripted transport, fixture rails, no network)
+        # Pillow serves only the screenshot-renderer legs (they skip
+        # without it); it is a CI test amenity, never a runtime
+        # dependency — the interface degrades to text captures.
         run: |
           python3 --version
+          python3 -m pip install --quiet Pillow
           python3 -m compileall -q integrations/telegram
           python3 pmo-roadmap/tests/telegram-interface-tests.py
 

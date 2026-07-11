@@ -36,6 +36,7 @@ BIN_DW = TESTS_DIR.parent / "bin" / "dw"
 
 sys.path.insert(0, str(REPO_ROOT / "integrations" / "telegram"))
 
+from dw_telegram import screenshot as screenshot_mod
 from dw_telegram.config import Config, ConfigError, load_config
 from dw_telegram.consent import Arming, ProposalBook
 from dw_telegram.interface import TelegramInterface
@@ -1686,6 +1687,153 @@ class PocketDeskExitExamTest(InterfaceCase):
         refusal = self.transport.edited[-1]["text"]
         self.assertIn("the rails refused", refusal)
         self.assertIn("refusing to mark story done without evidence", refusal)
+
+# ---------------------------------------------------------- screenshots
+
+
+class ScreenshotRendererTest(unittest.TestCase):
+    """The renderer leaf in isolation. PNG legs run only where
+    Pillow is installed; the string legs always run."""
+
+    def test_strip_non_sgr_keeps_colors(self):
+        noisy = "\x1b]0;title\x07\x1b[31mred\x1b[0m \x1b[2Jmoved\x1b(B"
+        self.assertEqual(
+            screenshot_mod.strip_non_sgr(noisy), "\x1b[31mred\x1b[0m moved"
+        )
+
+    def test_forced_unavailable_returns_none_with_reason(self):
+        saved = (screenshot_mod.AVAILABLE, screenshot_mod._PIL_ERROR)
+        screenshot_mod.AVAILABLE = False
+        screenshot_mod._PIL_ERROR = "forced for test"
+        try:
+            self.assertIsNone(screenshot_mod.text_to_image("hello"))
+            self.assertEqual(
+                screenshot_mod.unavailable_reason(), "forced for test"
+            )
+        finally:
+            screenshot_mod.AVAILABLE, screenshot_mod._PIL_ERROR = saved
+
+    @unittest.skipUnless(screenshot_mod.AVAILABLE, "Pillow not installed")
+    def test_ansi_matrix_renders_to_png(self):
+        text = (
+            "\x1b[31m16-color\x1b[0m \x1b[1mbold\x1b[0m \x1b[7mreverse\x1b[0m\n"
+            "\x1b[38;5;208m256-color\x1b[0m \x1b[38;2;10;200;120mRGB\x1b[0m\n"
+            "\x1b[44mblue-bg\x1b[49m ┌─box─┐\n│ glyphs │\n└────────┘"
+        )
+        png = screenshot_mod.text_to_image(text)
+        self.assertIsNotNone(png)
+        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n", "PNG magic")
+        width = int.from_bytes(png[16:20], "big")
+        height = int.from_bytes(png[20:24], "big")
+        self.assertGreater(width, 100)
+        self.assertGreater(height, 5 * 20, "five lines of pixels at least")
+
+    @unittest.skipUnless(screenshot_mod.AVAILABLE, "Pillow not installed")
+    def test_live_mode_is_lighter_than_full(self):
+        text = "\n".join("\x1b[32mline %d\x1b[0m" % i for i in range(20))
+        full = screenshot_mod.text_to_image(text)
+        live = screenshot_mod.text_to_image(text, live=True)
+        self.assertLess(len(live), len(full))
+
+    @unittest.skipUnless(screenshot_mod.AVAILABLE, "Pillow not installed")
+    def test_garbage_sgr_never_raises(self):
+        png = screenshot_mod.text_to_image(
+            "\x1b[999m\x1b[38;5m\x1b[38;2;1m odd \x1b[m fine"
+        )
+        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+
+
+class ScreenCommandTest(InterfaceCase):
+    """/screen: capture → render → photo with a refresh button, or
+    the stated text fallback. Read-only throughout."""
+
+    def setUp(self):
+        super().setUp()
+        self.pair()
+        self.iface.handle_update(topic_message(OWNER, f"/bind {self.repo}", 3))
+        self.iface.handle_update(topic_message(OWNER, "/steer claude:sess-1", 3))
+
+        def cap(argv, cwd):
+            if argv[1] == "capture-pane":
+                return types.SimpleNamespace(
+                    returncode=0,
+                    stdout="\x1b[32m❯\x1b[0m pane content",
+                    stderr="",
+                )
+            if argv[1] == "display-message":
+                return types.SimpleNamespace(
+                    returncode=0, stdout="desk\n", stderr=""
+                )
+            return None
+
+        self.tmux_runner.hook = cap
+
+    def _force_text_mode(self):
+        saved = (screenshot_mod.AVAILABLE, screenshot_mod._PIL_ERROR)
+        screenshot_mod.AVAILABLE = False
+        screenshot_mod._PIL_ERROR = "Pillow off for test"
+        self.addCleanup(
+            lambda: setattr(screenshot_mod, "AVAILABLE", saved[0])
+        )
+        self.addCleanup(
+            lambda: setattr(screenshot_mod, "_PIL_ERROR", saved[1])
+        )
+
+    def test_screen_unbound_and_argless_states_usage(self):
+        self.iface.handle_update(topic_message(OWNER, "/screen", 999))
+        self.assertIn("usage: /screen", self.last_text())
+        self.assertEqual(self.transport.photos, [])
+
+    def test_fallback_without_renderer_states_reason(self):
+        self._force_text_mode()
+        self.iface.handle_update(topic_message(OWNER, "/screen", 3))
+        self.assertEqual(self.transport.photos, [])
+        text = self.last_text()
+        self.assertIn("rendering unavailable", text)
+        self.assertIn("pane content", text, "the capture still arrives")
+        captures = [
+            c for c in self.tmux_runner.calls if c[1] == "capture-pane"
+        ]
+        self.assertNotIn("-e", captures[-1], "text mode captures plain")
+
+    def test_screen_is_read_only(self):
+        self.tmux_runner.calls.clear()
+        self.iface.handle_update(topic_message(OWNER, "/screen", 3))
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], [],
+            "/screen never sends a keystroke",
+        )
+
+    @unittest.skipUnless(screenshot_mod.AVAILABLE, "Pillow not installed")
+    def test_screen_sends_photo_with_refresh_button(self):
+        self.iface.handle_update(topic_message(OWNER, "/screen", 3))
+        self.assertEqual(len(self.transport.photos), 1)
+        photo = self.transport.photos[0]
+        self.assertEqual(photo["photo"][:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(photo["buttons"], [[("🔄 refresh", "ss:%7")]])
+        self.assertIn("%7", photo["caption"])
+        self.assertEqual(photo["thread_id"], 3, "lands in the topic")
+        captures = [
+            c for c in self.tmux_runner.calls if c[1] == "capture-pane"
+        ]
+        self.assertIn("-e", captures[-1], "render mode captures ANSI")
+
+    @unittest.skipUnless(screenshot_mod.AVAILABLE, "Pillow not installed")
+    def test_refresh_edits_the_same_photo_message(self):
+        self.iface.handle_update(topic_message(OWNER, "/screen", 3))
+        photo = self.transport.photos[0]
+        self.iface.handle_update({"callback_query": {
+            "id": "cb-ss", "data": "ss:%7",
+            "message": {"chat": {"id": OWNER},
+                        "message_id": photo["message_id"],
+                        "message_thread_id": 3}}})
+        self.assertEqual(len(self.transport.photos), 1, "no new message")
+        self.assertEqual(len(self.transport.media_edits), 1)
+        edit = self.transport.media_edits[0]
+        self.assertEqual(edit["message_id"], photo["message_id"])
+        self.assertEqual(edit["photo"][:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(self.transport.answered[-1]["text"], "refreshed")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

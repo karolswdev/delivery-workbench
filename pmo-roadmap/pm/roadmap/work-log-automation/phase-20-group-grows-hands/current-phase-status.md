@@ -46,12 +46,16 @@ use those assets."
 
 ## Exit criteria (evidence required)
 
-- [ ] `screenshot.py` renders a captured pane (16/256/RGB ANSI,
+- [x] `screenshot.py` renders a captured pane (16/256/RGB ANSI,
   box-drawing) to PNG bytes with Pillow present and reports
   capability honestly without it; it is an import-pure leaf;
   `/screen` sends a photo with a working refresh button inside a
   live binding, and falls back to the `/peek` text capture with a
-  stated reason when Pillow is absent (WLA-20-01).
+  stated reason when Pillow is absent (WLA-20-01 —
+  [evidence](./evidence-story-01.md): 118 interface tests green
+  both with Pillow (renderer legs live) and without (fallback legs
+  live); fitness pins the new leaf; `assets/screen-demo.png` is
+  the engine's own output).
 - [ ] `/live` serves an auto-refreshing PICTURE when Pillow is
   present — `editMessageMedia` edits gated by the existing content
   hash, auto-stop preserved — and the text live view without it;
@@ -83,7 +87,7 @@ use those assets."
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-20-01 | The pane becomes a picture — the screenshot engine | backlog | [story-01-screenshot-engine](./story-01-screenshot-engine.md) | - |
+| WLA-20-01 | The pane becomes a picture — the screenshot engine | done | [story-01-screenshot-engine](./story-01-screenshot-engine.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-20-02 | The live view learns to show, not tell | backlog | [story-02-live-image-view](./story-02-live-image-view.md) | - |
 | WLA-20-03 | Consent belongs to a person — groups get faces | backlog | [story-03-per-person-consent](./story-03-per-person-consent.md) | - |
 | WLA-20-04 | The toolbar grows up — grids, builtins, and the command menu | backlog | [story-04-toolbar-grows-up](./story-04-toolbar-grows-up.md) | - |
@@ -92,18 +96,13 @@ use those assets."
 
 ## Where we are
 
-Scaffolded from a capability-map discovery of the current
-integration plus a source read of upstream ccgram v4.3.11 (cloned,
-MIT). The map's findings that shaped the cut: the button/callback
-plumbing already exists end-to-end (proposal cards, the basic
-toolbar); NO image path exists (no sendPhoto/editMessageMedia/
-renderer — absorption row 11 parked "image later if wanted", now
-wanted); NO per-user authorization exists (a paired group grants
-every member full owner power — chat_id is checked, from.id never);
-no setMyCommands. Implementation order is the story order: the
-screenshot leaf first (01), the surfaces that consume it (02), then
-consent (03) BEFORE the new interactive surfaces (04, 05) so they
-are born owner-checked, exam last (06).
+1/6. WLA-20-01 shipped: the pane becomes a picture — the
+`screenshot.py` leaf (transmuted from upstream with one upstream
+regex defect fixed: three-byte charset designators), the bundled
+JetBrains Mono, `sendPhoto`/`editMessageMedia` on both transports,
+`/screen` with an in-place refresh button, `/status` stating render
+capability, Pillow optional everywhere (CI installs it as a test
+amenity only). Next: WLA-20-02, the live view learns to show.
 
 ## Active risks
 

@@ -153,29 +153,20 @@ class HttpTransport:
             {"callback_query_id": callback_id, "text": text[:180]},
         )
 
-    def send_document(
+    def _multipart(
         self,
-        chat_id: int,
-        path: str,
-        caption: str = "",
-        thread_id: int | None = None,
-    ) -> None:
-        """Upload a file. Multipart, so it bypasses the JSON `_call`
-        path; errors are still redacted of the token."""
-        import mimetypes
+        method: str,
+        fields: list[tuple[str, str]],
+        file_field: str,
+        filename: str,
+        content_type: str,
+        file_bytes: bytes,
+    ) -> dict:
+        """One multipart upload, bypassing the JSON `_call` path;
+        errors are still redacted of the token."""
         import uuid
 
         boundary = uuid.uuid4().hex
-        fields = [("chat_id", str(chat_id))]
-        if caption:
-            fields.append(("caption", caption[:1024]))
-        if thread_id is not None:
-            fields.append(("message_thread_id", str(thread_id)))
-        try:
-            with open(path, "rb") as handle:
-                file_bytes = handle.read()
-        except OSError as exc:
-            raise TransportError(f"cannot read file: {exc}") from None
         parts: list[bytes] = []
         for name, value in fields:
             parts.append(
@@ -185,20 +176,16 @@ class HttpTransport:
                     f"{value}\r\n"
                 ).encode("utf-8")
             )
-        filename = Path(path).name
-        content_type = (
-            mimetypes.guess_type(filename)[0] or "application/octet-stream"
-        )
         parts.append(
             (
                 f"--{boundary}\r\n"
-                f'Content-Disposition: form-data; name="document"; '
+                f'Content-Disposition: form-data; name="{file_field}"; '
                 f'filename="{filename}"\r\n'
                 f"Content-Type: {content_type}\r\n\r\n"
             ).encode("utf-8")
         )
         body = b"".join(parts) + file_bytes + f"\r\n--{boundary}--\r\n".encode()
-        url = f"{API_HOST}/bot{self._token}/sendDocument"
+        url = f"{API_HOST}/bot{self._token}/{method}"
         request = urllib.request.Request(
             url,
             data=body,
@@ -211,13 +198,120 @@ class HttpTransport:
                 doc = json.loads(response.read().decode("utf-8"))
         except Exception as exc:
             raise TransportError(
-                f"telegram sendDocument failed: {type(exc).__name__}"
+                f"telegram {method} failed: {type(exc).__name__}"
             ) from None
         if not doc.get("ok"):
             raise TransportError(
-                f"telegram sendDocument refused: "
+                f"telegram {method} refused: "
                 f"{str(doc.get('description'))[:200]}"
             )
+        return doc.get("result") or {}
+
+    def send_document(
+        self,
+        chat_id: int,
+        path: str,
+        caption: str = "",
+        thread_id: int | None = None,
+    ) -> None:
+        import mimetypes
+
+        fields = [("chat_id", str(chat_id))]
+        if caption:
+            fields.append(("caption", caption[:1024]))
+        if thread_id is not None:
+            fields.append(("message_thread_id", str(thread_id)))
+        try:
+            with open(path, "rb") as handle:
+                file_bytes = handle.read()
+        except OSError as exc:
+            raise TransportError(f"cannot read file: {exc}") from None
+        filename = Path(path).name
+        content_type = (
+            mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        )
+        self._multipart(
+            "sendDocument", fields, "document", filename, content_type,
+            file_bytes,
+        )
+
+    def send_photo(
+        self,
+        chat_id: int,
+        photo: bytes,
+        caption: str = "",
+        buttons: list[list[tuple[str, str]]] | None = None,
+        thread_id: int | None = None,
+    ) -> int | None:
+        """Send rendered PNG bytes as a photo (never a file on disk —
+        the renderer's output goes straight over the wire)."""
+        fields = [("chat_id", str(chat_id))]
+        if caption:
+            fields.append(("caption", caption[:1024]))
+        if thread_id is not None:
+            fields.append(("message_thread_id", str(thread_id)))
+        if buttons:
+            fields.append(
+                (
+                    "reply_markup",
+                    json.dumps(
+                        {
+                            "inline_keyboard": [
+                                [
+                                    {"text": label, "callback_data": data}
+                                    for label, data in row
+                                ]
+                                for row in buttons
+                            ]
+                        }
+                    ),
+                )
+            )
+        result = self._multipart(
+            "sendPhoto", fields, "photo", "pane.png", "image/png", photo
+        )
+        message_id = result.get("message_id")
+        return message_id if isinstance(message_id, int) else None
+
+    def edit_message_media(
+        self,
+        chat_id: int,
+        message_id: int,
+        photo: bytes,
+        caption: str = "",
+        buttons: list[list[tuple[str, str]]] | None = None,
+    ) -> None:
+        """Replace a photo message's picture in place — the live
+        view's edit, one message not a trail."""
+        media: dict = {"type": "photo", "media": "attach://photo"}
+        if caption:
+            media["caption"] = caption[:1024]
+        fields = [
+            ("chat_id", str(chat_id)),
+            ("message_id", str(message_id)),
+            ("media", json.dumps(media)),
+        ]
+        if buttons:
+            fields.append(
+                (
+                    "reply_markup",
+                    json.dumps(
+                        {
+                            "inline_keyboard": [
+                                [
+                                    {"text": label, "callback_data": data}
+                                    for label, data in row
+                                ]
+                                for row in buttons
+                            ]
+                        }
+                    ),
+                )
+            )
+        self._multipart(
+            "editMessageMedia", fields, "photo", "pane.png", "image/png",
+            photo,
+        )
 
 
 class ScriptedTransport:
@@ -235,6 +329,8 @@ class ScriptedTransport:
         self.feed_stream: list[dict] = []
         self.answered: list[dict] = []
         self.documents: list[dict] = []
+        self.photos: list[dict] = []
+        self.media_edits: list[dict] = []
         self.reject_entities = False
         self.flood_after: tuple[int, float] | None = None
         self._next_id = 100
@@ -290,3 +386,32 @@ class ScriptedTransport:
                 "thread_id": thread_id,
             }
         )
+
+    def send_photo(
+        self, chat_id, photo, caption="", buttons=None, thread_id=None
+    ) -> int:
+        record = {
+            "chat_id": chat_id,
+            "photo": photo,
+            "caption": caption,
+            "buttons": buttons,
+            "thread_id": thread_id,
+            "message_id": self._next_id,
+        }
+        self._next_id += 1
+        self.photos.append(record)
+        self.feed_stream.append({**record, "op": "photo"})
+        return record["message_id"]
+
+    def edit_message_media(
+        self, chat_id, message_id, photo, caption="", buttons=None
+    ) -> None:
+        record = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "photo": photo,
+            "caption": caption,
+            "buttons": buttons,
+        }
+        self.media_edits.append(record)
+        self.feed_stream.append({**record, "op": "media_edit"})
