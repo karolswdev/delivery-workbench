@@ -56,11 +56,14 @@ use those assets."
   both with Pillow (renderer legs live) and without (fallback legs
   live); fitness pins the new leaf; `assets/screen-demo.png` is
   the engine's own output).
-- [ ] `/live` serves an auto-refreshing PICTURE when Pillow is
+- [x] `/live` serves an auto-refreshing PICTURE when Pillow is
   present — `editMessageMedia` edits gated by the existing content
   hash, auto-stop preserved — and the text live view without it;
   no-change ticks make zero API calls, exactly as today
-  (WLA-20-02).
+  (WLA-20-02 — [evidence](./evidence-story-02.md): 122 tests green
+  in both environments; the no-change tick pinned to zero API
+  calls; the phase-14 text pins kept exact under a forced-off
+  probe).
 - [ ] In a group chat, a consent-bearing command or button tap from
   a non-owner is refused by name and the owner is unaffected; reads
   stay chat-scoped; a legacy paired state without an owner-of-record
@@ -88,7 +91,7 @@ use those assets."
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-20-01 | The pane becomes a picture — the screenshot engine | done | [story-01-screenshot-engine](./story-01-screenshot-engine.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-20-02 | The live view learns to show, not tell | backlog | [story-02-live-image-view](./story-02-live-image-view.md) | - |
+| WLA-20-02 | The live view learns to show, not tell | done | [story-02-live-image-view](./story-02-live-image-view.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-20-03 | Consent belongs to a person — groups get faces | backlog | [story-03-per-person-consent](./story-03-per-person-consent.md) | - |
 | WLA-20-04 | The toolbar grows up — grids, builtins, and the command menu | backlog | [story-04-toolbar-grows-up](./story-04-toolbar-grows-up.md) | - |
 | WLA-20-05 | Questions answer with buttons | backlog | [story-05-question-nav-buttons](./story-05-question-nav-buttons.md) | - |
@@ -96,13 +99,13 @@ use those assets."
 
 ## Where we are
 
-1/6. WLA-20-01 shipped: the pane becomes a picture — the
-`screenshot.py` leaf (transmuted from upstream with one upstream
-regex defect fixed: three-byte charset designators), the bundled
-JetBrains Mono, `sendPhoto`/`editMessageMedia` on both transports,
-`/screen` with an in-place refresh button, `/status` stating render
-capability, Pillow optional everywhere (CI installs it as a test
-amenity only). Next: WLA-20-02, the live view learns to show.
+2/6. The picture pipeline is whole: 01 shipped the screenshot leaf
+(one upstream regex defect fixed en route), the photo/media
+transport verbs, and `/screen` with in-place refresh; 02 put the
+picture on the live view — photo first, hash-gated media edits,
+`/live text` as the deliberate escape hatch, the phase-14 text
+behavior pinned unchanged. Next: WLA-20-03, consent gets a face
+before the new button surfaces are born.
 
 ## Active risks
 

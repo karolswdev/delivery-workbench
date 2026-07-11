@@ -1378,8 +1378,21 @@ class DriverMannersTest(unittest.TestCase):
 
 
 class LiveViewTest(InterfaceCase):
+    """The TEXT live view, pinned exactly as it shipped in phase 14.
+    The render probe is forced off so these stay the text-mode pins
+    even where CI installs Pillow (image mode has its own class)."""
+
     def setUp(self):
         super().setUp()
+        saved = (screenshot_mod.AVAILABLE, screenshot_mod._PIL_ERROR)
+        screenshot_mod.AVAILABLE = False
+        screenshot_mod._PIL_ERROR = "text pin"
+        self.addCleanup(
+            lambda: setattr(screenshot_mod, "AVAILABLE", saved[0])
+        )
+        self.addCleanup(
+            lambda: setattr(screenshot_mod, "_PIL_ERROR", saved[1])
+        )
         self.pair()
         self.frames = ["frame one", "frame one", "frame two"]
         def cap(argv, cwd):
@@ -1741,6 +1754,80 @@ class ScreenshotRendererTest(unittest.TestCase):
             "\x1b[999m\x1b[38;5m\x1b[38;2;1m odd \x1b[m fine"
         )
         self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+
+
+@unittest.skipUnless(screenshot_mod.AVAILABLE, "Pillow not installed")
+class ImageLiveViewTest(InterfaceCase):
+    """The IMAGE live view: photo first, media edits on change only,
+    the same hash gate and expiry as text mode."""
+
+    def setUp(self):
+        super().setUp()
+        self.pair()
+        self.frames = ["frame one", "frame one", "frame two"]
+
+        def cap(argv, cwd):
+            if argv[1] == "capture-pane":
+                text = self.frames.pop(0) if self.frames else "frame two"
+                return types.SimpleNamespace(
+                    returncode=0, stdout=text, stderr=""
+                )
+            if argv[1] == "display-message":
+                return types.SimpleNamespace(
+                    returncode=0, stdout="desk\n", stderr=""
+                )
+            return None
+
+        self.tmux_runner.hook = cap
+
+    def test_live_posts_a_photo_and_edits_media_on_change_only(self):
+        self.iface.handle_update(message(OWNER, "/live %7"))
+        self.assertEqual(len(self.transport.photos), 1)
+        photo = self.transport.photos[0]
+        self.assertEqual(photo["photo"][:8], b"\x89PNG\r\n\x1a\n")
+        self.assertIn("live, read-only", photo["caption"])
+        captures = [
+            c for c in self.tmux_runner.calls if c[1] == "capture-pane"
+        ]
+        self.assertIn("-e", captures[-1], "image live captures ANSI")
+        # identical frame → zero API calls of any kind
+        before = len(self.transport.feed_stream)
+        self.iface.refresh_live_views()
+        self.assertEqual(len(self.transport.media_edits), 0)
+        self.assertEqual(len(self.transport.feed_stream), before)
+        # changed frame → exactly one media edit on the same message
+        self.iface.refresh_live_views()
+        self.assertEqual(len(self.transport.media_edits), 1)
+        edit = self.transport.media_edits[0]
+        self.assertEqual(edit["message_id"], photo["message_id"])
+        self.assertEqual(edit["photo"][:8], b"\x89PNG\r\n\x1a\n")
+
+    def test_live_text_forces_text_mode_despite_renderer(self):
+        self.iface.handle_update(message(OWNER, "/live text %7"))
+        self.assertEqual(self.transport.photos, [])
+        self.assertIn("live, read-only", self.transport.sent[-1]["text"])
+        self.assertEqual(
+            self.iface._live_views[f"{OWNER}:%7"]["mode"], "text"
+        )
+
+    def test_image_live_expires_and_unlive_stops(self):
+        self.iface.handle_update(message(OWNER, "/live %7"))
+        self.clock.advance(minutes=6)
+        self.iface.refresh_live_views()
+        self.assertEqual(self.iface._live_views, {}, "expired view dropped")
+        self.iface.handle_update(message(OWNER, "/live %7"))
+        self.iface.handle_update(message(OWNER, "/unlive"))
+        self.assertEqual(self.iface._live_views, {})
+        self.assertIn("stopped 1 live view", self.last_text())
+
+    def test_image_live_is_read_only(self):
+        self.iface.handle_update(message(OWNER, "/live %7"))
+        self.iface.refresh_live_views()
+        self.iface.refresh_live_views()
+        self.assertEqual(
+            [c for c in self.tmux_runner.calls if c[1] == "send-keys"], [],
+            "an image live view never sends a keystroke",
+        )
 
 
 class ScreenCommandTest(InterfaceCase):

@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 20
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-20-01
 - **Unblocks:** (optional)
 - **Owner:** unassigned
@@ -37,8 +37,11 @@ hash-gated, auto-stop), completing absorption row 11's parked
   existing no-change test).
 - [ ] Auto-stop and `/unlive` end the loop in image mode exactly as
   in text mode; the final state is stated in the message.
-- [ ] Without Pillow: `/live` behaves byte-identically to today
-  (existing tests untouched and green).
+- [ ] Without Pillow: `/live` behaves byte-identically to today —
+  the existing text-mode tests pin it exactly, now with the render
+  probe forced off in their setUp (CI installs Pillow since
+  WLA-20-01, so the force-off is what keeps them the no-Pillow
+  pins; assertions untouched).
 - [ ] `/live text <target>` forces text mode even with Pillow
   present.
 - [ ] Full telegram suites green.

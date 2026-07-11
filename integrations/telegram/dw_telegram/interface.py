@@ -42,7 +42,9 @@ Topics are projects: /bind [path] ties this topic to a repo (commands
 Converse: /steer <session-key> binds a session — then just type, and
   your words reach the pane (no tap per message); /unsteer stops.
   /toolbar posts Esc/Enter/arrows for the bound session.
-Watch: /live [target] auto-refreshes a pane read-only; /unlive stops.
+Watch: /live [target] auto-refreshes a pane read-only — as a picture
+  where rendering is available (/live text [target] keeps the text
+  view); /unlive stops.
   /screen [target] sends the pane as a picture (colors and all) with
   a refresh button; falls back to text where rendering is unavailable.
 Files: /send <glob|path|substring> — a clean repo file, behind seven
@@ -202,6 +204,7 @@ class TelegramInterface:
         place only when the pane content changed (§4: content-hash
         gating — no change, no edit, no API call). Read-only: never a
         keystroke. Expired views are dropped."""
+        from . import screenshot
         from .tmuxdrive import content_hash
 
         now = self._now()
@@ -211,20 +214,36 @@ class TelegramInterface:
             if expires is not None and now.timestamp() > expires:
                 del self._live_views[key]
                 continue
-            ok, output = self.driver.capture_pane(view["target"])
+            image_mode = view.get("mode") == "image"
+            ok, output = self.driver.capture_pane(
+                view["target"], ansi=image_mode
+            )
             if not ok:
                 continue
             digest = content_hash(output)
             if digest == view.get("last_hash"):
-                continue
+                continue  # the gate: no change, no render, no API call
             view["last_hash"] = digest
-            body = f"── {view['target']} (live, read-only) ──\n{output}"
             from .transport import TransportError
 
             try:
-                self.transport.edit(
-                    self.state.paired_chat, view["message_id"], body
-                )
+                if image_mode:
+                    png = screenshot.text_to_image(output, live=True)
+                    if png is None:
+                        continue
+                    self.transport.edit_message_media(
+                        self.state.paired_chat,
+                        view["message_id"],
+                        png,
+                        caption=f"{view['target']} — live, read-only",
+                    )
+                else:
+                    body = (
+                        f"── {view['target']} (live, read-only) ──\n{output}"
+                    )
+                    self.transport.edit(
+                        self.state.paired_chat, view["message_id"], body
+                    )
             except TransportError:
                 pass
 
@@ -376,6 +395,14 @@ class TelegramInterface:
             "screenshots: png"
             if screenshot.AVAILABLE
             else f"screenshots: text only ({screenshot.unavailable_reason()})",
+            "live views: "
+            + (
+                ", ".join(
+                    f"{v['target']} ({v.get('mode', 'text')})"
+                    for v in self._live_views.values()
+                )
+                or "none"
+            ),
             "armed sessions: "
             + (
                 ", ".join(f"{s} (until {t})" for s, t in armed)
@@ -782,32 +809,59 @@ class TelegramInterface:
 
     def _cmd_live(self, chat_id: int, args: list[str]) -> None:
         """Auto-refreshing read-only view of a pane. Prefers the
-        bound session's pane; a bare target works too."""
-        target = args[0] if args else None
+        bound session's pane; a bare target works too. Shows a
+        PICTURE where the renderer is available; `/live text
+        [target]` keeps the text view on purpose."""
+        from . import screenshot
+
+        force_text = bool(args) and args[0].lower() == "text"
+        rest = args[1:] if force_text else args
+        target = rest[0] if rest else None
         if target is None:
             binding = self.topics.bound_session(
                 chat_id, self._reply_thread, self._now()
             )
             if binding is None:
-                self._say(chat_id, "usage: /live <tmux-target> (or /steer first)")
+                self._say(chat_id, "usage: /live [text] <tmux-target> (or /steer first)")
                 return
             target = binding["target"]
-        ok, output = self.driver.capture_pane(target)
+        image_mode = screenshot.AVAILABLE and not force_text
+        ok, output = self.driver.capture_pane(target, ansi=image_mode)
         if not ok:
             self._say(chat_id, f"live view unavailable: {output}")
             return
         from .tmuxdrive import content_hash
 
-        body = f"── {target} (live, read-only) ──\n{output}"
-        message_id = self.transport.send(
-            chat_id, body, thread_id=self._reply_thread
-        )
+        message_id = None
+        if image_mode:
+            png = screenshot.text_to_image(output, live=True)
+            if png is None:
+                image_mode = False  # renderer said no: text, honestly
+            else:
+                from .transport import TransportError
+
+                try:
+                    message_id = self.transport.send_photo(
+                        chat_id,
+                        png,
+                        caption=f"{target} — live, read-only",
+                        thread_id=self._reply_thread,
+                    )
+                except TransportError as exc:
+                    self._say(chat_id, f"live view unavailable: {exc}")
+                    return
+        if not image_mode:
+            body = f"── {target} (live, read-only) ──\n{output}"
+            message_id = self.transport.send(
+                chat_id, body, thread_id=self._reply_thread
+            )
         if message_id is None:
             return
         self._live_views[f"{chat_id}:{target}"] = {
             "target": target,
             "message_id": message_id,
             "thread": self._reply_thread,
+            "mode": "image" if image_mode else "text",
             "last_hash": content_hash(output),
             "expires": self._now().timestamp() + self.LIVE_TTL_SECONDS,
         }
