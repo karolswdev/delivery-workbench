@@ -7,6 +7,31 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## v1.14.0 — 2026-07-11
+
+The group grows hands: the second ccgram absorption (upstream
+v4.3.11, MIT). The Telegram interface becomes a first-class group
+surface — the pane arrives as a PICTURE (`/screen` renders ANSI
+color to PNG with an in-place refresh button; `/live` serves an
+auto-refreshing photo behind the same content-hash gate the text
+view always had, `/live text` on purpose; rendering is an optional
+Pillow capability with an honest text fallback — the published
+package still has zero dependencies); the buttons grow up (the
+toolbar is per-harness configuration with key/text/builtin action
+types and a CLOSED builtin table a config can never extend; pushed
+agent questions carry arrow/Enter/Esc/📸 keyboards that drive the
+actual TUI prompt — bound + armed only, and a nav tap never arms;
+the slash menu registers with Telegram); and consent in a group
+belongs to a person, not a room — pairing records the
+owner-of-record, and consent-bearing commands, every button tap,
+and the steering relay answer to that one identity, closing the
+gap where any member of a paired group held full owner power.
+Every keystroke still enters through the driver's one door;
+108 → 147 interface tests. Full detail:
+[phase 20](./pmo-roadmap/pm/roadmap/work-log-automation/phase-20-group-grows-hands/current-phase-status.md),
+and the ledger's second-absorption section in
+[docs/absorption-ccgram.md](./docs/absorption-ccgram.md).
+
 ## v1.13.0 — 2026-07-11
 
 The front door: open-source readiness. An audit of everything a

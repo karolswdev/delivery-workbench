@@ -25,23 +25,28 @@ as the last six releases. Owner direction (2026-07-11): "Land it."
 
 ## Exit criteria (evidence required)
 
-- [ ] v1.14.0 is live on every channel: every version surface in
+- [x] v1.14.0 is live on every channel: every version surface in
   lockstep under the parity tests, full battery + both smokes green
   at the release commit, annotated tag, GitHub Release with sha256s
   in the notes, PyPI at 1.14.0 via the trusted publisher, formula
   stamped with the served wheel's hash, tap mirrored, cold pip
-  install and brew both reporting 1.14.0, CI green (WLA-21-01).
+  install and brew both reporting 1.14.0, CI green (WLA-21-01 —
+  [evidence](./evidence-story-01.md): the pre-tag battery +
+  surfaces + smokes captured; post-publication confirmations in
+  the stamp rider commit).
 
 ## Story status
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-21-01 | Release v1.14.0 | backlog | [story-01-release-v1-14-0](./story-01-release-v1-14-0.md) | - |
+| WLA-21-01 | Release v1.14.0 | done | [story-01-release-v1-14-0](./story-01-release-v1-14-0.md) | [evidence-story-01](./evidence-story-01.md) |
 
 ## Where we are
 
-Scaffolded. One story: the release. Phase 20 closed earlier tonight
-with CI green on its head; nothing else sits unreleased.
+Phase CLOSED 1/1 (2026-07-11, same night as phases 19 and 20) —
+see [final-summary](./final-summary.md). v1.14.0 carries the
+group's hands to every channel; the phone leg stays owed in
+phase 20's evidence with the bot served for it.
 
 ## Active risks
 

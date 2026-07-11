@@ -11,9 +11,9 @@
 class DeliveryWorkbench < Formula
   desc "Evidence-first rails for agentic software delivery"
   homepage "https://github.com/karolswdev/delivery-workbench"
-  url "https://github.com/karolswdev/delivery-workbench/releases/download/v1.13.0/delivery_workbench-1.13.0-py3-none-any.whl",
+  url "https://github.com/karolswdev/delivery-workbench/releases/download/v1.14.0/delivery_workbench-1.14.0-py3-none-any.whl",
       using: :nounzip
-  sha256 "af266dd821b07854d1b87010be913052a783fce2bfba3e9009a91d4d2e54f182"
+  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
   license "MIT"
 
   depends_on "python@3.14"
