@@ -2579,6 +2579,48 @@ class MCPServerTest(unittest.TestCase):
 
     # -- guarded mutations ---------------------------------------------------
 
+    # -- the read surface (WLA-18-03) --------------------------------------
+
+    def test_browse_tools_agree_with_core(self) -> None:
+        from dw_pmo.api import parked_summary
+
+        result = self.call("dw_board", {"project": "demo"})
+        self.assertNotIn("isError", result)
+        direct = core.board_model(core.get_project(self.root, "demo"), self.root)
+        self.assertEqual(result["structuredContent"], direct)
+        self.assertIn("phase 1", result["content"][0]["text"])
+
+        result = self.call("dw_holds", {"project": "demo"})
+        self.assertEqual(
+            result["structuredContent"],
+            parked_summary(core.get_project(self.root, "demo"), self.root),
+        )
+        self.assertIn("nothing parked", result["content"][0]["text"])
+
+        result = self.call("dw_story_show", {"project": "demo", "phase": 1, "story": "DM-1-01"})
+        detail = result["structuredContent"]
+        self.assertEqual(detail["story_id"], "DM-1-01")
+        self.assertIn("fixture proof line", detail["evidence_markdown"])
+        self.assertEqual(detail["links"]["story"], "/api/projects/demo/stories/DM-1-01")
+        self.assertIn("evidence=yes", result["content"][0]["text"])
+
+    def test_browse_refusals_match_core(self) -> None:
+        result = self.call("dw_board", {"project": "nope"})
+        self.assertTrue(result["isError"])
+        self.assertIn("roadmap project not found", result["content"][0]["text"])
+        result = self.call("dw_story_show", {"project": "demo", "phase": "1", "story": "DM-9-99"})
+        self.assertTrue(result["isError"])
+        self.assertIn("story not found", result["content"][0]["text"])
+
+    def test_browse_tools_are_read_only(self) -> None:
+        # the interop layer never grows hands: no browse handler may
+        # reach a plan builder or apply
+        import inspect
+        for handler in (self.mcp._tool_board, self.mcp._tool_holds, self.mcp._tool_story_show):
+            src = inspect.getsource(handler)
+            self.assertNotIn("plan_", src)
+            self.assertNotIn("apply", src)
+
     def test_story_status_refusal_matches_core(self) -> None:
         # DM-1-02 has no evidence: done must be refused with the same
         # message the core raises for the CLI.

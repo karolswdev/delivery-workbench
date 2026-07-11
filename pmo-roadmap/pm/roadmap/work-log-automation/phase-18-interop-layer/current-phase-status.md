@@ -50,9 +50,12 @@ and is pinned by tests.
   same `story_detail` core (WLA-18-02 —
   [evidence](./evidence-story-02.md): 204 tests green + live browse
   of WLA-17-03 with its real captured runs).
-- [ ] MCP exposes `dw_board`, `dw_holds`, `dw_story_show` as
+- [x] MCP exposes `dw_board`, `dw_holds`, `dw_story_show` as
   read-only tools returning the same models as the CLI `--json`
-  verbs; refusals identical (WLA-18-03).
+  verbs; refusals identical (WLA-18-03 —
+  [evidence](./evidence-story-03.md): 207 tests green incl.
+  core-parity, refusal-parity, and the read-only census;
+  mcp-server.sh live round-trip green).
 - [ ] `docs/interop.md` names every read surface (CLI, HTTP, MCP)
   with its schema version; a test pins the doc's inventory against
   the code so a new surface cannot ship undocumented (WLA-18-04).
@@ -63,19 +66,20 @@ and is pinned by tests.
 |---|---|---|---|---|
 | WLA-18-01 | Self-describing cards: the board and the ledger carry their receipts | done | [story-01-self-describing-cards](./story-01-self-describing-cards.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-18-02 | dw story show — one story, whole | done | [story-02-story-show](./story-02-story-show.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-18-03 | The MCP read surface: board, holds, story | backlog | [story-03-mcp-read-surface](./story-03-mcp-read-surface.md) | - |
+| WLA-18-03 | The MCP read surface: board, holds, story | done | [story-03-mcp-read-surface](./story-03-mcp-read-surface.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-18-04 | The interop contract, versioned and pinned | backlog | [story-04-interop-contract](./story-04-interop-contract.md) | - |
 
 ## Where we are
 
-WLA-18-02 done (2026-07-11): one story, whole — `api.story_detail`
-is the one core (bodies + captured runs + paths/links + honest
-absences), the workbench story route refactored onto it
-(additive-only), and `dw story show [--json]` browses it from the
-CLI with every `find_story` selector form. 204 core tests green.
-Earlier: WLA-18-01 (self-describing cards: paths + links on every
-card/lane/hold, one link-minting helper, stamped board model,
-no-rot link walk). Next: WLA-18-03 (the MCP read surface).
+WLA-18-03 done (2026-07-11): the MCP read surface — `dw_board`,
+`dw_holds` (text via the shared `parked_lines` renderer, extracted
+so CLI and MCP cannot drift), `dw_story_show`; structuredContent
+byte-equal with the core, refusals identical, read-only census
+pinned; docs/mcp.md gained the Browse table, the CLAUDE block
+regenerated and the snapshot synced in the same commit. 207 core
+tests green. Earlier: WLA-18-02 (`story_detail` + `dw story show`),
+WLA-18-01 (self-describing cards). Next: WLA-18-04 (the interop
+contract) — the last story, then the phase closes.
 
 ## Active risks
 

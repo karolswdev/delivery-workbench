@@ -63,6 +63,14 @@ semantics are shared with the CLI by construction.
 | `dw_check` | `validate.check_project` | `{project?: string}` — result: `{ok: boolean, issues: string[]}` |
 | `dw_doctor` | `doctor.run_doctor` | `{}` — result: `{healthy: boolean, checks: [{name, ok, detail}]}` |
 
+### Browse (read-only)
+
+| Tool | Core function | Input schema (all fields optional unless noted) |
+|---|---|---|
+| `dw_board` | `board.board_model` | `{project?: string, phase?: string\|number}` — result: the stamped board model (`kind: delivery-workbench-board`, `schema_version: 1`); cards carry `paths` (story/evidence/phase-status receipts) and `links` (workbench story/trace routes); text is the rendered board |
+| `dw_holds` | `api.parked_summary` | `{project?: string}` — result: `{paused_phases, parked_stories, counts}`, every entry with its `note`, `paths`, and `links`; text mirrors the CLI's greppable `PAUSED`/`BLOCKED`/`ON-HOLD` lines |
+| `dw_story_show` | `api.story_detail` | `{project: string, phase: string\|number, story: string\|number}` (required) — result: one story whole (header context, `status_token`/`status_note`, story + evidence markdown, parsed `captured_runs`, `paths`, `links`); absences are honest empties |
+
 ### Verification (read-only)
 
 | Tool | Core function | Input schema |

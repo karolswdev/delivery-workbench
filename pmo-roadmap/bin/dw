@@ -56,6 +56,7 @@ try:
         read_text,
         next_story,
         parked_headline,
+        parked_lines,
         parked_summary,
         parse_contract_facts,
         render_board,
@@ -329,14 +330,7 @@ def command_holds(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(parked, sort_keys=True))
         return 0 if (parked["paused_phases"] or parked["parked_stories"]) else 2
-    lines = []
-    for phase in parked["paused_phases"]:
-        lines.append(f"PAUSED\t{phase['phase_path']}\t{phase['note'] or '(no reason recorded)'}")
-    for story in parked["parked_stories"]:
-        label = "ON-HOLD" if story["status"] != "blocked" else "BLOCKED"
-        where = f"{story['phase_path']}" + ("\t(phase paused)" if story["phase_paused"] else "")
-        note = story["note"] or "(no reason recorded)"
-        lines.append(f"{label}\t{story['story_id']}\t{note}\t{where}")
+    lines = parked_lines(parked)
     if not lines:
         print("dw holds: nothing parked (no blocked or on-hold stories, no paused phases)", file=sys.stderr)
         return 2

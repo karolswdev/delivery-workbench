@@ -56,6 +56,7 @@ try:
         read_text,
         next_story,
         parked_headline,
+        parked_lines,
         parked_summary,
         parse_contract_facts,
         render_board,
@@ -69,6 +70,7 @@ try:
         run_doctor,
         run_gate,
         run_verify,
+        story_detail,
         story_num_from_file,
         write_agent_docs,
         write_contract,
@@ -221,6 +223,34 @@ def command_story_evidence(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_story_show(args: argparse.Namespace) -> int:
+    project = get_project(args.root, args.project)
+    phase = get_phase(project, args.phase)
+    detail = story_detail(project, phase, args.story, args.root)
+    if args.json:
+        print(json.dumps(detail, sort_keys=True))
+        return 0
+    note = f" ({detail['status_note']})" if detail["status_note"] else ""
+    print(f"{detail['story_id']} — {detail['title']}")
+    print(f"status\t{detail['status_token']}{note}")
+    print(f"phase\t{phase.number} ({phase.path.name})")
+    print(f"story\t{detail['paths']['story']}")
+    evidence_state = "" if detail["evidence_exists"] else "\t(not written yet)"
+    print(f"evidence\t{detail['paths']['evidence'] or '-'}{evidence_state}")
+    print(f"api\t{detail['links']['story']}\t{detail['links']['trace']}")
+    print("captured runs:")
+    if detail["captured_runs"]:
+        for run in detail["captured_runs"]:
+            print(f"  - {run['timestamp']} `{run['command']}` exit {run['exit_code']}")
+    else:
+        print("  - none (narrative-only or no evidence yet)")
+    print("--- story ---")
+    print(detail["story_markdown"].rstrip() or "(missing story file)")
+    print("--- evidence ---")
+    print(detail["evidence_markdown"].rstrip() or "(no evidence file yet)")
+    return 0
+
+
 def command_story_list(args: argparse.Namespace) -> int:
     project = get_project(args.root, args.project)
     phases = [get_phase(project, args.phase)] if args.phase else discover_phases(project)
@@ -300,14 +330,7 @@ def command_holds(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(parked, sort_keys=True))
         return 0 if (parked["paused_phases"] or parked["parked_stories"]) else 2
-    lines = []
-    for phase in parked["paused_phases"]:
-        lines.append(f"PAUSED\t{phase['phase_path']}\t{phase['note'] or '(no reason recorded)'}")
-    for story in parked["parked_stories"]:
-        label = "ON-HOLD" if story["status"] != "blocked" else "BLOCKED"
-        where = f"{story['phase_path']}" + ("\t(phase paused)" if story["phase_paused"] else "")
-        note = story["note"] or "(no reason recorded)"
-        lines.append(f"{label}\t{story['story_id']}\t{note}\t{where}")
+    lines = parked_lines(parked)
     if not lines:
         print("dw holds: nothing parked (no blocked or on-hold stories, no paused phases)", file=sys.stderr)
         return 2
@@ -809,6 +832,12 @@ def build_parser() -> argparse.ArgumentParser:
     story_create.add_argument("--slug")
     story_create.add_argument("--status", default="backlog")
     story_create.set_defaults(func=command_story_create)
+    story_show = story_sub.add_parser("show", help="browse one story whole: header, status + why, bodies, captured runs, receipts and links")
+    story_show.add_argument("project")
+    story_show.add_argument("phase")
+    story_show.add_argument("story")
+    story_show.add_argument("--json", action="store_true")
+    story_show.set_defaults(func=command_story_show)
     story_status = story_sub.add_parser("status", help="transactionally update story and phase-table status")
     story_status.add_argument("project")
     story_status.add_argument("phase")

@@ -136,6 +136,19 @@ def parked_summary(project: Project, root: Path) -> dict[str, object]:
     }
 
 
+def parked_lines(parked: dict[str, object]) -> list[str]:
+    """The ledger as greppable lines — one per hold. The one renderer
+    behind `dw holds` and the MCP `dw_holds` text (WLA-18-03)."""
+    lines: list[str] = []
+    for phase in parked["paused_phases"]:  # type: ignore[union-attr]
+        lines.append(f"PAUSED\t{phase['phase_path']}\t{phase['note'] or '(no reason recorded)'}")
+    for story in parked["parked_stories"]:  # type: ignore[union-attr]
+        label = "BLOCKED" if story["status"] == "blocked" else "ON-HOLD"
+        where = f"{story['phase_path']}" + ("\t(phase paused)" if story["phase_paused"] else "")
+        lines.append(f"{label}\t{story['story_id']}\t{story['note'] or '(no reason recorded)'}\t{where}")
+    return lines
+
+
 def parked_headline(parked: dict[str, object]) -> str:
     """One honest clause for exit-2 messages: '2 blocked, 1 on-hold,
     1 phase paused'. Empty when nothing waits."""

@@ -176,6 +176,46 @@ def _tool_gate(root: Path, args: dict) -> tuple[str, dict]:
     return text, structured
 
 
+def _tool_board(root: Path, args: dict) -> tuple[str, dict]:
+    from .board import board_model, render_board
+    from .parse import get_phase, get_project
+
+    project = get_project(root, args.get("project"))
+    model = board_model(project, root)
+    phase_selector = args.get("phase")
+    if phase_selector is not None and str(phase_selector).strip():
+        phase = get_phase(project, str(phase_selector))
+        model["phases"] = [lane for lane in model["phases"] if lane["number"] == phase.number]
+    return render_board(model), model
+
+
+def _tool_holds(root: Path, args: dict) -> tuple[str, dict]:
+    from .api import parked_lines, parked_summary
+    from .parse import get_project
+
+    project = get_project(root, args.get("project"))
+    parked = parked_summary(project, root)
+    lines = parked_lines(parked)
+    text = "\n".join(lines) if lines else (
+        "dw holds: nothing parked (no blocked or on-hold stories, no paused phases)"
+    )
+    return text, parked
+
+
+def _tool_story_show(root: Path, args: dict) -> tuple[str, dict]:
+    from .api import story_detail
+    from .parse import get_phase, get_project
+
+    project = get_project(root, args["project"])
+    phase = get_phase(project, str(args["phase"]))
+    detail = story_detail(project, phase, str(args["story"]), root)
+    text = (
+        f"{detail['story_id']}\t{detail['status_token']}\t{detail['paths']['story']}"
+        f"\tevidence={'yes' if detail['evidence_exists'] else 'no'}"
+    )
+    return text, detail
+
+
 def _tool_story_status(root: Path, args: dict) -> tuple[str, dict]:
     from .mutations import apply_plan, plan_story_status
     from .parse import get_phase, get_project
@@ -325,6 +365,53 @@ TOOLS: dict[str, dict] = {
         ),
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "handler": _tool_gate,
+    },
+    "dw_board": {
+        "description": (
+            "The kanban board, read-only: swimlane per phase, six status "
+            "columns, cards carrying receipts (paths) and links; stamped "
+            "kind + schema_version. Adapter over dw_pmo.board.board_model."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": _PROJECT_PROP,
+                "phase": {"type": ["string", "integer"], "description": "Optional: one phase's lane only"},
+            },
+            "additionalProperties": False,
+        },
+        "handler": _tool_board,
+    },
+    "dw_holds": {
+        "description": (
+            "The ledger of parked work, read-only: blocked/on-hold stories "
+            "and paused phases, each with its recorded why and its "
+            "paths/links. Adapter over dw_pmo.api.parked_summary."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"project": _PROJECT_PROP},
+            "additionalProperties": False,
+        },
+        "handler": _tool_holds,
+    },
+    "dw_story_show": {
+        "description": (
+            "Browse one story whole, read-only: header context, normalized "
+            "status + note, story and evidence bodies, parsed captured "
+            "runs, paths and links. Adapter over dw_pmo.api.story_detail."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Project slug"},
+                "phase": {"type": ["string", "integer"], "description": "Phase number or folder name"},
+                "story": {"type": ["string", "integer"], "description": "Story id, number, or filename"},
+            },
+            "required": ["project", "phase", "story"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_story_show,
     },
     "dw_story_status": {
         "description": (

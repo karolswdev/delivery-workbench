@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .board import phase_links, story_links, story_paths
 from .model import DONE_STATUSES, OPEN_STATUSES, PARKED_STATUSES, Phase, Project, StoryRow, normalize_status, status_note
 from .parse import (
     discover_phases,
+    find_story,
     get_phase,
     header_status,
     hook_snapshot,
@@ -55,6 +57,33 @@ def next_story(project: Project, root: Path) -> dict[str, object] | None:
     return None
 
 
+def story_detail(project: Project, phase: Phase, selector: str, root: Path) -> dict[str, object]:
+    """One story, whole (WLA-18-02): everything ``story_context``
+    carries plus the bodies (story + evidence markdown), the parsed
+    captured runs, and the WLA-18-01 ``paths``/``links``
+    self-description. The one core behind the workbench story route,
+    ``dw story show``, and the MCP browse tool — absences render as
+    honest empties, never inventions."""
+    from .evidence import parse_captured_runs
+    from .paths import read_text
+
+    row, story_num, story_path = find_story(project, phase, selector)
+    detail = story_context(row, phase, project, root)
+    detail["phase_number"] = phase.number
+    detail["story_markdown"] = read_text(story_path) if story_path.is_file() else ""
+    evidence_rel = str(detail["evidence_path"])
+    evidence_file = (root / evidence_rel) if evidence_rel else None
+    detail["evidence_markdown"] = (
+        read_text(evidence_file) if evidence_file is not None and evidence_file.is_file() else ""
+    )
+    detail["captured_runs"] = (
+        parse_captured_runs(detail["evidence_markdown"]) if detail["evidence_markdown"] else []
+    )
+    detail["paths"] = story_paths(phase.path, row.story_file, story_num, root)
+    detail["links"] = story_links(project.slug, row.story_id)
+    return detail
+
+
 def parked_summary(project: Project, root: Path) -> dict[str, object]:
     """The ledger of work that waits (WLA-17-03): paused phases and
     blocked/on-hold stories in open phases, each with its recorded
@@ -73,6 +102,8 @@ def parked_summary(project: Project, root: Path) -> dict[str, object]:
                     "phase": phase.number,
                     "phase_path": phase.path.name,
                     "note": status_note(header),
+                    "paths": {"phase_status": rel(status_file, root)},
+                    "links": phase_links(project.slug, phase.number),
                 }
             )
         for row in parse_story_rows(status_file):
@@ -88,6 +119,8 @@ def parked_summary(project: Project, root: Path) -> dict[str, object]:
                     "phase": phase.number,
                     "phase_path": phase.path.name,
                     "phase_paused": phase_paused,
+                    "paths": story_paths(phase.path, row.story_file, story_num_from_file(row.story_file), root),
+                    "links": story_links(project.slug, row.story_id),
                 }
             )
     blocked = sum(1 for s in parked_stories if s["status"] == "blocked")
@@ -101,6 +134,19 @@ def parked_summary(project: Project, root: Path) -> dict[str, object]:
             "paused_phases": len(paused_phases),
         },
     }
+
+
+def parked_lines(parked: dict[str, object]) -> list[str]:
+    """The ledger as greppable lines — one per hold. The one renderer
+    behind `dw holds` and the MCP `dw_holds` text (WLA-18-03)."""
+    lines: list[str] = []
+    for phase in parked["paused_phases"]:  # type: ignore[union-attr]
+        lines.append(f"PAUSED\t{phase['phase_path']}\t{phase['note'] or '(no reason recorded)'}")
+    for story in parked["parked_stories"]:  # type: ignore[union-attr]
+        label = "BLOCKED" if story["status"] == "blocked" else "ON-HOLD"
+        where = f"{story['phase_path']}" + ("\t(phase paused)" if story["phase_paused"] else "")
+        lines.append(f"{label}\t{story['story_id']}\t{story['note'] or '(no reason recorded)'}\t{where}")
+    return lines
 
 
 def parked_headline(parked: dict[str, object]) -> str:
