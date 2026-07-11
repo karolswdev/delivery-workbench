@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .board import phase_links, story_links, story_paths
 from .model import DONE_STATUSES, OPEN_STATUSES, PARKED_STATUSES, Phase, Project, StoryRow, normalize_status, status_note
 from .parse import (
     discover_phases,
@@ -73,6 +74,8 @@ def parked_summary(project: Project, root: Path) -> dict[str, object]:
                     "phase": phase.number,
                     "phase_path": phase.path.name,
                     "note": status_note(header),
+                    "paths": {"phase_status": rel(status_file, root)},
+                    "links": phase_links(project.slug, phase.number),
                 }
             )
         for row in parse_story_rows(status_file):
@@ -88,6 +91,8 @@ def parked_summary(project: Project, root: Path) -> dict[str, object]:
                     "phase": phase.number,
                     "phase_path": phase.path.name,
                     "phase_paused": phase_paused,
+                    "paths": story_paths(phase.path, row.story_file, story_num_from_file(row.story_file), root),
+                    "links": story_links(project.slug, row.story_id),
                 }
             )
     blocked = sum(1 for s in parked_stories if s["status"] == "blocked")

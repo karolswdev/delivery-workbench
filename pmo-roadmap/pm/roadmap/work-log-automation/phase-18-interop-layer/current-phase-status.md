@@ -36,10 +36,13 @@ and is pinned by tests.
 
 ## Exit criteria (evidence required)
 
-- [ ] Every board card and every `dw holds` entry carries
+- [x] Every board card and every `dw holds` entry carries
   repo-relative `paths` (story, evidence, phase status) and
   workbench `links` (story, trace) — pinned in tests; the board
-  model is stamped `kind` + `schema_version: 1` (WLA-18-01).
+  model is stamped `kind` + `schema_version: 1` (WLA-18-01 —
+  [evidence](./evidence-story-01.md): 201 tests green incl. the
+  no-rot link walk; live HTTP walk card → story → evidence →
+  trace with zero tree knowledge).
 - [ ] `dw story show <project> <phase> <story>` prints one story
   whole — header fields, normalized status + note, story body,
   evidence body, captured runs, trace paths — and `--json` returns
@@ -56,20 +59,21 @@ and is pinned by tests.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-18-01 | Self-describing cards: the board and the ledger carry their receipts | backlog | [story-01-self-describing-cards](./story-01-self-describing-cards.md) | - |
+| WLA-18-01 | Self-describing cards: the board and the ledger carry their receipts | done | [story-01-self-describing-cards](./story-01-self-describing-cards.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-18-02 | dw story show — one story, whole | backlog | [story-02-story-show](./story-02-story-show.md) | - |
 | WLA-18-03 | The MCP read surface: board, holds, story | backlog | [story-03-mcp-read-surface](./story-03-mcp-read-surface.md) | - |
 | WLA-18-04 | The interop contract, versioned and pinned | backlog | [story-04-interop-contract](./story-04-interop-contract.md) | - |
 
 ## Where we are
 
-Phase scaffolded 2026-07-11 from the owner's direction ("do we have
-API methods associated with this kanban view? … each of those
-elements should be browsable — it should expose things like
-evidence"). Survey recorded the gaps: board cards are
-display-shaped (no paths/links), no CLI story browse verb, MCP has
-nine tools and zero browse surface, no read-surface contract doc.
-Four stories written; nothing started.
+WLA-18-01 done (2026-07-11): cards and holds are doors — `paths`
+(story/evidence/phase-status receipts, evidence address stable
+before the file exists) + `links` (workbench story/trace routes) on
+every board card, lane, parked story, and paused phase; one helper
+mints all link shapes; the board model stamped
+`kind`/`schema_version: 1`; a no-rot test resolves every emitted
+link through handle_api. 201 core tests green. Next: WLA-18-02
+(`dw story show`).
 
 ## Active risks
 

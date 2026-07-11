@@ -26,14 +26,49 @@ from .model import (
 )
 from .parse import (
     discover_phases,
+    link_target,
     parse_current_phase_dirname,
     parse_story_rows,
     phase_header_status,
     phase_story_files,
     story_num_from_file,
 )
+from .paths import rel
 
 BOARD_COLUMNS = ("backlog", "ready", "in-progress", "blocked", "on-hold", "done")
+
+BOARD_KIND = "delivery-workbench-board"
+BOARD_SCHEMA_VERSION = 1
+
+
+# The one place link shapes are minted (WLA-18-01): every consumer —
+# the board, the holds ledger, story detail — derives its workbench
+# routes here, so a route rename cannot strand a stale link shape in
+# one surface. A test resolves every emitted link against handle_api.
+def story_links(slug: str, story_id: str) -> dict[str, str]:
+    return {
+        "story": f"/api/projects/{slug}/stories/{story_id}",
+        "trace": f"/api/projects/{slug}/trace/{story_id}",
+    }
+
+
+def phase_links(slug: str, number: int) -> dict[str, str]:
+    return {"phase": f"/api/projects/{slug}/phases/{number}"}
+
+
+def story_paths(phase_path, story_file_cell: str, story_num: int | None, root) -> dict[str, str]:
+    """Repo-relative receipts for one story row. The evidence path is
+    emitted even before the file exists — the address is stable, the
+    paired ``evidence_exists`` flag tells the truth about occupancy."""
+    story_target = link_target(story_file_cell)
+    return {
+        "story": rel((phase_path / story_target).resolve(), root),
+        "evidence": (
+            rel(phase_path / f"evidence-story-{story_num:02d}.md", root)
+            if story_num is not None else ""
+        ),
+        "phase_status": rel(phase_path / "current-phase-status.md", root),
+    }
 
 # How many cards a rendered column shows before folding into "+N more".
 _MAX_ROWS = 8
@@ -95,6 +130,8 @@ def board_model(project: Project, root: Path) -> dict[str, object]:
                     "status": token,
                     "note": status_note(row.status),
                     "evidence_exists": evidence_exists,
+                    "paths": story_paths(phase.path, row.story_file, num, root),
+                    "links": story_links(project.slug, row.story_id),
                 }
             )
         story_count = sum(len(cards) for cards in columns.values())
@@ -115,11 +152,15 @@ def board_model(project: Project, root: Path) -> dict[str, object]:
                 "uncovered_story_files": len(uncovered_files),
                 "done_count": len(columns["done"]),
                 "story_count": story_count,
+                "paths": {"phase_status": rel(status_file, root)},
+                "links": phase_links(project.slug, phase.number),
                 "columns": columns,
             }
         )
     lanes.sort(key=lambda lane: (lane["closed"], not lane["is_pointer"], lane["number"]))
     return {
+        "kind": BOARD_KIND,
+        "schema_version": BOARD_SCHEMA_VERSION,
         "project": project.slug,
         "prefix": project.prefix,
         "columns": list(BOARD_COLUMNS),

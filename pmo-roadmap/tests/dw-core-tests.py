@@ -1409,6 +1409,67 @@ class DwCoreTest(unittest.TestCase):
         status, _body = wb.handle_api(self.root, "/api/projects/nope/board", {})
         self.assertEqual(status, 400)
 
+    # -- self-describing cards (WLA-18-01) --------------------------------
+
+    def test_board_and_holds_carry_receipts_and_links(self) -> None:
+        core.apply_plan(core.plan_story_status(
+            self.root, self.project, self.phase, "DM-1-02", "on-hold",
+            reason="pivot"), validate_after=False)
+        model = core.board_model(self.project, self.root)
+        self.assertEqual(model["kind"], "delivery-workbench-board")
+        self.assertEqual(model["schema_version"], 1)
+        lane = model["phases"][0]
+        self.assertEqual(lane["links"], {"phase": "/api/projects/demo/phases/1"})
+        self.assertEqual(lane["paths"], {"phase_status": "pm/roadmap/demo/phase-1-alpha/current-phase-status.md"})
+        card = lane["columns"]["done"][0]
+        self.assertEqual(card["paths"], {
+            "story": "pm/roadmap/demo/phase-1-alpha/story-01-first.md",
+            "evidence": "pm/roadmap/demo/phase-1-alpha/evidence-story-01.md",
+            "phase_status": "pm/roadmap/demo/phase-1-alpha/current-phase-status.md",
+        })
+        self.assertEqual(card["links"], {
+            "story": "/api/projects/demo/stories/DM-1-01",
+            "trace": "/api/projects/demo/trace/DM-1-01",
+        })
+        # the evidence ADDRESS is stable before the file exists;
+        # evidence_exists tells the truth about occupancy
+        held = lane["columns"]["on-hold"][0]
+        self.assertEqual(held["paths"]["evidence"], "pm/roadmap/demo/phase-1-alpha/evidence-story-02.md")
+        self.assertFalse(held["evidence_exists"])
+        parked = core.parked_summary(self.project, self.root)
+        entry = parked["parked_stories"][0]
+        self.assertEqual(entry["links"]["story"], "/api/projects/demo/stories/DM-1-02")
+        self.assertEqual(entry["paths"]["story"], "pm/roadmap/demo/phase-1-alpha/story-02-second.md")
+        core.apply_plan(core.plan_phase_pause(
+            self.root, self.project, self.phase, "yields"), validate_after=False)
+        parked = core.parked_summary(self.project, self.root)
+        self.assertEqual(parked["paused_phases"][0]["links"], {"phase": "/api/projects/demo/phases/1"})
+        self.assertEqual(
+            parked["paused_phases"][0]["paths"],
+            {"phase_status": "pm/roadmap/demo/phase-1-alpha/current-phase-status.md"},
+        )
+
+    def test_emitted_links_resolve_against_the_api(self) -> None:
+        # links cannot rot: every link the board or the ledger emits
+        # must answer 200 through the same handle_api that serves them
+        import dw_pmo.workbench as wb
+        core.apply_plan(core.plan_story_status(
+            self.root, self.project, self.phase, "DM-1-02", "blocked"), validate_after=False)
+        model = core.board_model(self.project, self.root)
+        parked = core.parked_summary(self.project, self.root)
+        links: list[str] = []
+        for lane in model["phases"]:
+            links.extend(lane["links"].values())
+            for cards in lane["columns"].values():
+                for card in cards:
+                    links.extend(card["links"].values())
+        for entry in list(parked["parked_stories"]) + list(parked["paused_phases"]):
+            links.extend(entry["links"].values())
+        self.assertTrue(links)
+        for link in sorted(set(links)):
+            status, _body = wb.handle_api(self.root, link, {})
+            self.assertEqual(status, 200, link)
+
     # -- the board (WLA-17-04) --------------------------------------------
 
     def test_board_bucketing_pinned(self) -> None:
