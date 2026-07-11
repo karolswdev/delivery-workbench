@@ -1352,6 +1352,49 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(status, 200, body)
         self.assertFalse(core.phase_is_paused(self.phase_dir))
 
+    # -- next tells the truth; dw holds is the ledger (WLA-17-03) ---------
+
+    def test_next_skips_parked_stories_and_paused_phases(self) -> None:
+        # park the only open story: next finds nothing, the ledger names it
+        core.apply_plan(core.plan_story_status(
+            self.root, self.project, self.phase, "DM-1-02", "on-hold",
+            reason="pivot"), validate_after=False)
+        self.assertIsNone(core.next_story(self.project, self.root))
+        parked = core.parked_summary(self.project, self.root)
+        self.assertEqual(parked["counts"], {"blocked": 0, "on_hold": 1, "paused_phases": 0})
+        self.assertEqual(core.parked_headline(parked), "1 on-hold")
+        import datetime as _dt
+        self.assertEqual(parked["parked_stories"][0]["note"], f"pivot — since {_dt.date.today().isoformat()}")
+        # release it, then pause the whole phase: an in-progress story
+        # inside a paused phase is never proposed
+        core.apply_plan(core.plan_story_status(
+            self.root, self.project, self.phase, "DM-1-02", "in-progress"), validate_after=False)
+        self.assertIsNotNone(core.next_story(self.project, self.root))
+        core.apply_plan(core.plan_phase_pause(
+            self.root, self.project, self.phase, "yields to phase 2"), validate_after=False)
+        self.assertIsNone(core.next_story(self.project, self.root))
+        parked = core.parked_summary(self.project, self.root)
+        self.assertEqual(parked["counts"]["paused_phases"], 1)
+        self.assertEqual(core.parked_headline(parked), "1 phase paused")
+
+    def test_bare_park_warns_never_errors(self) -> None:
+        # blocked composes without a reason (legacy shape) — the tree
+        # stays valid, but the drift surface names the forgotten why
+        core.apply_plan(core.plan_story_status(
+            self.root, self.project, self.phase, "DM-1-02", "blocked"), validate_after=False)
+        self.assertEqual(core.check_project(self.project, self.root), [])
+        warnings = core.project_warnings(self.project, self.root)
+        self.assertTrue(
+            any("parked without a recorded reason" in w and "DM-1-02" in w for w in warnings),
+            warnings,
+        )
+        # give it the why: the warning clears
+        core.apply_plan(core.plan_story_status(
+            self.root, self.project, self.phase, "DM-1-02", "blocked",
+            reason="waiting on keys"), validate_after=False)
+        warnings = core.project_warnings(self.project, self.root)
+        self.assertFalse(any("parked without a recorded reason" in w for w in warnings), warnings)
+
     def test_status_note_extraction(self) -> None:
         cases = {
             "on-hold (pivot to X — since 2026-07-11)": "pivot to X — since 2026-07-11",

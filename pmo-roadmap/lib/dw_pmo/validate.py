@@ -9,9 +9,11 @@ from .model import (
     DONE_STATUSES,
     EVIDENCE_PLACEHOLDER,
     OPEN_STATUSES,
+    PARKED_STATUSES,
     Project,
     normalize_status,
     row_is_retired,
+    status_note,
 )
 from .parse import (
     current_phase_status_path,
@@ -66,6 +68,7 @@ def project_warnings(project: Project, root: Path) -> list[str]:
     active = []
     uncaptured: list[str] = []
     file_derived: list[str] = []
+    bare_parks: list[str] = []
     for phase in discover_phases(project):
         rows = parse_story_rows(phase.path / "current-phase-status.md")
         covered = {story_num_from_file(row.story_file) for row in rows}
@@ -74,6 +77,13 @@ def project_warnings(project: Project, root: Path) -> list[str]:
             file_derived.append(f"{phase.path.name} ({len(uncovered)})")
         if any(normalize_status(row.status) in OPEN_STATUSES for row in rows):
             active.append(phase.path.name)
+        if not (phase.path / "final-summary.md").exists():
+            # A park without a why is where work goes to be forgotten
+            # (WLA-17-03). Warning, never an error — legacy trees
+            # parked before reasons existed.
+            for row in rows:
+                if normalize_status(row.status) in PARKED_STATUSES and not status_note(row.status):
+                    bare_parks.append(row.story_id)
         for row in rows:
             if normalize_status(row.status) not in DONE_STATUSES:
                 continue
@@ -99,6 +109,10 @@ def project_warnings(project: Project, root: Path) -> list[str]:
         shown = ", ".join(file_derived[:8])
         more = f" (+{len(file_derived) - 8} more)" if len(file_derived) > 8 else ""
         warnings.append(f"story files not in the story table (read file-derived): {shown}{more}")
+    if bare_parks:
+        shown = ", ".join(bare_parks[:8])
+        more = f" (+{len(bare_parks) - 8} more)" if len(bare_parks) > 8 else ""
+        warnings.append(f"parked without a recorded reason (dw story status --reason): {shown}{more}")
     snapshot = hook_snapshot(root)
     if snapshot["appears_older_snapshot"]:
         warnings.append("installed pre-commit hook appears older than current Delivery Workbench seams")

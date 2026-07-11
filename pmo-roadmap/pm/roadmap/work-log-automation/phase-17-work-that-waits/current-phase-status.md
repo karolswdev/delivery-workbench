@@ -46,10 +46,12 @@ shows the whole picture, columns by status, swimlanes by phase.
   `paused: true` with its note in context (WLA-17-02 —
   [evidence](./evidence-story-02.md): 192 tests green + live
   pause→resume walk with all four refusals).
-- [ ] `dw next` never proposes a story that is blocked or on-hold,
+- [x] `dw next` never proposes a story that is blocked or on-hold,
   never proposes from a paused phase, and its nothing-actionable
   exit names the parked counts; `dw holds` lists every parked
-  story and paused phase with reason (WLA-17-03).
+  story and paused phase with reason (WLA-17-03 —
+  [evidence](./evidence-story-03.md): 194 tests green + live walk;
+  the flagship read surfaced HS-25-07, a real forgotten hold).
 - [ ] `dw board` renders phase × status columns for this repo AND
   for the flagship tree (HoldSpeak) without error — parked work
   visibly parked (WLA-17-04).
@@ -66,25 +68,27 @@ shows the whole picture, columns by status, swimlanes by phase.
 |---|---|---|---|---|
 | WLA-17-01 | on-hold enters the write vocabulary; every park carries a reason | done | [story-01-hold-vocabulary](./story-01-hold-vocabulary.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-17-02 | Pause and resume a phase | done | [story-02-phase-pause](./story-02-phase-pause.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-17-03 | next tells the truth about parked work; dw holds is the ledger | backlog | [story-03-holds-ledger](./story-03-holds-ledger.md) | - |
+| WLA-17-03 | next tells the truth about parked work; dw holds is the ledger | done | [story-03-holds-ledger](./story-03-holds-ledger.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-17-04 | dw board — the kanban in the terminal | backlog | [story-04-terminal-board](./story-04-terminal-board.md) | - |
 | WLA-17-05 | The board on the workbench | backlog | [story-05-workbench-board](./story-05-workbench-board.md) | - |
 | WLA-17-06 | Guarded moves on the board | backlog | [story-06-board-moves](./story-06-board-moves.md) | - |
 
 ## Where we are
 
-WLA-17-02 done (2026-07-11): phases pause and resume —
-`dw phase pause --reason` / `resume` write the header (bullet or
-bare shape preserved; the flagship's bare shape inserted when
-absent) and the README index row together; context carries
-`paused`/`pause_note`; the workbench editor gained
-`pause_phase`/`resume_phase` on the same preview→apply fingerprint
-discipline; the event taxonomy grew `phase_paused`/`phase_resumed`.
-192 core tests green. Earlier: WLA-17-01 (the hold vocabulary:
-on-hold/paused + `--reason` decoration, refused bare and refused on
-done; `status_note`/`status_token` on every read surface; CLI + MCP
-+ workbench parity; §2.3 three-group parity test). Next: WLA-17-03
-(honest next + the holds ledger).
+WLA-17-03 done (2026-07-11): `next` tells the truth and `dw holds`
+is the ledger — paused phases and parked stories are skipped but
+named ("parked: 1 blocked, 1 on-hold, 1 phase paused — see dw
+holds") on CLI and MCP alike; `dw holds [--json]` prints one
+greppable line per hold; context carries `parked`; a park without a
+visible reason warns (never errors). The flagship read-only pass
+immediately earned its keep: HS-25-07 has sat blocked with no
+recorded reason since phase 25 of a 93-phase project. 194 core
+tests green. Earlier: WLA-17-02 (phase pause/resume, header + README
+row, pause_phase/resume_phase editor kinds, phase_paused/resumed
+events), WLA-17-01 (the hold vocabulary: on-hold/paused +
+`--reason` decoration; status_note/status_token; CLI + MCP +
+workbench parity; §2.3 three-group parity test). Next: WLA-17-04
+(the terminal board).
 
 Note for operators on this self-hosting repo: `.githooks/` is the
 installed snapshot and syncs at release time; between releases the
