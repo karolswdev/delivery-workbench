@@ -40,6 +40,10 @@ Phase 12 left more on the table than the scaffold specs assumed:
 
 ## 1. The state feed (implemented by WLA-13-02)
 
+The feed is one of several read surfaces; the whole inventory
+(CLI, workbench HTTP, MCP) is contracted in
+[interop.md](./interop.md).
+
 **Decided: the feed is a CLI invocation, `dw state --json`,** not
 a served endpoint — the cheapest thing a consumer can poll, no
 daemon, no port, works in every repo the rails are installed in.

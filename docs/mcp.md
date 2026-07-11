@@ -4,7 +4,9 @@ What the `dw-mcp` server exposes to agents, exactly how, and — most
 importantly — what it refuses to expose. This is the design contract
 for WLA-10-02/03 (implementation) and WLA-10-04 (wiring); the
 inventory and exclusions below are tested properties, not
-aspirations.
+aspirations. MCP is one of three read transports — the full
+read-surface inventory across CLI, HTTP, and MCP lives in
+[interop.md](./interop.md).
 
 ## Why a server, and why this thin
 

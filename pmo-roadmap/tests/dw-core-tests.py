@@ -1409,6 +1409,54 @@ class DwCoreTest(unittest.TestCase):
         status, _body = wb.handle_api(self.root, "/api/projects/nope/board", {})
         self.assertEqual(status, 400)
 
+    # -- the interop contract (WLA-18-04) ---------------------------------
+
+    @staticmethod
+    def _interop_missing(inventory, doc_text):
+        return sorted(item for item in inventory if item not in doc_text)
+
+    def test_interop_doc_names_every_surface(self) -> None:
+        """docs/interop.md is the read-surface contract; a new route,
+        tool, or machine verb cannot ship undocumented."""
+        import inspect
+        import re as _re
+
+        import dw_pmo.workbench as wb
+        from dw_pmo.mcpserver import TOOLS
+
+        doc = (TESTS_DIR.parent.parent / "docs" / "interop.md").read_text(encoding="utf-8")
+        # every MCP tool, by name
+        self.assertEqual(self._interop_missing(TOOLS.keys(), doc), [])
+        # every route literal handle_api dispatches on
+        source = inspect.getsource(wb.handle_api)
+        tokens: set[str] = set()
+        for line in source.splitlines():
+            if "parts" not in line:
+                continue
+            tokens.update(_re.findall(r'"([a-z]+)"', line))
+        tokens.discard("api")  # the prefix, not a surface
+        self.assertTrue(
+            {"context", "projects", "board", "stories", "trace", "health"} <= tokens,
+            tokens,
+        )
+        self.assertEqual(self._interop_missing(tokens, doc), [])
+        # the CLI's machine-readable verbs
+        verbs = [
+            "dw context", "dw state --json", "dw next", "dw board",
+            "dw holds", "dw story show", "dw sessions --json", "dw events",
+            "dw check", "dw gate --porcelain", "dw verify",
+        ]
+        self.assertEqual(self._interop_missing(verbs, doc), [])
+        # the stamped models
+        for stamp in ("delivery-workbench-roadmap-context",
+                      "delivery-workbench-workbench-response",
+                      "delivery-workbench-board", "feed_schema"):
+            self.assertIn(stamp, doc)
+        # the pin must actually bite: a planted surface reads as missing
+        self.assertEqual(
+            self._interop_missing(["dw_planted_tool"], doc), ["dw_planted_tool"]
+        )
+
     # -- one story, whole (WLA-18-02) -------------------------------------
 
     def test_story_detail_whole_and_absences(self) -> None:

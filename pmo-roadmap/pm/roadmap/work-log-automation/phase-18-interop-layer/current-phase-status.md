@@ -56,9 +56,12 @@ and is pinned by tests.
   [evidence](./evidence-story-03.md): 207 tests green incl.
   core-parity, refusal-parity, and the read-only census;
   mcp-server.sh live round-trip green).
-- [ ] `docs/interop.md` names every read surface (CLI, HTTP, MCP)
+- [x] `docs/interop.md` names every read surface (CLI, HTTP, MCP)
   with its schema version; a test pins the doc's inventory against
-  the code so a new surface cannot ship undocumented (WLA-18-04).
+  the code so a new surface cannot ship undocumented (WLA-18-04 —
+  [evidence](./evidence-story-04.md): 208 tests green incl. the
+  planted-omission self-check; the consumer walk ran from the doc
+  alone).
 
 ## Story status
 
@@ -67,19 +70,17 @@ and is pinned by tests.
 | WLA-18-01 | Self-describing cards: the board and the ledger carry their receipts | done | [story-01-self-describing-cards](./story-01-self-describing-cards.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-18-02 | dw story show — one story, whole | done | [story-02-story-show](./story-02-story-show.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-18-03 | The MCP read surface: board, holds, story | done | [story-03-mcp-read-surface](./story-03-mcp-read-surface.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-18-04 | The interop contract, versioned and pinned | backlog | [story-04-interop-contract](./story-04-interop-contract.md) | - |
+| WLA-18-04 | The interop contract, versioned and pinned | done | [story-04-interop-contract](./story-04-interop-contract.md) | [evidence-story-04](./evidence-story-04.md) |
 
 ## Where we are
 
-WLA-18-03 done (2026-07-11): the MCP read surface — `dw_board`,
-`dw_holds` (text via the shared `parked_lines` renderer, extracted
-so CLI and MCP cannot drift), `dw_story_show`; structuredContent
-byte-equal with the core, refusals identical, read-only census
-pinned; docs/mcp.md gained the Browse table, the CLAUDE block
-regenerated and the snapshot synced in the same commit. 207 core
-tests green. Earlier: WLA-18-02 (`story_detail` + `dw story show`),
-WLA-18-01 (self-describing cards). Next: WLA-18-04 (the interop
-contract) — the last story, then the phase closes.
+Phase CLOSED 4/4 (2026-07-11, one sitting) — see
+[final-summary](./final-summary.md). Every element answers: cards
+and holds carry receipts and links, `dw story show` browses one
+story whole, MCP gained the browse family, and docs/interop.md is
+the pinned contract over all three transports. 199 → 208 core
+tests; the closing walk browsed WLA-18-01's own evidence through
+the doors WLA-18-01 built.
 
 ## Active risks
 

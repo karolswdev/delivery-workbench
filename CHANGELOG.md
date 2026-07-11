@@ -9,7 +9,24 @@ single-sourced from `dw_pmo.__version__` (test-asserted against
 
 ## Unreleased
 
-Work that waits: holds, pivots, and the board. Parked work becomes
+Every element answers: the interop layer. The board's elements are
+browsable by machines — every card, lane, and holds-ledger entry
+carries `paths` (repo-relative story/evidence/phase-status
+receipts) and `links` (workbench story/trace routes), minted by one
+helper and pinned by a no-rot test that resolves each emitted link
+through the API; the board model is stamped
+(`delivery-workbench-board`, schema_version 1). `dw story show
+[--json]` browses one story whole (bodies, parsed captured runs,
+receipts) from the same `story_detail` core the workbench story
+route now serves; MCP gains the read surface — `dw_board`,
+`dw_holds`, `dw_story_show` — byte-equal with the CLI's `--json`
+verbs and census-pinned read-only; and `docs/interop.md` is the one
+versioned contract over all three transports, with a parity test
+deriving the inventories from code so a new surface cannot ship
+undocumented. Full detail:
+[phase 18](./pmo-roadmap/pm/roadmap/work-log-automation/phase-18-interop-layer/current-phase-status.md).
+
+Earlier in this release — work that waits: holds, pivots, and the board. Parked work becomes
 first-class — `on-hold` (synonym `paused`) joins the write
 vocabulary as an open status distinct from `blocked`, and every
 park carries a mandatory `--reason` written into the status cell as

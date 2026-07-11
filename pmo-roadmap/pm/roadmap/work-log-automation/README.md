@@ -1,6 +1,6 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-11 (Phase 17 — Work that waits CLOSED 6/6: the hold vocabulary with mandatory reasons, phase pause/resume, honest `dw next` + the `dw holds` ledger, and the kanban board in the terminal and on the workbench with guarded drag moves).
+**Last updated:** 2026-07-11 (Phase 18 — Every element answers CLOSED 4/4 the same day as Phase 17: cards and holds carry receipts + links, `dw story show` browses one story whole, MCP gained dw_board/dw_holds/dw_story_show, and docs/interop.md pins the whole read surface. Earlier the same day: Phase 17 — Work that waits CLOSED 6/6, the hold vocabulary with mandatory reasons, phase pause/resume, honest `dw next` + `dw holds`, and the kanban board with guarded drag moves).
 **Current phase:** n/a.
 **Status:** active — framework shipped through v1.8.0 (phases 0-11); the gate's guarantees hold locally, remotely, across distribution channels, for agents, and across the pull-request boundary.
 
@@ -73,7 +73,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 15 | The local dw-workbench browser grows a mission-control belt: the same feed, correlation, and events the phone and Desk render, now in the read-only roadmap view — no steering (that stays where the consent machinery lives), just the live picture at your desk. | done | [phase-15-mission-control-on-the-workbench](./phase-15-mission-control-on-the-workbench/) |
 | 16 | The flagship tree: receipts-first reading — header-mapped tables, status normalization, receipts-first evidence pairing, pointer-driven current phase; the write gate unchanged | done | [phase-16-flagship-tree](./phase-16-flagship-tree/) |
 | 17 | Parked work becomes first-class: on-hold with a reason, phase pause/resume, an honest dw next, a holds ledger, and a kanban board in the terminal and on the workbench. | done | [phase-17-work-that-waits](./phase-17-work-that-waits/) |
-| 18 | Every element on the board is browsable by machines: cards and holds carry their receipts and links, dw story show browses one story whole, MCP gains the read surface (board, holds, story), and one versioned contract names it all. | not-started | [phase-18-interop-layer](./phase-18-interop-layer/) |
+| 18 | Every element on the board is browsable by machines: cards and holds carry their receipts and links, dw story show browses one story whole, MCP gains the read surface (board, holds, story), and one versioned contract names it all. | done | [phase-18-interop-layer](./phase-18-interop-layer/) |
 
 ## Operating cadence
 
