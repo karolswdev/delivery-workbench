@@ -23,6 +23,15 @@ Start every work session with one briefing read; do not call both transports.
 - MCP-capable agents may call `dw_status` instead. It returns the identical
   object in `structuredContent`; an `attention` verdict is not a tool error.
 
+To act on a command recommendation, preview a fresh lease with
+`.githooks/dw step [project] --json` (or MCP `dw_step`). Require
+`applicable: true`, review the exact action/token/`apply_command`, and only
+after explicit authorization invoke that exact command (or `dw_step_apply`
+with the same `expect` token). Never reconstruct argv. One apply starts at
+most one child and stops; re-read status and preview a new lease before any
+next act. Manual/project-selection states, certification, and commit are
+never applicable—stop for the user, and never build a step loop.
+
 Use specialist surfaces for depth after the briefing:
 
 - `.githooks/dw context [project] --compact` — JSON snapshot: issues,
@@ -41,27 +50,29 @@ Use specialist surfaces for depth after the briefing:
 Statuses: `backlog | ready | in-progress | blocked | done`;
 done-synonyms `complete | closed | shipped` gate identically.
 
-1. `.githooks/dw story status <project> <phase> <story> in-progress`
+1. After authorization, require and apply a fresh `start-story` step lease;
+   stop after its receipt.
 2. Do the work.
 3. Prove it — run the real verification through
    `.githooks/dw evidence capture <project> <phase> <story> -- <command>`
    (records command, exit code, index tree, and output into the story's
    evidence file; screenshots/binaries go under `assets/` next to it).
-4. `.githooks/dw story status <project> <phase> <story> done`
-   (refuses without evidence).
+4. Require and apply a fresh `finish-story` step lease; stop after its receipt
+   (it refuses without evidence).
 
 ## Commit — every commit passes the gate
 
-1. Stage everything (`git add …`), THEN generate the contract:
-   `.githooks/dw contract new [--story ID] [--consent yes --reasons "…"]
-   [--tests-capture <evidence-path>[#ts]]`
-   It stamps machine-verified facts (branch, HEAD, index tree, staged
-   sample, story IDs); restaging afterwards invalidates it (regenerate
-   with `--force`).
+1. Stage everything (`git add …`), THEN apply a fresh, exact
+   `generate-contract` step lease and stop. It stamps machine-verified facts
+   (branch, HEAD, index tree, staged sample, story IDs); restaging afterwards
+   invalidates it (preview and apply a fresh `--force` lease). If explicit
+   story/consent/tests-capture metadata is required, supply it deliberately
+   through `dw contract new`; step never invents operator metadata.
 2. Honestly verify each rule, then flip every `- [ ]` to `- [x]` in
    `.tmp/CONTRACT.md`. A `--tests-capture` reference pre-checks the
    "Tests ran." box and is re-verified by the gate.
-3. `git commit`. Trailers (`PMO-Story`, `PMO-Contract-Digest`) and the
+3. Run `git commit` yourself—`dw step` never does this. Trailers
+   (`PMO-Story`, `PMO-Contract-Digest`) and the
    contract archive under `.git/pmo-contract-archive/<sha>` are
    automatic; the contract survives an aborted commit.
 
@@ -87,9 +98,9 @@ rather than bypassing.
 
 MCP-capable agents: prefer the MCP tools over shelling out —
 `.githooks/dw-mcp` (wired via `.mcp.json`) serves the same core as
-structured tools with identical refusals: orientation (`dw_status`, `dw_context`,
+structured tools with identical refusals: orientation (`dw_status`, `dw_step`, `dw_context`,
 `dw_next`, `dw_check`, `dw_doctor`), verification (`dw_verify`,
-`dw_gate`), guarded mutations (`dw_story_status`,
+`dw_gate`), guarded mutations (`dw_step_apply`, `dw_story_status`,
 `dw_evidence_capture`, `dw_contract_new`). Certification is never a
 tool call: flipping contract boxes stays a manual, deliberate edit
 (see `docs/mcp.md` in the framework repo).

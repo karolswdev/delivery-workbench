@@ -113,6 +113,23 @@ guards. It is distinct from the roadmap editor's content-fingerprint
 preview/apply routes: a step token binds the complete status observation and
 authorizes only the already-published closed argv.
 
+### Workbench confirmation
+
+The overview renders the status briefing and step preview together, but keeps
+observation and consent as separate acts. An applicable preview first offers
+“review one deliberate step”; opening it shows the full opaque token,
+tokenized authorized argv, the exact CLI fallback, and a one-child/no-loop
+warning. Only the second “apply this one step” control POSTs `{project,
+expect}`. It disables immediately, renders the bounded receipt, refreshes the
+briefing/preview, and stops.
+
+A 409 stale/replayed lease says that nothing started and refreshes rather than
+silently retrying. A manual, prohibited, certification, or commit preview
+shows the core refusal and contains no apply control. There is no text field,
+generic shell input, client-built command, poller, or automatic continuation.
+Desktop/mobile snapshot coverage includes both the collapsed and confirmation
+states; a static renderer fitness test pins the request keys and stale refresh.
+
 The token is SHA-256 over the canonical, complete status document plus the
 local lease-claim generation (sorted keys, compact separators, UTF-8). It
 therefore binds rail health, roadmap selection and validation, Git

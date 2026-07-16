@@ -27,23 +27,36 @@ fail() {
 }
 
 # Renderer contract runs even when no browser is installed. It keeps the
-# foyer a presentation-only view: argv stays tokenized, manual acts stay
-# explicit, and no status action grows an execution control or raw JSON dump.
+# recommendation separate from the deliberate act boundary: argv stays
+# tokenized, apply has only project+token, and prohibited states get no button.
 python3 - "$PMO_DIR/workbench/app.js" "$PMO_DIR/workbench/style.css" <<'PY' \
   || fail "status-panel renderer contract failed"
 import sys
 
 app = open(sys.argv[1], encoding="utf-8").read()
 css = open(sys.argv[2], encoding="utf-8").read()
-action = app[app.index("function statusActionHtml"):app.index("function statusPanel")]
+action = app[app.index("function statusActionHtml"):app.index("function stepArgvHtml")]
+controls = app[app.index("function stepControlHtml"):app.index("function statusPanel")]
+apply = app[app.index("async function applyReviewedStep"):app.index("function wireStepControl")]
 panel = app[app.index("function statusPanel"):app.index("/* ── mission control")]
 overview = app[app.index("async function viewOverview"):app.index("async function viewProject")]
 assert "data-argv-index" in action and "manual act" in action
 assert "<button" not in action and "JSON.stringify" not in action
+for token in ("step-review", "step-confirm", "step-apply", "step-cancel",
+              "step.applicable", "step.refusal", "No apply control"):
+    assert token in controls, token
+assert "<input" not in controls and "setInterval" not in controls
+assert 'postJson("/api/step/apply"' in apply
+assert "project: step.project" in apply and "expect: step.token" in apply
+assert "status === 409" in apply and "nothing started" in apply
+assert "viewOverview" in apply and "setInterval" not in apply
+for forbidden in ('command:', 'argv:', 'git commit', 'certif'):
+    assert forbidden not in apply, forbidden
 for token in ("data-verdict", "project", "workspace", "contract", "gate"):
     assert token in panel, token
-assert '/api/status' in overview and "Promise.all" in overview
+assert '/api/status' in overview and '/api/step' in overview and "Promise.all" in overview
 assert "overflow-wrap: anywhere" in css
+assert ".step-confirmation" in css and ".brief-step-unavailable" in css
 assert "@media (max-width: 430px)" in css
 PY
 
@@ -114,18 +127,21 @@ shot() { # name geometry url
   [ "$size" -gt 20000 ] || fail "$1 appears unrendered (only $size bytes)"
 }
 
-VIEWS="overview:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample"
+VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample"
 for spec in $VIEWS; do
   name="${spec%%:*}"
   route="${spec#*:}"
   extra=""
-  case "$name" in preview) extra="&autopreview=1" ;; esac
+  case "$name" in
+    preview) extra="&autopreview=1" ;;
+    step-confirm) extra="&confirmstep=1" ;;
+  esac
   shot "$name-desktop" 1440,900 "$BASE/?snapshot=1$extra$route"
   shot "$name-mobile" 390,844 "$BASE/?snapshot=1$extra$route"
 done
 
 # Red-path prominence: the same overview must render a broken rail as
-# attention, without gaining an execute button.
+# attention while keeping execution behind deliberate-step review.
 mv "$REPO/.githooks/pre-commit" "$REPO/.githooks/pre-commit.off"
 shot "overview-attention-desktop" 1440,900 "$BASE/?snapshot=1#/"
 shot "overview-attention-mobile" 390,844 "$BASE/?snapshot=1#/"
@@ -137,4 +153,4 @@ mv "$REPO/.githooks/pre-commit.off" "$REPO/.githooks/pre-commit"
 shot "overview-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
 shot "overview-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
 
-echo "workbench-ui-smoke.sh: ok (18 viewport renders: 7 views + attention + ambiguity, desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (20 viewport renders: 8 views + attention + ambiguity, desktop+mobile)"

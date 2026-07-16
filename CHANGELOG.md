@@ -42,6 +42,13 @@ core documents, accept no caller-supplied argv, refuse replay without another
 child, and keep certification and commit outside the capability. A freshly
 installed fixture proves the contract end to end and CI pins the new tool and
 route inventories.
+The browser now makes that trust boundary visible: an applicable overview
+action opens a separate review panel with the state token, authorized argv,
+and exact CLI fallback; a second control applies one lease, refreshes, and
+stops. Stale confirmation says nothing started; prohibited/manual,
+certification, and commit states have no apply control. The canonical rider
+brief and generated Claude/Codex/pi/plugin copies teach the same fresh-token,
+exact-command, stop-after-one discipline and mechanically drift-check it.
 
 This section is release-ready input, not a publication claim: the package
 remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula

@@ -120,7 +120,7 @@ behavior is:
 
 ## Active extension
 
-Phase 23 (The handrail — one deliberate step) is active at 3/5. It keeps
+Phase 23 (The handrail — one deliberate step) is active at 4/5. It keeps
 Phase 22's status model pure while binding its one recommendation to a
 deterministic token over the complete briefing. The delivered `dw step`
 core/CLI surface previews and explicitly applies at most one closed-table
@@ -132,7 +132,9 @@ every started child emits one content-safe correlation event. The same
 preview/result now crosses CLI, MCP, and HTTP byte-for-byte through
 thin adapters whose apply schemas accept no caller-supplied argv; a fresh
 installed fixture proves exact-token success, replay/injection refusal, and
-the certification/commit exclusions. See
+the certification/commit exclusions. The Workbench now exposes that lease as
+a separate review→confirm act boundary, and generated riders require a fresh
+exact token, preserve manual seams, and stop after one receipt. See
 [phase-23-deliberate-step/current-phase-status.md](./phase-23-deliberate-step/current-phase-status.md).
 
 Phase 22 (The briefing — one answer before agents act) is closed. It turned

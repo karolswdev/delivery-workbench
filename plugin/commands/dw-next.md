@@ -18,5 +18,9 @@ report what to work on next. Do not change anything yet.
 4. Report: the status verdict and recommendation, story ID and title, its acceptance criteria, any lint
    issues or warnings that affect it, and your plan to complete it.
 
-If the user confirms, flip it in-progress before working:
-`.githooks/dw story status <project> <phase> <story> in-progress`
+If the user confirms, run `.githooks/dw step [project] --json` and review the
+fresh lease. Require `applicable: true` and action `start-story`, then invoke
+that document's exact `apply_command`; never reconstruct or modify its argv.
+Stop after its one receipt and report the newly observed action. If the lease
+is stale, manual, prohibited, or names anything else, do not apply it. Never
+continue into a step loop.

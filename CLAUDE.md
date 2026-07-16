@@ -19,6 +19,20 @@ transports):
 - MCP-capable agents may call `dw_status` instead. It returns the identical
   object in `structuredContent`; an `attention` verdict is not a tool error.
 
+To deliberately apply a command recommendation, never reconstruct its argv:
+
+1. Preview a fresh lease with `.githooks/dw step [project] --json` (or MCP
+   `dw_step`). Reading status alone is not consent to act.
+2. Require `applicable: true`, review the exact action, token, and
+   `apply_command`, and stop for the user when the preview is manual or
+   prohibited. Project choice, contract certification, and commit always stay
+   manual; `dw step` cannot perform them.
+3. Only after explicit authorization, invoke that preview's exact
+   `apply_command` (or `dw_step_apply` with its exact `expect` token). Never
+   modify its argv. One apply starts at most one child and stops; read a fresh
+   status/step before considering anything else. Never build an automatic
+   step loop.
+
 Use specialist surfaces for depth after the briefing:
 
 - `.githooks/dw context [project] --compact` — JSON snapshot: issues,
@@ -36,27 +50,30 @@ on-hold | done; done-synonyms complete/closed/shipped gate identically,
 paused = on-hold; parking a story on-hold requires `--reason "why"`,
 recorded in the status cell):
 
-1. `.githooks/dw story status <project> <phase> <story> in-progress`
+1. After authorization, use the fresh deliberate-step flow above and require
+   its action to be `start-story`; apply its exact lease and stop.
 2. Do the work.
 3. Prove it — run the real verification through
    `.githooks/dw evidence capture <project> <phase> <story> -- <command>`
    (records command, exit code, index tree, and output into the story's
    evidence file; screenshots/binaries go under `assets/` next to it).
-4. `.githooks/dw story status <project> <phase> <story> done`
-   (refuses without evidence).
+4. Preview a fresh step, require its action to be the guarded `finish-story`,
+   apply that exact lease, and stop (it refuses without evidence).
 
 Commit — every commit passes the gate:
 
-1. Stage everything (`git add …`), THEN generate the contract:
-   `.githooks/dw contract new [--story ID] [--consent yes --reasons "…"]
-   [--tests-capture <evidence-path>[#ts]]`
-   It stamps machine-verified facts (branch, HEAD, index tree, staged
-   sample, story IDs); restaging afterwards invalidates it (regenerate
-   with `--force`).
+1. Stage everything (`git add …`), THEN preview a fresh deliberate step. If it
+   is the allowlisted `generate-contract` action, apply its exact lease and
+   stop. The generated contract stamps machine-verified facts (branch, HEAD,
+   index tree, staged sample, story IDs); restaging afterwards invalidates it
+   (preview and apply a fresh `--force` lease). If explicit
+   story/consent/tests-capture metadata is required, supply it deliberately
+   through `dw contract new`; step never invents operator metadata.
 2. Honestly verify each rule, then flip every `- [ ]` to `- [x]` in
    `.tmp/CONTRACT.md`. A `--tests-capture` reference pre-checks the
    "Tests ran." box and is re-verified by the gate.
-3. `git commit`. Trailers (`PMO-Story`, `PMO-Contract-Digest`) and the
+3. Run `git commit` yourself — `dw step` never does this. Trailers
+   (`PMO-Story`, `PMO-Contract-Digest`) and the
    contract archive under `.git/pmo-contract-archive/<sha>` are
    automatic; the contract survives an aborted commit.
 
@@ -72,9 +89,9 @@ no local contract needed.
 MCP-capable agents: prefer the MCP tools over shelling out —
 `.githooks/dw-mcp` (wired via `.mcp.json`) serves the same core as
 structured tools with identical refusals: orientation (`dw_status`, `dw_context`,
-`dw_next`, `dw_check`, `dw_doctor`), browse (`dw_board`, `dw_holds`,
+`dw_step`, `dw_next`, `dw_check`, `dw_doctor`), browse (`dw_board`, `dw_holds`,
 `dw_story_show`), verification (`dw_verify`, `dw_gate`), guarded
-mutations (`dw_story_status`, `dw_evidence_capture`,
+mutations (`dw_step_apply`, `dw_story_status`, `dw_evidence_capture`,
 `dw_contract_new`). Certification is never a tool call: flipping
 contract boxes stays a manual, deliberate edit (see `docs/mcp.md`
 in the framework repo).

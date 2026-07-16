@@ -644,6 +644,37 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(self._tree_checksums(), before,
                          "repeated API loads must not modify the roadmap tree")
 
+    def test_workbench_step_front_door_keeps_review_and_act_separate(self) -> None:
+        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
+        recommendation = app[
+            app.index("function statusActionHtml") : app.index("function stepArgvHtml")
+        ]
+        controls = app[
+            app.index("function stepControlHtml") : app.index("function statusPanel")
+        ]
+        apply = app[
+            app.index("async function applyReviewedStep") : app.index("function wireStepControl")
+        ]
+        self.assertNotIn("<button", recommendation)
+        for token in (
+            "step-review", "step-confirm", "step-apply", "step-cancel",
+            "step.applicable", "step.refusal", "No apply control",
+        ):
+            self.assertIn(token, controls)
+        self.assertNotIn("<input", controls)
+        self.assertIn('postJson("/api/step/apply"', apply)
+        self.assertIn("project: step.project", apply)
+        self.assertIn("expect: step.token", apply)
+        self.assertIn("status === 409", apply)
+        self.assertIn("nothing started", apply)
+        self.assertIn("viewOverview", apply)
+        for forbidden in ("command:", "argv:", "git commit", "certif", "setInterval"):
+            self.assertNotIn(forbidden, apply)
+        self.assertIn(".step-confirmation", css)
+        self.assertIn(".brief-step-unavailable", css)
+        self.assertIn("@media (max-width: 430px)", css)
+
     # -- traceability timeline (WLA-5-05) --------------------------------------
 
     def _timeline_for(self, story_id):
@@ -4128,7 +4159,7 @@ class RiderDocsTest(unittest.TestCase):
         self.first_render = riderdocs.write_rider_docs(self.root)
 
     def test_embedded_specs_match_source_canon(self) -> None:
-        from dw_pmo import riderdocs
+        from dw_pmo import agentdocs, riderdocs
 
         agent_dir = self.REPO_ROOT / "pmo-roadmap" / "agent"
         for name in riderdocs.COMMAND_NAMES:
@@ -4137,6 +4168,12 @@ class RiderDocsTest(unittest.TestCase):
                 (agent_dir / f"{name}.md").read_text(encoding="utf-8"),
                 f"embedded canon for {name} drifted from pmo-roadmap/agent",
             )
+        self.assertEqual(
+            agentdocs.CANONICAL_BLOCK,
+            (self.REPO_ROOT / "pmo-roadmap/templates/CLAUDE-snippet.md")
+            .read_text(encoding="utf-8").strip(),
+            "packaged managed-block fallback drifted from the source template",
+        )
 
     def test_regeneration_is_idempotent(self) -> None:
         from dw_pmo import riderdocs
@@ -4152,23 +4189,45 @@ class RiderDocsTest(unittest.TestCase):
         )
         self.assertEqual(riderdocs.rider_docs_issues(self.root), [])
 
-    def test_every_rider_opens_with_one_status_briefing(self) -> None:
+    def test_every_rider_opens_with_status_then_uses_fresh_step_leases(self) -> None:
         from dw_pmo import agentdocs, riderdocs
 
         for text in (agentdocs.canonical_block(), agentdocs.agents_block()):
             self.assertLess(text.index(".githooks/dw status"), text.index(".githooks/dw context"))
+            self.assertLess(text.index(".githooks/dw status"), text.index(".githooks/dw step"))
             self.assertIn("Exit 0 means `ready`", text)
             self.assertIn("exit 1 means `attention`", text)
             self.assertIn("dw_status", text)
-        for text in (
+            for token in ("applicable: true", "apply_command", "exact `expect` token",
+                          "Never build an automatic", "certification", "commit"):
+                self.assertIn(token, text)
+            self.assertIn("dw_step", text)
+            self.assertIn("dw_step_apply", text)
+        next_riders = (
             riderdocs.command_spec("dw-next"),
             riderdocs.codex_skill("dw-next"),
             riderdocs.pi_prompt("dw-next"),
-        ):
+        )
+        for text in next_riders:
             self.assertLess(text.index(".githooks/dw status"), text.index(".githooks/dw next"))
             self.assertIn("attention", text)
+            for token in (".githooks/dw step", "fresh lease", "applicable: true",
+                          "exact `apply_command`", "Never\ncontinue into a step loop"):
+                self.assertIn(token, text)
+            self.assertNotIn(".githooks/dw story status", text)
+        for text in (
+            riderdocs.command_spec("dw-story-done"),
+            riderdocs.codex_skill("dw-story-done"),
+            riderdocs.pi_prompt("dw-story-done"),
+        ):
+            for token in ("applicable: true", "finish-story", "exact `apply_command`",
+                          "Never reconstruct", "cannot commit"):
+                self.assertIn(token, text)
         plugin = (self.REPO_ROOT / "plugin/skills/delivery-workbench/SKILL.md").read_text(encoding="utf-8")
         self.assertLess(plugin.index(".githooks/dw status"), plugin.index(".githooks/dw context"))
+        for token in (".githooks/dw step", "dw_step", "dw_step_apply",
+                      "exact command", "never build a step loop"):
+            self.assertIn(token, plugin)
 
     def test_hand_edited_copy_is_a_check_error(self) -> None:
         from dw_pmo import riderdocs

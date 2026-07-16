@@ -269,6 +269,15 @@ without MCP. AGENTS.md itself is created by the rider installers
 (05/06), not by this repo's regeneration. The first canon-driven
 regeneration was byte-identical on every target.
 
+**Phase-23 handrail update (WLA-23-04).** The brief and workflow canon now
+separate reading from consent on every rendering. An agent previews
+`dw step --json` / `dw_step`, requires a fresh applicable lease, reviews and
+uses only its exact `apply_command` / `expect` token, then stops after one
+receipt. It never reconstructs argv or loops. Manual project choice, operator
+metadata, contract certification, and commit remain explicit seams; the
+generated Claude/Codex/pi/plugin copies are drift-tested for those words, not
+left to convention.
+
 ## The HoldSpeak seams we ride — and what we leave alone
 
 Three seams, all existing:
@@ -303,10 +312,12 @@ contract boxes are flipped by a human, on every surface, always.
 
 ## Proof obligations, story by story
 
-The **full story loop** means: `dw status` → inspect/follow the safe
-recommendation → `dw next` for focused story detail → flip in-progress → do the
-work → `dw evidence capture` of the real verification → flip done →
-`dw contract new` → certify by hand → gated `git commit` that
+The **full story loop** now means: `dw status` → inspect the safe
+recommendation → preview a fresh `dw step` lease → explicitly apply exactly
+one start transition → stop → do the work → `dw evidence capture` of the real
+verification → preview/apply exactly one finish transition → stop → stage →
+preview/apply exactly one contract-generation transition → stop → certify by
+hand → gated `git commit` that
 passes. Every typing-surface story below must run that loop
 end-to-end in a fixture repo under the real tool — not a transcript
 of what the tool would probably do.
@@ -509,7 +520,8 @@ three lines:
 2. Ensure the agent can run shell commands in the repo. The four
    workflows are plain `dw` invocations with meaningful exit codes
    (`dw status` exits 0/1 for ready/attention and always returns the
-   versioned briefing; `dw next` exits 0/2/1 for found/none/error; `dw check` and
+   versioned briefing; `dw step` requires a fresh exact token and stops after
+   one child; `dw next` exits 0/2/1 for found/none/error; `dw check` and
    `dw gate` exit non-zero on issues; the commit gate refuses on
    its own).
 3. Keep certification human-in-the-loop: whoever works the story

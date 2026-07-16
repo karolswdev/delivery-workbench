@@ -196,14 +196,19 @@ thin binding over the same preview/result core used by CLI and MCP. Its body
 has no command field; replay, altered state, manual certification, and commit
 all refuse before child start (proof: `tests/step-interop.sh`).
 
-The overview's first component renders `GET /api/status` without adding
-policy: verdict, selected project, workspace/contract/gate facts, and exactly
-one action. Command arrays stay visually tokenized as argv; judgment calls say
-`manual act`; there is no execute or commit control. Attention and ambiguous
+The overview composes `GET /api/status` with the pure `GET /api/step` preview
+without adding policy: verdict, selected project, workspace/contract/gate
+facts, and exactly one action. Command arrays stay visually tokenized as argv;
+judgment calls say `manual act`. An applicable lease gets a separate
+review→confirm control showing its token, authorized argv, and CLI fallback;
+the confirm POST sends only project+token, refreshes after one result, and
+never follows the next action. Manual/prohibited/certification/commit states
+render the core refusal and no apply control. Attention and ambiguous
 selection get stronger visual treatment than normal ready state (proof:
-`tests/workbench-ui-smoke.sh` renders ready, attention, and multi-project
-manual states at both desktop and mobile widths, while its renderer contract
-rejects raw JSON or an action button).
+`tests/workbench-ui-smoke.sh` renders the overview and open confirmation plus
+attention and multi-project manual states at desktop/mobile widths; its static
+fitness guard rejects command inputs, hidden loops, and a stale path that does
+not refresh).
 
 Viewport rendering is smoke-tested headlessly at desktop and mobile
 (`tests/workbench-ui-smoke.sh`, CI-run where Firefox exists).

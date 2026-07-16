@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 23
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-23-03
 - **Unblocks:** WLA-23-05
 - **Owner:** unassigned
@@ -23,11 +23,11 @@ workbench a shell or teaching agents to bypass manual actions.
 
 ## Acceptance criteria
 
-- [ ] Applicable actions expose an explicit preview→confirm step; prohibited
+- [x] Applicable actions expose an explicit preview→confirm step; prohibited
   actions state why no apply control exists.
-- [ ] Stale confirmation returns a non-mutating conflict and refreshes state.
-- [ ] Riders use `dw step` only with a fresh token and preserve manual seams.
-- [ ] Desktop/mobile and static fitness tests pin the trust boundary.
+- [x] Stale confirmation returns a non-mutating conflict and refreshes state.
+- [x] Riders use `dw step` only with a fresh token and preserve manual seams.
+- [x] Desktop/mobile and static fitness tests pin the trust boundary.
 
 ## Test plan
 
@@ -37,4 +37,23 @@ workbench a shell or teaching agents to bypass manual actions.
 
 ## Notes / open questions
 
-Record unresolved decisions here before implementation starts.
+- The overview fetches the pure status and step documents together. The
+  recommendation itself has no button; an applicable lease gets a separate
+  “review one deliberate step” act boundary.
+- Confirmation shows the full token, authorized argv, exact CLI fallback, and
+  one-child/no-loop warning. Its only mutation request is
+  `{project: step.project, expect: step.token}`; there is no input field or
+  client-built command.
+- One apply disables immediately, renders the bounded receipt, refreshes both
+  status and step, and stops. HTTP 409 is rendered as “nothing started” and
+  also refreshes; it never retries the old token.
+- Manual, prohibited, certification, and commit states display the core
+  refusal and contain no apply control.
+- The canonical managed block, packaged fallback, `/dw-next`,
+  `/dw-story-done`, plugin skill, and generated Claude/Codex/pi copies require
+  a fresh applicable lease, exact `apply_command`/`expect`, and a stop after
+  every receipt. Operator metadata, certification, and commit remain manual.
+- `workbench-ui-smoke.sh` now pins the static request boundary and renders 20
+  desktop/mobile snapshots, including an open confirmation plus attention and
+  ambiguous/prohibited states. The actual Story-04 confirmation was visually
+  inspected at 1440×900 and 390×844 on Firefox.

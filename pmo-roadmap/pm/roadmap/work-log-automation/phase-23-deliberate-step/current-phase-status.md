@@ -31,7 +31,7 @@ Let a human or agent deliberately apply exactly one current, allowlisted recomme
 - [x] MCP and HTTP expose the same preview/receipt models and explicit token
   contract while retaining their certification/commit exclusions and
   adapter-parity pins (WLA-23-03).
-- [ ] The workbench and generated agent riders make the preview→deliberate-
+- [x] The workbench and generated agent riders make the preview→deliberate-
   apply boundary legible, with no generic shell field and no hidden loop
   (WLA-23-04).
 - [ ] A wheel-installed fresh consumer advances a real story through
@@ -45,20 +45,21 @@ Let a human or agent deliberately apply exactly one current, allowlisted recomme
 | WLA-23-01 | dw step — preview and apply one allowlisted action | done | [story-01-step-core-cli](./story-01-step-core-cli.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-23-02 | Step receipts — stable result and event correlation | done | [story-02-step-receipts](./story-02-step-receipts.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-23-03 | One step across MCP and HTTP | done | [story-03-step-interop](./story-03-step-interop.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-23-04 | Workbench and riders expose the handrail | backlog | [story-04-step-front-door](./story-04-step-front-door.md) | - |
+| WLA-23-04 | Workbench and riders expose the handrail | done | [story-04-step-front-door](./story-04-step-front-door.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-23-05 | Fresh-consumer deliberate-step exit exam | backlog | [story-05-step-exit-exam](./story-05-step-exit-exam.md) | - |
 
 ## Where we are
 
-Phase OPEN 3/5. WLA-23-03 made the handrail interoperable without widening
-it: `dw_step` / `dw_step_apply` and `GET /api/step` /
-`POST /api/step/apply` are thin bindings over the same core preview/result.
-A freshly installed fixture proves byte-equal CLI/MCP/HTTP documents, exact-
-token application, one-child replay safety, rejected argv injection, and
-non-applicable certification/commit states. Inventories and docs now fail on
-route/tool drift. WLA-23-04 is next: turn that transport contract into a
-legible two-act Workbench control and canonical guidance for every generated
-agent rider.
+Phase OPEN 4/5. WLA-23-04 made the act boundary legible where users and agents
+already orient. The Workbench separates the recommendation from review and
+confirmation, POSTs only project+token, refreshes after one receipt or stale
+conflict, and offers no apply control for prohibited/manual/certification/
+commit states. The managed brief, packaged fallback, workflow commands, and
+Claude/Codex/pi/plugin renderings now require a fresh exact lease and stop
+after one action; drift is a test error. Desktop/mobile visual and static
+fitness coverage pin the control. WLA-23-05 is next: prove the entire sequence
+from a wheel-installed fresh consumer, with separate authorization for every
+step and the full regression matrix green.
 
 ## Active risks
 
@@ -81,6 +82,8 @@ agent rider.
 - 2026-07-16 - Emit `step_execution` only after a child starts and allow only action/outcome/exit/token hashes/next action - correlation is useful, command and output content are not telemetry - event consent stance.
 - 2026-07-16 - Keep operational apply refusal as the same versioned result over every adapter (HTTP 409 envelope; normal MCP result) - callers need `started: false` and the current observation without parsing transport errors - interop contract.
 - 2026-07-16 - Limit remote apply inputs to `project` plus exact `expect`; never accept command or argv - adapters cannot expand the core capability accidentally - consent floor.
+- 2026-07-16 - Put review and apply in separate Workbench controls and refresh after every result - seeing a recommendation is not consent, and one receipt must never become a UI loop - front-door trust boundary.
+- 2026-07-16 - Teach every generated rider to use only the preview's exact fresh command/token and stop after one action - interoperability includes operating discipline, not only payload parity - agent usability.
 
 ## Decisions deferred
 

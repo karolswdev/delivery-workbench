@@ -282,6 +282,11 @@ automatic continuation remain outside the capability. The exact preview
 schema and closed action/argv table are in
 [deliberate-step.md](./deliberate-step.md).
 
+The Workbench keeps the same separation visually: status renders the
+recommendation; an applicable step lease opens only after an explicit review
+click; a second confirmation applies that exact token once, refreshes, and
+stops. Prohibited and manual recommendations show why no apply control exists.
+
 ## Compatibility
 
 The status document is a new v1 model. Existing specialist commands,

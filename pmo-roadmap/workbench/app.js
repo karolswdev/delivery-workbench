@@ -1,5 +1,5 @@
-/* Delivery Workbench — hash-routed, API-backed. Views are read-only;
- * mutations go only through the preview → apply workflow below.
+/* Delivery Workbench — hash-routed, API-backed. Reads are live and pure;
+ * mutations cross only the guarded editor or deliberate-step boundaries.
  * Every byte of state comes from /api/*, which derives live from the
  * Markdown roadmap through the dw_pmo core. No local persistence. */
 
@@ -108,15 +108,138 @@ function statusActionHtml(action) {
       <span class="brief-argv-label">argv</span>
       ${command.map((arg, index) => `<code data-argv-index="${index}">${esc(arg)}</code>`).join("")}
     </div>` : `<div class="brief-manual"><strong>manual act</strong><span>No command is synthesized for this decision.</span></div>`}
-    <div class="brief-readonly">Recommendation only — this panel has no execute or commit control.</div>
+    <div class="brief-readonly">Recommendation only — review the separate deliberate-step boundary below before anything runs.</div>
   </div>`;
 }
 
-function statusPanel(status) {
+function stepArgvHtml(argv, label) {
+  if (!Array.isArray(argv)) return "";
+  return `<div class="brief-argv" aria-label="${esc(label)} argument vector">
+    <span class="brief-argv-label">${esc(label)}</span>
+    ${argv.map((arg, index) => `<code data-step-argv-index="${index}">${esc(arg)}</code>`).join("")}
+  </div>`;
+}
+
+function stepControlHtml(step) {
+  if (!step.applicable) {
+    return `<div class="brief-step-unavailable" data-step-applicable="false">
+      <div><strong>deliberate step unavailable</strong><span>No apply control is offered for this recommendation.</span></div>
+      <p>${esc(step.refusal || "The current recommendation is not executable through the one-step handrail.")}</p>
+    </div>`;
+  }
+  return `<div class="brief-step-control" data-step-applicable="true">
+    <div class="brief-step-intro">
+      <div><strong>separate act boundary</strong><span>Review the state-bound lease, then authorize only this one action.</span></div>
+      <button type="button" id="step-review">review one deliberate step</button>
+    </div>
+    <div id="step-confirm" aria-live="polite"></div>
+  </div>`;
+}
+
+function stepConfirmationHtml(step) {
+  return `<div class="step-confirmation" data-step-token="${esc(step.token)}">
+    <div class="step-confirm-head"><span>confirmation</span><strong>${esc(step.action.id)}</strong>${badge("one child maximum", "warn")}</div>
+    <p>${esc(step.action.reason)}</p>
+    <div class="step-token"><span>state token</span><code>${esc(step.token)}</code></div>
+    ${stepArgvHtml(step.action.command, "authorized argv")}
+    ${stepArgvHtml(step.apply_command, "CLI fallback")}
+    <div class="step-confirm-actions">
+      <button type="button" id="step-apply">apply this one step</button>
+      <button type="button" id="step-cancel">cancel</button>
+    </div>
+    <div class="brief-readonly">One POST, at most one child, then a fresh briefing. No automatic continuation.</div>
+  </div>`;
+}
+
+function stepNoticeHtml(notice) {
+  if (!notice) return "";
+  const result = notice.result;
+  const after = result && result.after ? result.after.action_id : null;
+  const streams = result && result.output
+    ? [result.output.stdout, result.output.stderr].filter(Boolean).join("\n") : "";
+  return `<div class="brief-step-notice ${esc(notice.kind)}" role="status">
+    <strong>${esc(notice.title)}</strong><span>${esc(notice.detail)}</span>
+    ${after ? `<span>Stopped. Fresh next action: <code>${esc(after)}</code>.</span>` : ""}
+    ${streams ? `<pre>${esc(streams)}</pre>` : ""}
+  </div>`;
+}
+
+async function applyReviewedStep(step, button) {
+  button.disabled = true;
+  button.textContent = "applying one step…";
+  try {
+    const { status, body } = await postJson("/api/step/apply", {
+      project: step.project,
+      expect: step.token,
+    });
+    const result = body.data && body.data.kind === "delivery-workbench-step-result"
+      ? body.data : null;
+    if (status === 409) {
+      await viewOverview({
+        kind: "stale",
+        title: "stale confirmation refused — nothing started",
+        detail: result ? result.reason : ((body.issues && body.issues[0]) || "Refresh and review the new lease."),
+        result,
+      });
+      return;
+    }
+    if (status >= 400 || !result) {
+      await viewOverview({
+        kind: "failed",
+        title: "step request failed — nothing else was attempted",
+        detail: (body.issues && body.issues[0]) || `HTTP ${status}`,
+        result,
+      });
+      return;
+    }
+    const succeeded = result.outcome === "succeeded";
+    await viewOverview({
+      kind: succeeded ? "succeeded" : "failed",
+      title: succeeded ? "one deliberate step applied" : `step ${result.outcome}`,
+      detail: result.reason || `Child exit ${result.exit_code}; started=${result.started}.`,
+      result,
+    });
+  } catch (err) {
+    await viewOverview({
+      kind: "failed",
+      title: "step request failed",
+      detail: err.message,
+      result: null,
+    });
+  }
+}
+
+function wireStepControl(step) {
+  const review = document.getElementById("step-review");
+  if (!review || !step.applicable) return;
+  const openConfirmation = () => {
+    const slot = document.getElementById("step-confirm");
+    if (!slot) return;
+    slot.innerHTML = stepConfirmationHtml(step);
+    review.disabled = true;
+    document.getElementById("step-apply").addEventListener("click", (event) => {
+      applyReviewedStep(step, event.currentTarget);
+    });
+    document.getElementById("step-cancel").addEventListener("click", () => {
+      slot.innerHTML = "";
+      review.disabled = false;
+      review.focus();
+    });
+  };
+  review.addEventListener("click", openConfirmation);
+  if (SNAPSHOT_MODE && new URLSearchParams(location.search).has("confirmstep")) {
+    openConfirmation();
+  }
+}
+
+function statusPanel(status, step, notice) {
   const repo = status.repository;
   const roadmap = status.roadmap;
   const changes = repo.changes;
-  const action = status.next_action;
+  const action = step.action || status.next_action || {
+    id: "none", kind: "manual", blocking: false,
+    reason: "The briefing has no action to review.", command: null,
+  };
   const manual = action.kind === "manual" || !action.command;
   const project = roadmap.selected_project || (roadmap.selection_required ? "selection required" : "none");
   const workspace = repo.clean
@@ -127,8 +250,9 @@ function statusPanel(status) {
        <a href="#/board/${encodeURIComponent(roadmap.selected_project)}">board</a>`
     : "";
   return `<section id="status-panel"
-      class="status-panel verdict-${esc(status.verdict)}${manual ? " is-manual" : ""}"
-      data-verdict="${esc(status.verdict)}" data-next-action="${esc(action.id)}">
+      class="status-panel verdict-${esc(status.verdict)}${manual ? " is-manual" : ""}${step.applicable ? "" : " is-prohibited"}"
+      data-verdict="${esc(status.verdict)}" data-next-action="${esc(action.id)}"
+      data-step-applicable="${step.applicable ? "true" : "false"}">
     <div class="brief-head">
       <div>
         <div class="brief-eyebrow">repository briefing</div>
@@ -142,7 +266,9 @@ function statusPanel(status) {
       <div><span>contract</span><strong>${esc(repo.contract.state)}</strong></div>
       <div><span>gate</span><strong>${esc(repo.gate.state)}</strong></div>
     </div>
+    ${stepNoticeHtml(notice)}
     ${statusActionHtml(action)}
+    ${stepControlHtml(step)}
     <nav class="brief-specialists" aria-label="specialist Delivery Workbench views">
       <span>inspect deeper</span>${projectLink}<a href="#/health">health</a><a href="#/mc">mission control</a>
     </nav>
@@ -250,13 +376,17 @@ async function viewMissionControl() {
 
 /* ── views ─────────────────────────────────────────────────────────── */
 
-async function viewOverview() {
+async function viewOverview(notice = null) {
   setCrumbs([{ label: "overview" }]);
-  const [statusBody, body] = await Promise.all([api("/api/status"), api("/api/projects")]);
+  const [statusBody, stepBody, body] = await Promise.all([
+    api("/api/status"), api("/api/step"), api("/api/projects"),
+  ]);
   const projects = body.data.projects;
-  const briefing = statusPanel(statusBody.data);
+  const step = stepBody.data;
+  const briefing = statusPanel(statusBody.data, step, notice);
   if (!projects.length) {
     app.innerHTML = briefing + stateHtml("No roadmap projects found under pm/roadmap/. Scaffold one with `dw phase create` or `dw adopt`.");
+    wireStepControl(step);
     return;
   }
   app.innerHTML = briefing + `<div class="grid">` + projects.map((p) => `
@@ -278,6 +408,7 @@ async function viewOverview() {
           ${esc(p.next_story.title)} ${badge(p.next_story.status)}
         </div>` : `<div class="next"><span class="lbl">next</span> nothing actionable</div>`}
     </div>`).join("") + `</div>`;
+  wireStepControl(step);
 }
 
 async function viewProject(slug) {

@@ -119,9 +119,12 @@ paths are executed end-to-end by `pmo-roadmap/tests/agent-surface.sh`,
 
 Phase 22 adds `dw status` in front of that loop. It does not replace the
 specialist commands; it composes their state and names the next safe one.
-Phase 23's first slice adds `dw step`: preview a token over that complete
-observation, explicitly authorize it, execute at most one closed-table
-recommendation, and stop. Commit and certification stay outside the seam.
+Phase 23 adds `dw step`: preview a token over that complete observation,
+explicitly authorize it, execute at most one closed-table recommendation, and
+stop. CLI, MCP, and HTTP return the same preview/receipt. The browser exposes
+that lease through a separate review→confirm act boundary, and generated
+riders require a fresh exact token and stop after every receipt. Commit and
+certification stay outside every seam.
 
 ### 2. Browse and understand work
 
@@ -176,8 +179,8 @@ consent-floor fitness tests run independently of its 147 interface tests.
 |---|---|---|---|
 | `dw` CLI | humans, scripts, fallback for every agent | JSON or porcelain on orientation/verification verbs; stable exit codes | full guarded roadmap lifecycle plus contract generation; one-step apply never certifies or commits |
 | `dw-mcp` | tool-capable agents | JSON-RPC tools with `structuredContent` | guarded story/evidence/contract mutations; never certification or commit |
-| `dw-workbench` HTTP | browser and local clients | stamped response envelope around shared models | only preview/apply roadmap mutations; never stage/commit |
-| Browser workbench | visual browse, board, trace, health, mission control, editor | consumes HTTP only | preview/diff/apply UI |
+| `dw-workbench` HTTP | browser and local clients | stamped response envelope around shared models | guarded roadmap mutations plus exact-token one-step apply; never stage/certify/commit |
+| Browser workbench | visual browse, board, trace, health, mission control, editor | consumes HTTP only | editor preview/diff/apply plus separate step review/confirm; no generic command input |
 | State/session/event documents | mission-control clients | versioned JSON/JSONL | read substrate only |
 | Agent riders | Claude Code, Codex, pi | generated managed docs/skills/commands | describes the same CLI/MCP rails; drift is a check error |
 | HoldSpeak packs | meeting alignment and approved story acts | host plugin contracts | proposes/executes through allow-listed rails seams |
@@ -185,11 +188,10 @@ consent-floor fitness tests run independently of its 147 interface tests.
 
 The key interoperability achievement is semantic reuse: transports do not
 parse Markdown independently. Phase 22 made aggregate orientation one shared
-CLI/MCP/HTTP model rather than a transport-specific dashboard. The active
-interop edge is now narrower and explicit: WLA-23-01 exposes deliberate step
-through the core and CLI; receipts, MCP/HTTP parity, and the browser front
-door are separately scoped in WLA-23-02 through WLA-23-04 instead of being
-implied by an unstable first implementation.
+CLI/MCP/HTTP model rather than a transport-specific dashboard. Phase 23 now
+carries the deliberate step through the same three adapters and browser front
+door without copying token, allowlist, or consent logic; the remaining exit
+exam proves the packaged consumer loop rather than inventing another surface.
 
 ## Trust and safety model
 

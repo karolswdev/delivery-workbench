@@ -196,14 +196,17 @@ See [the deliberate-step contract](./docs/deliberate-step.md).
 `dw-workbench --root /path/to/repo` serves a page for browsing the
 roadmap. Its overview opens with the same briefing as `dw status`:
 verdict, selected project, workspace/contract/gate state, and one
-tokenized argv or explicitly manual next action. It never executes that
-recommendation. The specialist views retain phase tables, story and evidence pairs, a health console,
+tokenized argv or explicitly manual next action. For an applicable action,
+“review one deliberate step” opens a separate confirmation with the exact
+token, authorized argv, and CLI fallback; applying runs at most that one
+step, refreshes, and stops. Manual, certification, and commit states explain
+why no apply control exists. The specialist views retain phase tables, story and evidence pairs, a health console,
 the kanban board at `#/board` (drag moves ride the same guarded
 preview-then-apply flow — a park demands its reason, done still
 demands evidence), and the trace from a story to the commits that
 shipped it. It can
 edit roadmap files through a guarded preview-then-apply flow. It
-never stages or commits. Bound to localhost by default; reachable
+never stages, certifies, or commits. Bound to localhost by default; reachable
 over your own Tailscale network too (a `.ts.net` Host header is
 allowed, since that name only resolves through your own
 authenticated tailnet).

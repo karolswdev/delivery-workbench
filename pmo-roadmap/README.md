@@ -349,6 +349,11 @@ certifies a contract, commits, chooses a project, accepts caller-supplied argv,
 or follows the next action. The contract is
 [`docs/deliberate-step.md`](../docs/deliberate-step.md).
 
+The Workbench overview presents the same lease as review → confirm → apply one
+step. The confirmation shows the token and tokenized argv, sends only
+`project` + `expect`, refreshes on success or stale conflict, and never offers
+controls for certification or commit.
+
 `next` follows a strict exit contract for agents: 0 = story found,
 2 = nothing actionable, 1 = error; `--json` emits the story as one JSON
 object (or `{"next_story": null}`). Story write commands validate the
