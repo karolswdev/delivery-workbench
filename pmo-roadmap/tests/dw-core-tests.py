@@ -17,11 +17,13 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 TESTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TESTS_DIR.parent / "lib"))
 
 import dw_pmo as core
+import dw_pmo.step as step_core
 from dw_pmo import DwError
 
 
@@ -3031,6 +3033,10 @@ class StatusBriefingTest(unittest.TestCase):
         "status_counts",
     ]
     ACTION_KEYS = ["blocking", "command", "id", "kind", "reason"]
+    STEP_KEYS = [
+        "action", "applicable", "apply_command", "kind", "project",
+        "refusal", "schema_version", "token",
+    ]
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -3119,6 +3125,211 @@ class StatusBriefingTest(unittest.TestCase):
             ],
         )
 
+    def test_step_preview_is_schema_pinned_pure_and_state_bound(self) -> None:
+        before = subprocess.check_output(
+            ["git", "-C", str(self.root), "status", "--porcelain=v1", "-z"]
+        )
+        events = self.root / ".git" / "pmo-events.jsonl"
+        event_before = events.read_bytes() if events.exists() else b""
+
+        first = core.build_step(self.root)
+        second = core.build_step(self.root)
+
+        after = subprocess.check_output(
+            ["git", "-C", str(self.root), "status", "--porcelain=v1", "-z"]
+        )
+        event_after = events.read_bytes() if events.exists() else b""
+        self.assertEqual(first, second)
+        self.assertEqual(before, after)
+        self.assertEqual(event_before, event_after)
+        self.assertEqual(sorted(first), self.STEP_KEYS)
+        self.assertEqual(first["kind"], "delivery-workbench-step")
+        self.assertEqual(first["schema_version"], 1)
+        self.assertEqual(first["project"], "demo")
+        self.assertEqual(first["action"]["id"], "start-story")
+        self.assertTrue(first["applicable"])
+        self.assertIsNone(first["refusal"])
+        self.assertRegex(first["token"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual(
+            first["apply_command"],
+            [
+                ".githooks/dw", "step", "demo", "--apply", "--expect",
+                first["token"],
+            ],
+        )
+
+    def test_step_stale_token_refuses_before_runner_even_for_same_action(self) -> None:
+        preview = core.build_step(self.root)
+        calls: list[tuple[list[str], Path]] = []
+
+        subprocess.run(
+            [
+                "git", "-C", str(self.root), "commit", "-q", "--allow-empty",
+                "--no-verify", "-m", "shift head only",
+            ],
+            check=True,
+        )
+        current = core.build_step(self.root)
+        self.assertEqual(current["action"]["id"], preview["action"]["id"])
+        self.assertNotEqual(current["token"], preview["token"])
+
+        def runner(argv: list[str], cwd: Path) -> int:
+            calls.append((argv, cwd))
+            return 0
+
+        with self.assertRaisesRegex(DwError, "token is stale"):
+            core.apply_step(
+                self.root,
+                None,
+                str(preview["token"]),
+                runner=runner,
+            )
+        self.assertEqual(calls, [])
+
+    def test_step_runs_exactly_one_allowlisted_child_and_mirrors_exit(self) -> None:
+        preview = core.build_step(self.root)
+        calls: list[tuple[list[str], Path]] = []
+
+        def runner(argv: list[str], cwd: Path) -> int:
+            calls.append((argv, cwd))
+            return 7
+
+        applied, exit_code = core.apply_step(
+            self.root,
+            None,
+            str(preview["token"]),
+            runner=runner,
+        )
+        self.assertEqual(applied, preview)
+        self.assertEqual(exit_code, 7)
+        self.assertEqual(
+            calls,
+            [
+                (
+                    [
+                        ".githooks/dw", "story", "status", "demo", "1",
+                        "DM-1-02", "in-progress",
+                    ],
+                    self.root.resolve(),
+                )
+            ],
+        )
+
+    def test_step_closes_over_action_id_and_entire_argv_shape(self) -> None:
+        status = self.status()
+        cases = [
+            ("start-story", ["sh", "-c", "touch escaped"]),
+            ("future-action", status["next_action"]["command"]),
+        ]
+        for action_id, command in cases:
+            with self.subTest(action_id=action_id, command=command):
+                tampered = json.loads(json.dumps(status))
+                tampered["next_action"]["id"] = action_id
+                tampered["next_action"]["command"] = command
+                with mock.patch.object(step_core, "build_status", return_value=tampered):
+                    preview = step_core.build_step(self.root)
+                self.assertFalse(preview["applicable"])
+                self.assertIsNone(preview["apply_command"])
+                self.assertIn("closed action/argv table", preview["refusal"])
+
+    def test_step_allowlist_positive_and_negative_matrix(self) -> None:
+        allowed = [
+            ("repair-rails", [".githooks/dw", "doctor"]),
+            ("resolve-rewrite", ["git", "status"]),
+            ("review-unstaged", ["git", "status", "--short"]),
+            ("review-workspace", ["git", "status", "--short"]),
+            ("generate-contract", [".githooks/dw", "contract", "new"]),
+            ("generate-contract", [".githooks/dw", "contract", "new", "--force"]),
+            ("repair-roadmap", [".githooks/dw", "check"]),
+            ("repair-roadmap", [".githooks/dw", "check", "demo"]),
+            ("repair-roadmap", [".githooks/dw", "phase", "create", "--help"]),
+            (
+                "finish-story",
+                [".githooks/dw", "story", "status", "demo", "12", "DM-12-03", "done"],
+            ),
+            (
+                "start-story",
+                [
+                    ".githooks/dw", "story", "status", "demo", "12",
+                    "DM-12-03", "in-progress",
+                ],
+            ),
+            (
+                "continue-story",
+                [".githooks/dw", "story", "show", "demo", "12", "DM-12-03"],
+            ),
+            ("review-holds", [".githooks/dw", "holds", "demo"]),
+            ("plan-work", [".githooks/dw", "phase", "create", "--help"]),
+        ]
+        for action_id, command in allowed:
+            with self.subTest(allowed=action_id, command=command):
+                self.assertTrue(
+                    step_core._command_is_allowlisted(  # type: ignore[attr-defined]
+                        {"id": action_id, "command": command}
+                    )
+                )
+
+        refused = [
+            ("commit", ["git", "commit"]),
+            ("future-action", ["git", "status"]),
+            ("start-story", "sh -c 'touch escaped'"),
+            (
+                "start-story",
+                ["/tmp/dw", "story", "status", "demo", "12", "DM-12-03", "in-progress"],
+            ),
+            (
+                "start-story",
+                [
+                    ".githooks/dw", "story", "evidence", "demo", "12",
+                    "DM-12-03", "in-progress",
+                ],
+            ),
+            (
+                "start-story",
+                [
+                    ".githooks/dw", "story", "status", "demo", "12",
+                    "DM-12-03", "in-progress", "--force",
+                ],
+            ),
+            (
+                "start-story",
+                [
+                    ".githooks/dw", "story", "status", "-demo", "12",
+                    "DM-12-03", "in-progress",
+                ],
+            ),
+            (
+                "start-story",
+                [
+                    ".githooks/dw", "story", "status", "demo", "latest",
+                    "DM-12-03", "in-progress",
+                ],
+            ),
+            (
+                "start-story",
+                [
+                    ".githooks/dw", "story", "status", "demo", "12",
+                    "dm-12-03", "in-progress",
+                ],
+            ),
+            (
+                "finish-story",
+                [
+                    ".githooks/dw", "story", "status", "demo", "12",
+                    "DM-12-03", "complete",
+                ],
+            ),
+            ("repair-roadmap", [".githooks/dw", "check", "demo/other"]),
+            ("review-holds", [".githooks/dw", "holds", "demo", "--json"]),
+        ]
+        for action_id, command in refused:
+            with self.subTest(refused=action_id, command=command):
+                self.assertFalse(
+                    step_core._command_is_allowlisted(  # type: ignore[attr-defined]
+                        {"id": action_id, "command": command}
+                    )
+                )
+
     def test_dirty_active_work_continues_but_unowned_work_is_reviewed(self) -> None:
         phase = core.get_phase(core.get_project(self.root, "demo"), "1")
         plan = core.plan_story_status(
@@ -3185,6 +3396,11 @@ class StatusBriefingTest(unittest.TestCase):
         status = self.status()
         self.assertEqual(status["repository"]["contract"]["state"], "passing")
         self.assertEqual(status["next_action"]["id"], "commit")
+        step = core.build_step(self.root)
+        self.assertEqual(step["action"]["id"], "commit")
+        self.assertFalse(step["applicable"])
+        self.assertIsNone(step["apply_command"])
+        self.assertIn("never applied", step["refusal"])
 
         # Restaging changes the index-tree fact and must retract commit.
         readme.write_text(readme.read_text(encoding="utf-8") + "later\n", encoding="utf-8")
@@ -3258,6 +3474,11 @@ class StatusBriefingTest(unittest.TestCase):
         self.assertTrue(status["roadmap"]["selection_required"])
         self.assertEqual(status["next_action"]["id"], "select-project")
         self.assertIsNone(status["next_action"]["command"])
+        step = core.build_step(self.root)
+        self.assertFalse(step["applicable"])
+        self.assertIsNone(step["project"])
+        self.assertIsNone(step["apply_command"])
+        self.assertIn("manual decision", step["refusal"])
         selected = self.status("other")
         self.assertEqual(selected["roadmap"]["selected_project"], "other")
 

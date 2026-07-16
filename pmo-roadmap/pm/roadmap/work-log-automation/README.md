@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-15 (Phase 22 closed: one versioned status briefing now composes clone health, roadmap validity, workspace/contract state, current work, and the next safe action across CLI, MCP, HTTP, the workbench, and agent riders; the packaged exit exam is green).
-**Current phase:** [phase-22-agent-briefing](./phase-22-agent-briefing/current-phase-status.md).
-**Status:** Phase 22 complete — v1.14.0 shipped phases 0-21; the unified briefing is implemented and recorded as unpublished release-ready work.
+**Last updated:** 2026-07-15 (Phase 23 is 1/5: `dw step` now binds the complete briefing to a state token and deliberately applies at most one closed-table action; receipts and event correlation are next).
+**Current phase:** [phase-23-deliberate-step](./phase-23-deliberate-step/current-phase-status.md).
+**Status:** active — WLA-23-01 delivered the core/CLI handrail; WLA-23-02 is next.
 
 ## Vision
 
@@ -53,6 +53,9 @@ summarization can improve those entries after the lifecycle is proven.
 - User requirement, 2026-07-15: comprehensively assess the whole solution,
   then push usability, interoperability, and agent-development guardrails
   forward by opening and executing the next phase from the audit findings.
+- User follow-up, 2026-07-15: move beyond summarizing the briefing and push
+  it into something operational; Phase 23 turns one observed recommendation
+  into one explicit, stale-safe, allowlisted step.
 - [Solution overview](../../../../docs/solution-overview.md), 2026-07-15:
   the whole-system map, evidence snapshot, strengths, gaps, and rationale for
   Phase 22.
@@ -84,6 +87,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 20 | The Telegram interface becomes a first-class group surface: the pane becomes a picture (on demand and live), the buttons become a configurable toolbar and question-steering keyboards, and consent in a group belongs to a person, not a room — the second ccgram absorption (v4.3.11), every feature riding the existing consent spine. | done | [phase-20-group-grows-hands](./phase-20-group-grows-hands/) |
 | 21 | Phase 20's interactive surface — screenshots, buttons, per-person consent — reaches every channel as v1.14.0, with the same machinery as the last six releases. | done | [phase-21-landing-v1-14-0](./phase-21-landing-v1-14-0/) |
 | 22 | Give every human and agent one deterministic, versioned answer for repository readiness, current work, and the next safe action, shared across every supported surface. | done | [phase-22-agent-briefing](./phase-22-agent-briefing/) |
+| 23 | Let a human or agent deliberately apply exactly one current, allowlisted recommendation without copy/paste, stale intent, arbitrary execution, certification, or commit automation. | in-progress | [phase-23-deliberate-step](./phase-23-deliberate-step/) |
 
 ## Operating cadence
 
@@ -114,10 +118,19 @@ behavior is:
 - `dw` performs routine roadmap inspection, scaffolding, evidence-backed status
   updates, phase closing, drift reporting, and checks.
 
-## Most recent extension
+## Active extension
 
-Phase 22 (The briefing — one answer before agents act) is closed. It
-turned the audit in `docs/solution-overview.md` into one deterministic,
+Phase 23 (The handrail — one deliberate step) is active at 1/5. It keeps
+Phase 22's status model pure while binding its one recommendation to a
+deterministic token over the complete briefing. The delivered `dw step`
+core/CLI surface previews and explicitly applies at most one closed-table
+action, re-reading state first and permanently refusing arbitrary commands,
+certification, commit, project choice, and automatic loops. Bounded receipts
+and event correlation are the next slice. See
+[phase-23-deliberate-step/current-phase-status.md](./phase-23-deliberate-step/current-phase-status.md).
+
+Phase 22 (The briefing — one answer before agents act) is closed. It turned
+the audit in `docs/solution-overview.md` into one deterministic,
 versioned, read-only status model shared by CLI, MCP, HTTP, the browser,
 and generated agent riders. The model composes existing authorities; it
 does not invent a second gate or automate certification. See

@@ -22,6 +22,15 @@ evidence, the specialized guarded `finish-story` transition, staging,
 contract staleness, certification, trailers, archived contract, verified
 commit, and the next clean story. Full detail: [Phase 22](./pmo-roadmap/pm/roadmap/work-log-automation/phase-22-agent-briefing/current-phase-status.md).
 
+The next handrail begins in Phase 23: `dw step` keeps `dw status` pure while
+turning one reviewed recommendation into a state-bound act. Its stamped
+`delivery-workbench-step@1` preview hashes the complete current briefing;
+apply requires that token, re-reads state, admits only an action id plus
+entire argv shape from a second closed table, starts at most one child, and
+stops. Same-action stale state, unknown or modified argv, manual choices,
+certification, and commit all refuse before process start. The first core/CLI
+slice is documented in [Phase 23](./pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/current-phase-status.md).
+
 This section is release-ready input, not a publication claim: the package
 remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula
 change has been performed.

@@ -20,12 +20,17 @@ through those same rails.
 
 The strongest property is not any individual interface. It is that the
 interfaces share one parser, vocabulary, mutation planner, and gate while
-Markdown and Git remain the durable state. The primary weakness at this
-snapshot is connective: a user or agent can obtain every fact, but must
-combine several commands and documents to answer “is this clone ready,
-what work owns these changes, and what is the next safe transition?”
-Phase 22 addresses that gap with one versioned status briefing; its
-contract is [status-briefing.md](./status-briefing.md).
+Markdown and Git remain the durable state. The primary weakness found at
+the start of this assessment was connective: a user or agent could obtain
+every fact, but had to combine several commands and documents to answer “is
+this clone ready, what work owns these changes, and what is the next safe
+transition?” Phase 22 closed that gap with one versioned status briefing.
+The follow-on observation was equally practical: status named an exact
+action but left the operator to carry an unbound argv across the read→act
+boundary. Active Phase 23 adds a separate, state-bound one-step handrail
+while preserving manual certification and commit. Its contracts are
+[status-briefing.md](./status-briefing.md) and
+[deliberate-step.md](./deliberate-step.md).
 
 ## What problem it solves
 
@@ -112,8 +117,11 @@ Today the specialist commands are `dw doctor`, `dw check`, `dw next`,
 paths are executed end-to-end by `pmo-roadmap/tests/agent-surface.sh`,
 `roadmap-cli.sh`, and `mcp-server.sh`.
 
-Phase 22 begins by adding `dw status` in front of that loop. It does not replace the
+Phase 22 adds `dw status` in front of that loop. It does not replace the
 specialist commands; it composes their state and names the next safe one.
+Phase 23's first slice adds `dw step`: preview a token over that complete
+observation, explicitly authorize it, execute at most one closed-table
+recommendation, and stop. Commit and certification stay outside the seam.
 
 ### 2. Browse and understand work
 
@@ -166,7 +174,7 @@ consent-floor fitness tests run independently of its 147 interface tests.
 
 | Surface | Best for | Stable/machine form | Mutation stance |
 |---|---|---|---|
-| `dw` CLI | humans, scripts, fallback for every agent | JSON or porcelain on orientation/verification verbs; stable exit codes | full guarded roadmap lifecycle plus contract generation |
+| `dw` CLI | humans, scripts, fallback for every agent | JSON or porcelain on orientation/verification verbs; stable exit codes | full guarded roadmap lifecycle plus contract generation; one-step apply never certifies or commits |
 | `dw-mcp` | tool-capable agents | JSON-RPC tools with `structuredContent` | guarded story/evidence/contract mutations; never certification or commit |
 | `dw-workbench` HTTP | browser and local clients | stamped response envelope around shared models | only preview/apply roadmap mutations; never stage/commit |
 | Browser workbench | visual browse, board, trace, health, mission control, editor | consumes HTTP only | preview/diff/apply UI |
@@ -175,12 +183,13 @@ consent-floor fitness tests run independently of its 147 interface tests.
 | HoldSpeak packs | meeting alignment and approved story acts | host plugin contracts | proposes/executes through allow-listed rails seams |
 | Telegram | remote read and explicitly consented steering | Bot API adapter over the substrate | owner-bound, proposal/approval or armed-pane controls |
 
-The key interoperability achievement is semantic reuse: transports do
-not parse Markdown independently. The remaining inconsistency at this
-snapshot is that aggregate orientation is spread across several models,
-and not every useful answer has one shared schema. Phase 22 makes status
-the first cross-surface aggregate rather than adding a transport-specific
-dashboard.
+The key interoperability achievement is semantic reuse: transports do not
+parse Markdown independently. Phase 22 made aggregate orientation one shared
+CLI/MCP/HTTP model rather than a transport-specific dashboard. The active
+interop edge is now narrower and explicit: WLA-23-01 exposes deliberate step
+through the core and CLI; receipts, MCP/HTTP parity, and the browser front
+door are separately scoped in WLA-23-02 through WLA-23-04 instead of being
+implied by an unstable first implementation.
 
 ## Trust and safety model
 
@@ -225,9 +234,9 @@ On 2026-07-15 in this checkout:
 - version v1.14.0 is single-sourced across Python, CLI, plugin manifest,
   formula, and the latest published changelog heading; Phase 22 is recorded
   under an explicitly unpublished changelog section;
-- phases 0–22 are closed; Phase 22 is implemented but not published as a
-  new release;
-- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 221 tests on the local
+- phases 0–22 are closed; Phase 23 is active with its core/CLI deliberate-
+  step slice implemented but not published as a new release;
+- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 226 tests on the local
   interpreter and on the declared Python 3.9 floor;
 - every locally runnable non-Homebrew shell/integration suite in the CI
   workflow passed,
@@ -339,6 +348,17 @@ selected in-progress story as `finish-story`, carrying the existing guarded
 `story status ... done` argv. Any other roadmap issue retains the generic
 blocking repair path.
 
+### 9. A recommendation was still an unbound handoff — being addressed
+
+Phase 22 could return an exact argv, but a caller still copied or
+reconstructed it after the observation that justified it. Checking only the
+action id would not be enough: HEAD, contract facts, or the selected story
+can move while the id remains `start-story`. WLA-23-01 now previews
+`delivery-workbench-step@1`, whose SHA-256 token binds the entire status
+document, then permits exactly one action only when both id and complete argv
+shape match a second closed table. Stale, manual, unknown, modified, commit,
+and certification paths refuse before process start.
+
 ## Phase 22: delivered product step
 
 Phase 22 is **The briefing — one answer before agents act**. It is a
@@ -375,10 +395,30 @@ dw status
 The phase plan, evidence, and closeout live under
 `pmo-roadmap/pm/roadmap/work-log-automation/phase-22-agent-briefing/`.
 
+## Phase 23: active product step
+
+Phase 23 is **The handrail — one deliberate step**. It advances usability
+without turning the product into an autonomous shell:
+
+1. core and CLI preview/apply with a complete-state token and closed argv
+   table (implemented in WLA-23-01);
+2. bounded, versioned success/failure receipts plus safe event correlation;
+3. identical MCP and HTTP preview/result models;
+4. an explicit workbench confirmation and updated generated riders; and
+5. a wheel-installed exit exam that repeatedly authorizes one transition at
+   a time and proves stale-token and prohibited-commit red paths.
+
+The trust boundary is the feature: every invocation stops after one child;
+callers never provide argv; and project choice, certification, commit,
+evidence-command invention, and automatic loops remain deliberate operator
+work. The active plan is under
+`pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/`.
+
 ## Where to go deeper
 
 - [Architecture and executable claims](./architecture.md)
 - [Status briefing contract](./status-briefing.md)
+- [Deliberate step contract](./deliberate-step.md)
 - [Interop inventory and schema policy](./interop.md)
 - [MCP tool contract and exclusions](./mcp.md)
 - [Mission-control substrate and consent rings](./mission-control.md)

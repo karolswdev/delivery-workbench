@@ -323,6 +323,7 @@ the existing markdown files; it does not create a separate tracker.
   --body "- Additional verification detail."
 .githooks/dw evidence capture myproject 1 PRJ-1-01 -- npm test
 .githooks/dw status myproject --json
+.githooks/dw step myproject
 .githooks/dw next myproject --json
 .githooks/dw doctor
 .githooks/dw agent-docs
@@ -337,6 +338,14 @@ action without writing files or recording events. Its versioned JSON exits
 0 for `ready` and 1 for `attention`; when multiple projects exist it requires
 selection instead of guessing. The model contract is
 [`docs/status-briefing.md`](../docs/status-briefing.md).
+
+Use `step` only after reviewing its pure preview. It binds the complete
+current status to a `sha256:` token and prints an exact `apply=` argv;
+`--apply --expect <token>` re-reads that state, refuses stale or prohibited
+intent before spawn, executes at most one closed-table recommendation, and
+stops. It never certifies a contract, commits, chooses a project, accepts
+caller-supplied argv, or follows the next action. The contract is
+[`docs/deliberate-step.md`](../docs/deliberate-step.md).
 
 `next` follows a strict exit contract for agents: 0 = story found,
 2 = nothing actionable, 1 = error; `--json` emits the story as one JSON
@@ -718,7 +727,7 @@ pmo-roadmap/
 │   └── dw_pmo/                   ← the core: model, paths, gitio, parse,
 │                                    validate, trace, render, mutations, api,
 │                                    gate, contract, evidence, agentdocs,
-│                                    doctor, adopt, workbench
+│                                    doctor, status, step, adopt, workbench
 ├── tests/
 │   ├── dw-core-tests.py          ← core unit suite
 │   ├── adoption-discovery.sh     ← three-command adoption coverage

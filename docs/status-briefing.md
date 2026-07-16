@@ -267,6 +267,21 @@ The MCP exclusion remains load-bearing: `dw_status` may return a manual
 certification action or recommend `git commit`, but it cannot perform
 either operation.
 
+## From briefing to one deliberate act
+
+Status remains read-only. Phase 23 adds a separate `dw step` surface that
+can turn only an allowlisted current recommendation into one explicit act.
+It first returns a pure preview with a SHA-256 token over this complete
+status document. Apply requires that exact token, re-reads status, refuses
+stale or prohibited intent before starting a child, executes at most one
+existing argv, and stops.
+
+This does not make every status action executable. Commit, contract
+certification, project selection, manual repairs, arbitrary commands, and
+automatic continuation remain outside the capability. The exact preview
+schema and closed action/argv table are in
+[deliberate-step.md](./deliberate-step.md).
+
 ## Compatibility
 
 The status document is a new v1 model. Existing specialist commands,

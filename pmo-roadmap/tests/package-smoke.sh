@@ -106,14 +106,15 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw" ] || fail "install did not vendor .githooks/dw"
 [ -f "$FIXTURE/.githooks/dw_pmo/verify.py" ] || fail "vendored dw_pmo incomplete"
 [ -f "$FIXTURE/.githooks/dw_pmo/status.py" ] || fail "wheel omitted the status core"
+[ -f "$FIXTURE/.githooks/dw_pmo/step.py" ] || fail "wheel omitted the deliberate-step core"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
 [ -x "$FIXTURE/.githooks/dw-workbench" ] || fail "install did not vendor .githooks/dw-workbench"
 [ -f "$FIXTURE/.mcp.json" ] || fail "install did not write the .mcp.json seam"
 (cd "$FIXTURE" && ./.githooks/dw doctor) >/dev/null \
   || fail "fixture doctor not green after packaged install"
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
-  'from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api; assert "dw_status" in TOOLS; assert callable(handle_api)' \
-  || fail "packaged MCP/HTTP adapters do not expose the status core"
+  'from dw_pmo import build_step; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api; assert callable(build_step); assert "dw_status" in TOOLS; assert callable(handle_api)' \
+  || fail "packaged core and MCP/HTTP adapters do not expose the guided operations"
 set +e
 (cd "$FIXTURE" && ./.githooks/dw status --json) > "$TMP_ROOT/status.json"
 STATUS_CODE=$?

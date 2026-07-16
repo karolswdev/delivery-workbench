@@ -51,6 +51,8 @@ inspects the repo and drafts a roadmap for you. See the
 
 ```bash
 .githooks/dw status                     # is this repo ready, and what is safe next?
+.githooks/dw step myapp                 # preview one state-bound, allowlisted action
+# review the preview; run its exact apply=... command when it is applicable
 .githooks/dw story status myapp 2 3 in-progress
 # ... do the work ...
 .githooks/dw evidence capture myapp 2 3 -- npm test
@@ -134,6 +136,7 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 | Command | What it does |
 |---|---|
 | `dw status [project] [--json]` | One read-only readiness verdict and the next safe action across rails, workspace, and roadmap. |
+| `dw step [project] [--json]` | Preview one state-bound action; `--apply --expect <token>` runs at most that one allowlisted argv, never certification or commit. |
 | `dw next` | The next actionable story. Exit 0 found, 2 nothing to do. |
 | `dw context --compact` | JSON snapshot of the roadmap: issues, warnings, next story, trace paths. |
 | `dw check` | Lints roadmap structure and evidence content. Greppable errors, exit 1 on issues. |
@@ -150,7 +153,10 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 
 All commands have stable exit codes. `dw status` exits 0 for `ready` and
 1 for `attention`; its JSON is a versioned contract suitable for an
-agent's first repository read. The specialist orientation commands
+agent's first repository read. `dw step` is its separate explicit act
+boundary: preview is pure, stale tokens start nothing, and every invocation
+stops after one child. See [docs/deliberate-step.md](./docs/deliberate-step.md).
+The specialist orientation commands
 support `--json` or `--porcelain` output.
 
 Parked work is first-class: a story goes on-hold only with a
@@ -259,6 +265,7 @@ trailers and an archived contract, the full history passing
 
 - [Comprehensive solution overview](./docs/solution-overview.md): current architecture, workflows, trust model, proof snapshot, strengths, gaps, and next phase
 - [Status briefing contract](./docs/status-briefing.md): the Phase 22 one-answer model, readiness semantics, and guided action order
+- [Deliberate step contract](./docs/deliberate-step.md): the Phase 23 state-bound preview/apply seam and closed executable action table
 - [Architecture](./docs/architecture.md), with the test that proves each claim
 - [Framework README](./pmo-roadmap/README.md): install, update, adopt, operate
 - [The contract rules](./pmo-roadmap/templates/PMO-CONTRACT.md)

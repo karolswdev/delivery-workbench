@@ -154,5 +154,12 @@ from .status import (
     build_status,
     render_status,
 )
+from .step import (
+    STEP_KIND,
+    STEP_SCHEMA_VERSION,
+    apply_step,
+    build_step,
+    render_step,
+)
 
 __version__ = "1.14.0"

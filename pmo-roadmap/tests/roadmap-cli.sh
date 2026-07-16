@@ -397,6 +397,123 @@ assert status["verdict"] == "attention"
 assert status["next_action"]["id"] == "repair-rails"
 assert status["next_action"]["blocking"] is True
 PY
+"$STATUS_DW" --root "$STATUS_REPO" step status-demo --json > "$TMP_ROOT/repair-step.json"
+REPAIR_TOKEN="$(python3 - "$TMP_ROOT/repair-step.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    step = json.load(f)
+assert step["action"]["id"] == "repair-rails"
+assert step["applicable"] is True
+print(step["token"])
+PY
+)"
+if "$STATUS_DW" --root "$STATUS_REPO" step status-demo \
+  --apply --expect "$REPAIR_TOKEN" >"$TMP_ROOT/repair-step.out" 2>"$TMP_ROOT/repair-step.err"; then
+  fail "step should mirror a failing allowlisted child"
+fi
+grep -q '^dw step: repair-rails exited 1; next=repair-rails$' "$TMP_ROOT/repair-step.err" \
+  || fail "failed step should preserve the exit and report the newly observed action"
 mv "$STATUS_REPO/.githooks/pre-commit.off" "$STATUS_REPO/.githooks/pre-commit"
+
+# ── Deliberate one-step handrail (WLA-23-01) ────────────────────────
+
+git -C "$STATUS_REPO" status --porcelain=v1 -z > "$TMP_ROOT/step-state-before"
+"$STATUS_DW" --root "$STATUS_REPO" step status-demo --json > "$TMP_ROOT/step-a.json"
+"$STATUS_DW" --root "$STATUS_REPO" step status-demo --json > "$TMP_ROOT/step-b.json"
+git -C "$STATUS_REPO" status --porcelain=v1 -z > "$TMP_ROOT/step-state-after"
+cmp "$TMP_ROOT/step-a.json" "$TMP_ROOT/step-b.json" \
+  || fail "step preview JSON should be byte-stable over unchanged state"
+cmp "$TMP_ROOT/step-state-before" "$TMP_ROOT/step-state-after" \
+  || fail "step preview should not mutate the installed repository"
+python3 - "$TMP_ROOT/step-a.json" <<'PY' || fail "step should preview the exact installed action"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    step = json.load(f)
+assert sorted(step) == [
+    "action", "applicable", "apply_command", "kind", "project",
+    "refusal", "schema_version", "token",
+]
+assert step["kind"] == "delivery-workbench-step"
+assert step["schema_version"] == 1
+assert step["project"] == "status-demo"
+assert step["action"]["id"] == "start-story"
+assert step["action"]["command"] == [
+    ".githooks/dw", "story", "status", "status-demo", "0",
+    "SD-0-01", "in-progress",
+]
+assert step["applicable"] is True
+assert step["refusal"] is None
+assert step["token"].startswith("sha256:") and len(step["token"]) == 71
+assert step["apply_command"] == [
+    ".githooks/dw", "step", "status-demo", "--apply", "--expect",
+    step["token"],
+]
+PY
+STEP_TOKEN="$(python3 - "$TMP_ROOT/step-a.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    print(json.load(f)["token"])
+PY
+)"
+if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --apply >/dev/null 2>&1; then
+  fail "step apply should require an expected preview token"
+fi
+if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --expect "$STEP_TOKEN" >/dev/null 2>&1; then
+  fail "step expect should only be accepted with apply"
+fi
+if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --json \
+  --apply --expect "$STEP_TOKEN" >/dev/null 2>&1; then
+  fail "step JSON apply should remain unavailable until receipt story WLA-23-02"
+fi
+
+# Moving only HEAD leaves the same recommendation, but invalidates the lease.
+git -C "$STATUS_REPO" commit -q --allow-empty --no-verify -m "move step fixture head"
+if "$STATUS_DW" --root "$STATUS_REPO" step status-demo \
+  --apply --expect "$STEP_TOKEN" >"$TMP_ROOT/stale-step.out" 2>"$TMP_ROOT/stale-step.err"; then
+  fail "step should refuse a stale token even when the action id is unchanged"
+fi
+grep -q 'step token is stale' "$TMP_ROOT/stale-step.err" \
+  || fail "stale step refusal should explain how to recover"
+"$STATUS_DW" --root "$STATUS_REPO" status status-demo --json > "$TMP_ROOT/status-after-stale.json"
+python3 - "$TMP_ROOT/status-after-stale.json" <<'PY' \
+  || fail "stale refusal should happen before the child action"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    status = json.load(f)
+assert status["next_action"]["id"] == "start-story"
+PY
+
+"$STATUS_DW" --root "$STATUS_REPO" step status-demo --json > "$TMP_ROOT/step-fresh.json"
+STEP_TOKEN="$(python3 - "$TMP_ROOT/step-fresh.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    print(json.load(f)["token"])
+PY
+)"
+"$STATUS_DW" --root "$STATUS_REPO" step status-demo \
+  --apply --expect "$STEP_TOKEN" > "$TMP_ROOT/step-applied.out"
+grep -q '^dw step: applied start-story; next=continue-story$' "$TMP_ROOT/step-applied.out" \
+  || fail "successful step should stop after one action and name the new recommendation"
+"$STATUS_DW" --root "$STATUS_REPO" status status-demo --json > "$TMP_ROOT/status-after-step.json"
+python3 - "$TMP_ROOT/status-after-step.json" <<'PY' \
+  || fail "applied step should perform exactly the previewed transition"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    status = json.load(f)
+assert status["next_action"]["id"] == "continue-story"
+assert status["roadmap"]["projects"][0]["next_story"]["status"] == "in-progress"
+PY
 
 echo "roadmap-cli.sh: ok"

@@ -37,9 +37,11 @@ try:
         __version__ as DW_VERSION,
         append_trailers,
         apply_plan,
+        apply_step,
         board_model,
         build_context_payload,
         build_status,
+        build_step,
         contract_digest,
         discover_phases,
         discover_projects,
@@ -62,6 +64,7 @@ try:
         parse_contract_facts,
         render_board,
         render_status,
+        render_step,
         run_adoption,
         render_doctor,
         render_gate_failure,
@@ -390,6 +393,38 @@ def command_status(args: argparse.Namespace) -> int:
     return 0 if briefing["verdict"] == "ready" else 1
 
 
+def command_step(args: argparse.Namespace) -> int:
+    if args.apply:
+        if args.json:
+            die("--json --apply arrives with the versioned receipt in WLA-23-02")
+        preview, exit_code = apply_step(
+            args.root,
+            args.project,
+            args.expect or "",
+        )
+        action = preview["action"]
+        action_id = action["id"] if isinstance(action, dict) else "none"
+        after = build_step(args.root, args.project)
+        next_action = after["action"]
+        next_id = next_action["id"] if isinstance(next_action, dict) else "none"
+        if exit_code:
+            print(
+                f"dw step: {action_id} exited {exit_code}; next={next_id}",
+                file=sys.stderr,
+            )
+            return exit_code
+        print(f"dw step: applied {action_id}; next={next_id}")
+        return 0
+    if args.expect:
+        die("--expect is only valid with --apply")
+    preview = build_step(args.root, args.project)
+    if args.json:
+        print(json.dumps(preview, sort_keys=True))
+    else:
+        print(render_step(preview), end="")
+    return 0
+
+
 def command_context(args: argparse.Namespace) -> int:
     projects = [get_project(args.root, args.project)] if args.project else discover_projects(args.root)
     status_filter = "done" if args.done else args.status
@@ -660,6 +695,16 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("project", nargs="?")
     status.add_argument("--json", action="store_true", help="emit the versioned status document")
     status.set_defaults(func=command_status)
+
+    step = sub.add_parser(
+        "step",
+        help="preview or deliberately apply exactly one current allowlisted status action",
+    )
+    step.add_argument("project", nargs="?")
+    step.add_argument("--json", action="store_true", help="emit the pure versioned preview document")
+    step.add_argument("--apply", action="store_true", help="apply one current action after validating --expect")
+    step.add_argument("--expect", help="sha256 state token from a fresh dw step preview")
+    step.set_defaults(func=command_step)
 
     projects = sub.add_parser("projects", help="list roadmap projects")
     projects.set_defaults(func=command_projects)

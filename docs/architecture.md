@@ -32,7 +32,7 @@ plumbing), `parse` (roadmap discovery), `validate` (structural checks
 and drift warnings), `trace` (commit and work-log correlation),
 `render`/`mutations` (content generation and guarded writes), `api`
 (context envelopes, timelines, handoffs), plus `gate`, `contract`,
-`evidence`, `agentdocs`, `doctor`, `status`, `adopt`, and `workbench`.
+`evidence`, `agentdocs`, `doctor`, `status`, `step`, `adopt`, and `workbench`.
 
 `status` is the read-only composition root for an agent's first question. It
 joins doctor, roadmap validation, git/contract/gate state, current progress,
@@ -45,6 +45,16 @@ assertions in `tests/roadmap-cli.sh`). The packaged system proof is
 `tests/guided-status-loop.sh`: one fresh consumer receives equal CLI, MCP,
 and HTTP objects at each transition and reaches a verified gated commit by
 executing the recommended argv (manual certification remains manual).
+
+`step` is a deliberately smaller execution boundary over that status object.
+Its pure `delivery-workbench-step@1` preview hashes the complete canonical
+briefing, and apply re-reads it before permitting one command through a
+closed action-id plus exact-argv-shape table. It starts at most one child
+from the repository root, mirrors failure, and never permits commit,
+certification, project choice, caller-supplied argv, or continuation (proof:
+the step cases in `StatusBriefingTest` and the installed lifecycle in
+`tests/roadmap-cli.sh`). The protocol and allowlist are
+[deliberate-step.md](./deliberate-step.md).
 
 The status vocabulary is defined once (`model.STORY_STATUSES`:
 `backlog | ready | in-progress | blocked | done`, with done-synonyms
