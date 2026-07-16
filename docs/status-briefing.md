@@ -1,7 +1,7 @@
 # Status briefing contract
 
-**Status:** v1 contract frozen; core, CLI, MCP, and HTTP implemented in Phase
-22; workbench/agent rendering rollout in progress.
+**Status:** v1 contract frozen and implemented across core, CLI, MCP, HTTP,
+workbench overview, and generated agent briefs; packaged exit exam pending.
 **Scope:** local, read-only readiness and guided next action.
 
 ## Purpose

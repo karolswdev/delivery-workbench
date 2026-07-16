@@ -303,7 +303,8 @@ contract boxes are flipped by a human, on every surface, always.
 
 ## Proof obligations, story by story
 
-The **full story loop** means: `dw next` → flip in-progress → do the
+The **full story loop** means: `dw status` → inspect/follow the safe
+recommendation → `dw next` for focused story detail → flip in-progress → do the
 work → `dw evidence capture` of the real verification → flip done →
 `dw contract new` → certify by hand → gated `git commit` that
 passes. Every typing-surface story below must run that loop
@@ -507,7 +508,8 @@ three lines:
    the harness reads; `dw agent-docs` writes it.
 2. Ensure the agent can run shell commands in the repo. The four
    workflows are plain `dw` invocations with meaningful exit codes
-   (`dw next` exits 0/2/1 for found/none/error; `dw check` and
+   (`dw status` exits 0/1 for ready/attention and always returns the
+   versioned briefing; `dw next` exits 0/2/1 for found/none/error; `dw check` and
    `dw gate` exit non-zero on issues; the commit gate refuses on
    its own).
 3. Keep certification human-in-the-loop: whoever works the story

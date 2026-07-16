@@ -6,8 +6,8 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Current phase: 18 (phase-18-interop-layer)
-- Next story: WLA-18-03 — The MCP read surface: board, holds, story [in-progress]
+- Current phase: 22 (phase-22-agent-briefing)
+- Next story: WLA-22-05 — Prove the guided loop in a fresh consumer [backlog]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

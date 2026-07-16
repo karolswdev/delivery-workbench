@@ -94,6 +94,61 @@ function statusCounts(counts) {
   return keys.map((k) => badge(`${k} ${counts[k]}`, k)).join(" ");
 }
 
+function statusActionHtml(action) {
+  const command = Array.isArray(action.command) ? action.command : null;
+  const manual = action.kind === "manual" || !command;
+  return `<div class="brief-action${manual ? " manual" : ""}" data-action="${esc(action.id)}">
+    <div class="brief-action-head">
+      <span>next safe action</span>
+      <strong>${esc(action.id)}</strong>
+      ${action.blocking ? '<span class="badge issue">blocking</span>' : ""}
+    </div>
+    <div class="brief-reason">${esc(action.reason)}</div>
+    ${command ? `<div class="brief-argv" aria-label="command argument vector">
+      <span class="brief-argv-label">argv</span>
+      ${command.map((arg, index) => `<code data-argv-index="${index}">${esc(arg)}</code>`).join("")}
+    </div>` : `<div class="brief-manual"><strong>manual act</strong><span>No command is synthesized for this decision.</span></div>`}
+    <div class="brief-readonly">Recommendation only — this panel has no execute or commit control.</div>
+  </div>`;
+}
+
+function statusPanel(status) {
+  const repo = status.repository;
+  const roadmap = status.roadmap;
+  const changes = repo.changes;
+  const action = status.next_action;
+  const manual = action.kind === "manual" || !action.command;
+  const project = roadmap.selected_project || (roadmap.selection_required ? "selection required" : "none");
+  const workspace = repo.clean
+    ? "clean"
+    : `${changes.staged.count} staged · ${changes.unstaged.count} unstaged · ${changes.untracked.count} untracked`;
+  const projectLink = roadmap.selected_project
+    ? `<a href="#/p/${encodeURIComponent(roadmap.selected_project)}">project</a>
+       <a href="#/board/${encodeURIComponent(roadmap.selected_project)}">board</a>`
+    : "";
+  return `<section id="status-panel"
+      class="status-panel verdict-${esc(status.verdict)}${manual ? " is-manual" : ""}"
+      data-verdict="${esc(status.verdict)}" data-next-action="${esc(action.id)}">
+    <div class="brief-head">
+      <div>
+        <div class="brief-eyebrow">repository briefing</div>
+        <div class="brief-verdict">${esc(status.verdict)}</div>
+      </div>
+      <div class="brief-summary">${esc(status.summary)}</div>
+    </div>
+    <div class="brief-facts">
+      <div><span>project</span><strong>${esc(project)}</strong></div>
+      <div><span>workspace</span><strong>${esc(workspace)}</strong></div>
+      <div><span>contract</span><strong>${esc(repo.contract.state)}</strong></div>
+      <div><span>gate</span><strong>${esc(repo.gate.state)}</strong></div>
+    </div>
+    ${statusActionHtml(action)}
+    <nav class="brief-specialists" aria-label="specialist Delivery Workbench views">
+      <span>inspect deeper</span>${projectLink}<a href="#/health">health</a><a href="#/mc">mission control</a>
+    </nav>
+  </section>`;
+}
+
 /* ── mission control (WLA-15-01): the read-only belt ──────────────
  * The workbench is the fourth consumer of the mission-control
  * substrate (feed + sessions + events), read-only by charter — the
@@ -197,13 +252,14 @@ async function viewMissionControl() {
 
 async function viewOverview() {
   setCrumbs([{ label: "overview" }]);
-  const body = await api("/api/projects");
+  const [statusBody, body] = await Promise.all([api("/api/status"), api("/api/projects")]);
   const projects = body.data.projects;
+  const briefing = statusPanel(statusBody.data);
   if (!projects.length) {
-    app.innerHTML = stateHtml("No roadmap projects found under pm/roadmap/. Scaffold one with `dw phase create` or `dw adopt`.");
+    app.innerHTML = briefing + stateHtml("No roadmap projects found under pm/roadmap/. Scaffold one with `dw phase create` or `dw adopt`.");
     return;
   }
-  app.innerHTML = `<div class="grid">` + projects.map((p) => `
+  app.innerHTML = briefing + `<div class="grid">` + projects.map((p) => `
     <div class="card">
       <h3><a href="#/p/${encodeURIComponent(p.slug)}">${esc(p.slug)}</a>
         <span class="badge">${esc(p.prefix)}</span></h3>

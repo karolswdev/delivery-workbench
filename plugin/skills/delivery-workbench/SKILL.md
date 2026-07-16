@@ -12,7 +12,18 @@ is the CLI for everything below. Run `.githooks/dw doctor` if anything
 seems miswired. `.githooks/dw-workbench --root .` serves a localhost
 web view of the roadmap (browse, health, trace, guarded edit).
 
-## Orient before working
+## Start with one briefing
+
+Start every work session with one briefing read; do not call both transports.
+
+- `.githooks/dw status [project] --json` — the versioned readiness,
+  workspace, roadmap, and next-safe-action object. Exit 0 means `ready`;
+  exit 1 means `attention`. Attention is valid JSON: follow its blocking
+  repair action before work. Status reads only; it never executes the action.
+- MCP-capable agents may call `dw_status` instead. It returns the identical
+  object in `structuredContent`; an `attention` verdict is not a tool error.
+
+Use specialist surfaces for depth after the briefing:
 
 - `.githooks/dw context [project] --compact` — JSON snapshot: issues,
   warnings, next story, per-story trace paths.
@@ -22,6 +33,8 @@ web view of the roadmap (browse, health, trace, guarded edit).
 - `.githooks/dw check [project]` — structural and evidence-content
   lint; greppable `ERROR <path>: <issue>` lines, exit 1 on issues.
   `dw check: ok` is the green signal.
+- `.githooks/dw doctor` — detailed clone-wiring diagnosis when status names
+  unhealthy rails.
 
 ## Work a story
 
@@ -74,7 +87,7 @@ rather than bypassing.
 
 MCP-capable agents: prefer the MCP tools over shelling out —
 `.githooks/dw-mcp` (wired via `.mcp.json`) serves the same core as
-structured tools with identical refusals: orientation (`dw_context`,
+structured tools with identical refusals: orientation (`dw_status`, `dw_context`,
 `dw_next`, `dw_check`, `dw_doctor`), verification (`dw_verify`,
 `dw_gate`), guarded mutations (`dw_story_status`,
 `dw_evidence_capture`, `dw_contract_new`). Certification is never a

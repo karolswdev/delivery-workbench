@@ -180,7 +180,10 @@ Schemas and design are in [docs/mcp.md](./docs/mcp.md).
 ## The web view
 
 `dw-workbench --root /path/to/repo` serves a page for browsing the
-roadmap: phase tables, story and evidence pairs, a health console,
+roadmap. Its overview opens with the same briefing as `dw status`:
+verdict, selected project, workspace/contract/gate state, and one
+tokenized argv or explicitly manual next action. It never executes that
+recommendation. The specialist views retain phase tables, story and evidence pairs, a health console,
 the kanban board at `#/board` (drag moves ride the same guarded
 preview-then-apply flow — a park demands its reason, done still
 demands evidence), and the trace from a story to the commits that
@@ -191,7 +194,7 @@ over your own Tailscale network too (a `.ts.net` Host header is
 allowed, since that name only resolves through your own
 authenticated tailnet).
 
-![Workbench project overview: phase table with status badges, evidence counts, the next actionable story, and a validation warning](./assets/workbench-overview.png)
+![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 
 More screenshots and two terminal recordings are in
 [demos/](./demos/README.md).

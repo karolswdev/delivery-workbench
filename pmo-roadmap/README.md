@@ -525,14 +525,14 @@ writes only through preview→apply inside `pm/roadmap/**` with
 rollback protection; has no endpoint that stages or commits (the
 suite proves the git index stays empty); logs each request to stderr
 (`--quiet` to silence); and shuts down cleanly on SIGINT/SIGTERM.
-Views: project overview (health, story counts, next actionable
-story), phase board, story/evidence pair, health console, trace
+Views: status-first project overview (readiness, workspace, contract/gate,
+tokenized or manual next action, then project health/story counts), phase board, story/evidence pair, health console, trace
 timeline with agent handoff, work-log viewer, and the guarded editor.
 `?snapshot=1` switches the UI to synchronous loading for headless
 screenshot tools.
 
 JSON API (stable envelope `delivery-workbench-workbench-response`,
-schema_version 1): `/api/context`, `/api/projects`,
+schema_version 1): `/api/status`, `/api/context`, `/api/projects`,
 `/api/projects/{slug}`, `/api/projects/{slug}/phases/{n}`,
 `/api/projects/{slug}/stories/{id}`, `/api/health` (structured
 drift/validation report with the `mutation_safe` flag),

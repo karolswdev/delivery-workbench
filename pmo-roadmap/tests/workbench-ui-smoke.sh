@@ -26,6 +26,27 @@ fail() {
   exit 1
 }
 
+# Renderer contract runs even when no browser is installed. It keeps the
+# foyer a presentation-only view: argv stays tokenized, manual acts stay
+# explicit, and no status action grows an execution control or raw JSON dump.
+python3 - "$PMO_DIR/workbench/app.js" "$PMO_DIR/workbench/style.css" <<'PY' \
+  || fail "status-panel renderer contract failed"
+import sys
+
+app = open(sys.argv[1], encoding="utf-8").read()
+css = open(sys.argv[2], encoding="utf-8").read()
+action = app[app.index("function statusActionHtml"):app.index("function statusPanel")]
+panel = app[app.index("function statusPanel"):app.index("/* ── mission control")]
+overview = app[app.index("async function viewOverview"):app.index("async function viewProject")]
+assert "data-argv-index" in action and "manual act" in action
+assert "<button" not in action and "JSON.stringify" not in action
+for token in ("data-verdict", "project", "workspace", "contract", "gate"):
+    assert token in panel, token
+assert '/api/status' in overview and "Promise.all" in overview
+assert "overflow-wrap: anywhere" in css
+assert "@media (max-width: 430px)" in css
+PY
+
 FF=""
 for candidate in \
   "/Applications/Firefox.app/Contents/MacOS/firefox" \
@@ -41,6 +62,9 @@ fi
 REPO="$TMP_ROOT/repo"
 PROJECT="$REPO/pm/roadmap/sample"
 mkdir -p "$PROJECT"
+git -C "$REPO" init -q -b main
+git -C "$REPO" config user.name "UI Smoke"
+git -C "$REPO" config user.email "ui-smoke@example.test"
 cat > "$PROJECT/README.md" <<'EOF'
 # Sample - Roadmap
 
@@ -61,6 +85,7 @@ DW="$PMO_DIR/bin/dw"
 "$DW" --root "$REPO" story create sample 0 "Rendered story" >/dev/null
 "$DW" --root "$REPO" story status sample 0 SMP-0-01 "done" --evidence-body "- rendered proof." >/dev/null
 "$DW" --root "$REPO" story create sample 0 "Open story" >/dev/null
+"$PMO_DIR/install.sh" "$REPO" --skip-bootstrap >/dev/null
 
 PORT=$(( (RANDOM % 2000) + 21000 ))
 "$PMO_DIR/bin/dw-workbench" --root "$REPO" --port "$PORT" --quiet &
@@ -99,4 +124,17 @@ for spec in $VIEWS; do
   shot "$name-mobile" 390,844 "$BASE/?snapshot=1$extra$route"
 done
 
-echo "workbench-ui-smoke.sh: ok (14 viewport renders: 7 views x desktop+mobile)"
+# Red-path prominence: the same overview must render a broken rail as
+# attention, without gaining an execute button.
+mv "$REPO/.githooks/pre-commit" "$REPO/.githooks/pre-commit.off"
+shot "overview-attention-desktop" 1440,900 "$BASE/?snapshot=1#/"
+shot "overview-attention-mobile" 390,844 "$BASE/?snapshot=1#/"
+mv "$REPO/.githooks/pre-commit.off" "$REPO/.githooks/pre-commit"
+
+# Ambiguity prominence: two healthy projects yield the manual
+# select-project action; the briefing must not guess one.
+"$PMO_DIR/bootstrap/new-project.sh" "$REPO" other "Other" OTH >/dev/null
+shot "overview-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
+shot "overview-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
+
+echo "workbench-ui-smoke.sh: ok (18 viewport renders: 7 views + attention + ambiguity, desktop+mobile)"

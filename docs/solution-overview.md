@@ -333,10 +333,10 @@ Its five slices are:
 5. prove the recommendation sequence through a fresh packaged consumer's
    full evidence-backed, gated delivery loop.
 
-Slices 1–3 are implemented and evidence-backed: the core object now travels
+Slices 1–4 are implemented and evidence-backed: the core object now travels
 unchanged through CLI JSON, MCP `structuredContent`, and the workbench HTTP
-envelope. The remaining work is presentation at the human/agent front door
-and a packaged-consumer exit exam.
+envelope; the browser and generated Claude/Codex/pi/plugin instructions open
+on that answer. The remaining work is a packaged-consumer exit exam.
 
 The desired result is a shorter safe path into all the power already
 present:

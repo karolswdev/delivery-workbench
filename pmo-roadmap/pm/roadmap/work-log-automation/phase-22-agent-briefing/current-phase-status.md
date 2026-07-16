@@ -35,7 +35,7 @@ individual rails; this phase turns them into one legible entry point.
 - [x] `dw_status` and `GET /api/status` return the same core model as
   the CLI, and the interop inventory/schema pins fail on drift
   (WLA-22-03).
-- [ ] The workbench overview and generated agent brief begin with the
+- [x] The workbench overview and generated agent brief begin with the
   briefing and its next action without removing any specialist surface
   (WLA-22-04).
 - [ ] A fresh packaged consumer is driven from unknown state through a
@@ -50,17 +50,19 @@ individual rails; this phase turns them into one legible entry point.
 | WLA-22-01 | Map the solution and contract the briefing | done | [story-01-solution-map-and-briefing-contract](./story-01-solution-map-and-briefing-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-22-02 | dw status — one deterministic core and CLI | done | [story-02-status-core-and-cli](./story-02-status-core-and-cli.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-22-03 | One model everywhere — MCP and HTTP parity | done | [story-03-status-interop](./story-03-status-interop.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-22-04 | The workbench and agent brief open on the answer | backlog | [story-04-status-front-door](./story-04-status-front-door.md) | - |
+| WLA-22-04 | The workbench and agent brief open on the answer | done | [story-04-status-front-door](./story-04-status-front-door.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-22-05 | Prove the guided loop in a fresh consumer | backlog | [story-05-guided-loop-exit-exam](./story-05-guided-loop-exit-exam.md) | - |
 
 ## Where we are
 
-Phase OPEN 3/5. The solution map, frozen v1 contract, pure core, and CLI are
-now joined by `dw_status` and `GET /api/status`. Ready and attention fixtures
-compare the complete core object across all three transports; the thirteen
-MCP tools and HTTP/CLI inventory are pinned, and wheel/install/update tests
-prove the adapters ship together. WLA-22-04 is next: put this answer at the
-top of the workbench and every generated agent brief.
+Phase OPEN 4/5. The browser overview now leads with a responsive,
+presentation-only briefing: verdict, project, workspace, contract/gate, and
+one tokenized argv or manual action before the existing project cards. The
+canonical agent block and `/dw-next` start from the same status contract
+across Claude, AGENTS/Codex, pi, and plugin renders. The 220-test core suite,
+agent lifecycle, and 18 desktop/mobile Firefox renders are green. WLA-22-05
+is the final exit exam: prove the recommendation sequence end-to-end from a
+fresh packaged consumer.
 
 ## Active risks
 
@@ -82,6 +84,7 @@ top of the workbench and every generated agent brief.
 - 2026-07-15 - Unknown beats guessed - no implicit project selection when more than one candidate exists, and no invented test command - mission-control precedent.
 - 2026-07-15 - Action commands are argv arrays, not shell strings; deliberate human acts such as contract certification have `kind: manual` and no pretend command - interoperability and consent spine.
 - 2026-07-15 - Installed repos ignore `__pycache__/` append-only - adapter imports must not perturb Git status or invite vendored runtime caches into commits - full-object parity finding.
+- 2026-07-15 - The workbench status panel renders argv as escaped tokens and has no execute control - guidance can be prominent without turning orientation into authority - UI trust boundary.
 
 ## Decisions deferred
 

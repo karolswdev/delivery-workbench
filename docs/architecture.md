@@ -164,6 +164,15 @@ exist — except mutations whose projected post-write issue set strictly
 shrinks the current one, because a fix is never ambiguous (proof:
 `test_guard_lets_remediation_through`).
 
+The overview's first component renders `GET /api/status` without adding
+policy: verdict, selected project, workspace/contract/gate facts, and exactly
+one action. Command arrays stay visually tokenized as argv; judgment calls say
+`manual act`; there is no execute or commit control. Attention and ambiguous
+selection get stronger visual treatment than normal ready state (proof:
+`tests/workbench-ui-smoke.sh` renders ready, attention, and multi-project
+manual states at both desktop and mobile widths, while its renderer contract
+rejects raw JSON or an action button).
+
 Viewport rendering is smoke-tested headlessly at desktop and mobile
 (`tests/workbench-ui-smoke.sh`, CI-run where Firefox exists).
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Agent-surface coverage (WLA-6-05): shipped slash commands, the managed
-# CLAUDE.md/AGENTS.md block lifecycle (install/update/re-run), dw next
+# CLAUDE.md/AGENTS.md block lifecycle (install/update/re-run), dw status/next
 # exit contract, status vocabulary validation, dw doctor detections, the
 # inline contract template in the blocked banner, work-log-read paging,
 # and — the acceptance proof — a full story lifecycle driven headlessly
@@ -49,6 +49,20 @@ done
 grep -q 'BEGIN DELIVERY WORKBENCH' CLAUDE.md || fail "install should write the managed block"
 grep -q 'User content above the managed block.' CLAUDE.md || fail "install must not clobber user content"
 [ "$(grep -c 'BEGIN DELIVERY WORKBENCH' CLAUDE.md)" = "1" ] || fail "exactly one managed block after install"
+python3 - <<'PY' || fail "managed brief must open with the status contract"
+text = open("CLAUDE.md", encoding="utf-8").read()
+assert text.index(".githooks/dw status") < text.index(".githooks/dw context")
+assert "Exit 0 means `ready`" in text and "exit 1 means `attention`" in text
+assert "dw_status" in text and "specialist surfaces" in text
+PY
+.githooks/dw status demo --json > "$TMP_ROOT/status.json" \
+  || fail "fresh installed agent surface should return a ready briefing"
+python3 - "$TMP_ROOT/status.json" <<'PY' || fail "status briefing shape wrong"
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["kind"] == "delivery-workbench-status" and d["schema_version"] == 1
+assert d["verdict"] == "ready" and d["next_action"]["id"]
+PY
 
 echo "User content below the managed block." >> CLAUDE.md
 "$PMO_DIR/install.sh" "$REPO" --skip-bootstrap >/dev/null 2>&1 || true

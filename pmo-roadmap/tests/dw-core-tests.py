@@ -3677,6 +3677,24 @@ class RiderDocsTest(unittest.TestCase):
         )
         self.assertEqual(riderdocs.rider_docs_issues(self.root), [])
 
+    def test_every_rider_opens_with_one_status_briefing(self) -> None:
+        from dw_pmo import agentdocs, riderdocs
+
+        for text in (agentdocs.canonical_block(), agentdocs.agents_block()):
+            self.assertLess(text.index(".githooks/dw status"), text.index(".githooks/dw context"))
+            self.assertIn("Exit 0 means `ready`", text)
+            self.assertIn("exit 1 means `attention`", text)
+            self.assertIn("dw_status", text)
+        for text in (
+            riderdocs.command_spec("dw-next"),
+            riderdocs.codex_skill("dw-next"),
+            riderdocs.pi_prompt("dw-next"),
+        ):
+            self.assertLess(text.index(".githooks/dw status"), text.index(".githooks/dw next"))
+            self.assertIn("attention", text)
+        plugin = (self.REPO_ROOT / "plugin/skills/delivery-workbench/SKILL.md").read_text(encoding="utf-8")
+        self.assertLess(plugin.index(".githooks/dw status"), plugin.index(".githooks/dw context"))
+
     def test_hand_edited_copy_is_a_check_error(self) -> None:
         from dw_pmo import riderdocs
 
