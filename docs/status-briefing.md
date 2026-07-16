@@ -1,7 +1,7 @@
 # Status briefing contract
 
-**Status:** v1 contract frozen; core and CLI implemented in Phase 22, adapter
-rollout in progress.
+**Status:** v1 contract frozen; core, CLI, MCP, and HTTP implemented in Phase
+22; workbench/agent rendering rollout in progress.
 **Scope:** local, read-only readiness and guided next action.
 
 ## Purpose

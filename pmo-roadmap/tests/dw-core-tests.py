@@ -536,6 +536,14 @@ class DwCoreTest(unittest.TestCase):
     def test_workbench_api_view_models(self) -> None:
         from dw_pmo import workbench as wb
 
+        status, body = wb.handle_api(self.root, "/api/status", {"project": ["demo"]})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"], "attention is status data, not an HTTP error")
+        self.assertEqual(body["data"], core.build_status(self.root, "demo"))
+        status, body = wb.handle_api(self.root, "/api/status", {"project": ["nope"]})
+        self.assertEqual(status, 400)
+        self.assertFalse(body["ok"])
+
         status, body = wb.handle_api(self.root, "/api/projects", {})
         self.assertEqual(status, 200)
         self.assertEqual(body["kind"], "delivery-workbench-workbench-response")
@@ -595,6 +603,7 @@ class DwCoreTest(unittest.TestCase):
 
         before = self._tree_checksums()
         for _ in range(3):
+            wb.handle_api(self.root, "/api/status", {"project": ["demo"]})
             wb.handle_api(self.root, "/api/context", {"trace": ["0"]})
             wb.handle_api(self.root, "/api/projects", {})
             wb.handle_api(self.root, "/api/projects/demo", {})
@@ -1443,13 +1452,14 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(self._interop_missing(tokens, doc), [])
         # the CLI's machine-readable verbs
         verbs = [
-            "dw context", "dw state --json", "dw next", "dw board",
+            "dw status", "dw context", "dw state --json", "dw next", "dw board",
             "dw holds", "dw story show", "dw sessions --json", "dw events",
             "dw check", "dw gate --porcelain", "dw verify",
         ]
         self.assertEqual(self._interop_missing(verbs, doc), [])
         # the stamped models
-        for stamp in ("delivery-workbench-roadmap-context",
+        for stamp in ("delivery-workbench-status",
+                      "delivery-workbench-roadmap-context",
                       "delivery-workbench-workbench-response",
                       "delivery-workbench-board", "feed_schema"):
             self.assertIn(stamp, doc)
@@ -2582,8 +2592,11 @@ class MCPServerTest(unittest.TestCase):
     def test_tools_list_matches_contract_and_excludes_attestation(self) -> None:
         tools = self.rpc("tools/list")["result"]["tools"]
         names = [t["name"] for t in tools]
-        for expected in ("dw_context", "dw_next", "dw_check", "dw_doctor", "dw_verify", "dw_gate"):
-            self.assertIn(expected, names)
+        self.assertEqual(names, [
+            "dw_status", "dw_context", "dw_next", "dw_check", "dw_doctor",
+            "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
+            "dw_story_status", "dw_evidence_capture", "dw_contract_new",
+        ])
         for banned in ("certify", "commit", "bundle"):
             self.assertFalse(any(banned in n for n in names), names)
         for tool in tools:
@@ -2604,6 +2617,19 @@ class MCPServerTest(unittest.TestCase):
         direct_next = next_story(core.get_project(self.root, "demo"), self.root)
         self.assertEqual(result["structuredContent"]["next_story"], direct_next)
         self.assertIn(direct_next["story_id"], result["content"][0]["text"])
+
+    def test_status_agrees_with_core_and_attention_is_data(self) -> None:
+        result = self.call("dw_status", {"project": "demo"})
+        self.assertNotIn("isError", result)
+        direct = core.build_status(self.root, "demo")
+        self.assertEqual(result["structuredContent"], direct)
+        self.assertEqual(direct["verdict"], "attention")  # fixture has no installed hooks
+        self.assertIn("status=attention", result["content"][0]["text"])
+
+        import inspect
+        source = inspect.getsource(self.mcp._tool_status)
+        self.assertNotIn("verdict", source)
+        self.assertNotIn("next_action", source)
 
     # -- error paths -----------------------------------------------------------
 
@@ -2665,7 +2691,12 @@ class MCPServerTest(unittest.TestCase):
         # the interop layer never grows hands: no browse handler may
         # reach a plan builder or apply
         import inspect
-        for handler in (self.mcp._tool_board, self.mcp._tool_holds, self.mcp._tool_story_show):
+        for handler in (
+            self.mcp._tool_status,
+            self.mcp._tool_board,
+            self.mcp._tool_holds,
+            self.mcp._tool_story_show,
+        ):
             src = inspect.getsource(handler)
             self.assertNotIn("plan_", src)
             self.assertNotIn("apply", src)

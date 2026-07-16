@@ -143,6 +143,7 @@ cd "$TMP_ROOT"
 # ── idempotent reruns ────────────────────────────────────────────────
 "$PMO_DIR/install.sh" "$REPO" --skip-bootstrap >/dev/null 2>&1
 [ "$(grep -cxF '.tmp/' "$REPO/.gitignore")" = "1" ] || fail "rerunning install must not duplicate .gitignore entries"
+[ "$(grep -cxF '__pycache__/' "$REPO/.gitignore")" = "1" ] || fail "rerunning install must not duplicate Python cache ignores"
 [ "$(grep -c 'BEGIN DELIVERY WORKBENCH' "$REPO/CLAUDE.md")" = "1" ] || fail "rerunning install must not duplicate the agent-docs block"
 
 # ── hostile project name renders literally ───────────────────────────

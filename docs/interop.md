@@ -24,6 +24,7 @@ is added when an external consumer asks for one.
 
 | Model | Stamp | Declared in |
 |---|---|---|
+| Status briefing | `delivery-workbench-status` v1 | `status.build_status` |
 | Roadmap context | `delivery-workbench-roadmap-context` v1 | `api.build_context_payload` |
 | Workbench envelope | `delivery-workbench-workbench-response` v1 | `workbench.envelope` (wraps every HTTP response) |
 | Board | `delivery-workbench-board` v1 | `board.board_model` |
@@ -34,6 +35,7 @@ is added when an external consumer asks for one.
 
 | Verb | Core function | Returns |
 |---|---|---|
+| `dw status [project] --json` | `status.build_status` | the stamped briefing; exit 0 `ready`, 1 `attention` |
 | `dw context [project] [--compact] [--trace]` | `api.build_context_payload` | the stamped roadmap context |
 | `dw state --json` | `statefeed.build_state_feed` | the mission-control feed (`feed_schema` 1) |
 | `dw next [project] --json` | `api.next_story` | the next actionable story or `{next_story: null, parked}` |
@@ -54,6 +56,7 @@ Mutations exist only at `POST /api/mutations/preview` and
 
 | Route | Core function | Returns |
 |---|---|---|
+| `/api/status?project=<slug>` | `status.build_status` | the stamped briefing in `data`; `attention` remains HTTP 200 data |
 | `/api/context` | `api.build_context_payload` | the roadmap context |
 | `/api/projects` | `workbench._project_summary` | per-project summaries (counts, next story) |
 | `/api/projects/<slug>` | `api.project_context` | one project: phases, stories, parked summary |
@@ -71,7 +74,7 @@ Mutations exist only at `POST /api/mutations/preview` and
 ## MCP tools (`dw-mcp`, stdio)
 
 The full tool table with input schemas lives in [mcp.md](./mcp.md);
-this is the inventory. Read-only: `dw_context`, `dw_next`,
+this is the inventory. Read-only: `dw_status`, `dw_context`, `dw_next`,
 `dw_check`, `dw_doctor`, `dw_board`, `dw_holds`, `dw_story_show`,
 `dw_verify`, `dw_gate`. Guarded mutations: `dw_story_status`,
 `dw_evidence_capture`, `dw_contract_new`. Certification is never a
@@ -83,3 +86,6 @@ A test (`test_interop_doc_names_every_surface`) derives the route
 inventory from `workbench.handle_api`'s source and the tool
 inventory from the MCP registry, and fails if any surface is missing
 from this document — a new surface cannot ship undocumented.
+The same test pins the status stamp and CLI verb; adapter parity tests compare
+CLI JSON, MCP `structuredContent`, and HTTP envelope `data` without rewriting
+the core object.

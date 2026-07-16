@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 22
-- **Status:** ready
+- **Status:** done
 - **Depends on:** WLA-22-02
 - **Unblocks:** WLA-22-04, WLA-22-05
 - **Owner:** unassigned
@@ -25,16 +25,16 @@ impossible.
 
 ## Acceptance criteria
 
-- [ ] MCP and HTTP call the status core directly and contain no readiness
+- [x] MCP and HTTP call the status core directly and contain no readiness
   or action-selection conditionals.
-- [ ] Normal and attention fixtures produce the same structured object
+- [x] Normal and attention fixtures produce the same structured object
   through CLI JSON, MCP `structuredContent`, and HTTP envelope `data`.
-- [ ] The tool and GET route are documented, census-pinned, read-only,
+- [x] The tool and GET route are documented, census-pinned, read-only,
   usable with one or many projects, and do not convert attention into a
   tool/protocol error.
-- [ ] The MCP tool inventory still excludes certification, commit, and
+- [x] The MCP tool inventory still excludes certification, commit, and
   bundle operations; status can recommend but cannot execute them.
-- [ ] Install/update/package fixtures carry the new module and all three
+- [x] Install/update/package fixtures carry the new module and all three
   adapters.
 
 ## Test plan
@@ -50,3 +50,11 @@ impossible.
 
 Attention is data, not a transport failure: an agent most needs the
 briefing when something is wrong.
+
+The adapter functions are intentionally just core calls plus transport
+rendering. Full-object parity runs for both `ready` and `attention`, with
+HTTP's generated envelope timestamp left outside the compared `data` object.
+That test exposed Python bytecode as observable untracked drift in fresh
+consumers; install/update now append an idempotent `__pycache__/` ignore so
+switching adapters cannot change the recommendation payload or invite runtime
+caches into a commit.

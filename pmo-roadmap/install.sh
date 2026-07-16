@@ -24,7 +24,7 @@ Installs the pmo-roadmap framework into <target-dir>:
   - copies agent/dw-*.md                  → .claude/commands/ (slash commands)
   - writes the managed Delivery Workbench block into CLAUDE.md/AGENTS.md
   - sets git config core.hooksPath .githooks
-  - adds .tmp/ to .gitignore (if missing)
+  - adds .tmp/ and Python runtime caches to .gitignore (if missing)
   - optionally scaffolds pm/roadmap/<slug>/ skeleton
 
 Options:
@@ -222,7 +222,7 @@ fi
 git -C "$TARGET" config core.hooksPath .githooks
 echo "  ✓ git config core.hooksPath = .githooks"
 
-# 4. .gitignore — add .tmp/ (accepting common existing spellings)
+# 4. .gitignore — add framework scratch/runtime artifacts (append-only)
 GITIGNORE="$TARGET/.gitignore"
 touch "$GITIGNORE"
 if grep -qxE '/?\.tmp/?' "$GITIGNORE" 2>/dev/null; then
@@ -230,6 +230,12 @@ if grep -qxE '/?\.tmp/?' "$GITIGNORE" 2>/dev/null; then
 else
   printf '\n# pmo-roadmap pre-commit contract scratch\n.tmp/\n' >> "$GITIGNORE"
   echo "  ✓ added .tmp/ to .gitignore"
+fi
+if grep -qxE '/?__pycache__/?' "$GITIGNORE" 2>/dev/null; then
+  echo "  · .gitignore already covers __pycache__/"
+else
+  printf '\n# Python runtime caches (including the vendored dw_pmo core)\n__pycache__/\n' >> "$GITIGNORE"
+  echo "  ✓ added __pycache__/ to .gitignore"
 fi
 
 # 5. Agent slash commands (Claude Code) + mirrored guidance

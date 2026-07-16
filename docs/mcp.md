@@ -56,10 +56,16 @@ lines the CLI prints, so transcripts stay auditable) and
 `isError: true` with the CLI's refusal message as text — refusal
 semantics are shared with the CLI by construction.
 
+`dw_status` is intentionally different from a refusal: a briefing whose
+`verdict` is `attention` is successful tool data. The caller needs its
+blocking reason and repair action, so the adapter never converts that verdict
+to `isError`.
+
 ### Orientation (read-only)
 
 | Tool | Core function | Input schema (all fields optional unless noted) |
 |---|---|---|
+| `dw_status` | `status.build_status` | `{project?: string}` — result: the stamped `delivery-workbench-status` v1 object, including exactly one guided `next_action` |
 | `dw_context` | `api.build_context_payload` | `{project?: string, compact?: boolean}` |
 | `dw_next` | `api.next_story` | `{project?: string}` — result: the story object or `{next: null}` |
 | `dw_check` | `validate.check_project` | `{project?: string}` — result: `{ok: boolean, issues: string[]}` |

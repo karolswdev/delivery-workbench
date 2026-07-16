@@ -76,6 +76,36 @@ sum_tree() {
 BEFORE="$(sum_tree)"
 
 # ── API view models ──────────────────────────────────────────────────
+set +e
+"$DW" --root "$REPO" status sample --json > "$TMP_ROOT/status-cli.json"
+STATUS_CLI_CODE=$?
+set -e
+[ "$STATUS_CLI_CODE" -eq 1 ] || fail "unwired fixture should report attention from CLI status"
+curl -s "$BASE/api/status?project=sample" > "$TMP_ROOT/status-http.json"
+python3 - "$TMP_ROOT/status-cli.json" "$TMP_ROOT/status-http.json" \
+  "$PMO_DIR/bin/dw-mcp" "$REPO" <<'PY' || fail "CLI/MCP/HTTP attention status parity failed"
+import json
+import subprocess
+import sys
+
+cli_path, http_path, mcp, repo = sys.argv[1:]
+cli = json.load(open(cli_path))
+http = json.load(open(http_path))
+request = {
+    "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+    "params": {"name": "dw_status", "arguments": {"project": "sample"}},
+}
+proc = subprocess.run(
+    ["python3", mcp, "--root", repo], input=json.dumps(request) + "\n",
+    cwd=repo, text=True, capture_output=True, check=True,
+)
+mcp_result = json.loads(proc.stdout)["result"]
+assert not mcp_result.get("isError"), mcp_result
+assert cli["verdict"] == "attention", cli
+assert http["ok"] is True, http
+assert cli == http["data"] == mcp_result["structuredContent"]
+PY
+
 curl -s "$BASE/api/projects" > "$TMP_ROOT/projects.json"
 python3 - "$TMP_ROOT/projects.json" <<'PY' || fail "overview payload wrong"
 import json, sys
@@ -127,6 +157,7 @@ curl -s "$BASE/api/file?path=pm/roadmap/sample/README.md" \
 
 # ── read-only across repeated loads (checksums) ──────────────────────
 for _ in 1 2 3; do
+  curl -s "$BASE/api/status?project=sample" >/dev/null
   curl -s "$BASE/api/context" >/dev/null
   curl -s "$BASE/api/projects" >/dev/null
   curl -s "$BASE/api/projects/sample" >/dev/null
@@ -442,6 +473,40 @@ until curl -sf "http://127.0.0.1:$IPORT/api/projects" >/dev/null 2>&1; do
 done
 curl -s "http://127.0.0.1:$IPORT/" | grep -q 'id="app"' \
   || { kill $IPID 2>/dev/null; fail "installed workbench should serve the UI from .githooks/workbench"; }
+"$INSTALL_REPO/.githooks/dw" --root "$INSTALL_REPO" status demo --json \
+  > "$TMP_ROOT/installed-status-cli.json" \
+  || { kill $IPID 2>/dev/null; fail "installed CLI status should be ready"; }
+curl -s "http://127.0.0.1:$IPORT/api/status?project=demo" \
+  > "$TMP_ROOT/installed-status-http.json"
+python3 - "$TMP_ROOT/installed-status-cli.json" "$TMP_ROOT/installed-status-http.json" \
+  "$INSTALL_REPO/.githooks/dw-mcp" "$INSTALL_REPO" <<'PY' \
+  || { kill $IPID 2>/dev/null; fail "installed CLI/MCP/HTTP ready status parity failed"; }
+import json
+import subprocess
+import sys
+
+cli_path, http_path, mcp, repo = sys.argv[1:]
+cli = json.load(open(cli_path))
+http = json.load(open(http_path))
+request = {
+    "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+    "params": {"name": "dw_status", "arguments": {"project": "demo"}},
+}
+proc = subprocess.run(
+    [mcp, "--root", repo], input=json.dumps(request) + "\n",
+    cwd=repo, text=True, capture_output=True, check=True,
+)
+mcp_result = json.loads(proc.stdout)["result"]
+assert not mcp_result.get("isError"), mcp_result
+assert cli["verdict"] == "ready", cli
+assert http["ok"] is True, http
+assert cli == http["data"], json.dumps(
+    {"cli": cli, "http": http["data"]}, indent=2, sort_keys=True,
+)
+assert cli == mcp_result["structuredContent"], json.dumps(
+    {"cli": cli, "mcp": mcp_result["structuredContent"]}, indent=2, sort_keys=True,
+)
+PY
 kill $IPID 2>/dev/null; wait $IPID 2>/dev/null || true
 
 echo "workbench-explorer.sh: ok"

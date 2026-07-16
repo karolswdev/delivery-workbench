@@ -166,8 +166,8 @@ every read surface — CLI, HTTP, and MCP — is
 
 `dw install` also vendors `.githooks/dw-mcp` and writes an entry into
 the repo's `.mcp.json`, which Claude Code and other MCP clients pick
-up automatically. The server exposes twelve tools backed by the same
-code as the CLI: orientation (`dw_context`, `dw_next`, `dw_check`,
+up automatically. The server exposes thirteen tools backed by the same
+code as the CLI: orientation (`dw_status`, `dw_context`, `dw_next`, `dw_check`,
 `dw_doctor`), browse (`dw_board`, `dw_holds`, `dw_story_show`),
 verification (`dw_verify`, `dw_gate`), and guarded mutations
 (`dw_story_status`, `dw_evidence_capture`, `dw_contract_new`).

@@ -121,6 +121,8 @@ msgs = [
     {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
      "params": {"name": "dw_nonexistent", "arguments": {}}},
     {"jsonrpc": "2.0", "id": 8, "method": "ping"},
+    {"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+     "params": {"name": "dw_status", "arguments": {"project": "demo"}}},
 ]
 inp = "\n".join(m if isinstance(m, str) else json.dumps(m) for m in msgs) + "\n"
 out, _ = proc.communicate(inp, timeout=120)
@@ -141,7 +143,7 @@ assert init["capabilities"] == {"tools": {}}, init
 assert init["serverInfo"]["name"] == "delivery-workbench", init
 
 names = [t["name"] for t in replies[2]["result"]["tools"]]
-expected = ["dw_context", "dw_next", "dw_check", "dw_doctor", "dw_verify", "dw_gate"]
+expected = ["dw_status", "dw_context", "dw_next", "dw_check", "dw_doctor", "dw_verify", "dw_gate"]
 for name in expected:
     assert name in names, (name, names)
 for banned in ("certify", "commit", "bundle"):
@@ -163,6 +165,15 @@ assert parse_errors == 1, parse_errors
 bad = replies[7]["result"]
 assert bad.get("isError") is True and "unknown tool" in bad["content"][0]["text"], bad
 assert replies[8]["result"] == {}, replies[8]
+
+brief = replies[9]["result"]
+assert not brief.get("isError"), brief
+cli_brief = json.loads(subprocess.check_output(
+    [repo + "/.githooks/dw", "--root", repo, "status", "demo", "--json"],
+    cwd=repo, text=True,
+))
+assert brief["structuredContent"] == cli_brief, (brief, cli_brief)
+assert cli_brief["verdict"] == "ready", cli_brief
 
 print("protocol exchange: ok (%d replies)" % len(replies))
 PYEOF

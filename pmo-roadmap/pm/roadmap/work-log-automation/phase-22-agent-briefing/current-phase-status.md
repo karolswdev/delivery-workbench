@@ -32,7 +32,7 @@ individual rails; this phase turns them into one legible entry point.
   read-only model over rails health, roadmap health, workspace state,
   selected work, gate state, and the next safe action; red paths never
   claim readiness (WLA-22-02).
-- [ ] `dw_status` and `GET /api/status` return the same core model as
+- [x] `dw_status` and `GET /api/status` return the same core model as
   the CLI, and the interop inventory/schema pins fail on drift
   (WLA-22-03).
 - [ ] The workbench overview and generated agent brief begin with the
@@ -49,19 +49,18 @@ individual rails; this phase turns them into one legible entry point.
 |---|---|---|---|---|
 | WLA-22-01 | Map the solution and contract the briefing | done | [story-01-solution-map-and-briefing-contract](./story-01-solution-map-and-briefing-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-22-02 | dw status — one deterministic core and CLI | done | [story-02-status-core-and-cli](./story-02-status-core-and-cli.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-22-03 | One model everywhere — MCP and HTTP parity | ready | [story-03-status-interop](./story-03-status-interop.md) | - |
+| WLA-22-03 | One model everywhere — MCP and HTTP parity | done | [story-03-status-interop](./story-03-status-interop.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-22-04 | The workbench and agent brief open on the answer | backlog | [story-04-status-front-door](./story-04-status-front-door.md) | - |
 | WLA-22-05 | Prove the guided loop in a fresh consumer | backlog | [story-05-guided-loop-exit-exam](./story-05-guided-loop-exit-exam.md) | - |
 
 ## Where we are
 
-Phase OPEN 2/5. The solution map and v1 briefing contract are current.
-WLA-22-02 now implements that contract in one pure `dw_pmo.status` core and
-the `dw status [project] [--json]` CLI. Its 218-test fixture matrix pins
-schema, action precedence, ambiguity, bounded paths, purity, and all gate
-transitions; installed-repository and self-hosted-update regressions are also
-green. WLA-22-03 is next: expose the byte-identical object through MCP and
-HTTP and make inventory drift executable.
+Phase OPEN 3/5. The solution map, frozen v1 contract, pure core, and CLI are
+now joined by `dw_status` and `GET /api/status`. Ready and attention fixtures
+compare the complete core object across all three transports; the thirteen
+MCP tools and HTTP/CLI inventory are pinned, and wheel/install/update tests
+prove the adapters ship together. WLA-22-04 is next: put this answer at the
+top of the workbench and every generated agent brief.
 
 ## Active risks
 
@@ -82,6 +81,7 @@ HTTP and make inventory drift executable.
 - 2026-07-15 - `ready` means the rails and roadmap are safe to work on, not that the tree is clean or work is finished - dirty/staged/contract states are normal workflow states with different next actions - workflow model.
 - 2026-07-15 - Unknown beats guessed - no implicit project selection when more than one candidate exists, and no invented test command - mission-control precedent.
 - 2026-07-15 - Action commands are argv arrays, not shell strings; deliberate human acts such as contract certification have `kind: manual` and no pretend command - interoperability and consent spine.
+- 2026-07-15 - Installed repos ignore `__pycache__/` append-only - adapter imports must not perturb Git status or invite vendored runtime caches into commits - full-object parity finding.
 
 ## Decisions deferred
 

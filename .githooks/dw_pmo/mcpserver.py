@@ -54,6 +54,12 @@ def _has_rails(root: Path) -> bool:
 
 # ── tool implementations (thin adapters; core does the thinking) ────
 
+def _tool_status(root: Path, args: dict) -> tuple[str, dict]:
+    from .status import build_status, render_status
+
+    payload = build_status(root, args.get("project"))
+    return render_status(payload).rstrip("\n"), payload
+
 def _tool_context(root: Path, args: dict) -> tuple[str, dict]:
     from .api import build_context_payload
     from .parse import discover_projects, get_project
@@ -295,6 +301,19 @@ def _tool_contract_new(root: Path, args: dict) -> tuple[str, dict]:
 _PROJECT_PROP = {"type": "string", "description": "Project slug (optional when the repo has exactly one project)"}
 
 TOOLS: dict[str, dict] = {
+    "dw_status": {
+        "description": (
+            "One versioned, read-only briefing over rails, roadmap, workspace, "
+            "current work, and the next safe action. Attention is valid data, "
+            "not a tool error. Adapter over dw_pmo.status.build_status."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"project": _PROJECT_PROP},
+            "additionalProperties": False,
+        },
+        "handler": _tool_status,
+    },
     "dw_context": {
         "description": (
             "Machine-readable roadmap context: issues, warnings, next story, "

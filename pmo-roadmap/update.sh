@@ -39,8 +39,8 @@ Never touches:
   - .githooks/pre-commit.config          (your project config)
   - .githooks/pre-commit.local           (your project-specific rule checks)
 
-Also keeps the .tmp/ entry present in .gitignore (append-only; existing
-entries and spellings are respected).
+Also keeps the .tmp/ and __pycache__/ entries present in .gitignore
+(append-only; existing entries and spellings are respected).
 
 Use install.sh for first-time installs. Use --force only after manually
 reconciling local PMO-CONTRACT.md changes against the canonical version.
@@ -208,12 +208,16 @@ fi
 # Re-assert hooksPath in case it drifted.
 git -C "$TARGET" config core.hooksPath .githooks
 
-# Keep the .tmp/ gitignore entry present (accepting common spellings).
+# Keep framework scratch/runtime artifacts ignored (append-only).
 GITIGNORE="$TARGET/.gitignore"
 touch "$GITIGNORE"
 if ! grep -qxE '/?\.tmp/?' "$GITIGNORE" 2>/dev/null; then
   printf '\n# pmo-roadmap pre-commit contract scratch\n.tmp/\n' >> "$GITIGNORE"
   echo "  ✓ added .tmp/ to .gitignore"
+fi
+if ! grep -qxE '/?__pycache__/?' "$GITIGNORE" 2>/dev/null; then
+  printf '\n# Python runtime caches (including the vendored dw_pmo core)\n__pycache__/\n' >> "$GITIGNORE"
+  echo "  ✓ added __pycache__/ to .gitignore"
 fi
 
 if [ -f "$TARGET/.githooks/pre-commit.config" ]; then

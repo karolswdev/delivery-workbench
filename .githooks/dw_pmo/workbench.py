@@ -202,6 +202,12 @@ def mission_control_live_layer(sessions_doc: dict) -> tuple[dict, list]:
 def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
     parts = [part for part in path.strip("/").split("/") if part]
     try:
+        if parts == ["api", "status"]:
+            from .status import build_status
+
+            project = query.get("project", [""])[0].strip() or None
+            return 200, envelope(build_status(root, project))
+
         if parts == ["api", "context"]:
             include_trace = query.get("trace", ["0"])[0] in {"1", "true"}
             payload = build_context_payload(root, discover_projects(root), include_trace=include_trace)

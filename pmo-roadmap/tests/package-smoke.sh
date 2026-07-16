@@ -104,10 +104,22 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
   || fail "packaged bootstrap install failed"
 [ -f "$FIXTURE/.githooks/dw" ] || fail "install did not vendor .githooks/dw"
 [ -f "$FIXTURE/.githooks/dw_pmo/verify.py" ] || fail "vendored dw_pmo incomplete"
+[ -f "$FIXTURE/.githooks/dw_pmo/status.py" ] || fail "wheel omitted the status core"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
+[ -x "$FIXTURE/.githooks/dw-workbench" ] || fail "install did not vendor .githooks/dw-workbench"
 [ -f "$FIXTURE/.mcp.json" ] || fail "install did not write the .mcp.json seam"
 (cd "$FIXTURE" && ./.githooks/dw doctor) >/dev/null \
   || fail "fixture doctor not green after packaged install"
+PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
+  'from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api; assert "dw_status" in TOOLS; assert callable(handle_api)' \
+  || fail "packaged MCP/HTTP adapters do not expose the status core"
+set +e
+(cd "$FIXTURE" && ./.githooks/dw status --json) > "$TMP_ROOT/status.json"
+STATUS_CODE=$?
+set -e
+[ "$STATUS_CODE" -eq 1 ] || fail "empty packaged consumer should return attention"
+grep -q '"kind": "delivery-workbench-status"' "$TMP_ROOT/status.json" \
+  || fail "packaged status CLI did not return the stamped model"
 
 # ── defer-to-repo rule ─────────────────────────────────────────────
 # Replace the vendored CLI with a marker; the global dw run inside the
