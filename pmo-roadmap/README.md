@@ -743,6 +743,7 @@ pmo-roadmap/
 │   ├── gate-parity.sh            ← gate-vs-hook parity scenarios
 │   ├── roadmap-cli.sh            ← CLI integration coverage
 │   ├── guided-status-loop.sh      ← packaged briefing-to-commit exit exam
+│   ├── deliberate-step-loop.sh    ← packaged explicit-lease exit exam
 │   ├── work-log-mvp.sh           ← work-log pipeline coverage
 │   ├── workbench-explorer.sh     ← workbench server/API integration
 │   └── workbench-ui-smoke.sh     ← headless viewport renders

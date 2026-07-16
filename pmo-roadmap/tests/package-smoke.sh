@@ -5,8 +5,8 @@
 # install the wheel into an isolated environment (pipx when it works,
 # plain venv+pip otherwise — same artifact, same entry point), then
 # from OUTSIDE the checkout bootstrap a fixture repo with the packaged
-# payload, reach doctor-green there, complete the packaged guided-status
-# exit exam, and prove the defer-to-repo rule (a global dw inside an
+# payload, reach doctor-green there, complete the packaged guided-status and
+# deliberate-step exit exams, and prove the defer-to-repo rule (a global dw inside an
 # adopted repo runs the vendored copy).
 #
 # Interpreter health is probed first: a broken pyexpat or venv pip
@@ -113,7 +113,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 (cd "$FIXTURE" && ./.githooks/dw doctor) >/dev/null \
   || fail "fixture doctor not green after packaged install"
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
-  'from dw_pmo import STEP_RESULT_KIND, StepChild, build_step; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api; assert callable(build_step); assert STEP_RESULT_KIND == "delivery-workbench-step-result"; assert StepChild(0).started; assert "dw_status" in TOOLS; assert callable(handle_api)' \
+  'from dw_pmo import STEP_RESULT_KIND, StepChild, build_step; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api, handle_mutation; assert callable(build_step); assert STEP_RESULT_KIND == "delivery-workbench-step-result"; assert StepChild(0).started; assert {"dw_status", "dw_step", "dw_step_apply"} <= set(TOOLS); assert callable(handle_api) and callable(handle_mutation)' \
   || fail "packaged core and MCP/HTTP adapters do not expose the guided operations"
 set +e
 (cd "$FIXTURE" && ./.githooks/dw status --json) > "$TMP_ROOT/status.json"
@@ -129,6 +129,12 @@ grep -q '"kind": "delivery-workbench-status"' "$TMP_ROOT/status.json" \
 # evidence-backed commit, so package smoke cannot pass on mere imports.
 DW_GUIDED_CLI="$DW" "$SCRIPT_DIR/guided-status-loop.sh" \
   || fail "packaged guided status loop failed"
+
+# The Phase-23 exam consumes the same installed wheel but never reconstructs
+# a status action argv: each child crosses a separately reviewed token lease;
+# stale/manual/commit attempts start nothing on CLI, MCP, and HTTP.
+DW_STEP_CLI="$DW" "$SCRIPT_DIR/deliberate-step-loop.sh" \
+  || fail "packaged deliberate-step loop failed"
 
 # ── defer-to-repo rule ─────────────────────────────────────────────
 # Replace the vendored CLI with a marker; the global dw run inside the

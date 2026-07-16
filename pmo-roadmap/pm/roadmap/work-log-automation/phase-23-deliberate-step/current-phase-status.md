@@ -34,7 +34,7 @@ Let a human or agent deliberately apply exactly one current, allowlisted recomme
 - [x] The workbench and generated agent riders make the preview→deliberate-
   apply boundary legible, with no generic shell field and no hidden loop
   (WLA-23-04).
-- [ ] A wheel-installed fresh consumer advances a real story through
+- [x] A wheel-installed fresh consumer advances a real story through
   successive explicit steps, proves stale-token and prohibited-commit red
   paths, and leaves the full regression matrix green (WLA-23-05).
 
@@ -46,20 +46,22 @@ Let a human or agent deliberately apply exactly one current, allowlisted recomme
 | WLA-23-02 | Step receipts — stable result and event correlation | done | [story-02-step-receipts](./story-02-step-receipts.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-23-03 | One step across MCP and HTTP | done | [story-03-step-interop](./story-03-step-interop.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-23-04 | Workbench and riders expose the handrail | done | [story-04-step-front-door](./story-04-step-front-door.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-23-05 | Fresh-consumer deliberate-step exit exam | backlog | [story-05-step-exit-exam](./story-05-step-exit-exam.md) | - |
+| WLA-23-05 | Fresh-consumer deliberate-step exit exam | done | [story-05-step-exit-exam](./story-05-step-exit-exam.md) | [evidence-story-05](./evidence-story-05.md) |
 
 ## Where we are
 
-Phase OPEN 4/5. WLA-23-04 made the act boundary legible where users and agents
-already orient. The Workbench separates the recommendation from review and
-confirmation, POSTs only project+token, refreshes after one receipt or stale
-conflict, and offers no apply control for prohibited/manual/certification/
-commit states. The managed brief, packaged fallback, workflow commands, and
-Claude/Codex/pi/plugin renderings now require a fresh exact lease and stop
-after one action; drift is a test error. Desktop/mobile visual and static
-fitness coverage pin the control. WLA-23-05 is next: prove the entire sequence
-from a wheel-installed fresh consumer, with separate authorization for every
-step and the full regression matrix green.
+Phase COMPLETE 5/5. One pure Phase-22 recommendation can now cross an explicit
+review→authorize boundary as one state-bound, closed-table action and one
+bounded receipt, then stop. CLI, MCP, HTTP, the Workbench, and every generated
+rider share that contract without accepting caller argv or gaining
+certification/commit power. The wheel-installed exit exam separately
+authorized seven CLI/MCP/HTTP leases through a real story, refused same-action
+staleness before spawn with zero new events, kept both certifications and
+commits manual, and reached a trailered, contract-archived, verified commit.
+The full closeout matrix passed 230 core tests on both local and Python 3.9,
+20 Firefox renders, 147+10 Telegram tests, 23 pinned HoldSpeak tests, both
+packaged consumer loops, and all agent, shell, docs, upgrade, range, and
+pre-close 128-commit history checks. See [the final summary](./final-summary.md).
 
 ## Active risks
 
@@ -84,6 +86,8 @@ step and the full regression matrix green.
 - 2026-07-16 - Limit remote apply inputs to `project` plus exact `expect`; never accept command or argv - adapters cannot expand the core capability accidentally - consent floor.
 - 2026-07-16 - Put review and apply in separate Workbench controls and refresh after every result - seeing a recommendation is not consent, and one receipt must never become a UI loop - front-door trust boundary.
 - 2026-07-16 - Teach every generated rider to use only the preview's exact fresh command/token and stop after one action - interoperability includes operating discipline, not only payload parity - agent usability.
+- 2026-07-16 - Make package smoke prove a whole deliberate-step loop, not imports - separate authorization and refusal behavior are distribution contracts once agents depend on them - fresh-consumer exit exam.
+- 2026-07-16 - Treat locally installed Homebrew state as an explicit abstention - the smoke must not uninstall operator software to manufacture a green result; clean-machine macOS CI owns that leg - closeout matrix.
 
 ## Decisions deferred
 

@@ -210,6 +210,11 @@ attention and multi-project manual states at desktop/mobile widths; its static
 fitness guard rejects command inputs, hidden loops, and a stale path that does
 not refresh).
 
+The distribution proof closes the composition: `tests/deliberate-step-loop.sh`
+installs a built wheel into a fresh consumer, rotates seven separately reviewed
+applies across CLI/MCP/HTTP, and asserts exact event/receipt/manual-commit
+boundaries. Package smoke cannot pass from imports or one happy-path adapter.
+
 Viewport rendering is smoke-tested headlessly at desktop and mobile
 (`tests/workbench-ui-smoke.sh`, CI-run where Firefox exists).
 

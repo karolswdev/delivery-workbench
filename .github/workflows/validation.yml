@@ -42,7 +42,7 @@ jobs:
       - name: Build, install, bootstrap a fixture from the package
         # Proves the distribution contract: sdist+wheel build, isolated
         # install (pipx or venv+pip), packaged bootstrap to
-        # doctor-green, guided CLI/MCP/HTTP story-to-commit loop, and
+        # doctor-green, guided status + deliberate-step story-to-commit loops, and
         # defer-to-repo rule. docs/distribution.md.
         run: pmo-roadmap/tests/package-smoke.sh
 
@@ -82,6 +82,7 @@ jobs:
             pmo-roadmap/tests/step-interop.sh \
             pmo-roadmap/tests/contributor-flow.sh \
             pmo-roadmap/tests/guided-status-loop.sh \
+            pmo-roadmap/tests/deliberate-step-loop.sh \
             pmo-roadmap/tests/package-smoke.sh \
             pmo-roadmap/tests/brew-formula-smoke.sh \
             pmo-roadmap/tests/upgrade-path.sh \
@@ -218,6 +219,7 @@ jobs:
             pmo-roadmap/tests/step-interop.sh \
             pmo-roadmap/tests/contributor-flow.sh \
             pmo-roadmap/tests/guided-status-loop.sh \
+            pmo-roadmap/tests/deliberate-step-loop.sh \
             pmo-roadmap/tests/package-smoke.sh \
             pmo-roadmap/tests/brew-formula-smoke.sh \
             pmo-roadmap/tests/upgrade-path.sh \

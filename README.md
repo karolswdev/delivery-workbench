@@ -167,7 +167,7 @@ recorded reason, whole phases pause and resume (`dw phase pause
 what it skipped. Every board card and holds entry carries its
 receipt paths and workbench links, so a machine can walk card →
 story → evidence without knowing the tree layout; the contract over
-every read surface — CLI, HTTP, and MCP — is
+every supported CLI, HTTP, and MCP surface is
 [docs/interop.md](./docs/interop.md).
 
 ## The MCP server
@@ -274,7 +274,7 @@ trailers and an archived contract, the full history passing
 
 ## Documentation
 
-- [Comprehensive solution overview](./docs/solution-overview.md): current architecture, workflows, trust model, proof snapshot, strengths, gaps, and next phase
+- [Comprehensive solution overview](./docs/solution-overview.md): current architecture, workflows, trust model, proof snapshot, strengths, gaps, and delivered response
 - [Status briefing contract](./docs/status-briefing.md): the Phase 22 one-answer model, readiness semantics, and guided action order
 - [Deliberate step contract](./docs/deliberate-step.md): the Phase 23 state-bound preview/apply seam and closed executable action table
 - [Architecture](./docs/architecture.md), with the test that proves each claim
@@ -283,7 +283,7 @@ trailers and an archived contract, the full history passing
 - [Remote verification design](./docs/remote-verification.md)
 - [Contribution rails](./docs/contribution-rails.md): what survives a pull request
 - [MCP surface design](./docs/mcp.md)
-- [The interop contract](./docs/interop.md): every read surface over CLI, HTTP, and MCP, with its schema version
+- [The interop contract](./docs/interop.md): every supported surface over CLI, HTTP, and MCP, with its schema version
 - [Riders: the symbiosis contract](./docs/riders.md): one brief, every agent surface (Claude Code, Codex, pi, HoldSpeak)
 - [The journal](./docs/journal/README.md): the worked example, phases delivered on their own rails, written in the moment with refusals and dead ends included (through the mission-control and ccgram-absorption phases)
 - [Distribution design](./docs/distribution.md)
@@ -293,10 +293,12 @@ trailers and an archived contract, the full history passing
 
 The suites live in `pmo-roadmap/tests/` and run standalone. CI runs
 all of them on ubuntu and macos, the unit suite on python 3.9 (the
-floor), and history verification on every push. The packaged exit exam,
-`guided-status-loop.sh`, creates a fresh consumer and follows the shared
-CLI/MCP/HTTP briefing through real evidence, contract certification, gate
-pass, trailers, archive, and commit verification.
+floor), and history verification on every push. Two packaged exit exams
+create fresh consumers: `guided-status-loop.sh` follows the shared briefing;
+`deliberate-step-loop.sh` separately authorizes each CLI/MCP/HTTP lease without
+reconstructing argv, proves same-action staleness, and keeps certification and
+commit manual. Both reach real evidence, gate pass, trailers, archive, and
+history verification.
 
 ## License
 

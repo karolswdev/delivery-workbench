@@ -1,6 +1,6 @@
 # Delivery Workbench — solution overview
 
-**Assessment date:** 2026-07-15. **Product version assessed:** v1.14.0.
+**Assessment date:** 2026-07-16. **Product version assessed:** v1.14.0.
 This is the map of the whole solution. Exact subsystem protocols remain
 owned by the linked specialist documents.
 
@@ -24,10 +24,10 @@ Markdown and Git remain the durable state. The primary weakness found at
 the start of this assessment was connective: a user or agent could obtain
 every fact, but had to combine several commands and documents to answer “is
 this clone ready, what work owns these changes, and what is the next safe
-transition?” Phase 22 closed that gap with one versioned status briefing.
-The follow-on observation was equally practical: status named an exact
-action but left the operator to carry an unbound argv across the read→act
-boundary. Active Phase 23 adds a separate, state-bound one-step handrail
+transition?” Phase 22 closed that gap with one versioned status briefing. The
+follow-on observation was equally practical: status named an exact action but
+left the operator to carry an unbound argv across the read→act boundary.
+Phase 23 now closes that gap with a separate, state-bound one-step handrail
 while preserving manual certification and commit. Its contracts are
 [status-briefing.md](./status-briefing.md) and
 [deliberate-step.md](./deliberate-step.md).
@@ -115,7 +115,8 @@ Today the specialist commands are `dw doctor`, `dw check`, `dw next`,
 `dw holds`, `dw story status`, `dw evidence capture`, `dw contract new`,
 `dw gate`, and `dw verify`. The supported lifecycle and its refusal
 paths are executed end-to-end by `pmo-roadmap/tests/agent-surface.sh`,
-`roadmap-cli.sh`, and `mcp-server.sh`.
+`roadmap-cli.sh`, `mcp-server.sh`, `guided-status-loop.sh`, and
+`deliberate-step-loop.sh`.
 
 Phase 22 adds `dw status` in front of that loop. It does not replace the
 specialist commands; it composes their state and names the next safe one.
@@ -190,8 +191,9 @@ The key interoperability achievement is semantic reuse: transports do not
 parse Markdown independently. Phase 22 made aggregate orientation one shared
 CLI/MCP/HTTP model rather than a transport-specific dashboard. Phase 23 now
 carries the deliberate step through the same three adapters and browser front
-door without copying token, allowlist, or consent logic; the remaining exit
-exam proves the packaged consumer loop rather than inventing another surface.
+door without copying token, allowlist, or consent logic. Its packaged exit
+exam proves the whole repeated-authorization loop rather than inventing
+another surface.
 
 ## Trust and safety model
 
@@ -231,32 +233,35 @@ have dedicated smoke tests described in [distribution.md](./distribution.md).
 ## Current evidence snapshot
 
 The following is a dated verification snapshot, not an evergreen claim.
-On 2026-07-15 in this checkout:
+On 2026-07-16 in this checkout:
 
 - version v1.14.0 is single-sourced across Python, CLI, plugin manifest,
-  formula, and the latest published changelog heading; Phase 22 is recorded
-  under an explicitly unpublished changelog section;
-- phases 0–22 are closed; Phase 23 is active with its core/CLI deliberate-
-  step slice implemented but not published as a new release;
-- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 228 tests on the local
+  formula, and the latest published changelog heading; Phases 22 and 23 are
+  recorded under an explicitly unpublished changelog section;
+- phases 0–23 are closed; the orientation and deliberate-step advances are
+  evidence-backed but not published as a new release;
+- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 230 tests on the local
   interpreter and on the declared Python 3.9 floor;
-- every locally runnable non-Homebrew shell/integration suite in the CI
-  workflow passed,
-  including gate parity, contributor flow, MCP, package-facing docs,
-  workbench explorer, upgrade-from-v1.5.0, history-range fixtures, and
-  work-log lifecycle;
+- every shipped shell parsed and passed ShellCheck; every locally runnable
+  non-Homebrew CI integration passed, including gate parity, contribution,
+  MCP, step transport parity, agent/rider/plugin drift, package-facing docs,
+  workbench explorer, upgrade-from-v1.5.0, history-range fixtures, demo assets,
+  credentials, and work-log lifecycle;
 - the package smoke built sdist and wheel on Python 3.9, installed the wheel,
-  and invoked the fresh-consumer guided loop through a verified gated commit;
-- the workbench viewport smoke rendered seven views at desktop and mobile
-  sizes plus attention and ambiguous-project states (18 renders);
+  then completed both the guided-status and deliberate-step fresh-consumer
+  loops through verified gated commits; the second used seven separately
+  authorized CLI/MCP/HTTP leases and proved same-action stale refusal with no
+  child or event;
+- the workbench viewport smoke rendered eight views at desktop and mobile
+  sizes plus attention and ambiguous-project states (20 renders);
 - Telegram architecture fitness passed 10 tests and its interface suite
   passed 147 tests in a Python 3.9 + Pillow environment (one Python-3.11-only
   `tomllib` lock test abstained on the declared floor);
 - all 23 HoldSpeak pack tests passed in the same pinned v0.4.0/no-runtime-
   dependencies plus NumPy environment provisioned by CI;
 - `dw check work-log-automation` passed; and
-- after the phase-closing commit, `dw verify --all` verifies 124 gated
-  commits and skips 17 pre-epoch commits under the documented epoch policy.
+- the captured pre-close `dw verify --all` sweep verified 128 gated commits
+  and skipped 17 pre-epoch commits under the documented epoch policy.
 
 The Homebrew smoke deliberately refused to disturb the already installed
 user formula on this workstation; its clean-machine macOS CI leg remains
@@ -350,16 +355,20 @@ selected in-progress story as `finish-story`, carrying the existing guarded
 `story status ... done` argv. Any other roadmap issue retains the generic
 blocking repair path.
 
-### 9. A recommendation was still an unbound handoff — being addressed
+### 9. A recommendation was still an unbound handoff — addressed in Phase 23
 
 Phase 22 could return an exact argv, but a caller still copied or
 reconstructed it after the observation that justified it. Checking only the
-action id would not be enough: HEAD, contract facts, or the selected story
-can move while the id remains `start-story`. WLA-23-01 now previews
-`delivery-workbench-step@1`, whose SHA-256 token binds the entire status
-document, then permits exactly one action only when both id and complete argv
-shape match a second closed table. Stale, manual, unknown, modified, commit,
-and certification paths refuse before process start.
+action id would not be enough: HEAD, contract facts, or the selected story can
+move while the id remains `start-story` or `continue-story`. Phase 23 now
+previews `delivery-workbench-step@1`, whose SHA-256 token binds the entire
+status document, then permits exactly one action only when both id and complete
+argv shape match a second closed table. Atomic claims close replay for
+read-only actions; bounded receipts and content-safe events explain started
+work; stale, manual, unknown, modified, commit, and certification paths refuse
+before process start. CLI, MCP, HTTP, the browser, and generated riders share
+that boundary, and the wheel-installed exit exam proves it through a real
+story.
 
 ## Phase 22: delivered product step
 
@@ -397,15 +406,15 @@ dw status
 The phase plan, evidence, and closeout live under
 `pmo-roadmap/pm/roadmap/work-log-automation/phase-22-agent-briefing/`.
 
-## Phase 23: active product step
+## Phase 23: delivered product step
 
 Phase 23 is **The handrail — one deliberate step**. It advances usability
 without turning the product into an autonomous shell:
 
 1. core and CLI preview/apply with a complete-state token and closed argv
-   table (implemented in WLA-23-01);
+   table;
 2. bounded, versioned success/failure receipts, atomic replay prevention,
-   and safe event correlation (implemented in WLA-23-02);
+   and safe event correlation;
 3. identical MCP and HTTP preview/result models;
 4. an explicit workbench confirmation and updated generated riders; and
 5. a wheel-installed exit exam that repeatedly authorizes one transition at
@@ -414,8 +423,9 @@ without turning the product into an autonomous shell:
 The trust boundary is the feature: every invocation stops after one child;
 callers never provide argv; and project choice, certification, commit,
 evidence-command invention, and automatic loops remain deliberate operator
-work. The active plan is under
-`pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/`.
+work. All five slices are implemented, evidence-backed, and closed. The
+[Phase 23 final summary](../pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/final-summary.md)
+holds the measured matrix and decision record.
 
 ## Where to go deeper
 

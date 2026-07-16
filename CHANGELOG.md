@@ -22,14 +22,15 @@ evidence, the specialized guarded `finish-story` transition, staging,
 contract staleness, certification, trailers, archived contract, verified
 commit, and the next clean story. Full detail: [Phase 22](./pmo-roadmap/pm/roadmap/work-log-automation/phase-22-agent-briefing/current-phase-status.md).
 
-The next handrail begins in Phase 23: `dw step` keeps `dw status` pure while
+Phase 23 closes the read→act gap: `dw step` keeps `dw status` pure while
 turning one reviewed recommendation into a state-bound act. Its stamped
 `delivery-workbench-step@1` preview hashes the complete current briefing;
 apply requires that token, re-reads state, admits only an action id plus
 entire argv shape from a second closed table, starts at most one child, and
 stops. Same-action stale state, unknown or modified argv, manual choices,
-certification, and commit all refuse before process start. The first core/CLI
-slice is documented in [Phase 23](./pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/current-phase-status.md).
+certification, and commit all refuse before process start. That core/CLI slice
+is the foundation of the completed
+[Phase 23](./pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/final-summary.md).
 Apply now returns a bounded `delivery-workbench-step-result@1` for success,
 failure, interruption, spawn failure, and non-started refusal. Atomic local
 claims prevent replay even for read-only actions, and exactly one content-
@@ -49,6 +50,19 @@ stops. Stale confirmation says nothing started; prohibited/manual,
 certification, and commit states have no apply control. The canonical rider
 brief and generated Claude/Codex/pi/plugin copies teach the same fresh-token,
 exact-command, stop-after-one discipline and mechanically drift-check it.
+The packaged closeout now proves the whole handrail rather than its imports:
+a wheel-installed consumer compares CLI/MCP/HTTP before every authorization,
+rotates seven one-step applies without reconstructing the underlying argv,
+and reaches an evidence-backed, trailered, contract-archived, history-verified
+commit. A workspace change leaves `continue-story` as the action but expires
+the old token; all three adapters report `started: false` and add zero step
+events. Certification and both commits refuse through every step surface and
+are performed only by the fixture operator.
+The closeout matrix passes on Python 3.9 and the local interpreter, renders 20
+browser viewports, exercises every agent and distribution surface, and runs
+the provisioned Telegram and pinned HoldSpeak hosts. Homebrew remains an
+explicit local abstention because its smoke will not uninstall the operator's
+existing formula; clean-machine macOS CI owns that proof.
 
 This section is release-ready input, not a publication claim: the package
 remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula

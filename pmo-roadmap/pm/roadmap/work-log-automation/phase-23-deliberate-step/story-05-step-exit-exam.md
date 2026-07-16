@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 23
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-23-04
 - **Unblocks:** phase close and next release decision
 - **Owner:** unassigned
@@ -23,12 +23,12 @@ wheel-installed consumer.
 
 ## Acceptance criteria
 
-- [ ] A fresh consumer advances one real story by authorizing every step
+- [x] A fresh consumer advances one real story by authorizing every step
   separately and never reconstructing the underlying action argv.
-- [ ] A relevant state change invalidates the token even when the action id
+- [x] A relevant state change invalidates the token even when the action id
   stays constant; runner/event counts remain zero.
-- [ ] Certification and commit remain manual through every surface.
-- [ ] Full distribution, Python-floor, UI, agent, optional integration, docs,
+- [x] Certification and commit remain manual through every surface.
+- [x] Full distribution, Python-floor, UI, agent, optional integration, docs,
   and history suites are green with a phase final summary.
 
 ## Test plan
@@ -39,4 +39,29 @@ wheel-installed consumer.
 
 ## Notes / open questions
 
-Record unresolved decisions here before implementation starts.
+- `deliberate-step-loop.sh` consumes the CLI installed from the wheel built by
+  `package-smoke.sh`; it updates and boots a disposable repository rather than
+  importing the source checkout accidentally.
+- Before all seven authorizations, the fixture proves exact CLI JSON = MCP
+  `structuredContent` = HTTP envelope `data`. It applies only `project` plus
+  the opaque token and never reads or reconstructs `next_action.command`.
+- The seven leases cross every applying adapter: CLI review, MCP contract
+  generation, HTTP story start, MCP story continuation, CLI guarded finish,
+  HTTP review, and CLI final contract generation. Each receipt stops before
+  the next preview.
+- A real workspace edit preserves the `continue-story` action id while
+  changing the token. The old lease refuses through CLI, MCP, and HTTP with
+  `started: false`, no child, no claim, no state change, and zero new step
+  events; the fresh lease remains usable.
+- Bootstrap and story certification/commit are previewed and refused through
+  all three step transports. The fixture operator performs both attestations
+  and commits manually, then proves trailers, archived contract, and
+  `dw verify --all`.
+- The complete capture at `2026-07-16T15:24:47Z` passed 230 core tests on
+  Python 3.14 and the declared Python 3.9 floor, both package-installed
+  consumer loops, 20 Firefox viewport renders, 147 Telegram interface tests,
+  10 Telegram fitness tests, 23 pinned HoldSpeak tests, all shipped-shell and
+  docs checks, upgrade/range fixtures, and the pre-close 128-commit history.
+- Homebrew alone abstained locally because the operator's formula is already
+  installed; the smoke refuses to uninstall user state and remains wired on
+  the clean macOS CI runner.

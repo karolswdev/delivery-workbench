@@ -168,12 +168,18 @@ roadmap carries it; see WLA-11-04 for the worked example):
 
 - `tests/package-smoke.sh` — build artifacts, `pipx install` from
   the local artifact, bootstrap a fixture repo to doctor-green with
-  no checkout present, invoke the packaged guided-status exit exam,
-  and prove the defer-to-repo rule (WLA-9-02, WLA-22-05).
+  no checkout present, invoke both packaged status and deliberate-step exit
+  exams, and prove the defer-to-repo rule (WLA-9-02, WLA-22-05, WLA-23-05).
 - `tests/guided-status-loop.sh` — install/update a fresh consumer and
   assert each byte-equal CLI/MCP/HTTP recommendation from initial work
   through evidence, manual certification, live gate pass, trailers,
   archived contract, verified commit, and the next clean story.
+- `tests/deliberate-step-loop.sh` — install/update from that same wheel,
+  compare every fresh CLI/MCP/HTTP step lease, and apply each real transition
+  separately using only project+token. A workspace change invalidates an old
+  token while `continue-story` stays the action; all three adapters report
+  `started: false` with zero new events. Certification and commit refuse on
+  every step surface before the fixture operator performs them manually.
 - `tests/upgrade-path.sh` — adopt from the real `v1.5.0` tag,
   upgrade, byte-compare protected content, `dw verify` over the
   mixed-version history, gated commit after refresh (WLA-9-03).

@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-16 (Phase 23 is 2/5: bounded step results, atomic replay prevention, and content-safe execution correlation are delivered; MCP/HTTP parity is next).
+**Last updated:** 2026-07-16 (Phase 23 closed 5/5: the deliberate-step handrail is proven across every surface and a wheel-installed consumer).
 **Current phase:** [phase-23-deliberate-step](./phase-23-deliberate-step/current-phase-status.md).
-**Status:** active — WLA-23-01/02 delivered the core/CLI handrail and receipt; WLA-23-03 is next.
+**Status:** complete through Phase 23; versioning and publication remain a separate owner decision.
 
 ## Vision
 
@@ -87,7 +87,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 20 | The Telegram interface becomes a first-class group surface: the pane becomes a picture (on demand and live), the buttons become a configurable toolbar and question-steering keyboards, and consent in a group belongs to a person, not a room — the second ccgram absorption (v4.3.11), every feature riding the existing consent spine. | done | [phase-20-group-grows-hands](./phase-20-group-grows-hands/) |
 | 21 | Phase 20's interactive surface — screenshots, buttons, per-person consent — reaches every channel as v1.14.0, with the same machinery as the last six releases. | done | [phase-21-landing-v1-14-0](./phase-21-landing-v1-14-0/) |
 | 22 | Give every human and agent one deterministic, versioned answer for repository readiness, current work, and the next safe action, shared across every supported surface. | done | [phase-22-agent-briefing](./phase-22-agent-briefing/) |
-| 23 | Let a human or agent deliberately apply exactly one current, allowlisted recommendation without copy/paste, stale intent, arbitrary execution, certification, or commit automation. | in-progress | [phase-23-deliberate-step](./phase-23-deliberate-step/) |
+| 23 | Let a human or agent deliberately apply exactly one current, allowlisted recommendation without copy/paste, stale intent, arbitrary execution, certification, or commit automation. | done | [phase-23-deliberate-step](./phase-23-deliberate-step/) |
 
 ## Operating cadence
 
@@ -120,7 +120,7 @@ behavior is:
 
 ## Active extension
 
-Phase 23 (The handrail — one deliberate step) is active at 4/5. It keeps
+Phase 23 (The handrail — one deliberate step) is closed at 5/5. It keeps
 Phase 22's status model pure while binding its one recommendation to a
 deterministic token over the complete briefing. The delivered `dw step`
 core/CLI surface previews and explicitly applies at most one closed-table
@@ -134,8 +134,12 @@ thin adapters whose apply schemas accept no caller-supplied argv; a fresh
 installed fixture proves exact-token success, replay/injection refusal, and
 the certification/commit exclusions. The Workbench now exposes that lease as
 a separate review→confirm act boundary, and generated riders require a fresh
-exact token, preserve manual seams, and stop after one receipt. See
-[phase-23-deliberate-step/current-phase-status.md](./phase-23-deliberate-step/current-phase-status.md).
+exact token, preserve manual seams, and stop after one receipt. A wheel-
+installed consumer separately authorizes seven CLI/MCP/HTTP actions, proves
+same-id stale refusal without a child or event, and keeps certification and
+commit manual through a verified fixture commit. See
+[the Phase 23 status](./phase-23-deliberate-step/current-phase-status.md) and
+[final summary](./phase-23-deliberate-step/final-summary.md).
 
 Phase 22 (The briefing — one answer before agents act) is closed. It turned
 the audit in `docs/solution-overview.md` into one deterministic,

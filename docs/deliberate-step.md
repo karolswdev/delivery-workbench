@@ -272,6 +272,11 @@ The executable proof is:
 - `pmo-roadmap/tests/step-interop.sh`: a freshly installed repo compares the
   CLI, MCP, and HTTP preview/result documents exactly, consumes one real
   `start-story` lease through each adapter, refuses replay and caller-supplied
-  argv, and proves certification/commit remain non-applicable everywhere.
+  argv, and proves certification/commit remain non-applicable everywhere; and
+- `pmo-roadmap/tests/deliberate-step-loop.sh`: a wheel-installed consumer
+  authorizes seven successive actions separately across all three adapters,
+  never executes the published action argv directly, proves a same-action
+  workspace change makes the old token start zero children/events, then
+  manually certifies and commits a trailered, archived, history-verified story.
 
 No adapter may expand the allowlist or consent boundary implicitly.
