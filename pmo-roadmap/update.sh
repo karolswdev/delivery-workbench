@@ -26,6 +26,10 @@ Always overwrites (these are framework-owned):
   - bin/work-log-read            → .githooks/work-log-read
   - bin/dw-mcp                   → .githooks/dw-mcp
 
+When the target is this source checkout, update refreshes only the vendored
+runtime surfaces and skips the pm/roadmap scaffold. The framework's canonical
+roadmap lives under pmo-roadmap/pm/roadmap and must not be shadowed.
+
 Refuses to overwrite WITHOUT --force (these may be project-customized):
   - templates/PMO-CONTRACT.md    → pm/roadmap/PMO-CONTRACT.md
   - non-framework .githooks/post-commit
@@ -60,11 +64,21 @@ done
 [ -n "$TARGET" ] || { usage; exit 1; }
 [ -d "$TARGET" ] || { echo "update.sh: not a dir: $TARGET" >&2; exit 1; }
 TARGET="$(cd "$TARGET" && pwd)"
-SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 
 git -C "$TARGET" rev-parse --show-toplevel >/dev/null 2>&1 \
   || { echo "update.sh: not a git repo: $TARGET" >&2; exit 1; }
 TARGET="$(git -C "$TARGET" rev-parse --show-toplevel)"
+
+# The framework repository keeps its canon under pmo-roadmap/.  When
+# update.sh runs from a source directory inside the target, creating a
+# second root pm/roadmap/ would shadow the real dogfood roadmap in every
+# reader.  Refresh only the vendored rails in that layout, exactly like
+# install.sh's self-hosted seam.
+SELF_HOSTED=0
+case "$SOURCE_DIR" in
+  "$TARGET"/*) SELF_HOSTED=1 ;;
+esac
 
 vendored_version() { # dir
   sed -n 's/^__version__ = "\(.*\)"$/\1/p' "$1/lib/dw_pmo/__init__.py" 2>/dev/null \
@@ -94,9 +108,14 @@ fi
 
 echo "→ Updating pmo-roadmap in $TARGET"
 
-mkdir -p "$TARGET/pm/roadmap" "$TARGET/.githooks"
-cp "$SOURCE_DIR/templates/roadmap-builder.md" "$TARGET/pm/roadmap/roadmap-builder.md"
-echo "  ✓ roadmap-builder.md updated"
+mkdir -p "$TARGET/.githooks"
+if [ "$SELF_HOSTED" -eq 1 ]; then
+  echo "  · self-hosting refresh (source inside target); skipping pm/roadmap canon scaffold"
+else
+  mkdir -p "$TARGET/pm/roadmap"
+  cp "$SOURCE_DIR/templates/roadmap-builder.md" "$TARGET/pm/roadmap/roadmap-builder.md"
+  echo "  ✓ roadmap-builder.md updated"
+fi
 
 cp "$SOURCE_DIR/hooks/pre-commit" "$TARGET/.githooks/pre-commit"
 chmod +x "$TARGET/.githooks/pre-commit"
@@ -168,7 +187,9 @@ fi
 # rules. Refuse to overwrite without --force; print a diff hint.
 TARGET_CONTRACT="$TARGET/pm/roadmap/PMO-CONTRACT.md"
 SOURCE_CONTRACT="$SOURCE_DIR/templates/PMO-CONTRACT.md"
-if [ -f "$TARGET_CONTRACT" ] && [ "$FORCE" -ne 1 ]; then
+if [ "$SELF_HOSTED" -eq 1 ]; then
+  : # Canon is already $SOURCE_CONTRACT; never scaffold a shadow tree.
+elif [ -f "$TARGET_CONTRACT" ] && [ "$FORCE" -ne 1 ]; then
   if cmp -s "$TARGET_CONTRACT" "$SOURCE_CONTRACT"; then
     echo "  · PMO-CONTRACT.md already matches canonical; no change."
   else

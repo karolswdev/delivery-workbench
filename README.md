@@ -50,7 +50,7 @@ inspects the repo and drafts a roadmap for you. See the
 ## The daily loop
 
 ```bash
-.githooks/dw next                       # what should I work on?
+.githooks/dw status                     # is this repo ready, and what is safe next?
 .githooks/dw story status myapp 2 3 in-progress
 # ... do the work ...
 .githooks/dw evidence capture myapp 2 3 -- npm test
@@ -133,6 +133,7 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 
 | Command | What it does |
 |---|---|
+| `dw status [project] [--json]` | One read-only readiness verdict and the next safe action across rails, workspace, and roadmap. |
 | `dw next` | The next actionable story. Exit 0 found, 2 nothing to do. |
 | `dw context --compact` | JSON snapshot of the roadmap: issues, warnings, next story, trace paths. |
 | `dw check` | Lints roadmap structure and evidence content. Greppable errors, exit 1 on issues. |
@@ -147,7 +148,9 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 | `dw phase create`, `dw story create` | Scaffolding for new roadmap work. |
 | `dw doctor` | Checks the wiring in this clone. |
 
-All commands have stable exit codes. The orientation commands
+All commands have stable exit codes. `dw status` exits 0 for `ready` and
+1 for `attention`; its JSON is a versioned contract suitable for an
+agent's first repository read. The specialist orientation commands
 support `--json` or `--porcelain` output.
 
 Parked work is first-class: a story goes on-hold only with a

@@ -32,7 +32,16 @@ plumbing), `parse` (roadmap discovery), `validate` (structural checks
 and drift warnings), `trace` (commit and work-log correlation),
 `render`/`mutations` (content generation and guarded writes), `api`
 (context envelopes, timelines, handoffs), plus `gate`, `contract`,
-`evidence`, `agentdocs`, `doctor`, `adopt`, and `workbench`.
+`evidence`, `agentdocs`, `doctor`, `status`, `adopt`, and `workbench`.
+
+`status` is the read-only composition root for an agent's first question. It
+joins doctor, roadmap validation, git/contract/gate state, current progress,
+holds, and the next story into the versioned
+`delivery-workbench-status@1` object, then applies one explicit action
+precedence. It performs no network access or writes—not even a state-feed
+event—and repeated calls over unchanged inputs are byte-identical (proof:
+`StatusBriefingTest` in `tests/dw-core-tests.py` and the installed-repository
+assertions in `tests/roadmap-cli.sh`).
 
 The status vocabulary is defined once (`model.STORY_STATUSES`:
 `backlog | ready | in-progress | blocked | done`, with done-synonyms
@@ -183,8 +192,9 @@ including a hostile project name and idempotent re-runs).
 
 The agent surface is generated from one constant: the managed
 `CLAUDE.md` block (markers, refreshed by install/update/`dw
-agent-docs`, user content never touched), slash commands, `dw next`'s
-strict exit contract (0 found / 2 nothing actionable / 1 error), and
+agent-docs`, user content never touched), slash commands, the versioned
+`dw status` opening answer, `dw next`'s strict exit contract (0 found / 2
+nothing actionable / 1 error), and
 gate porcelain (proof: `tests/agent-surface.sh` drives a full story
 lifecycle headlessly using only commands the managed block names).
 

@@ -112,7 +112,7 @@ Today the specialist commands are `dw doctor`, `dw check`, `dw next`,
 paths are executed end-to-end by `pmo-roadmap/tests/agent-surface.sh`,
 `roadmap-cli.sh`, and `mcp-server.sh`.
 
-Phase 22 adds `dw status` in front of that loop. It does not replace the
+Phase 22 begins by adding `dw status` in front of that loop. It does not replace the
 specialist commands; it composes their state and names the next safe one.
 
 ### 2. Browse and understand work

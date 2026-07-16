@@ -148,5 +148,11 @@ from .agentdocs import (
 )
 from .doctor import DoctorCheck, render_doctor, run_doctor
 from .adopt import AdoptionReport, parse_adoption_report, run_adoption
+from .status import (
+    STATUS_KIND,
+    STATUS_SCHEMA_VERSION,
+    build_status,
+    render_status,
+)
 
 __version__ = "1.14.0"

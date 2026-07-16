@@ -1,6 +1,7 @@
 # Status briefing contract
 
-**Status:** Phase 22 design contract, frozen before implementation.
+**Status:** v1 contract frozen; core and CLI implemented in Phase 22, adapter
+rollout in progress.
 **Scope:** local, read-only readiness and guided next action.
 
 ## Purpose

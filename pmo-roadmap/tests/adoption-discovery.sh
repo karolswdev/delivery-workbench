@@ -198,6 +198,11 @@ echo "$OUT" | grep -q 'self-hosting refresh' \
   || fail "self-hosted install should announce the canon-scaffold skip"
 [ ! -e "$SELFHOST/pm" ] \
   || fail "self-hosted install must not create a root pm/ tree"
+UPDATE_OUT="$("$SELFHOST/pmo-roadmap/update.sh" "$SELFHOST" 2>&1)"
+echo "$UPDATE_OUT" | grep -q 'self-hosting refresh' \
+  || fail "self-hosted update should announce the canon-scaffold skip"
+[ ! -e "$SELFHOST/pm" ] \
+  || fail "self-hosted update must not create a shadow root pm/ tree"
 [ -e "$FOREIGN/pm/roadmap/PMO-CONTRACT.md" ] \
   || fail "external install must still scaffold pm/roadmap canon"
 

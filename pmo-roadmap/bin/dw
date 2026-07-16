@@ -39,6 +39,7 @@ try:
         apply_plan,
         board_model,
         build_context_payload,
+        build_status,
         contract_digest,
         discover_phases,
         discover_projects,
@@ -60,6 +61,7 @@ try:
         parked_summary,
         parse_contract_facts,
         render_board,
+        render_status,
         run_adoption,
         render_doctor,
         render_gate_failure,
@@ -379,6 +381,15 @@ def command_doctor(args: argparse.Namespace) -> int:
     return 0 if all(check.ok for check in checks) else 1
 
 
+def command_status(args: argparse.Namespace) -> int:
+    briefing = build_status(args.root, args.project)
+    if args.json:
+        print(json.dumps(briefing, sort_keys=True))
+    else:
+        print(render_status(briefing), end="")
+    return 0 if briefing["verdict"] == "ready" else 1
+
+
 def command_context(args: argparse.Namespace) -> int:
     projects = [get_project(args.root, args.project)] if args.project else discover_projects(args.root)
     status_filter = "done" if args.done else args.status
@@ -641,6 +652,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"dw {DW_VERSION}")
     parser.add_argument("--root", type=Path, default=None, help="repository root containing pm/roadmap")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    status = sub.add_parser(
+        "status",
+        help="one local briefing: rails, roadmap, workspace, current work, and the next safe action",
+    )
+    status.add_argument("project", nargs="?")
+    status.add_argument("--json", action="store_true", help="emit the versioned status document")
+    status.set_defaults(func=command_status)
 
     projects = sub.add_parser("projects", help="list roadmap projects")
     projects.set_defaults(func=command_projects)

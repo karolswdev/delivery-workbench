@@ -342,4 +342,61 @@ printf 'png' > "$PROJECT/phase-3-lint/assets/shot.png"
 "$DW" --root "$REPO" phase close sample 3 --summary "Lint phase closed." >/dev/null
 "$DW" --root "$REPO" check sample | grep -q 'dw check: ok' || fail "check should pass once the asset exists"
 
+# ── One-answer status briefing (WLA-22-02) ──────────────────────────
+
+STATUS_REPO="$TMP_ROOT/status-repo"
+mkdir -p "$STATUS_REPO"
+git -C "$STATUS_REPO" init -q -b main
+git -C "$STATUS_REPO" config user.name "Status Integration"
+git -C "$STATUS_REPO" config user.email "status@example.test"
+"$PMO_DIR/install.sh" "$STATUS_REPO" \
+  --project-name "Status Demo" --project-slug status-demo \
+  --project-prefix SD >/dev/null
+git -C "$STATUS_REPO" add -A
+git -C "$STATUS_REPO" commit -q --no-verify -m "fixture scaffold"
+STATUS_DW="$STATUS_REPO/.githooks/dw"
+
+"$STATUS_DW" --root "$STATUS_REPO" status status-demo --json > "$TMP_ROOT/status-a.json"
+"$STATUS_DW" --root "$STATUS_REPO" status status-demo --json > "$TMP_ROOT/status-b.json"
+cmp "$TMP_ROOT/status-a.json" "$TMP_ROOT/status-b.json" \
+  || fail "status JSON should be byte-stable over unchanged state"
+python3 - "$TMP_ROOT/status-a.json" <<'PY' || fail "status should guide a clean installed repo"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    status = json.load(f)
+assert status["kind"] == "delivery-workbench-status"
+assert status["schema_version"] == 1
+assert status["verdict"] == "ready"
+assert status["repository"]["clean"] is True
+assert status["rails"]["healthy"] is True
+assert status["roadmap"]["selected_project"] == "status-demo"
+assert status["next_action"]["id"] == "start-story"
+assert status["next_action"]["command"] == [
+    ".githooks/dw", "story", "status", "status-demo", "0",
+    "SD-0-01", "in-progress",
+]
+assert status["actions"] == [status["next_action"]]
+PY
+"$STATUS_DW" --root "$STATUS_REPO" status status-demo | grep -q '^next=start-story command=' \
+  || fail "human status should lead with the same next action"
+
+# Attention is a valid JSON briefing with exit 1, not an empty failure.
+mv "$STATUS_REPO/.githooks/pre-commit" "$STATUS_REPO/.githooks/pre-commit.off"
+if "$STATUS_DW" --root "$STATUS_REPO" status status-demo --json > "$TMP_ROOT/status-attention.json"; then
+  fail "broken required wiring should make status exit 1"
+fi
+python3 - "$TMP_ROOT/status-attention.json" <<'PY' || fail "attention briefing should name repair"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    status = json.load(f)
+assert status["verdict"] == "attention"
+assert status["next_action"]["id"] == "repair-rails"
+assert status["next_action"]["blocking"] is True
+PY
+mv "$STATUS_REPO/.githooks/pre-commit.off" "$STATUS_REPO/.githooks/pre-commit"
+
 echo "roadmap-cli.sh: ok"

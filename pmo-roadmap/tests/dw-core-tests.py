@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -2968,6 +2969,292 @@ class VerifyTest(unittest.TestCase):
             doc_text = doc.read_text(encoding="utf-8")
             for rule_id in sorted(verify_ids | gate_ids | remote_only):
                 self.assertIn(f"`{rule_id}`", doc_text, f"{rule_id} unclassified in remote-verification.md")
+
+
+class StatusBriefingTest(unittest.TestCase):
+    """WLA-22-02: the aggregate answer is schema-pinned, pure, and
+    recommends only transitions the underlying rails can accept."""
+
+    TOP_KEYS = [
+        "actions", "kind", "next_action", "rails", "repository",
+        "roadmap", "schema_version", "summary", "verdict",
+    ]
+    REPOSITORY_KEYS = [
+        "branch", "changes", "clean", "contract", "gate", "head",
+        "operation", "root",
+    ]
+    CONTRACT_KEYS = [
+        "checked_boxes", "exists", "expected_boxes", "facts_fresh",
+        "path", "state", "story_ids", "tier",
+    ]
+    GATE_KEYS = [
+        "checked_boxes", "declared_stories", "expected_boxes", "failure",
+        "ok", "shipped_stories", "state",
+    ]
+    ROADMAP_KEYS = [
+        "healthy", "issues", "projects", "selected_project",
+        "selection_required", "warnings",
+    ]
+    PROJECT_KEYS = [
+        "current_phase", "next_story", "parked_counts", "prefix", "slug",
+        "status_counts",
+    ]
+    ACTION_KEYS = ["blocking", "command", "id", "kind", "reason"]
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        subprocess.run(
+            ["git", "init", "-q", "-b", "main", str(self.root)],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.root), "config", "user.name", "Status Test"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.root), "config", "user.email", "status@example.test"],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.root), "config", "core.hooksPath", ".githooks"],
+            check=True,
+        )
+
+        hooks = self.root / ".githooks"
+        (hooks / "dw_pmo").mkdir(parents=True)
+        for name in ("pre-commit", "commit-msg", "post-commit", "dw"):
+            hook = hooks / name
+            hook.write_text("#!/bin/sh\n", encoding="utf-8")
+            hook.chmod(0o755)
+        (hooks / "dw_pmo" / "__init__.py").write_text("# fixture\n", encoding="utf-8")
+        (self.root / ".gitignore").write_text(".tmp/\n", encoding="utf-8")
+
+        project = self.root / "pm" / "roadmap" / "demo"
+        phase = project / "phase-1-alpha"
+        phase.mkdir(parents=True)
+        (project / "README.md").write_text(README, encoding="utf-8")
+        (phase / "current-phase-status.md").write_text(STATUS_FILE, encoding="utf-8")
+        (phase / "story-01-first.md").write_text(
+            STORY_TMPL.format(sid="DM-1-01", title="First thing", status="done"),
+            encoding="utf-8",
+        )
+        (phase / "story-02-second.md").write_text(
+            STORY_TMPL.format(sid="DM-1-02", title="Second thing", status="ready"),
+            encoding="utf-8",
+        )
+        (phase / "evidence-story-01.md").write_text(EVIDENCE_01, encoding="utf-8")
+        core.write_agent_docs(self.root)
+        subprocess.run(["git", "-C", str(self.root), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.root), "commit", "-q", "--no-verify", "-m", "fixture"],
+            check=True,
+        )
+
+    def status(self, project: str | None = None) -> dict:
+        return core.build_status(self.root, project)
+
+    def test_schema_is_pinned_and_clean_repo_starts_next_story(self) -> None:
+        status = self.status()
+        self.assertEqual(sorted(status), self.TOP_KEYS)
+        self.assertEqual(status["kind"], "delivery-workbench-status")
+        self.assertEqual(status["schema_version"], 1)
+        self.assertEqual(status["verdict"], "ready")
+        self.assertEqual(sorted(status["repository"]), self.REPOSITORY_KEYS)
+        self.assertEqual(
+            sorted(status["repository"]["changes"]),
+            ["staged", "unstaged", "untracked"],
+        )
+        for bucket in status["repository"]["changes"].values():
+            self.assertEqual(sorted(bucket), ["count", "paths"])
+        self.assertEqual(sorted(status["repository"]["contract"]), self.CONTRACT_KEYS)
+        self.assertEqual(sorted(status["repository"]["gate"]), self.GATE_KEYS)
+        self.assertEqual(sorted(status["rails"]), ["checks", "healthy"])
+        self.assertTrue(status["rails"]["checks"])
+        self.assertEqual(
+            sorted(status["rails"]["checks"][0]), ["detail", "name", "ok"]
+        )
+        self.assertEqual(sorted(status["roadmap"]), self.ROADMAP_KEYS)
+        self.assertEqual(sorted(status["roadmap"]["projects"][0]), self.PROJECT_KEYS)
+        self.assertEqual(sorted(status["next_action"]), self.ACTION_KEYS)
+        self.assertEqual(status["actions"], [status["next_action"]])
+        self.assertEqual(status["next_action"]["id"], "start-story")
+        self.assertEqual(
+            status["next_action"]["command"],
+            [
+                ".githooks/dw", "story", "status", "demo", "1",
+                "DM-1-02", "in-progress",
+            ],
+        )
+
+    def test_dirty_active_work_continues_but_unowned_work_is_reviewed(self) -> None:
+        phase = core.get_phase(core.get_project(self.root, "demo"), "1")
+        plan = core.plan_story_status(
+            self.root, core.get_project(self.root, "demo"), phase,
+            "DM-1-02", "in-progress",
+        )
+        core.apply_plan(plan)
+        status = self.status()
+        self.assertEqual(status["next_action"]["id"], "continue-story")
+        self.assertGreater(status["repository"]["changes"]["unstaged"]["count"], 0)
+
+        # Restore a clean fixture, then introduce work with no active story.
+        subprocess.run(["git", "-C", str(self.root), "restore", "."], check=True)
+        readme = self.root / "pm" / "roadmap" / "demo" / "README.md"
+        readme.write_text(readme.read_text(encoding="utf-8") + "\nchange\n", encoding="utf-8")
+        status = self.status()
+        self.assertEqual(status["next_action"]["id"], "review-workspace")
+
+    def test_stage_contract_certification_gate_and_staleness_sequence(self) -> None:
+        readme = self.root / "pm" / "roadmap" / "demo" / "README.md"
+        readme.write_text(readme.read_text(encoding="utf-8") + "\nchange\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.root), "add", str(readme)], check=True)
+
+        status = self.status()
+        self.assertEqual(status["next_action"]["id"], "generate-contract")
+        self.assertEqual(status["repository"]["gate"]["state"], "fail")
+
+        core.write_contract(self.root)
+        status = self.status()
+        self.assertEqual(status["repository"]["contract"]["state"], "unchecked")
+        self.assertEqual(status["next_action"]["id"], "certify-contract")
+        self.assertEqual(status["next_action"]["kind"], "manual")
+        self.assertIsNone(status["next_action"]["command"])
+
+        contract = self.root / ".tmp" / "CONTRACT.md"
+        contract.write_text(
+            contract.read_text(encoding="utf-8").replace("- [ ]", "- [x]"),
+            encoding="utf-8",
+        )
+        status = self.status()
+        self.assertEqual(status["repository"]["contract"]["state"], "passing")
+        self.assertEqual(status["next_action"]["id"], "commit")
+
+        # Restaging changes the index-tree fact and must retract commit.
+        readme.write_text(readme.read_text(encoding="utf-8") + "later\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.root), "add", str(readme)], check=True)
+        status = self.status()
+        self.assertEqual(status["repository"]["contract"]["state"], "stale")
+        self.assertEqual(status["next_action"]["id"], "generate-contract")
+        self.assertIn("--force", status["next_action"]["command"])
+
+    def test_mixed_stage_precedes_contract_and_status_is_pure(self) -> None:
+        readme = self.root / "pm" / "roadmap" / "demo" / "README.md"
+        story = self.root / "pm" / "roadmap" / "demo" / "phase-1-alpha" / "story-02-second.md"
+        readme.write_text(readme.read_text(encoding="utf-8") + "\nstaged\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.root), "add", str(readme)], check=True)
+        story.write_text(story.read_text(encoding="utf-8") + "\nunstaged\n", encoding="utf-8")
+        before = subprocess.check_output(
+            ["git", "-C", str(self.root), "status", "--porcelain=v1", "-z"]
+        )
+        events = self.root / ".git" / "pmo-events.jsonl"
+        event_before = events.read_bytes() if events.exists() else b""
+        first = self.status()
+        second = self.status()
+        after = subprocess.check_output(
+            ["git", "-C", str(self.root), "status", "--porcelain=v1", "-z"]
+        )
+        event_after = events.read_bytes() if events.exists() else b""
+        self.assertEqual(first, second)
+        self.assertEqual(before, after)
+        self.assertEqual(event_before, event_after)
+        self.assertEqual(first["next_action"]["id"], "review-unstaged")
+
+    def test_attention_precedence_for_rails_roadmap_and_rewrite(self) -> None:
+        (self.root / ".githooks" / "pre-commit").unlink()
+        status = self.status()
+        self.assertEqual(status["verdict"], "attention")
+        self.assertEqual(status["next_action"]["id"], "repair-rails")
+
+        (self.root / ".githooks" / "pre-commit").write_text("#!/bin/sh\n", encoding="utf-8")
+        story = self.root / "pm" / "roadmap" / "demo" / "phase-1-alpha" / "story-02-second.md"
+        story.unlink()
+        status = self.status()
+        self.assertEqual(status["verdict"], "attention")
+        self.assertEqual(status["next_action"]["id"], "repair-roadmap")
+
+        subprocess.run(["git", "-C", str(self.root), "restore", "."], check=True)
+        git_dir = Path(
+            subprocess.check_output(
+                ["git", "-C", str(self.root), "rev-parse", "--git-dir"], text=True
+            ).strip()
+        )
+        if not git_dir.is_absolute():
+            git_dir = self.root / git_dir
+        (git_dir / "CHERRY_PICK_HEAD").write_text("0" * 40 + "\n", encoding="utf-8")
+        status = self.status()
+        self.assertEqual(status["verdict"], "attention")
+        self.assertEqual(status["next_action"]["id"], "resolve-rewrite")
+
+    def test_multiple_projects_are_never_guessed(self) -> None:
+        source = self.root / "pm" / "roadmap" / "demo"
+        target = self.root / "pm" / "roadmap" / "other"
+        shutil.copytree(source, target)
+        other_readme = target / "README.md"
+        other_readme.write_text(
+            other_readme.read_text(encoding="utf-8")
+            .replace("Demo", "Other")
+            .replace("`demo`", "`other`"),
+            encoding="utf-8",
+        )
+        status = self.status()
+        self.assertIsNone(status["roadmap"]["selected_project"])
+        self.assertTrue(status["roadmap"]["selection_required"])
+        self.assertEqual(status["next_action"]["id"], "select-project")
+        self.assertIsNone(status["next_action"]["command"])
+        selected = self.status("other")
+        self.assertEqual(selected["roadmap"]["selected_project"], "other")
+
+    def test_empty_roadmap_directory_is_attention_not_ready(self) -> None:
+        shutil.rmtree(self.root / "pm" / "roadmap" / "demo")
+        status = self.status()
+        self.assertEqual(status["verdict"], "attention")
+        self.assertFalse(status["roadmap"]["healthy"])
+        self.assertEqual(status["next_action"]["id"], "repair-roadmap")
+
+    def test_action_targets_next_story_phase_not_a_closed_pointer(self) -> None:
+        project = self.root / "pm" / "roadmap" / "demo"
+        old = project / "phase-0-old"
+        old.mkdir()
+        (old / "current-phase-status.md").write_text(
+            "# Phase 0 - Old\n\n## Story status\n\n"
+            "| ID | Story | Status | Story file | Evidence |\n"
+            "|---|---|---|---|---|\n",
+            encoding="utf-8",
+        )
+        (old / "final-summary.md").write_text("# Closed\n", encoding="utf-8")
+        readme = project / "README.md"
+        readme.write_text(
+            readme.read_text(encoding="utf-8").replace(
+                "[phase-1-alpha](./phase-1-alpha/current-phase-status.md)",
+                "[phase-0-old](./phase-0-old/current-phase-status.md)",
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "-C", str(self.root), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.root), "commit", "-q", "--no-verify", "-m", "old pointer"],
+            check=True,
+        )
+        status = self.status()
+        self.assertEqual(status["roadmap"]["projects"][0]["current_phase"]["number"], 0)
+        self.assertEqual(status["next_action"]["id"], "start-story")
+        self.assertEqual(status["next_action"]["command"][4], "1")
+
+    def test_path_lists_are_bounded_but_counts_are_complete(self) -> None:
+        for index in range(55):
+            (self.root / f"untracked-{index:02d}.txt").write_text("x", encoding="utf-8")
+        bucket = self.status()["repository"]["changes"]["untracked"]
+        self.assertEqual(bucket["count"], 55)
+        self.assertEqual(len(bucket["paths"]), 50)
+        self.assertEqual(bucket["paths"], sorted(bucket["paths"]))
+
+    def test_human_render_leads_with_verdict_and_next(self) -> None:
+        rendered = core.render_status(self.status())
+        lines = rendered.splitlines()
+        self.assertTrue(lines[0].startswith("status=ready summary="))
+        self.assertTrue(lines[1].startswith("next=start-story command="))
 
 
 class StateFeedTest(unittest.TestCase):

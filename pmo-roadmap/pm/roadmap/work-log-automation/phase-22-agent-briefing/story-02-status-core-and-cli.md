@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 22
-- **Status:** ready
+- **Status:** done
 - **Depends on:** WLA-22-01
 - **Unblocks:** WLA-22-03, WLA-22-04, WLA-22-05
 - **Owner:** unassigned
@@ -20,28 +20,32 @@ stable document.
 - **In:** a new stdlib-only `dw_pmo/status.py`; read-only gate inspection;
   Git workspace/contract classification; roadmap/project summaries;
   ordered structured actions; `dw status [project] [--json]`; exports;
-  text renderer; schema, red-path, action-precedence, path-safety, and
+  text renderer; a self-hosted update seam that cannot create a root
+  roadmap shadow; schema, red-path, action-precedence, path-safety, and
   purity tests.
 - **Out:** MCP, HTTP, UI, agent-doc changes (later stories); executing an
   action; network/CI checks; changing existing command exit contracts.
 
 ## Acceptance criteria
 
-- [ ] The model matches `docs/status-briefing.md` v1 exactly and derives
+- [x] The model matches `docs/status-briefing.md` v1 exactly and derives
   semantics only by composing existing core functions.
-- [ ] Workspace state distinguishes staged, unstaged, untracked, rewrite,
+- [x] Workspace state distinguishes staged, unstaged, untracked, rewrite,
   and absent/stale/unchecked/passing contract/gate states with bounded,
   repo-relative path lists.
-- [ ] Rails or roadmap failures produce `attention` and a blocking repair
+- [x] Rails or roadmap failures produce `attention` and a blocking repair
   action; ambiguous multi-project state produces a manual selection
   action; normal work states select the documented next action in order.
-- [ ] `git commit` is recommended only when there is a staged index, no
+- [x] `git commit` is recommended only when there is a staged index, no
   overlooked worktree change outranks it, and a side-effect-free gate
   inspection passes.
-- [ ] Repeated core/CLI reads are byte-stable in JSON and change neither
+- [x] Repeated core/CLI reads are byte-stable in JSON and change neither
   tracked files nor `.git/pmo-events.jsonl`.
-- [ ] Human output leads with verdict and `next`, while `--json` emits the
+- [x] Human output leads with verdict and `next`, while `--json` emits the
   core object byte-for-byte; exit 0 means ready and exit 1 means attention.
+- [x] Refreshing vendored rails from inside the framework repository does
+  not create `pm/roadmap/` and cannot make status inspect an empty shadow
+  instead of the canonical `pmo-roadmap/pm/roadmap/` tree.
 
 ## Test plan
 
@@ -59,3 +63,10 @@ stable document.
 Certification stays a manual action with no command array. Status may
 inspect the gate but must suppress rail-event emission; a read is not a
 gate attempt.
+
+Implemented by `dw_pmo.status`, with the CLI as a zero-semantics adapter.
+The fixture matrix pins the exact schema and precedence across clean, dirty,
+staged, contracted, gate-ready, invalid-roadmap, rewrite, and ambiguous
+project states. During dogfooding, the self-hosted updater was also corrected
+so it cannot introduce a root roadmap shadow ahead of the canonical nested
+roadmap.

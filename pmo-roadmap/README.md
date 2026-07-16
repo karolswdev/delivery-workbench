@@ -6,8 +6,9 @@ A drop-in PMO framework for any git project. Provides:
 
 1. **Methodology** — phase-based, evidence-rich roadmap structure under
    `pm/roadmap/{project}/`. See `templates/roadmap-builder.md`.
-2. **The `dw` CLI and core** — orientation (`next`, `context`, `check`,
-   `doctor`), preview-safe roadmap maintenance, evidence capture, the
+2. **The `dw` CLI and core** — aggregate orientation (`status`),
+   specialist diagnostics (`next`, `context`, `check`, `doctor`),
+   preview-safe roadmap maintenance, evidence capture, the
    adoption bridge (`dw adopt`), and the gate engine, all in one
    python package (`lib/dw_pmo/`).
 3. **The commit gate with verified contracts** — `dw contract new`
@@ -321,6 +322,7 @@ the existing markdown files; it does not create a separate tracker.
 .githooks/dw story evidence myproject 1 PRJ-1-01 \
   --body "- Additional verification detail."
 .githooks/dw evidence capture myproject 1 PRJ-1-01 -- npm test
+.githooks/dw status myproject --json
 .githooks/dw next myproject --json
 .githooks/dw doctor
 .githooks/dw agent-docs
@@ -328,6 +330,13 @@ the existing markdown files; it does not create a separate tracker.
   --summary "Phase closed with all stories evidenced."
 .githooks/dw check myproject
 ```
+
+Start with `status`: it composes local rail health, git workspace and
+contract/gate state, roadmap integrity and progress, holds, and one guided
+action without writing files or recording events. Its versioned JSON exits
+0 for `ready` and 1 for `attention`; when multiple projects exist it requires
+selection instead of guessing. The model contract is
+[`docs/status-briefing.md`](../docs/status-briefing.md).
 
 `next` follows a strict exit contract for agents: 0 = story found,
 2 = nothing actionable, 1 = error; `--json` emits the story as one JSON

@@ -110,8 +110,12 @@ def run_gate(
     root: Path,
     expected_boxes: int | None = None,
     work_log_enabled: bool | None = None,
+    *,
+    record_event: bool = True,
 ) -> GateResult:
     result = _run_gate_inner(root, expected_boxes, work_log_enabled)
+    if not record_event:
+        return result
     from .events import emit
 
     if result.ok:

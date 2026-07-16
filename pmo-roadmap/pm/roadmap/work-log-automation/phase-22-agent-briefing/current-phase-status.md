@@ -28,7 +28,7 @@ individual rails; this phase turns them into one legible entry point.
 - [x] The repository has one current, evidence-linked solution
   overview and a status-briefing contract that defines readiness,
   schema, action precedence, and non-goals (WLA-22-01).
-- [ ] `dw status [project] [--json]` returns a stamped, deterministic,
+- [x] `dw status [project] [--json]` returns a stamped, deterministic,
   read-only model over rails health, roadmap health, workspace state,
   selected work, gate state, and the next safe action; red paths never
   claim readiness (WLA-22-02).
@@ -48,19 +48,20 @@ individual rails; this phase turns them into one legible entry point.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-22-01 | Map the solution and contract the briefing | done | [story-01-solution-map-and-briefing-contract](./story-01-solution-map-and-briefing-contract.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-22-02 | dw status — one deterministic core and CLI | ready | [story-02-status-core-and-cli](./story-02-status-core-and-cli.md) | - |
+| WLA-22-02 | dw status — one deterministic core and CLI | done | [story-02-status-core-and-cli](./story-02-status-core-and-cli.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-22-03 | One model everywhere — MCP and HTTP parity | ready | [story-03-status-interop](./story-03-status-interop.md) | - |
 | WLA-22-04 | The workbench and agent brief open on the answer | backlog | [story-04-status-front-door](./story-04-status-front-door.md) | - |
 | WLA-22-05 | Prove the guided loop in a fresh consumer | backlog | [story-05-guided-loop-exit-exam](./story-05-guided-loop-exit-exam.md) | - |
 
 ## Where we are
 
-Phase OPEN 1/5. WLA-22-01 is done: the dated solution overview maps the
-whole product and its proof, the roadmap front door is current again,
-and `docs/status-briefing.md` freezes the v1 readiness/action contract
-before implementation. Its captured run is 208 core tests plus docs,
-canon, roadmap, and diff checks green. WLA-22-02 is next: build the pure
-status core and CLI against that contract.
+Phase OPEN 2/5. The solution map and v1 briefing contract are current.
+WLA-22-02 now implements that contract in one pure `dw_pmo.status` core and
+the `dw status [project] [--json]` CLI. Its 218-test fixture matrix pins
+schema, action precedence, ambiguity, bounded paths, purity, and all gate
+transitions; installed-repository and self-hosted-update regressions are also
+green. WLA-22-03 is next: expose the byte-identical object through MCP and
+HTTP and make inventory drift executable.
 
 ## Active risks
 
