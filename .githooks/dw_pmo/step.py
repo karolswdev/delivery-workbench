@@ -269,6 +269,8 @@ def _claim_token(root: Path, token: str) -> str | None:
     """Atomically consume one lease. Return a refusal reason on failure."""
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", token):
         return "step token is malformed; run dw step again"
+    if not (root / ".git").is_dir():
+        return "step token cannot be claimed: repository Git metadata is unavailable"
     claims = root / STEP_CLAIMS_REL
     try:
         claims.mkdir(mode=0o700, parents=True, exist_ok=True)

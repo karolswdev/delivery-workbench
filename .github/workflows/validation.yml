@@ -79,6 +79,7 @@ jobs:
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
             pmo-roadmap/tests/mcp-server.sh \
+            pmo-roadmap/tests/step-interop.sh \
             pmo-roadmap/tests/contributor-flow.sh \
             pmo-roadmap/tests/guided-status-loop.sh \
             pmo-roadmap/tests/package-smoke.sh \
@@ -214,6 +215,7 @@ jobs:
             pmo-roadmap/tests/workbench-ui-smoke.sh \
             pmo-roadmap/tests/plugin-validate.sh \
             pmo-roadmap/tests/mcp-server.sh \
+            pmo-roadmap/tests/step-interop.sh \
             pmo-roadmap/tests/contributor-flow.sh \
             pmo-roadmap/tests/guided-status-loop.sh \
             pmo-roadmap/tests/package-smoke.sh \
@@ -265,6 +267,9 @@ jobs:
 
       - name: MCP server integration test
         run: pmo-roadmap/tests/mcp-server.sh
+
+      - name: Deliberate-step transport parity
+        run: pmo-roadmap/tests/step-interop.sh
 
       - name: Contributor flow integration test
         run: pmo-roadmap/tests/contributor-flow.sh

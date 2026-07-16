@@ -60,6 +60,24 @@ def _tool_status(root: Path, args: dict) -> tuple[str, dict]:
     payload = build_status(root, args.get("project"))
     return render_status(payload).rstrip("\n"), payload
 
+
+def _tool_step(root: Path, args: dict) -> tuple[str, dict]:
+    from .step import build_step, render_step
+
+    payload = build_step(root, args.get("project"))
+    return render_step(payload).rstrip("\n"), payload
+
+
+def _tool_step_apply(root: Path, args: dict) -> tuple[str, dict]:
+    from .step import apply_step
+
+    payload, _exit_code = apply_step(
+        root,
+        args.get("project"),
+        str(args["expect"]),
+    )
+    return json.dumps(payload, sort_keys=True), payload
+
 def _tool_context(root: Path, args: dict) -> tuple[str, dict]:
     from .api import build_context_payload
     from .parse import discover_projects, get_project
@@ -313,6 +331,39 @@ TOOLS: dict[str, dict] = {
             "additionalProperties": False,
         },
         "handler": _tool_status,
+    },
+    "dw_step": {
+        "description": (
+            "Pure preview of exactly one state-bound, allowlisted status action; "
+            "returns delivery-workbench-step@1 and never executes. Adapter over "
+            "dw_pmo.step.build_step."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"project": _PROJECT_PROP},
+            "additionalProperties": False,
+        },
+        "handler": _tool_step,
+    },
+    "dw_step_apply": {
+        "description": (
+            "Apply exactly one current step lease and return the bounded, versioned "
+            "result; accepts no command or argv and never certifies or commits. "
+            "Adapter over dw_pmo.step.apply_step."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": _PROJECT_PROP,
+                "expect": {
+                    "type": "string",
+                    "description": "Exact sha256 token from a fresh dw_step preview",
+                },
+            },
+            "required": ["expect"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_step_apply,
     },
     "dw_context": {
         "description": (

@@ -35,6 +35,13 @@ failure, interruption, spawn failure, and non-started refusal. Atomic local
 claims prevent replay even for read-only actions, and exactly one content-
 safe `step_execution` event correlates every started child without recording
 argv or output.
+The handrail is now transport-complete: MCP adds pure `dw_step` and exact-token
+`dw_step_apply`; the local HTTP API adds `GET /api/step` and
+`POST /api/step/apply`. All three adapters return byte-equal preview/result
+core documents, accept no caller-supplied argv, refuse replay without another
+child, and keep certification and commit outside the capability. A freshly
+installed fixture proves the contract end to end and CI pins the new tool and
+route inventories.
 
 This section is release-ready input, not a publication claim: the package
 remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula

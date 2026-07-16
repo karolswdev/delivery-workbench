@@ -1,12 +1,12 @@
 """The local workbench server: JSON API + static explorer shell.
 
-Read-only in this slice (WLA-5-03): every response is derived live from
-the Markdown roadmap through the same ``dw_pmo`` functions the CLI
-uses — no second parser, no cache, no database, and no writes. The
-server binds 127.0.0.1 only and serves exactly the repo root it was
-started against. Non-GET methods are rejected; the file endpoint is
-contained to the roadmap tree; static assets are contained to the
-workbench directory.
+Every response is derived live from the Markdown roadmap through the same
+``dw_pmo`` functions the CLI uses — no second parser, cache, or database.
+Writes have only two explicit boundaries: the roadmap editor's guarded
+preview/apply pair and the deliberate step's exact-token apply route. Neither
+stages, certifies, or commits. The server binds 127.0.0.1 only and serves
+exactly the repo root it was started against; file and static endpoints are
+contained to their respective trees.
 
 Route logic lives in :func:`handle_api` (pure: path + query in,
 status + envelope out) so view models are unit-testable without
@@ -207,6 +207,12 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
             project = query.get("project", [""])[0].strip() or None
             return 200, envelope(build_status(root, project))
+
+        if parts == ["api", "step"]:
+            from .step import build_step
+
+            project = query.get("project", [""])[0].strip() or None
+            return 200, envelope(build_step(root, project))
 
         if parts == ["api", "context"]:
             include_trace = query.get("trace", ["0"])[0] in {"1", "true"}
@@ -435,8 +441,35 @@ def _issues_guard(root: Path, body: dict[str, object], plan) -> tuple[int, dict[
 
 
 def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
-    """POST routes: /api/mutations/preview and /api/mutations/apply."""
+    """POST routes: deliberate step apply and guarded roadmap mutations."""
     route = path.rstrip("/")
+    if route == "/api/step/apply":
+        unknown = sorted(set(body) - {"project", "expect"})
+        if unknown:
+            return _error(400, f"unknown step parameter(s): {', '.join(unknown)}")
+        expected = str(body.get("expect", "") or "")
+        if not expected:
+            return _error(400, "step apply requires expect from a fresh preview")
+        try:
+            from .step import apply_step
+
+            result, _exit_code = apply_step(
+                root,
+                str(body.get("project", "") or "") or None,
+                expected,
+            )
+            if result["outcome"] == "refused":
+                reason = str(result["reason"] or "step refused")
+                return 409, envelope(result, ok=False, issues=[reason])
+            issues = [str(result["reason"])] if result["reason"] else []
+            return 200, envelope(
+                result,
+                ok=result["outcome"] == "succeeded",
+                issues=issues,
+            )
+        except DwError as err:
+            return _error(400, err.message)
+
     if route == "/api/mutations/preview":
         try:
             plan = build_mutation_plan(root, body)
@@ -487,7 +520,11 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
                 issues=[f"apply failed and was rolled back: {err}"],
             )
 
-    return _error(405, "unsupported method or route; mutations go through /api/mutations/preview and /api/mutations/apply")
+    return _error(
+        405,
+        "unsupported method or route; use /api/step/apply or the guarded "
+        "/api/mutations/preview and /api/mutations/apply routes",
+    )
 
 def create_handler(root: Path, static_dir: Path | None):
     class WorkbenchHandler(BaseHTTPRequestHandler):
@@ -607,7 +644,10 @@ def serve(root: Path, port: int = 8377, quiet: bool = False) -> None:
         )
     print(f"dw-workbench: serving {root}")
     print(f"dw-workbench: http://127.0.0.1:{port}/ (localhost or your own .ts.net tailnet; Ctrl-C to stop)")
-    print("dw-workbench: writes happen only via /api/mutations preview→apply inside pm/roadmap; never commits")
+    print(
+        "dw-workbench: writes require /api/mutations preview→apply or an exact "
+        "/api/step/apply token; never stages, certifies, or commits"
+    )
 
     def _term(_sig, _frame):  # graceful SIGTERM
         raise KeyboardInterrupt

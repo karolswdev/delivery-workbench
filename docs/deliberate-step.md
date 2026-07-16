@@ -1,7 +1,7 @@
 # Deliberate step contract
 
-**Status:** v1 preview and result contracts implemented in the core and CLI;
-transport adapters are the next Phase-23 slice.
+**Status:** v1 preview and result contracts implemented across CLI, MCP, and
+HTTP; the three adapters return byte-equal core documents.
 **Scope:** local preview and explicit application of exactly one current,
 allowlisted status recommendation.
 
@@ -87,6 +87,31 @@ The pure document has an exact, test-pinned key set:
 `apply_command` is present only when the action is applicable. Preview exits
 zero even for a prohibited/manual action because the refusal itself is a
 valid answer.
+
+## Transport bindings
+
+All three transports call `step.build_step` and `step.apply_step` directly.
+They add framing, never policy, argv, or a second token implementation:
+
+| Transport | Preview | Explicit apply |
+|---|---|---|
+| CLI | `dw step [project] --json` | `dw step [project] --json --apply --expect <token>` |
+| MCP | `dw_step {project?}` | `dw_step_apply {project?, expect}` |
+| HTTP | `GET /api/step?project=<slug>` | `POST /api/step/apply` with `{project?, expect}` |
+
+MCP returns the core document as `structuredContent`; HTTP returns it as the
+workbench envelope's `data`; CLI prints it directly. Canonical serialization
+of those core documents is byte-equal on identical repository state. The MCP
+apply schema and HTTP body accept only `project` and `expect`: callers cannot
+supply or modify the underlying command. An operational apply refusal remains
+a normal MCP result carrying `delivery-workbench-step-result@1`; HTTP maps it
+to 409 with that exact receipt in `data`. A started child result remains
+truthful even when nonzero.
+
+The HTTP route is localhost-only under the existing workbench host/origin
+guards. It is distinct from the roadmap editor's content-fingerprint
+preview/apply routes: a step token binds the complete status observation and
+authorizes only the already-published closed argv.
 
 The token is SHA-256 over the canonical, complete status document plus the
 local lease-claim generation (sorted keys, compact separators, UTF-8). It
@@ -226,7 +251,10 @@ The executable proof is:
   token after only HEAD moves, consumes a read-only lease, and proves exactly
   one content-safe event per started child; and
 - `pmo-roadmap/tests/package-smoke.sh`: the wheel must contain and import the
-  deliberate-step core.
+  deliberate-step core; and
+- `pmo-roadmap/tests/step-interop.sh`: a freshly installed repo compares the
+  CLI, MCP, and HTTP preview/result documents exactly, consumes one real
+  `start-story` lease through each adapter, refuses replay and caller-supplied
+  argv, and proves certification/commit remain non-applicable everywhere.
 
-WLA-23-03 carries these same core documents through MCP and HTTP. No adapter
-may expand the allowlist or consent boundary implicitly.
+No adapter may expand the allowlist or consent boundary implicitly.

@@ -168,9 +168,11 @@ in), agent handoff text, a work-log viewer, and a guarded editor.
 flowchart LR
   UI[static UI\nvanilla JS, hash routes] --> API[JSON API\nstable envelope]
   API --> CORE[dw_pmo core\nlive reads, no cache]
-  UI --> MUT[preview -> diff -> apply]
+  UI --> MUT[editor preview -> diff -> apply]
+  API --> STEP[step preview -> exact token -> one child]
   MUT --> FPR[content-bound fingerprint\nstale/tamper 409]
   FPR --> CORE
+  STEP --> CORE
 ```
 
 The runtime boundary is deliberately boring and fully tested
@@ -179,13 +181,20 @@ The runtime boundary is deliberately boring and fully tested
 remediation in the message; rejects non-local `Host` headers, CORS
 preflights, path traversal, and slugs outside `[a-z0-9-]`; reads
 degrade to explicit absent states; repeated reads leave the tree
-checksum-identical; writes happen only through fingerprint-verified
-apply inside `pm/roadmap/**`; and **no endpoint stages or commits**
+checksum-identical; roadmap-editor writes happen only through fingerprint-
+verified apply inside `pm/roadmap/**`; deliberate-step writes require a full-
+status token and a second closed action/argv table; and **no endpoint stages,
+certifies, or commits**
 (proof: the suite asserts `git ls-files` stays empty through every
 preview/apply cycle). Mutations are guarded while validation issues
 exist — except mutations whose projected post-write issue set strictly
 shrinks the current one, because a fix is never ambiguous (proof:
 `test_guard_lets_remediation_through`).
+
+The deliberate-step HTTP pair (`GET /api/step`, `POST /api/step/apply`) is a
+thin binding over the same preview/result core used by CLI and MCP. Its body
+has no command field; replay, altered state, manual certification, and commit
+all refuse before child start (proof: `tests/step-interop.sh`).
 
 The overview's first component renders `GET /api/status` without adding
 policy: verdict, selected project, workspace/contract/gate facts, and exactly

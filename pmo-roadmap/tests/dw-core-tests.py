@@ -111,10 +111,13 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 2,
-            "exactly the preview and apply mutation routes may POST; "
+            len(post_routes), 3,
+            "exactly deliberate-step apply and the two roadmap mutation routes may POST; "
             f"found: {post_routes}",
         )
+        self.assertTrue(any('/api/step/apply' in line for line in post_routes))
+        self.assertTrue(any('/api/mutations/preview' in line for line in post_routes))
+        self.assertTrue(any('/api/mutations/apply' in line for line in post_routes))
 
     def test_missioncontrol_readonly_guard_catches_a_planted_write(self):
         # The guard must FAIL on a violation or it guards nothing:
@@ -546,6 +549,32 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertFalse(body["ok"])
 
+        status, body = wb.handle_api(self.root, "/api/step", {"project": ["demo"]})
+        self.assertEqual(status, 200)
+        step = core.build_step(self.root, "demo")
+        self.assertEqual(body["data"], step)
+        status, applied = wb.handle_mutation(
+            self.root,
+            "/api/step/apply",
+            {"project": "demo", "expect": step["token"]},
+        )
+        direct, _exit_code = core.apply_step(self.root, "demo", str(step["token"]))
+        self.assertEqual(status, 409)
+        self.assertFalse(applied["ok"])
+        self.assertEqual(applied["data"], direct)
+        self.assertEqual(direct["outcome"], "refused")
+        status, refused = wb.handle_mutation(
+            self.root,
+            "/api/step/apply",
+            {
+                "project": "demo",
+                "expect": step["token"],
+                "command": ["git", "commit"],
+            },
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("unknown step parameter", refused["issues"][0])
+
         status, body = wb.handle_api(self.root, "/api/projects", {})
         self.assertEqual(status, 200)
         self.assertEqual(body["kind"], "delivery-workbench-workbench-response")
@@ -606,6 +635,7 @@ class DwCoreTest(unittest.TestCase):
         before = self._tree_checksums()
         for _ in range(3):
             wb.handle_api(self.root, "/api/status", {"project": ["demo"]})
+            wb.handle_api(self.root, "/api/step", {"project": ["demo"]})
             wb.handle_api(self.root, "/api/context", {"trace": ["0"]})
             wb.handle_api(self.root, "/api/projects", {})
             wb.handle_api(self.root, "/api/projects/demo", {})
@@ -1452,15 +1482,24 @@ class DwCoreTest(unittest.TestCase):
             tokens,
         )
         self.assertEqual(self._interop_missing(tokens, doc), [])
+        # every POST route literal handle_mutation dispatches on
+        mutation_source = inspect.getsource(wb.handle_mutation)
+        post_routes = set(_re.findall(r'"(/api/[a-z/]+)"', mutation_source))
+        self.assertEqual(
+            post_routes,
+            {"/api/step/apply", "/api/mutations/preview", "/api/mutations/apply"},
+        )
+        self.assertEqual(self._interop_missing(post_routes, doc), [])
         # the CLI's machine-readable verbs
         verbs = [
-            "dw status", "dw context", "dw state --json", "dw next", "dw board",
+            "dw status", "dw step", "dw context", "dw state --json", "dw next", "dw board",
             "dw holds", "dw story show", "dw sessions --json", "dw events",
             "dw check", "dw gate --porcelain", "dw verify",
         ]
         self.assertEqual(self._interop_missing(verbs, doc), [])
         # the stamped models
-        for stamp in ("delivery-workbench-status",
+        for stamp in ("delivery-workbench-status", "delivery-workbench-step",
+                      "delivery-workbench-step-result",
                       "delivery-workbench-roadmap-context",
                       "delivery-workbench-workbench-response",
                       "delivery-workbench-board", "feed_schema"):
@@ -2595,7 +2634,8 @@ class MCPServerTest(unittest.TestCase):
         tools = self.rpc("tools/list")["result"]["tools"]
         names = [t["name"] for t in tools]
         self.assertEqual(names, [
-            "dw_status", "dw_context", "dw_next", "dw_check", "dw_doctor",
+            "dw_status", "dw_step", "dw_step_apply", "dw_context", "dw_next",
+            "dw_check", "dw_doctor",
             "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",
         ])
@@ -2633,12 +2673,51 @@ class MCPServerTest(unittest.TestCase):
         self.assertNotIn("verdict", source)
         self.assertNotIn("next_action", source)
 
+    def test_step_tools_are_exact_core_adapters(self) -> None:
+        preview_result = self.call("dw_step", {"project": "demo"})
+        self.assertNotIn("isError", preview_result)
+        preview = core.build_step(self.root, "demo")
+        self.assertEqual(preview_result["structuredContent"], preview)
+        self.assertIn("step=preview", preview_result["content"][0]["text"])
+
+        apply_result = self.call(
+            "dw_step_apply",
+            {"project": "demo", "expect": preview["token"]},
+        )
+        self.assertNotIn("isError", apply_result)
+        direct, _exit_code = core.apply_step(
+            self.root,
+            "demo",
+            str(preview["token"]),
+        )
+        self.assertEqual(apply_result["structuredContent"], direct)
+        self.assertEqual(
+            json.loads(apply_result["content"][0]["text"]),
+            apply_result["structuredContent"],
+        )
+        self.assertEqual(direct["outcome"], "refused")
+        self.assertFalse(direct["started"])
+        self.assertIn("Git metadata", direct["reason"])
+
+        import inspect
+
+        preview_source = inspect.getsource(self.mcp._tool_step)
+        apply_source = inspect.getsource(self.mcp._tool_step_apply)
+        self.assertNotIn("next_action", preview_source + apply_source)
+        self.assertNotIn("command", preview_source + apply_source)
+
     # -- error paths -----------------------------------------------------------
 
     def test_unknown_tool_and_unknown_params(self) -> None:
         result = self.call("dw_nonexistent")
         self.assertTrue(result["isError"])
         result = self.call("dw_check", {"projekt": "demo"})
+        self.assertTrue(result["isError"])
+        self.assertIn("unknown parameter", result["content"][0]["text"])
+        result = self.call(
+            "dw_step_apply",
+            {"expect": "sha256:" + "0" * 64, "command": ["git", "commit"]},
+        )
         self.assertTrue(result["isError"])
         self.assertIn("unknown parameter", result["content"][0]["text"])
 
@@ -2695,6 +2774,7 @@ class MCPServerTest(unittest.TestCase):
         import inspect
         for handler in (
             self.mcp._tool_status,
+            self.mcp._tool_step,
             self.mcp._tool_board,
             self.mcp._tool_holds,
             self.mcp._tool_story_show,
@@ -2732,6 +2812,9 @@ class MCPServerTest(unittest.TestCase):
         self.assertIn("| DM-1-02 | Second thing | in-progress |", table)
 
     def test_mutation_tools_require_their_params(self) -> None:
+        result = self.call("dw_step_apply", {"project": "demo"})
+        self.assertTrue(result["isError"])
+        self.assertIn("missing required parameter", result["content"][0]["text"])
         result = self.call("dw_story_status", {"project": "demo"})
         self.assertTrue(result["isError"])
         self.assertIn("missing required parameter", result["content"][0]["text"])

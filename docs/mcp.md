@@ -4,8 +4,8 @@ What the `dw-mcp` server exposes to agents, exactly how, and — most
 importantly — what it refuses to expose. This is the design contract
 for WLA-10-02/03 (implementation) and WLA-10-04 (wiring); the
 inventory and exclusions below are tested properties, not
-aspirations. MCP is one of three read transports — the full
-read-surface inventory across CLI, HTTP, and MCP lives in
+aspirations. MCP is one of three interoperable transports — the full
+surface inventory across CLI, HTTP, and MCP lives in
 [interop.md](./interop.md).
 
 ## Why a server, and why this thin
@@ -50,11 +50,12 @@ ceremony is proportionate there), the workbench's guarded editor
 
 ## Tool inventory
 
-Every tool returns both human-greppable `content` text (the same
-lines the CLI prints, so transcripts stay auditable) and
+Every tool returns both human-greppable `content` text and
 `structuredContent` for machine consumption. Errors set
 `isError: true` with the CLI's refusal message as text — refusal
-semantics are shared with the CLI by construction.
+semantics are shared with the CLI by construction. The deliberate-step apply
+receipt is the exception by design: expected operational refusals are versioned
+result data (`outcome: refused`, `started: false`), not protocol/tool errors.
 
 `dw_status` is intentionally different from a refusal: a briefing whose
 `verdict` is `attention` is successful tool data. The caller needs its
@@ -66,6 +67,7 @@ to `isError`.
 | Tool | Core function | Input schema (all fields optional unless noted) |
 |---|---|---|
 | `dw_status` | `status.build_status` | `{project?: string}` — result: the stamped `delivery-workbench-status` v1 object, including exactly one guided `next_action` |
+| `dw_step` | `step.build_step` | `{project?: string}` — pure `delivery-workbench-step` v1 preview of one state-bound action; never executes |
 | `dw_context` | `api.build_context_payload` | `{project?: string, compact?: boolean}` |
 | `dw_next` | `api.next_story` | `{project?: string}` — result: the story object or `{next: null}` |
 | `dw_check` | `validate.check_project` | `{project?: string}` — result: `{ok: boolean, issues: string[]}` |
@@ -90,6 +92,7 @@ to `isError`.
 
 | Tool | Core function | Input schema |
 |---|---|---|
+| `dw_step_apply` | `step.apply_step` | `{expect: string, project?: string}` — consumes one exact preview token, starts at most its closed-table child, and returns `delivery-workbench-step-result` v1; no command/argv field, certification, commit, or continuation |
 | `dw_story_status` | `mutations.plan_story_status` + `mutations.apply_plan` | `{project: string, phase: string|number, story: string|number, status: string}` (required) — same transactional header+table write, same refusal of done-without-evidence |
 | `dw_evidence_capture` | `evidence.run_capture` | `{project, phase, story, command: string[], cwd?: string}` (required except cwd) — command is an argv array, executed exactly as `dw evidence capture -- …`; output recorded with the shared renderer and its truncation bounds |
 | `dw_contract_new` | `contract.build_contract` + `contract.write_contract` | `{story?: string[], consent?: "yes"|"no", reasons?: string[], tests_capture?: string, tier?: "auto"|"full"|"short", force?: boolean}` — result text states plainly: certification happens by editing `.tmp/CONTRACT.md`, and no tool does it |
@@ -140,6 +143,9 @@ CLI defers: the server that answers must be the rails that gate
 
 - Every tool's verdict equals the CLI's on identical fixture state
   (`dw-core-tests.py` parity cases, WLA-10-02/03).
+- `dw_step` and `dw_step_apply` return the exact same core preview/result as
+  CLI and HTTP, reject caller-supplied argv, consume one lease, and preserve
+  the certification/commit exclusions (`tests/step-interop.sh`, WLA-23-03).
 - A fixture story walks backlog → done over MCP with files
   byte-identical to the CLI path (WLA-10-03).
 - `tools/list` never contains a certify/commit/bundle tool

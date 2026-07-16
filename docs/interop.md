@@ -1,11 +1,12 @@
-# The interop contract — every read surface, named
+# The interop contract — every surface, named
 
-Delivery Workbench exposes one read layer over three transports.
+Delivery Workbench exposes one core layer over three transports.
 Every surface below derives live from the Markdown roadmap through
-the same `dw_pmo` core — no second parser, no cache — and every
-surface is **read-only**: the write path is exactly the guarded
-preview→apply mutation flow plus the commit gate
-(see [mcp.md](./mcp.md) for the mutation stance and
+the same `dw_pmo` core — no second parser, no cache. Reads are pure. The
+write paths are the structured editor's guarded preview→apply flow, guarded
+MCP mutations, and the explicit state-bound deliberate step. None can stage,
+certify, or commit
+(see [mcp.md](./mcp.md), [deliberate-step.md](./deliberate-step.md), and
 `pm/roadmap/PMO-CONTRACT.md` for the gate rules; this document
 never restates them).
 
@@ -25,6 +26,8 @@ is added when an external consumer asks for one.
 | Model | Stamp | Declared in |
 |---|---|---|
 | Status briefing | `delivery-workbench-status` v1 | `status.build_status` |
+| Deliberate-step preview | `delivery-workbench-step` v1 | `step.build_step` |
+| Deliberate-step result | `delivery-workbench-step-result` v1 | `step.apply_step` |
 | Roadmap context | `delivery-workbench-roadmap-context` v1 | `api.build_context_payload` |
 | Workbench envelope | `delivery-workbench-workbench-response` v1 | `workbench.envelope` (wraps every HTTP response) |
 | Board | `delivery-workbench-board` v1 | `board.board_model` |
@@ -36,6 +39,7 @@ is added when an external consumer asks for one.
 | Verb | Core function | Returns |
 |---|---|---|
 | `dw status [project] --json` | `status.build_status` | the stamped briefing; exit 0 `ready`, 1 `attention` |
+| `dw step [project] --json` | `step.build_step` | pure state-bound preview; add `--apply --expect <token>` for exactly one closed-table action and the stamped result |
 | `dw context [project] [--compact] [--trace]` | `api.build_context_payload` | the stamped roadmap context |
 | `dw state --json` | `statefeed.build_state_feed` | the mission-control feed (`feed_schema` 1) |
 | `dw next [project] --json` | `api.next_story` | the next actionable story or `{next_story: null, parked}` |
@@ -48,15 +52,20 @@ is added when an external consumer asks for one.
 | `dw gate --porcelain` | `gate.run_gate` | the gate verdict, machine-readable |
 | `dw verify [range] --porcelain` | `verify.run_verify` | the history audit, machine-readable |
 
-## Workbench HTTP (GET, localhost/tailnet)
+## Workbench HTTP (localhost/tailnet)
 
 Served by `dw-workbench`; every response rides the stamped envelope.
-Mutations exist only at `POST /api/mutations/preview` and
-`POST /api/mutations/apply` (documented with the editor, not here).
+Roadmap-content mutations use only `POST /api/mutations/preview` and
+`POST /api/mutations/apply`. The deliberate step has its own exact-token
+apply route; it accepts no caller-supplied argv.
 
 | Route | Core function | Returns |
 |---|---|---|
 | `/api/status?project=<slug>` | `status.build_status` | the stamped briefing in `data`; `attention` remains HTTP 200 data |
+| `GET /api/step?project=<slug>` | `step.build_step` | the stamped pure preview in `data` |
+| `POST /api/step/apply` | `step.apply_step` | exact stamped result in `data`; 409 for a non-started refusal |
+| `POST /api/mutations/preview` | guarded editor plan | content diff + state fingerprint; no write |
+| `POST /api/mutations/apply` | guarded editor apply | applies only the matching fresh fingerprint inside `pm/roadmap` |
 | `/api/context` | `api.build_context_payload` | the roadmap context |
 | `/api/projects` | `workbench._project_summary` | per-project summaries (counts, next story) |
 | `/api/projects/<slug>` | `api.project_context` | one project: phases, stories, parked summary |
@@ -74,18 +83,18 @@ Mutations exist only at `POST /api/mutations/preview` and
 ## MCP tools (`dw-mcp`, stdio)
 
 The full tool table with input schemas lives in [mcp.md](./mcp.md);
-this is the inventory. Read-only: `dw_status`, `dw_context`, `dw_next`,
+this is the inventory. Read-only: `dw_status`, `dw_step`, `dw_context`, `dw_next`,
 `dw_check`, `dw_doctor`, `dw_board`, `dw_holds`, `dw_story_show`,
-`dw_verify`, `dw_gate`. Guarded mutations: `dw_story_status`,
+`dw_verify`, `dw_gate`. Exact-token action: `dw_step_apply`. Guarded mutations: `dw_story_status`,
 `dw_evidence_capture`, `dw_contract_new`. Certification is never a
 tool call.
 
 ## The pin
 
-A test (`test_interop_doc_names_every_surface`) derives the route
-inventory from `workbench.handle_api`'s source and the tool
+A test (`test_interop_doc_names_every_surface`) derives the GET and POST route
+inventories from `workbench.handle_api` / `handle_mutation` and the tool
 inventory from the MCP registry, and fails if any surface is missing
 from this document — a new surface cannot ship undocumented.
-The same test pins the status stamp and CLI verb; adapter parity tests compare
+The same test pins the model stamps and CLI verbs; adapter parity tests compare
 CLI JSON, MCP `structuredContent`, and HTTP envelope `data` without rewriting
 the core object.

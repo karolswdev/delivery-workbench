@@ -143,7 +143,10 @@ assert init["capabilities"] == {"tools": {}}, init
 assert init["serverInfo"]["name"] == "delivery-workbench", init
 
 names = [t["name"] for t in replies[2]["result"]["tools"]]
-expected = ["dw_status", "dw_context", "dw_next", "dw_check", "dw_doctor", "dw_verify", "dw_gate"]
+expected = [
+    "dw_status", "dw_step", "dw_step_apply", "dw_context", "dw_next",
+    "dw_check", "dw_doctor", "dw_verify", "dw_gate",
+]
 for name in expected:
     assert name in names, (name, names)
 for banned in ("certify", "commit", "bundle"):
