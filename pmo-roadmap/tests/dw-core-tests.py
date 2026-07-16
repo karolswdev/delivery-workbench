@@ -3137,6 +3137,30 @@ class StatusBriefingTest(unittest.TestCase):
         status = self.status()
         self.assertEqual(status["next_action"]["id"], "review-workspace")
 
+    def test_captured_evidence_recommends_the_guarded_done_transition(self) -> None:
+        phase = core.get_phase(core.get_project(self.root, "demo"), "1")
+        plan = core.plan_story_status(
+            self.root, core.get_project(self.root, "demo"), phase,
+            "DM-1-02", "in-progress",
+        )
+        core.apply_plan(plan)
+        (phase.path / "evidence-story-02.md").write_text(
+            "# Evidence - DM-1-02\n\n## Captured run 1\n\n- exit: 0\n",
+            encoding="utf-8",
+        )
+
+        status = self.status()
+        self.assertEqual(status["verdict"], "attention")
+        self.assertEqual(status["next_action"]["id"], "finish-story")
+        self.assertTrue(status["next_action"]["blocking"])
+        self.assertEqual(
+            status["next_action"]["command"],
+            [
+                ".githooks/dw", "story", "status", "demo", "1",
+                "DM-1-02", "done",
+            ],
+        )
+
     def test_stage_contract_certification_gate_and_staleness_sequence(self) -> None:
         readme = self.root / "pm" / "roadmap" / "demo" / "README.md"
         readme.write_text(readme.read_text(encoding="utf-8") + "\nchange\n", encoding="utf-8")

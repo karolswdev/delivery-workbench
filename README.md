@@ -275,7 +275,10 @@ trailers and an archived contract, the full history passing
 
 The suites live in `pmo-roadmap/tests/` and run standalone. CI runs
 all of them on ubuntu and macos, the unit suite on python 3.9 (the
-floor), and history verification on every push.
+floor), and history verification on every push. The packaged exit exam,
+`guided-status-loop.sh`, creates a fresh consumer and follows the shared
+CLI/MCP/HTTP briefing through real evidence, contract certification, gate
+pass, trailers, archive, and commit verification.
 
 ## License
 

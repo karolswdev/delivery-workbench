@@ -168,7 +168,12 @@ roadmap carries it; see WLA-11-04 for the worked example):
 
 - `tests/package-smoke.sh` — build artifacts, `pipx install` from
   the local artifact, bootstrap a fixture repo to doctor-green with
-  no checkout present, prove the defer-to-repo rule (WLA-9-02).
+  no checkout present, invoke the packaged guided-status exit exam,
+  and prove the defer-to-repo rule (WLA-9-02, WLA-22-05).
+- `tests/guided-status-loop.sh` — install/update a fresh consumer and
+  assert each byte-equal CLI/MCP/HTTP recommendation from initial work
+  through evidence, manual certification, live gate pass, trailers,
+  archived contract, verified commit, and the next clean story.
 - `tests/upgrade-path.sh` — adopt from the real `v1.5.0` tag,
   upgrade, byte-compare protected content, `dw verify` over the
   mixed-version history, gated commit after refresh (WLA-9-03).

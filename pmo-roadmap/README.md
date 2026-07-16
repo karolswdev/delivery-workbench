@@ -726,6 +726,7 @@ pmo-roadmap/
 │   ├── canon-lint.sh             ← forbidden-drift patterns in canon
 │   ├── gate-parity.sh            ← gate-vs-hook parity scenarios
 │   ├── roadmap-cli.sh            ← CLI integration coverage
+│   ├── guided-status-loop.sh      ← packaged briefing-to-commit exit exam
 │   ├── work-log-mvp.sh           ← work-log pipeline coverage
 │   ├── workbench-explorer.sh     ← workbench server/API integration
 │   └── workbench-ui-smoke.sh     ← headless viewport renders

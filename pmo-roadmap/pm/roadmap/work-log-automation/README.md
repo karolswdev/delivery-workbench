@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-15 (Phase 22 opened from a full solution audit: one versioned status briefing will compose clone health, roadmap validity, workspace/contract state, current work, and the next safe action across CLI, MCP, HTTP, the workbench, and agent riders).
+**Last updated:** 2026-07-15 (Phase 22 closed: one versioned status briefing now composes clone health, roadmap validity, workspace/contract state, current work, and the next safe action across CLI, MCP, HTTP, the workbench, and agent riders; the packaged exit exam is green).
 **Current phase:** [phase-22-agent-briefing](./phase-22-agent-briefing/current-phase-status.md).
-**Status:** active — v1.14.0 shipped phases 0-21; Phase 22 is executing the unified briefing and guided agent loop.
+**Status:** Phase 22 complete — v1.14.0 shipped phases 0-21; the unified briefing is implemented and recorded as unpublished release-ready work.
 
 ## Vision
 
@@ -83,7 +83,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 19 | A stranger arriving from PyPI, Homebrew, or GitHub meets a package that states its case: complete metadata, a README that matches the shipped surface, and phases 16-18 published as v1.13.0. | done | [phase-19-front-door](./phase-19-front-door/) |
 | 20 | The Telegram interface becomes a first-class group surface: the pane becomes a picture (on demand and live), the buttons become a configurable toolbar and question-steering keyboards, and consent in a group belongs to a person, not a room — the second ccgram absorption (v4.3.11), every feature riding the existing consent spine. | done | [phase-20-group-grows-hands](./phase-20-group-grows-hands/) |
 | 21 | Phase 20's interactive surface — screenshots, buttons, per-person consent — reaches every channel as v1.14.0, with the same machinery as the last six releases. | done | [phase-21-landing-v1-14-0](./phase-21-landing-v1-14-0/) |
-| 22 | Give every human and agent one deterministic, versioned answer for repository readiness, current work, and the next safe action, shared across every supported surface. | active | [phase-22-agent-briefing](./phase-22-agent-briefing/) |
+| 22 | Give every human and agent one deterministic, versioned answer for repository readiness, current work, and the next safe action, shared across every supported surface. | done | [phase-22-agent-briefing](./phase-22-agent-briefing/) |
 
 ## Operating cadence
 
@@ -114,15 +114,15 @@ behavior is:
 - `dw` performs routine roadmap inspection, scaffolding, evidence-backed status
   updates, phase closing, drift reporting, and checks.
 
-## Active extension
+## Most recent extension
 
-Phase 22 (The briefing — one answer before agents act) is open. It
-turns the audit in `docs/solution-overview.md` into one deterministic,
+Phase 22 (The briefing — one answer before agents act) is closed. It
+turned the audit in `docs/solution-overview.md` into one deterministic,
 versioned, read-only status model shared by CLI, MCP, HTTP, the browser,
 and generated agent riders. The model composes existing authorities; it
 does not invent a second gate or automate certification. See
 [phase-22-agent-briefing/current-phase-status.md](./phase-22-agent-briefing/current-phase-status.md)
-and [the status contract](../../../../docs/status-briefing.md).
+and [the final summary](./phase-22-agent-briefing/final-summary.md).
 
 The most recent shipped foundation is v1.14.0: Phase 20 made the Telegram
 interface a first-class group surface (screenshots, live pictures,
@@ -189,10 +189,10 @@ commands, and CI runs the full suite on two OSes with shellcheck and a
 python-floor job. See
 [phase-6-agent-rails-hardening/final-summary.md](./phase-6-agent-rails-hardening/final-summary.md).
 
-Other future work remains possible around default-on policy, richer
+Future work remains possible around default-on policy, richer
 redaction, remote sync, hosted collaboration, and deeper browser
-interaction tests. Those remain deliberately deferred; Phase 22 is
-bounded to the briefing and guided loop selected by the current audit.
+interaction tests. Those remain deliberately deferred; the next phase has
+not been invented implicitly after Phase 22's bounded closeout.
 
 ## Project metadata
 

@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 22
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-22-04
 - **Unblocks:** phase close and next release
 - **Owner:** unassigned
@@ -27,17 +27,17 @@ and every transition matches what the underlying rails will accept.
 
 ## Acceptance criteria
 
-- [ ] A temporary repo installed from the built artifact completes one
+- [x] A temporary repo installed from the built artifact completes one
   story and gated commit by following each successive status action;
   every recommendation is asserted before execution.
-- [ ] Missing evidence and restaging after contract generation produce
+- [x] Missing evidence and restaging after contract generation produce
   attention/manual repair and never recommend commit.
-- [ ] CLI/MCP/HTTP payloads agree at representative transitions and all
+- [x] CLI/MCP/HTTP payloads agree at representative transitions and all
   reads leave tracked state and rail-event count unchanged.
-- [ ] Python 3.9, shell/integration, package/upgrade, MCP, workbench UI,
+- [x] Python 3.9, shell/integration, package/upgrade, MCP, workbench UI,
   Telegram, HoldSpeak CI, docs, self-check, and history verification are
   green with evidence captured.
-- [ ] The phase final summary names delivered value, proof, decisions,
+- [x] The phase final summary names delivered value, proof, decisions,
   limitations, and deliberately deferred work; release files are ready
   but no external publication is performed implicitly.
 

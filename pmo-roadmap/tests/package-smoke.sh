@@ -5,8 +5,9 @@
 # install the wheel into an isolated environment (pipx when it works,
 # plain venv+pip otherwise — same artifact, same entry point), then
 # from OUTSIDE the checkout bootstrap a fixture repo with the packaged
-# payload, reach doctor-green there, and prove the defer-to-repo rule
-# (a global dw inside an adopted repo runs the vendored copy).
+# payload, reach doctor-green there, complete the packaged guided-status
+# exit exam, and prove the defer-to-repo rule (a global dw inside an
+# adopted repo runs the vendored copy).
 #
 # Interpreter health is probed first: a broken pyexpat or venv pip
 # (observed on this machine's brew python 3.14) disqualifies a
@@ -120,6 +121,13 @@ set -e
 [ "$STATUS_CODE" -eq 1 ] || fail "empty packaged consumer should return attention"
 grep -q '"kind": "delivery-workbench-status"' "$TMP_ROOT/status.json" \
   || fail "packaged status CLI did not return the stamped model"
+
+# ── guided status loop ─────────────────────────────────────────────
+# Reuse this exact installed wheel entry point. The exam creates its own
+# consumer and proves every CLI/MCP/HTTP recommendation through a gated
+# evidence-backed commit, so package smoke cannot pass on mere imports.
+DW_GUIDED_CLI="$DW" "$SCRIPT_DIR/guided-status-loop.sh" \
+  || fail "packaged guided status loop failed"
 
 # ── defer-to-repo rule ─────────────────────────────────────────────
 # Replace the vendored CLI with a marker; the global dw run inside the

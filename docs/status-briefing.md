@@ -1,7 +1,8 @@
 # Status briefing contract
 
-**Status:** v1 contract frozen and implemented across core, CLI, MCP, HTTP,
-workbench overview, and generated agent briefs; packaged exit exam pending.
+**Status:** v1 contract implemented and exit-exam proven across core, CLI,
+MCP, HTTP, workbench overview, generated agent briefs, and a packaged
+fresh-consumer delivery loop.
 **Scope:** local, read-only readiness and guided next action.
 
 ## Purpose
@@ -35,6 +36,12 @@ The top-level verdict is one of:
 - `attention`: a blocking precondition makes ordinary story work unsafe:
   required clone wiring is broken, the roadmap has validation errors, or
   Git is in a rewrite operation. The first action is a repair/resolve act.
+
+The intentional instant between evidence capture and a guarded `done`
+transition remains `attention`, because the roadmap validator can already
+see the premature receipt. In that one unambiguous case the repair is the
+exact `finish-story` argv; status does not strand the operator at a generic
+check report.
 
 This is **local readiness**. It does not claim current CI, required GitHub
 checks, network services, release publication, or latest available
@@ -189,26 +196,28 @@ not competing first choices.
 The first matching rule wins:
 
 1. `repair-rails` — a required doctor check fails.
-2. `repair-roadmap` — validation or generated-rider drift fails.
-3. `resolve-rewrite` — Git reports a rebase/cherry-pick/revert state.
-4. `select-project` — several projects exist and none was requested.
-5. `review-unstaged` — staged work also has unstaged/untracked paths;
+2. `finish-story` — the selected in-progress story has the sole premature-
+   evidence issue; run its guarded `story status ... done` transition.
+3. `repair-roadmap` — any other validation or generated-rider drift fails.
+4. `resolve-rewrite` — Git reports a rebase/cherry-pick/revert state.
+5. `select-project` — several projects exist and none was requested.
+6. `review-unstaged` — staged work also has unstaged/untracked paths;
    prevent an accidental partial commit before contract generation.
-6. `generate-contract` — work is staged and no valid/fresh contract exists
+7. `generate-contract` — work is staged and no valid/fresh contract exists
    (`--force` when replacing one).
-7. `certify-contract` — the live gate says boxes remain unchecked. This is
+8. `certify-contract` — the live gate says boxes remain unchecked. This is
    `kind: manual`, `command: null`; the reason names `.tmp/CONTRACT.md`.
-8. `repair-gate` — the staged contract exists but another gate rule
+9. `repair-gate` — the staged contract exists but another gate rule
    refuses; the reason carries the gate's remediation. Manual unless that
    remediation has a universally safe existing command.
-9. `commit` — and only when staged work exists and side-effect-free gate
+10. `commit` — and only when staged work exists and side-effect-free gate
    inspection passes; argv is `git commit`.
-10. `continue-story` — selected next story is already in progress.
-11. `review-workspace` — dirty work exists but no story is in progress;
+11. `continue-story` — selected next story is already in progress.
+12. `review-workspace` — dirty work exists but no story is in progress;
     ask the operator to align it before starting another story.
-12. `start-story` — selected next story is ready or backlog.
-13. `review-holds` — no actionable story exists and work is parked.
-14. `plan-work` — no actionable or parked story exists.
+13. `start-story` — selected next story is ready or backlog.
+14. `review-holds` — no actionable story exists and work is parked.
+15. `plan-work` — no actionable or parked story exists.
 
 Additional non-first actions may link to the selected story, warnings, or
 holds, but may not contradict this order.

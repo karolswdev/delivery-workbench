@@ -41,7 +41,10 @@ holds, and the next story into the versioned
 precedence. It performs no network access or writes—not even a state-feed
 event—and repeated calls over unchanged inputs are byte-identical (proof:
 `StatusBriefingTest` in `tests/dw-core-tests.py` and the installed-repository
-assertions in `tests/roadmap-cli.sh`).
+assertions in `tests/roadmap-cli.sh`). The packaged system proof is
+`tests/guided-status-loop.sh`: one fresh consumer receives equal CLI, MCP,
+and HTTP objects at each transition and reaches a verified gated commit by
+executing the recommended argv (manual certification remains manual).
 
 The status vocabulary is defined once (`model.STORY_STATUSES`:
 `backlog | ready | in-progress | blocked | done`, with done-synonyms

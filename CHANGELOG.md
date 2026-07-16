@@ -7,6 +7,25 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
+## Unreleased
+
+One answer before agents act: Phase 22 adds the stamped, deterministic
+`delivery-workbench-status@1` briefing across `dw status`, MCP
+`dw_status`, `GET /api/status`, the workbench overview, and every generated
+agent rider. The object composes the existing doctor, roadmap, Git,
+contract, gate, current-work, and holds authorities; adapters carry no
+decision logic, reads emit no events, ambiguous projects are never guessed,
+manual certification stays manual, and `commit` appears only when a live
+side-effect-free gate inspection passes. A packaged fresh-consumer exit exam
+now asserts byte-equal CLI/MCP/HTTP recommendations through install, update,
+evidence, the specialized guarded `finish-story` transition, staging,
+contract staleness, certification, trailers, archived contract, verified
+commit, and the next clean story. Full detail: [Phase 22](./pmo-roadmap/pm/roadmap/work-log-automation/phase-22-agent-briefing/current-phase-status.md).
+
+This section is release-ready input, not a publication claim: the package
+remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula
+change has been performed.
+
 ## v1.14.0 — 2026-07-11
 
 The group grows hands: the second ccgram absorption (upstream

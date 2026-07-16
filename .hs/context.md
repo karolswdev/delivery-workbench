@@ -6,8 +6,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Current phase: 22 (phase-22-agent-briefing)
-- Next story: WLA-22-05 — Prove the guided loop in a fresh consumer [backlog]
+- Next story: nothing actionable
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

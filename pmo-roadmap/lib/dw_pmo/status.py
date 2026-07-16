@@ -9,6 +9,7 @@ contract is ``docs/status-briefing.md``.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -255,6 +256,71 @@ def _action(
     }
 
 
+def _finish_story_action(
+    roadmap: dict[str, object],
+    selected: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Turn the evidence-capture transition into an exact guarded action.
+
+    The roadmap validator deliberately reports evidence attached to an open
+    story as premature.  That is also the unavoidable state immediately
+    after ``dw evidence capture`` and before the guarded done flip.  Only
+    specialize that single, unambiguous issue for the selected in-progress
+    story; every other validation failure keeps the generic repair path.
+    """
+    if selected is None:
+        return None
+    issues = roadmap.get("issues")
+    next_story = selected.get("next_story")
+    if (
+        not isinstance(issues, list)
+        or len(issues) != 1
+        or not isinstance(next_story, dict)
+    ):
+        return None
+    if normalize_status(str(next_story.get("status") or "")) != "in-progress":
+        return None
+
+    story_id = str(next_story.get("story_id") or "")
+    match = re.search(r"-(\d+)$", story_id)
+    phase = selected.get("_next_phase")
+    slug = str(roadmap.get("selected_project") or "")
+    if not match or phase is None or not slug:
+        return None
+
+    issue_path, separator, message = str(issues[0]).partition(": ")
+    path = Path(issue_path)
+    evidence_number = int(match.group(1))
+    expected_names = {
+        f"evidence-story-{evidence_number:02d}.md",
+        f"evidence-story-{evidence_number}.md",
+    }
+    parts = path.parts
+    project_matches = any(
+        part == "roadmap" and index + 1 < len(parts) and parts[index + 1] == slug
+        for index, part in enumerate(parts)
+    )
+    phase_matches = bool(
+        re.match(rf"^phase-{re.escape(str(phase))}(?:-|$)", path.parent.name)
+    )
+    if (
+        not separator
+        or message != "evidence exists but matching story is not done"
+        or path.name not in expected_names
+        or not project_matches
+        or not phase_matches
+    ):
+        return None
+    return _action(
+        "finish-story",
+        f"{story_id} has evidence and can use the guarded done transition",
+        [
+            ".githooks/dw", "story", "status", slug, str(phase), story_id, "done",
+        ],
+        blocking=True,
+    )
+
+
 _REGENERATE_RULES = {
     "contract-missing",
     "contract-facts-missing",
@@ -280,6 +346,9 @@ def _choose_action(
         failed = next((c for c in rails["checks"] if not c["ok"]), None)  # type: ignore[union-attr]
         reason = str(failed["detail"]) if failed else "required clone wiring is unhealthy"
         return _action("repair-rails", reason, [".githooks/dw", "doctor"], blocking=True)
+    finish_story = _finish_story_action(roadmap, selected)
+    if finish_story is not None:
+        return finish_story
     if not roadmap["healthy"]:
         first = str(roadmap["issues"][0])  # type: ignore[index]
         command = (

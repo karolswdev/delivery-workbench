@@ -223,25 +223,34 @@ The following is a dated verification snapshot, not an evergreen claim.
 On 2026-07-15 in this checkout:
 
 - version v1.14.0 is single-sourced across Python, CLI, plugin manifest,
-  formula, and changelog;
-- phases 0–21 are closed and Phase 22 is now open;
-- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 208 tests;
-- every local shell/integration suite in the CI workflow passed,
+  formula, and the latest published changelog heading; Phase 22 is recorded
+  under an explicitly unpublished changelog section;
+- phases 0–22 are closed; Phase 22 is implemented but not published as a
+  new release;
+- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 221 tests on the local
+  interpreter and on the declared Python 3.9 floor;
+- every locally runnable non-Homebrew shell/integration suite in the CI
+  workflow passed,
   including gate parity, contributor flow, MCP, package-facing docs,
-  workbench explorer, and work-log lifecycle;
+  workbench explorer, upgrade-from-v1.5.0, history-range fixtures, and
+  work-log lifecycle;
+- the package smoke built sdist and wheel on Python 3.9, installed the wheel,
+  and invoked the fresh-consumer guided loop through a verified gated commit;
 - the workbench viewport smoke rendered seven views at desktop and mobile
-  sizes (14 renders);
+  sizes plus attention and ambiguous-project states (18 renders);
 - Telegram architecture fitness passed 10 tests and its interface suite
-  passed 147 tests; nine Pillow-dependent image legs skipped locally
-  because Pillow was absent (CI installs it);
+  passed 147 tests in a Python 3.9 + Pillow environment (one Python-3.11-only
+  `tomllib` lock test abstained on the declared floor);
+- all 23 HoldSpeak pack tests passed in the same pinned v0.4.0/no-runtime-
+  dependencies plus NumPy environment provisioned by CI;
 - `dw check work-log-automation` passed; and
-- `dw verify --all` verified 119 gated commits and skipped 17 pre-epoch
-  commits under the documented epoch policy.
+- after the phase-closing commit, `dw verify --all` verifies 124 gated
+  commits and skips 17 pre-epoch commits under the documented epoch policy.
 
-The 23 HoldSpeak-host tests skipped locally because HoldSpeak is not
-installed in this interpreter; CI installs the pinned v0.4.0 host and
-runs them. That distinction matters: an optional integration is not
-claimed locally proven merely because its skip is green.
+The Homebrew smoke deliberately refused to disturb the already installed
+user formula on this workstation; its clean-machine macOS CI leg remains
+wired. That environment limitation is recorded rather than translated into
+a false local pass.
 
 The complete CI job inventory is `.github/workflows/validation.yml`.
 
@@ -264,13 +273,13 @@ The complete CI job inventory is `.github/workflows/validation.yml`.
 
 ## Assessment: gaps and observations
 
-### 1. Orientation is fragmented
+### 1. Orientation was fragmented — addressed in Phase 22
 
 `doctor`, `check`, `next`, `holds`, context, Git status, contract facts,
 and gate readiness each answer one part of the opening question. Agent
-docs currently ask for three orientation calls before workspace state is
-considered. Omitting one can produce a locally reasonable but globally
-wrong next step. This is Phase 22's primary target.
+docs previously asked for three orientation calls before workspace state
+was considered. `dw status` now composes those authorities into one bounded
+answer, and generated riders open with that answer before specialist calls.
 
 ### 2. The broad context payload is comprehensive but not economical
 
@@ -288,13 +297,13 @@ not violate Markdown structure or version-single-source tests. This
 overview fixes the instance; the status model reduces dependence on prose
 for live facts. A future semantic-freshness policy may still be useful.
 
-### 4. Product breadth raises discoverability cost
+### 4. Product breadth raises discoverability cost — front door addressed
 
 The CLI has planning, evidence, gate, verification, board, holds,
 adoption, riders, hooks, state, sessions, events, and contract families.
-The breadth is earned, but `--help` is now an inventory rather than a
-guided entry point. One obvious aggregate command can preserve specialist
-power while reducing the number of choices at start.
+The breadth is earned, but `--help` remains an inventory. `dw status` now
+provides the obvious guided entry point while preserving the specialist
+commands for depth.
 
 ### 5. Schema discipline is strong but uneven by age
 
@@ -319,7 +328,18 @@ their tests. A local all-green run can therefore include explicit skips.
 The operator-facing briefing should surface capabilities as observed
 facts in a later phase if those integrations become central to daily use.
 
-## Phase 22: the next product step
+### 8. Evidence capture exposed an intentional but unguided transition
+
+The validator correctly considers evidence attached to a non-done story
+premature, yet `dw evidence capture` necessarily creates that state before
+the guarded done flip. The fresh-consumer exam caught that a generic
+`repair-roadmap` answer stranded an agent at the exact point it needed the
+rails most. Status now specializes only the single unambiguous case for the
+selected in-progress story as `finish-story`, carrying the existing guarded
+`story status ... done` argv. Any other roadmap issue retains the generic
+blocking repair path.
+
+## Phase 22: delivered product step
 
 Phase 22 is **The briefing — one answer before agents act**. It is a
 usability and interoperability phase, not a new source of truth.
@@ -333,10 +353,12 @@ Its five slices are:
 5. prove the recommendation sequence through a fresh packaged consumer's
    full evidence-backed, gated delivery loop.
 
-Slices 1–4 are implemented and evidence-backed: the core object now travels
+All five slices are implemented and evidence-backed: the core object travels
 unchanged through CLI JSON, MCP `structuredContent`, and the workbench HTTP
 envelope; the browser and generated Claude/Codex/pi/plugin instructions open
-on that answer. The remaining work is a packaged-consumer exit exam.
+on that answer; and the packaged-consumer exit exam follows every successive
+recommendation through a real gated commit while asserting read purity and
+adapter equality.
 
 The desired result is a shorter safe path into all the power already
 present:
@@ -345,12 +367,12 @@ present:
 dw status
   ├─ attention → repair the named rail
   ├─ select-project → human/agent chooses; the tool does not guess
-  ├─ start/continue/capture → use the existing guarded story loop
+  ├─ start/continue/capture/finish → use the guarded story loop
   ├─ stage/contract/certify/gate → preserve the consent spine
   └─ commit → only after live gate inspection passes
 ```
 
-The phase plan and evidence will live under
+The phase plan, evidence, and closeout live under
 `pmo-roadmap/pm/roadmap/work-log-automation/phase-22-agent-briefing/`.
 
 ## Where to go deeper

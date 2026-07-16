@@ -38,7 +38,7 @@ individual rails; this phase turns them into one legible entry point.
 - [x] The workbench overview and generated agent brief begin with the
   briefing and its next action without removing any specialist surface
   (WLA-22-04).
-- [ ] A fresh packaged consumer is driven from unknown state through a
+- [x] A fresh packaged consumer is driven from unknown state through a
   complete evidence-backed story and gated commit using the briefing's
   recommendation at each transition; all distribution and UI checks
   remain green (WLA-22-05).
@@ -51,18 +51,19 @@ individual rails; this phase turns them into one legible entry point.
 | WLA-22-02 | dw status — one deterministic core and CLI | done | [story-02-status-core-and-cli](./story-02-status-core-and-cli.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-22-03 | One model everywhere — MCP and HTTP parity | done | [story-03-status-interop](./story-03-status-interop.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-22-04 | The workbench and agent brief open on the answer | done | [story-04-status-front-door](./story-04-status-front-door.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-22-05 | Prove the guided loop in a fresh consumer | backlog | [story-05-guided-loop-exit-exam](./story-05-guided-loop-exit-exam.md) | - |
+| WLA-22-05 | Prove the guided loop in a fresh consumer | done | [story-05-guided-loop-exit-exam](./story-05-guided-loop-exit-exam.md) | [evidence-story-05](./evidence-story-05.md) |
 
 ## Where we are
 
-Phase OPEN 4/5. The browser overview now leads with a responsive,
-presentation-only briefing: verdict, project, workspace, contract/gate, and
-one tokenized argv or manual action before the existing project cards. The
-canonical agent block and `/dw-next` start from the same status contract
-across Claude, AGENTS/Codex, pi, and plugin renders. The 220-test core suite,
-agent lifecycle, and 18 desktop/mobile Firefox renders are green. WLA-22-05
-is the final exit exam: prove the recommendation sequence end-to-end from a
-fresh packaged consumer.
+Phase COMPLETE 5/5. One pure `delivery-workbench-status@1` decision now opens
+the CLI, MCP, HTTP, workbench, and generated-agent paths. The Python 3.9
+package exit exam installs and updates a fresh consumer, asserts equal and
+read-only objects at every transition, survives missing-evidence and stale-
+contract red paths, preserves manual certification, and reaches a gated,
+trailered, archived, history-verified commit. The measured closeout is 221
+core tests, 18 desktop/mobile Firefox renders, 147 Telegram interface + 10
+fitness tests, 23 provisioned HoldSpeak tests, and the full shell,
+distribution, upgrade, contribution, docs, and verification battery.
 
 ## Active risks
 
@@ -85,6 +86,8 @@ fresh packaged consumer.
 - 2026-07-15 - Action commands are argv arrays, not shell strings; deliberate human acts such as contract certification have `kind: manual` and no pretend command - interoperability and consent spine.
 - 2026-07-15 - Installed repos ignore `__pycache__/` append-only - adapter imports must not perturb Git status or invite vendored runtime caches into commits - full-object parity finding.
 - 2026-07-15 - The workbench status panel renders argv as escaped tokens and has no execute control - guidance can be prominent without turning orientation into authority - UI trust boundary.
+- 2026-07-15 - The sole premature-evidence issue for the selected in-progress story maps to a blocking `finish-story` action carrying the existing guarded done argv - evidence capture intentionally creates this transient state, and a generic check command stranded the exit exam - fresh-consumer finding.
+- 2026-07-15 - Phase 22 closes as unpublished v1.14.0 work - prepare an Unreleased narrative but do not infer authority to bump, tag, push, publish, or disturb an installed formula - release boundary.
 
 ## Decisions deferred
 
