@@ -251,6 +251,8 @@ trailers and an archived contract, the full history passing
 
 ## Documentation
 
+- [Comprehensive solution overview](./docs/solution-overview.md): current architecture, workflows, trust model, proof snapshot, strengths, gaps, and next phase
+- [Status briefing contract](./docs/status-briefing.md): the Phase 22 one-answer model, readiness semantics, and guided action order
 - [Architecture](./docs/architecture.md), with the test that proves each claim
 - [Framework README](./pmo-roadmap/README.md): install, update, adopt, operate
 - [The contract rules](./pmo-roadmap/templates/PMO-CONTRACT.md)

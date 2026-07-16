@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-11 (Phase 18 — Every element answers CLOSED 4/4 the same day as Phase 17: cards and holds carry receipts + links, `dw story show` browses one story whole, MCP gained dw_board/dw_holds/dw_story_show, and docs/interop.md pins the whole read surface. Earlier the same day: Phase 17 — Work that waits CLOSED 6/6, the hold vocabulary with mandatory reasons, phase pause/resume, honest `dw next` + `dw holds`, and the kanban board with guarded drag moves).
-**Current phase:** n/a.
-**Status:** active — framework shipped through v1.8.0 (phases 0-11); the gate's guarantees hold locally, remotely, across distribution channels, for agents, and across the pull-request boundary.
+**Last updated:** 2026-07-15 (Phase 22 opened from a full solution audit: one versioned status briefing will compose clone health, roadmap validity, workspace/contract state, current work, and the next safe action across CLI, MCP, HTTP, the workbench, and agent riders).
+**Current phase:** [phase-22-agent-briefing](./phase-22-agent-briefing/current-phase-status.md).
+**Status:** active — v1.14.0 shipped phases 0-21; Phase 22 is executing the unified briefing and guided agent loop.
 
 ## Vision
 
@@ -50,6 +50,12 @@ summarization can improve those entries after the lifecycle is proven.
   gap, gate-logic drift bypasses, ephemeral contract audit trail, evidence
   backfill risk, missing agent surface, and dogfood-integrity findings that
   seed Phase 6.
+- User requirement, 2026-07-15: comprehensively assess the whole solution,
+  then push usability, interoperability, and agent-development guardrails
+  forward by opening and executing the next phase from the audit findings.
+- [Solution overview](../../../../docs/solution-overview.md), 2026-07-15:
+  the whole-system map, evidence snapshot, strengths, gaps, and rationale for
+  Phase 22.
 
 ## Phase index
 
@@ -77,6 +83,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 19 | A stranger arriving from PyPI, Homebrew, or GitHub meets a package that states its case: complete metadata, a README that matches the shipped surface, and phases 16-18 published as v1.13.0. | done | [phase-19-front-door](./phase-19-front-door/) |
 | 20 | The Telegram interface becomes a first-class group surface: the pane becomes a picture (on demand and live), the buttons become a configurable toolbar and question-steering keyboards, and consent in a group belongs to a person, not a room — the second ccgram absorption (v4.3.11), every feature riding the existing consent spine. | done | [phase-20-group-grows-hands](./phase-20-group-grows-hands/) |
 | 21 | Phase 20's interactive surface — screenshots, buttons, per-person consent — reaches every channel as v1.14.0, with the same machinery as the last six releases. | done | [phase-21-landing-v1-14-0](./phase-21-landing-v1-14-0/) |
+| 22 | Give every human and agent one deterministic, versioned answer for repository readiness, current work, and the next safe action, shared across every supported surface. | active | [phase-22-agent-briefing](./phase-22-agent-briefing/) |
 
 ## Operating cadence
 
@@ -109,7 +116,23 @@ behavior is:
 
 ## Active extension
 
-No phase is open. Phase 11 (Contribution Rails) shipped: the
+Phase 22 (The briefing — one answer before agents act) is open. It
+turns the audit in `docs/solution-overview.md` into one deterministic,
+versioned, read-only status model shared by CLI, MCP, HTTP, the browser,
+and generated agent riders. The model composes existing authorities; it
+does not invent a second gate or automate certification. See
+[phase-22-agent-briefing/current-phase-status.md](./phase-22-agent-briefing/current-phase-status.md)
+and [the status contract](../../../../docs/status-briefing.md).
+
+The most recent shipped foundation is v1.14.0: Phase 20 made the Telegram
+interface a first-class group surface (screenshots, live pictures,
+configurable buttons, question steering, and per-person consent), and
+Phase 21 landed it across the release channels. Phases 16-19 delivered
+legacy-tree absorption, first-class holds/board, the interop layer, and
+the open-source front door. Their receipts remain in their phase folders
+and the release narrative is in the root CHANGELOG.
+
+Earlier, Phase 11 (Contribution Rails) shipped: the
 contribution contract classifies what survives the fork boundary,
 contributor-flow.sh proved the rebase green path and both squash
 corruption modes with exact rule ids, the repository is rebase-merge
@@ -166,10 +189,10 @@ commands, and CI runs the full suite on two OSes with shellcheck and a
 python-floor job. See
 [phase-6-agent-rails-hardening/final-summary.md](./phase-6-agent-rails-hardening/final-summary.md).
 
-Future work remains possible around default-on policy, richer
-redaction, remote sync, hosted collaboration, and DOM-level UI tests —
-each parked deliberately in the phase final summaries. Any of it would
-open as a new phase through the same gate that shipped the ones above.
+Other future work remains possible around default-on policy, richer
+redaction, remote sync, hosted collaboration, and deeper browser
+interaction tests. Those remain deliberately deferred; Phase 22 is
+bounded to the briefing and guided loop selected by the current audit.
 
 ## Project metadata
 
