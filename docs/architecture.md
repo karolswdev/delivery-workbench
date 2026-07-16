@@ -56,6 +56,16 @@ the step cases in `StatusBriefingTest` and the installed lifecycle in
 `tests/roadmap-cli.sh`). The protocol and allowlist are
 [deliberate-step.md](./deliberate-step.md).
 
+Apply returns `delivery-workbench-step-result@1`: one exact-key receipt for
+success, child failure, interruption, spawn failure, or non-started refusal.
+Streams are captured separately and byte-capped; before/after observations
+carry only token and action id. An exclusive claim under
+`.git/pmo-step-claims/` makes even an unchanged read-only action single-use,
+while one allowlisted `step_execution` event correlates every started child
+without command/output content (proof: receipt, replay, truncation, and event
+cases in `StatusBriefingTest`, plus installed JSON lifecycle coverage in
+`tests/roadmap-cli.sh`).
+
 The status vocabulary is defined once (`model.STORY_STATUSES`:
 `backlog | ready | in-progress | blocked | done`, with done-synonyms
 `complete | closed | shipped`) and a doc-parity unit test fails if the

@@ -395,18 +395,35 @@ def command_status(args: argparse.Namespace) -> int:
 
 def command_step(args: argparse.Namespace) -> int:
     if args.apply:
-        if args.json:
-            die("--json --apply arrives with the versioned receipt in WLA-23-02")
-        preview, exit_code = apply_step(
+        result, exit_code = apply_step(
             args.root,
             args.project,
             args.expect or "",
         )
-        action = preview["action"]
+        if args.json:
+            print(json.dumps(result, sort_keys=True))
+            return exit_code
+        output = result["output"]
+        stdout = output["stdout"]
+        stderr = output["stderr"]
+        if stdout:
+            print(stdout, end="" if stdout.endswith("\n") else "\n")
+        if stderr:
+            print(
+                stderr,
+                end="" if stderr.endswith("\n") else "\n",
+                file=sys.stderr,
+            )
+        action = result["action"]
         action_id = action["id"] if isinstance(action, dict) else "none"
-        after = build_step(args.root, args.project)
-        next_action = after["action"]
-        next_id = next_action["id"] if isinstance(next_action, dict) else "none"
+        after = result["after"]
+        next_id = after["action_id"] if isinstance(after, dict) else "unknown"
+        if result["outcome"] == "refused":
+            print(f"dw step: refused: {result['reason']}", file=sys.stderr)
+            return exit_code
+        if result["outcome"] == "interrupted":
+            print(f"dw step: interrupted; next={next_id}", file=sys.stderr)
+            return exit_code
         if exit_code:
             print(
                 f"dw step: {action_id} exited {exit_code}; next={next_id}",

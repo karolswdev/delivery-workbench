@@ -136,7 +136,7 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 | Command | What it does |
 |---|---|
 | `dw status [project] [--json]` | One read-only readiness verdict and the next safe action across rails, workspace, and roadmap. |
-| `dw step [project] [--json]` | Preview one state-bound action; `--apply --expect <token>` runs at most that one allowlisted argv, never certification or commit. |
+| `dw step [project] [--json]` | Preview one state-bound action; `--json --apply --expect <token>` returns its bounded result after at most one allowlisted argv, never certification or commit. |
 | `dw next` | The next actionable story. Exit 0 found, 2 nothing to do. |
 | `dw context --compact` | JSON snapshot of the roadmap: issues, warnings, next story, trace paths. |
 | `dw check` | Lints roadmap structure and evidence content. Greppable errors, exit 1 on issues. |
@@ -155,7 +155,9 @@ All commands have stable exit codes. `dw status` exits 0 for `ready` and
 1 for `attention`; its JSON is a versioned contract suitable for an
 agent's first repository read. `dw step` is its separate explicit act
 boundary: preview is pure, stale tokens start nothing, and every invocation
-stops after one child. See [docs/deliberate-step.md](./docs/deliberate-step.md).
+stops after one child. Applied leases cannot replay even when the action was
+read-only; JSON apply returns the versioned result and human apply renders the
+same bounded streams. See [docs/deliberate-step.md](./docs/deliberate-step.md).
 The specialist orientation commands
 support `--json` or `--porcelain` output.
 

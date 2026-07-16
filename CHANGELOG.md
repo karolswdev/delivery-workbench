@@ -30,6 +30,11 @@ entire argv shape from a second closed table, starts at most one child, and
 stops. Same-action stale state, unknown or modified argv, manual choices,
 certification, and commit all refuse before process start. The first core/CLI
 slice is documented in [Phase 23](./pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/current-phase-status.md).
+Apply now returns a bounded `delivery-workbench-step-result@1` for success,
+failure, interruption, spawn failure, and non-started refusal. Atomic local
+claims prevent replay even for read-only actions, and exactly one content-
+safe `step_execution` event correlates every started child without recording
+argv or output.
 
 This section is release-ready input, not a publication claim: the package
 remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula

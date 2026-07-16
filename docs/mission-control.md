@@ -144,6 +144,13 @@ code), `gate_pass`, `gate_refusal` (with rule id),
 v1.1 (WLA-17-02) with the pause/resume moments: `phase_paused`,
 `phase_resumed` (each with phase).
 
+Grown in v1.2 (WLA-23-02) with `step_execution`: exactly one event for each
+child that crosses the deliberate-step boundary, carrying only action id,
+outcome, exit code, before/after token hashes, and the newly observed action
+id. Preview, refusal, and process-start failure do not emit it. The underlying
+guarded command may also emit its existing domain event; the step event is the
+transport-neutral execution correlation, never a replacement.
+
 **The consent stance, binding:** events carry rails metadata only —
 story IDs, statuses, rule ids, exit codes, tree hashes. Never
 diff content, never transcript or prompt text, never file paths
@@ -283,7 +290,7 @@ honesty bar. The worked example gets richer, entry 10 onward.
 - **WLA-13-03** implements §2: registry file read-only, the four
   correlation outcomes, the 30-minute staleness TTL, tests pinning
   the observed field list.
-- **WLA-13-04** implements §3: the seven-event taxonomy, the
+- **WLA-13-04** implements §3's original seven-event taxonomy, the
   `.git/pmo-events.jsonl` location, the content-audit test.
 - **WLA-13-05** consumes §1+§3 from the Desk; its approval leg
   rides ring 2 of §4.

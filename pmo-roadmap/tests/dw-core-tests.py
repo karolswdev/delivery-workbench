@@ -3037,6 +3037,12 @@ class StatusBriefingTest(unittest.TestCase):
         "action", "applicable", "apply_command", "kind", "project",
         "refusal", "schema_version", "token",
     ]
+    STEP_RESULT_KEYS = [
+        "action", "after", "before", "exit_code", "kind", "outcome",
+        "output", "project", "reason", "schema_version", "started",
+    ]
+    STEP_OBSERVATION_KEYS = ["action_id", "token"]
+    STEP_OUTPUT_KEYS = ["stderr", "stdout", "truncated"]
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -3092,6 +3098,14 @@ class StatusBriefingTest(unittest.TestCase):
     def status(self, project: str | None = None) -> dict:
         return core.build_status(self.root, project)
 
+    def step_events(self) -> list[dict]:
+        from dw_pmo.events import read_events
+
+        return [
+            event for event in read_events(self.root)
+            if event.get("event") == "step_execution"
+        ]
+
     def test_schema_is_pinned_and_clean_repo_starts_next_story(self) -> None:
         status = self.status()
         self.assertEqual(sorted(status), self.TOP_KEYS)
@@ -3142,6 +3156,10 @@ class StatusBriefingTest(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(before, after)
         self.assertEqual(event_before, event_after)
+        self.assertFalse(
+            (self.root / ".git" / "pmo-step-claims").exists(),
+            "preview must not create the replay ledger",
+        )
         self.assertEqual(sorted(first), self.STEP_KEYS)
         self.assertEqual(first["kind"], "delivery-workbench-step")
         self.assertEqual(first["schema_version"], 1)
@@ -3177,31 +3195,67 @@ class StatusBriefingTest(unittest.TestCase):
             calls.append((argv, cwd))
             return 0
 
-        with self.assertRaisesRegex(DwError, "token is stale"):
-            core.apply_step(
-                self.root,
-                None,
-                str(preview["token"]),
-                runner=runner,
-            )
-        self.assertEqual(calls, [])
-
-    def test_step_runs_exactly_one_allowlisted_child_and_mirrors_exit(self) -> None:
-        preview = core.build_step(self.root)
-        calls: list[tuple[list[str], Path]] = []
-
-        def runner(argv: list[str], cwd: Path) -> int:
-            calls.append((argv, cwd))
-            return 7
-
-        applied, exit_code = core.apply_step(
+        result, exit_code = core.apply_step(
             self.root,
             None,
             str(preview["token"]),
             runner=runner,
         )
-        self.assertEqual(applied, preview)
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(sorted(result), self.STEP_RESULT_KEYS)
+        self.assertEqual(result["outcome"], "refused")
+        self.assertFalse(result["started"])
+        self.assertIsNone(result["after"])
+        self.assertIn("token is stale", result["reason"])
+        self.assertEqual(
+            result["output"],
+            {
+                "stdout": "",
+                "stderr": "",
+                "truncated": {"stdout": False, "stderr": False},
+            },
+        )
+        self.assertEqual(calls, [])
+        self.assertEqual(self.step_events(), [])
+
+    def test_step_runs_exactly_one_allowlisted_child_and_mirrors_exit(self) -> None:
+        preview = core.build_step(self.root)
+        calls: list[tuple[list[str], Path]] = []
+
+        def runner(argv: list[str], cwd: Path) -> core.StepChild:
+            calls.append((argv, cwd))
+            return core.StepChild(
+                7,
+                stdout=b"receipt-only-stdout\n",
+                stderr=b"receipt-only-stderr\n",
+            )
+
+        result, exit_code = core.apply_step(
+            self.root,
+            None,
+            str(preview["token"]),
+            runner=runner,
+        )
         self.assertEqual(exit_code, 7)
+        self.assertEqual(sorted(result), self.STEP_RESULT_KEYS)
+        self.assertEqual(result["kind"], "delivery-workbench-step-result")
+        self.assertEqual(result["schema_version"], 1)
+        self.assertEqual(result["outcome"], "failed")
+        self.assertTrue(result["started"])
+        self.assertEqual(result["action"], preview["action"])
+        self.assertEqual(sorted(result["before"]), self.STEP_OBSERVATION_KEYS)
+        self.assertEqual(result["before"]["token"], preview["token"])
+        self.assertEqual(result["before"]["action_id"], "start-story")
+        self.assertEqual(sorted(result["after"]), self.STEP_OBSERVATION_KEYS)
+        self.assertEqual(result["after"]["action_id"], "start-story")
+        self.assertNotEqual(result["after"]["token"], preview["token"])
+        self.assertEqual(sorted(result["output"]), self.STEP_OUTPUT_KEYS)
+        self.assertEqual(result["output"]["stdout"], "receipt-only-stdout\n")
+        self.assertEqual(result["output"]["stderr"], "receipt-only-stderr\n")
+        self.assertEqual(
+            result["output"]["truncated"],
+            {"stdout": False, "stderr": False},
+        )
         self.assertEqual(
             calls,
             [
@@ -3214,6 +3268,99 @@ class StatusBriefingTest(unittest.TestCase):
                 )
             ],
         )
+        events = self.step_events()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["story"], "DM-1-02")
+        self.assertEqual(
+            events[0]["detail"],
+            {
+                "action": "start-story",
+                "outcome": "failed",
+                "exit_code": 7,
+                "before": result["before"]["token"],
+                "after": result["after"]["token"],
+                "next_action": "start-story",
+            },
+        )
+        event_text = (self.root / ".git" / "pmo-events.jsonl").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("receipt-only-stdout", event_text)
+        self.assertNotIn("receipt-only-stderr", event_text)
+
+    def test_step_success_is_bounded_and_old_lease_cannot_replay(self) -> None:
+        preview = core.build_step(self.root)
+        calls = 0
+
+        def runner(_argv: list[str], _cwd: Path) -> core.StepChild:
+            nonlocal calls
+            calls += 1
+            return core.StepChild(0, stdout="é" * 20, stderr="sensitive" * 10)
+
+        result, exit_code = core.apply_step(
+            self.root,
+            None,
+            str(preview["token"]),
+            runner=runner,
+            max_output_bytes=9,
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["outcome"], "succeeded")
+        self.assertEqual(result["reason"], None)
+        self.assertLessEqual(len(result["output"]["stdout"].encode("utf-8")), 11)
+        self.assertTrue(result["output"]["truncated"]["stdout"])
+        self.assertTrue(result["output"]["truncated"]["stderr"])
+        self.assertEqual(calls, 1)
+        self.assertEqual(len(self.step_events()), 1)
+
+        replay, replay_code = core.apply_step(
+            self.root,
+            None,
+            str(preview["token"]),
+            runner=runner,
+        )
+        self.assertEqual(replay_code, 1)
+        self.assertEqual(replay["outcome"], "refused")
+        self.assertFalse(replay["started"])
+        self.assertIn("token is stale", replay["reason"])
+        self.assertEqual(calls, 1)
+        self.assertEqual(len(self.step_events()), 1)
+
+    def test_step_interruption_and_start_failure_are_truthful(self) -> None:
+        preview = core.build_step(self.root)
+
+        def interrupt(_argv: list[str], _cwd: Path) -> int:
+            raise KeyboardInterrupt
+
+        interrupted, exit_code = core.apply_step(
+            self.root,
+            None,
+            str(preview["token"]),
+            runner=interrupt,
+        )
+        self.assertEqual(exit_code, 130)
+        self.assertEqual(interrupted["outcome"], "interrupted")
+        self.assertTrue(interrupted["started"])
+        self.assertEqual(interrupted["reason"], "step child was interrupted")
+        self.assertEqual(len(self.step_events()), 1)
+
+        next_preview = core.build_step(self.root)
+        not_started, exit_code = core.apply_step(
+            self.root,
+            None,
+            str(next_preview["token"]),
+            runner=lambda _argv, _cwd: core.StepChild(
+                127,
+                stderr="missing executable\n",
+                started=False,
+                reason="could not start fixture",
+            ),
+        )
+        self.assertEqual(exit_code, 127)
+        self.assertEqual(not_started["outcome"], "failed")
+        self.assertFalse(not_started["started"])
+        self.assertEqual(not_started["reason"], "could not start fixture")
+        self.assertEqual(len(self.step_events()), 1)
 
     def test_step_closes_over_action_id_and_entire_argv_shape(self) -> None:
         status = self.status()

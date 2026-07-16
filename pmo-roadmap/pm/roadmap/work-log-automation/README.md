@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-15 (Phase 23 is 1/5: `dw step` now binds the complete briefing to a state token and deliberately applies at most one closed-table action; receipts and event correlation are next).
+**Last updated:** 2026-07-16 (Phase 23 is 2/5: bounded step results, atomic replay prevention, and content-safe execution correlation are delivered; MCP/HTTP parity is next).
 **Current phase:** [phase-23-deliberate-step](./phase-23-deliberate-step/current-phase-status.md).
-**Status:** active — WLA-23-01 delivered the core/CLI handrail; WLA-23-02 is next.
+**Status:** active — WLA-23-01/02 delivered the core/CLI handrail and receipt; WLA-23-03 is next.
 
 ## Vision
 
@@ -120,13 +120,15 @@ behavior is:
 
 ## Active extension
 
-Phase 23 (The handrail — one deliberate step) is active at 1/5. It keeps
+Phase 23 (The handrail — one deliberate step) is active at 2/5. It keeps
 Phase 22's status model pure while binding its one recommendation to a
 deterministic token over the complete briefing. The delivered `dw step`
 core/CLI surface previews and explicitly applies at most one closed-table
 action, re-reading state first and permanently refusing arbitrary commands,
-certification, commit, project choice, and automatic loops. Bounded receipts
-and event correlation are the next slice. See
+certification, commit, project choice, and automatic loops. Its delivered
+result separates success, child failure, interruption, spawn failure, and
+non-started refusal; streams are bounded, consumed tokens cannot replay, and
+every started child emits one content-safe correlation event. See
 [phase-23-deliberate-step/current-phase-status.md](./phase-23-deliberate-step/current-phase-status.md).
 
 Phase 22 (The briefing — one answer before agents act) is closed. It turned

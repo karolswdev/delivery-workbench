@@ -409,12 +409,29 @@ assert step["applicable"] is True
 print(step["token"])
 PY
 )"
-if "$STATUS_DW" --root "$STATUS_REPO" step status-demo \
-  --apply --expect "$REPAIR_TOKEN" >"$TMP_ROOT/repair-step.out" 2>"$TMP_ROOT/repair-step.err"; then
+if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --json \
+  --apply --expect "$REPAIR_TOKEN" >"$TMP_ROOT/repair-result.json"; then
   fail "step should mirror a failing allowlisted child"
 fi
-grep -q '^dw step: repair-rails exited 1; next=repair-rails$' "$TMP_ROOT/repair-step.err" \
-  || fail "failed step should preserve the exit and report the newly observed action"
+python3 - "$TMP_ROOT/repair-result.json" <<'PY' \
+  || fail "failed JSON step should return a truthful bounded receipt"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    result = json.load(f)
+assert result["kind"] == "delivery-workbench-step-result"
+assert result["schema_version"] == 1
+assert result["outcome"] == "failed"
+assert result["started"] is True
+assert result["exit_code"] == 1
+assert result["action"]["id"] == "repair-rails"
+assert result["before"]["action_id"] == "repair-rails"
+assert result["after"]["action_id"] == "repair-rails"
+assert result["before"]["token"] != result["after"]["token"]
+assert result["output"]["truncated"] == {"stdout": False, "stderr": False}
+assert "FAIL" in result["output"]["stdout"]
+PY
 mv "$STATUS_REPO/.githooks/pre-commit.off" "$STATUS_REPO/.githooks/pre-commit"
 
 # ── Deliberate one-step handrail (WLA-23-01) ────────────────────────
@@ -461,25 +478,49 @@ with open(sys.argv[1], encoding="utf-8") as f:
     print(json.load(f)["token"])
 PY
 )"
-if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --apply >/dev/null 2>&1; then
+if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --json \
+  --apply > "$TMP_ROOT/missing-token-result.json"; then
   fail "step apply should require an expected preview token"
 fi
+python3 - "$TMP_ROOT/missing-token-result.json" <<'PY' \
+  || fail "missing-token apply should be a pinned non-started refusal"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    result = json.load(f)
+assert result["outcome"] == "refused"
+assert result["started"] is False
+assert result["exit_code"] == 1
+assert result["after"] is None
+assert result["output"] == {
+    "stdout": "", "stderr": "",
+    "truncated": {"stdout": False, "stderr": False},
+}
+assert "requires --expect" in result["reason"]
+PY
 if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --expect "$STEP_TOKEN" >/dev/null 2>&1; then
   fail "step expect should only be accepted with apply"
-fi
-if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --json \
-  --apply --expect "$STEP_TOKEN" >/dev/null 2>&1; then
-  fail "step JSON apply should remain unavailable until receipt story WLA-23-02"
 fi
 
 # Moving only HEAD leaves the same recommendation, but invalidates the lease.
 git -C "$STATUS_REPO" commit -q --allow-empty --no-verify -m "move step fixture head"
-if "$STATUS_DW" --root "$STATUS_REPO" step status-demo \
-  --apply --expect "$STEP_TOKEN" >"$TMP_ROOT/stale-step.out" 2>"$TMP_ROOT/stale-step.err"; then
+if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --json \
+  --apply --expect "$STEP_TOKEN" >"$TMP_ROOT/stale-result.json"; then
   fail "step should refuse a stale token even when the action id is unchanged"
 fi
-grep -q 'step token is stale' "$TMP_ROOT/stale-step.err" \
-  || fail "stale step refusal should explain how to recover"
+python3 - "$TMP_ROOT/stale-result.json" <<'PY' \
+  || fail "stale step refusal should explain recovery without starting"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    result = json.load(f)
+assert result["outcome"] == "refused"
+assert result["started"] is False
+assert result["after"] is None
+assert "step token is stale" in result["reason"]
+PY
 "$STATUS_DW" --root "$STATUS_REPO" status status-demo --json > "$TMP_ROOT/status-after-stale.json"
 python3 - "$TMP_ROOT/status-after-stale.json" <<'PY' \
   || fail "stale refusal should happen before the child action"
@@ -500,10 +541,29 @@ with open(sys.argv[1], encoding="utf-8") as f:
     print(json.load(f)["token"])
 PY
 )"
-"$STATUS_DW" --root "$STATUS_REPO" step status-demo \
-  --apply --expect "$STEP_TOKEN" > "$TMP_ROOT/step-applied.out"
-grep -q '^dw step: applied start-story; next=continue-story$' "$TMP_ROOT/step-applied.out" \
-  || fail "successful step should stop after one action and name the new recommendation"
+"$STATUS_DW" --root "$STATUS_REPO" step status-demo --json \
+  --apply --expect "$STEP_TOKEN" > "$TMP_ROOT/step-success.json"
+python3 - "$TMP_ROOT/step-success.json" <<'PY' \
+  || fail "successful JSON step should return the shared result receipt"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    result = json.load(f)
+assert sorted(result) == [
+    "action", "after", "before", "exit_code", "kind", "outcome",
+    "output", "project", "reason", "schema_version", "started",
+]
+assert result["outcome"] == "succeeded"
+assert result["started"] is True
+assert result["exit_code"] == 0
+assert result["reason"] is None
+assert result["before"]["action_id"] == "start-story"
+assert result["after"]["action_id"] == "continue-story"
+assert result["before"]["token"] != result["after"]["token"]
+assert "SD-0-01" in result["output"]["stdout"]
+assert result["output"]["stderr"] == ""
+PY
 "$STATUS_DW" --root "$STATUS_REPO" status status-demo --json > "$TMP_ROOT/status-after-step.json"
 python3 - "$TMP_ROOT/status-after-step.json" <<'PY' \
   || fail "applied step should perform exactly the previewed transition"
@@ -514,6 +574,47 @@ with open(sys.argv[1], encoding="utf-8") as f:
     status = json.load(f)
 assert status["next_action"]["id"] == "continue-story"
 assert status["roadmap"]["projects"][0]["next_story"]["status"] == "in-progress"
+PY
+
+# A read-only action still consumes its lease: a new preview is required.
+"$STATUS_DW" --root "$STATUS_REPO" step status-demo --json > "$TMP_ROOT/read-step.json"
+READ_TOKEN="$(python3 - "$TMP_ROOT/read-step.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    print(json.load(f)["token"])
+PY
+)"
+"$STATUS_DW" --root "$STATUS_REPO" step status-demo \
+  --apply --expect "$READ_TOKEN" > "$TMP_ROOT/read-step.out"
+grep -q '^dw step: applied continue-story; next=continue-story$' "$TMP_ROOT/read-step.out" \
+  || fail "human apply should stop after one read-only child"
+if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --json \
+  --apply --expect "$READ_TOKEN" > "$TMP_ROOT/replay-result.json"; then
+  fail "an already consumed read-only lease should not replay"
+fi
+python3 - "$TMP_ROOT/replay-result.json" "$STATUS_REPO/.git/pmo-events.jsonl" <<'PY' \
+  || fail "replay refusal should emit no additional step event"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    result = json.load(f)
+with open(sys.argv[2], encoding="utf-8") as f:
+    events = [json.loads(line) for line in f if line.strip()]
+step_events = [event for event in events if event["event"] == "step_execution"]
+assert result["outcome"] == "refused"
+assert result["started"] is False
+assert "token is stale" in result["reason"]
+assert len(step_events) == 3  # failing doctor, start story, read-only story show
+for event in step_events:
+    assert sorted(event["detail"]) == [
+        "action", "after", "before", "exit_code", "next_action", "outcome",
+    ]
+event_text = open(sys.argv[2], encoding="utf-8").read()
+assert "Status Demo" not in event_text
+assert "### story" not in event_text
 PY
 
 echo "roadmap-cli.sh: ok"

@@ -343,8 +343,10 @@ Use `step` only after reviewing its pure preview. It binds the complete
 current status to a `sha256:` token and prints an exact `apply=` argv;
 `--apply --expect <token>` re-reads that state, refuses stale or prohibited
 intent before spawn, executes at most one closed-table recommendation, and
-stops. It never certifies a contract, commits, chooses a project, accepts
-caller-supplied argv, or follows the next action. The contract is
+stops. `--json --apply` returns the bounded versioned result; consumed leases
+cannot replay, and one content-safe event follows each started child. It never
+certifies a contract, commits, chooses a project, accepts caller-supplied argv,
+or follows the next action. The contract is
 [`docs/deliberate-step.md`](../docs/deliberate-step.md).
 
 `next` follows a strict exit contract for agents: 0 = story found,

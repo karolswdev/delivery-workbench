@@ -1,6 +1,6 @@
 # Phase 23 - The handrail — one deliberate step
 
-**Last updated:** 2026-07-15.
+**Last updated:** 2026-07-16.
 
 ## Goal
 
@@ -25,7 +25,7 @@ Let a human or agent deliberately apply exactly one current, allowlisted recomme
   read-only action lease; `--apply --expect <token>` executes at most one
   allowlisted current argv and refuses stale or prohibited intent before
   starting a child process (WLA-23-01).
-- [ ] Applied steps produce one bounded, versioned receipt and append one
+- [x] Applied steps produce one bounded, versioned receipt and append one
   content-safe rail event that correlates before/after action and outcome
   without pretending a failed command succeeded (WLA-23-02).
 - [ ] MCP and HTTP expose the same preview/receipt models and explicit token
@@ -43,20 +43,21 @@ Let a human or agent deliberately apply exactly one current, allowlisted recomme
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-23-01 | dw step — preview and apply one allowlisted action | done | [story-01-step-core-cli](./story-01-step-core-cli.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-23-02 | Step receipts — stable result and event correlation | backlog | [story-02-step-receipts](./story-02-step-receipts.md) | - |
+| WLA-23-02 | Step receipts — stable result and event correlation | done | [story-02-step-receipts](./story-02-step-receipts.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-23-03 | One step across MCP and HTTP | backlog | [story-03-step-interop](./story-03-step-interop.md) | - |
 | WLA-23-04 | Workbench and riders expose the handrail | backlog | [story-04-step-front-door](./story-04-step-front-door.md) | - |
 | WLA-23-05 | Fresh-consumer deliberate-step exit exam | backlog | [story-05-step-exit-exam](./story-05-step-exit-exam.md) | - |
 
 ## Where we are
 
-Phase OPEN 1/5. WLA-23-01 delivered the separate core/CLI act boundary:
-`delivery-workbench-step@1`, a token over the complete current briefing, a
-second closed action-id/argv-shape table, and explicit one-child apply with
-same-action stale refusal. The installed fixture and this repository both
-used it for real transitions; certification, commit, project choice, caller
-argv, and loops remain excluded. WLA-23-02 is next: turn a started child's
-truth into one bounded result receipt and one content-safe correlated event.
+Phase OPEN 2/5. WLA-23-02 made apply machine-honest:
+`delivery-workbench-step-result@1` pins success, failure, interruption, spawn
+failure, and non-started refusal; stdout/stderr are bounded; an exclusive
+Git-metadata claim prevents replay even when status is unchanged; and each
+started child gets one content-safe correlation event. The installed fixture
+and this repository proved JSON success/failure/refusal plus a read-only
+replay red path. WLA-23-03 is next: carry these exact preview/result documents
+through MCP and HTTP without either adapter gaining policy or authority.
 
 ## Active risks
 
@@ -75,6 +76,8 @@ truth into one bounded result receipt and one content-safe correlated event.
 - 2026-07-15 - Applying requires the opaque token from a fresh preview, not only an action id - the story or command can change while the id stays the same - stale-intent threat model.
 - 2026-07-15 - Commit and contract certification are permanently prohibited step actions - explicit invocation of a convenience surface is not consent to ship or attest - consent spine.
 - 2026-07-15 - Keep JSON apply unavailable until a versioned receipt exists - a transport-shaped success string would become accidental API debt - WLA-23-02 boundary.
+- 2026-07-16 - Claim every applicable token atomically under `.git/pmo-step-claims/` before spawn and feed the claim generation into future tokens - read-only actions otherwise leave the original lease replayable - replay threat model.
+- 2026-07-16 - Emit `step_execution` only after a child starts and allow only action/outcome/exit/token hashes/next action - correlation is useful, command and output content are not telemetry - event consent stance.
 
 ## Decisions deferred
 

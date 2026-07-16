@@ -13,17 +13,36 @@ import hashlib
 import json
 import re
 import shlex
+import signal
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Union
 
-from .model import STORY_ID_RE, die
+from .model import STORY_ID_RE
 from .status import build_status
 
 STEP_KIND = "delivery-workbench-step"
 STEP_SCHEMA_VERSION = 1
+STEP_RESULT_KIND = "delivery-workbench-step-result"
+STEP_RESULT_SCHEMA_VERSION = 1
+DEFAULT_STEP_OUTPUT_BYTES = 20_000
+STEP_CLAIMS_REL = Path(".git") / "pmo-step-claims"
 
-Runner = Callable[[list[str], Path], int]
+
+@dataclass(frozen=True)
+class StepChild:
+    """One child-process outcome, injectable for deterministic adapters/tests."""
+
+    exit_code: int
+    stdout: str | bytes = ""
+    stderr: str | bytes = ""
+    started: bool = True
+    interrupted: bool = False
+    reason: str | None = None
+
+
+Runner = Callable[[list[str], Path], Union[StepChild, int]]
 
 
 def _safe_selector(value: object) -> bool:
@@ -105,9 +124,27 @@ def _command_is_allowlisted(action: dict[str, object]) -> bool:
     return False
 
 
-def _status_token(status: dict[str, object]) -> str:
+def _claims_generation(root: Path) -> str:
+    """Hash claimed lease names so read-only actions mint a new next token."""
+    claims = root / STEP_CLAIMS_REL
+    try:
+        names = sorted(
+            item.name for item in claims.iterdir()
+            if item.is_file() and item.name.endswith(".claim")
+        )
+    except FileNotFoundError:
+        names = []
+    except OSError as exc:
+        # A deterministic sentinel keeps preview available. Apply still fails
+        # closed when it cannot atomically claim the token.
+        names = [f"unreadable:{exc.errno}"]
+    joined = "\n".join(names).encode("utf-8")
+    return "sha256:" + hashlib.sha256(joined).hexdigest()
+
+
+def _status_token(status: dict[str, object], claims_generation: str) -> str:
     canonical = json.dumps(
-        status,
+        {"claims_generation": claims_generation, "status": status},
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -117,10 +154,11 @@ def _status_token(status: dict[str, object]) -> str:
 
 def build_step(root: Path, project: str | None = None) -> dict[str, object]:
     """Return the deterministic one-step preview for the current briefing."""
-    status = build_status(root.resolve(), project)
+    root = root.resolve()
+    status = build_status(root, project)
     action = status["next_action"]
     selected = status["roadmap"]["selected_project"]  # type: ignore[index]
-    token = _status_token(status)
+    token = _status_token(status, _claims_generation(root))
 
     applicable = False
     refusal: str | None = None
@@ -154,35 +192,263 @@ def build_step(root: Path, project: str | None = None) -> dict[str, object]:
     }
 
 
+def _observation(preview: dict[str, object]) -> dict[str, object]:
+    action = preview.get("action")
+    return {
+        "token": preview.get("token"),
+        "action_id": action.get("id") if isinstance(action, dict) else None,
+    }
+
+
+def _bounded(value: str | bytes, limit: int) -> tuple[str, bool]:
+    limit = max(0, int(limit))
+    raw = value if isinstance(value, bytes) else value.encode("utf-8")
+    truncated = len(raw) > limit
+    if truncated:
+        raw = raw[:limit]
+    return raw.decode("utf-8", errors="replace"), truncated
+
+
+def _output(child: StepChild, limit: int) -> dict[str, object]:
+    stdout, stdout_truncated = _bounded(child.stdout, limit)
+    stderr, stderr_truncated = _bounded(child.stderr, limit)
+    return {
+        "stdout": stdout,
+        "stderr": stderr,
+        "truncated": {
+            "stdout": stdout_truncated,
+            "stderr": stderr_truncated,
+        },
+    }
+
+
+def _result(
+    preview: dict[str, object],
+    *,
+    outcome: str,
+    started: bool,
+    exit_code: int,
+    reason: str | None,
+    after: dict[str, object] | None = None,
+    child: StepChild | None = None,
+    max_output_bytes: int = DEFAULT_STEP_OUTPUT_BYTES,
+) -> dict[str, object]:
+    empty = StepChild(exit_code=exit_code, started=started)
+    return {
+        "kind": STEP_RESULT_KIND,
+        "schema_version": STEP_RESULT_SCHEMA_VERSION,
+        "project": preview.get("project"),
+        "outcome": outcome,
+        "started": started,
+        "exit_code": exit_code,
+        "reason": reason,
+        "action": preview.get("action"),
+        "before": _observation(preview),
+        "after": _observation(after) if after is not None else None,
+        "output": _output(child or empty, max_output_bytes),
+    }
+
+
+def _refusal(
+    preview: dict[str, object],
+    reason: str,
+) -> tuple[dict[str, object], int]:
+    return (
+        _result(
+            preview,
+            outcome="refused",
+            started=False,
+            exit_code=1,
+            reason=reason,
+        ),
+        1,
+    )
+
+
+def _claim_token(root: Path, token: str) -> str | None:
+    """Atomically consume one lease. Return a refusal reason on failure."""
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", token):
+        return "step token is malformed; run dw step again"
+    claims = root / STEP_CLAIMS_REL
+    try:
+        claims.mkdir(mode=0o700, parents=True, exist_ok=True)
+        claim = claims / f"{token.removeprefix('sha256:')}.claim"
+        with claim.open("x", encoding="utf-8") as handle:
+            handle.write("claimed\n")
+    except FileExistsError:
+        return "step token was already applied; run dw step again"
+    except OSError as exc:
+        return f"step token could not be claimed safely: {exc}"
+    return None
+
+
+def _exit_code(code: int) -> int:
+    if code < 0:
+        return min(255, 128 + abs(code))
+    return min(255, code)
+
+
+def _run_child(argv: list[str], cwd: Path) -> StepChild:
+    try:
+        process = subprocess.Popen(
+            argv,
+            cwd=str(cwd),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as exc:
+        return StepChild(
+            exit_code=127,
+            stderr=f"could not start step action: {exc}\n",
+            started=False,
+            reason=f"could not start step action: {exc}",
+        )
+    try:
+        stdout, stderr = process.communicate()
+        return StepChild(
+            exit_code=_exit_code(process.returncode),
+            stdout=stdout,
+            stderr=stderr,
+        )
+    except KeyboardInterrupt:
+        try:
+            process.send_signal(signal.SIGINT)
+        except OSError:
+            pass
+        try:
+            stdout, stderr = process.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            try:
+                process.kill()
+            except OSError:
+                pass
+            stdout, stderr = process.communicate()
+        return StepChild(
+            exit_code=130,
+            stdout=stdout,
+            stderr=stderr,
+            interrupted=True,
+            reason="step child was interrupted",
+        )
+
+
+def _story_id(action: object) -> str | None:
+    if not isinstance(action, dict):
+        return None
+    command = action.get("command")
+    if (
+        isinstance(command, list)
+        and len(command) >= 6
+        and command[:2] == [".githooks/dw", "story"]
+        and isinstance(command[5], str)
+        and STORY_ID_RE.fullmatch(command[5])
+    ):
+        return command[5]
+    return None
+
+
 def apply_step(
     root: Path,
     project: str | None,
     expected_token: str,
     *,
     runner: Runner | None = None,
+    max_output_bytes: int = DEFAULT_STEP_OUTPUT_BYTES,
 ) -> tuple[dict[str, object], int]:
-    """Re-read, authorize, and start at most one current recommendation."""
+    """Authorize one lease and return its pinned, bounded execution receipt."""
+    root = root.resolve()
     preview = build_step(root, project)
     if not expected_token:
-        die("dw step --apply requires --expect <token> from a fresh preview")
+        return _refusal(
+            preview,
+            "dw step --apply requires --expect <token> from a fresh preview",
+        )
     if expected_token != preview["token"]:
-        die("step token is stale; run dw step again and review the new preview")
+        return _refusal(
+            preview,
+            "step token is stale; run dw step again and review the new preview",
+        )
     if not preview["applicable"]:
-        die(f"step is not applicable: {preview['refusal']}")
+        return _refusal(preview, f"step is not applicable: {preview['refusal']}")
 
     action = preview["action"]
     command = action["command"]  # type: ignore[index]
     if not isinstance(command, list) or not all(isinstance(item, str) for item in command):
-        die("step action lost its validated argv before execution")
+        return _refusal(preview, "step action lost its validated argv before execution")
 
-    if runner is None:
-        def run_child(argv: list[str], cwd: Path) -> int:
-            try:
-                return subprocess.run(argv, cwd=str(cwd), check=False).returncode
-            except OSError as exc:
-                die(f"could not start step action: {exc}", code=127)
-        runner = run_child
-    return preview, runner(list(command), root.resolve())
+    claim_refusal = _claim_token(root, expected_token)
+    if claim_refusal:
+        return _refusal(preview, claim_refusal)
+
+    try:
+        raw_child = (runner or _run_child)(list(command), root)
+        child = raw_child if isinstance(raw_child, StepChild) else StepChild(raw_child)
+    except KeyboardInterrupt:
+        child = StepChild(
+            130,
+            started=True,
+            interrupted=True,
+            reason="step child was interrupted",
+        )
+    except OSError as exc:
+        child = StepChild(
+            127,
+            stderr=f"could not start step action: {exc}\n",
+            started=False,
+            reason=f"could not start step action: {exc}",
+        )
+    code = _exit_code(child.exit_code)
+    if child.interrupted:
+        outcome = "interrupted"
+        reason = child.reason or "step child was interrupted"
+        code = 130
+    elif not child.started:
+        outcome = "failed"
+        reason = child.reason or "step child could not be started"
+    elif code == 0:
+        outcome = "succeeded"
+        reason = child.reason
+    else:
+        outcome = "failed"
+        reason = child.reason or f"step action exited {code}"
+
+    try:
+        after = build_step(root, project)
+    except Exception as exc:  # keep a started child's truthful result returnable
+        after = None
+        reason = reason or f"post-step observation failed: {exc}"
+
+    result = _result(
+        preview,
+        outcome=outcome,
+        started=child.started,
+        exit_code=code,
+        reason=reason,
+        after=after,
+        child=child,
+        max_output_bytes=max_output_bytes,
+    )
+    if child.started:
+        from .events import emit
+
+        before_obs = result["before"]
+        after_obs = result["after"]
+        emit(
+            root,
+            "step_execution",
+            project=str(result["project"] or "") or None,
+            story=_story_id(action),
+            detail={
+                "action": before_obs["action_id"],  # type: ignore[index]
+                "outcome": outcome,
+                "exit_code": code,
+                "before": before_obs["token"],  # type: ignore[index]
+                "after": after_obs["token"] if after_obs else None,  # type: ignore[index]
+                "next_action": after_obs["action_id"] if after_obs else None,  # type: ignore[index]
+            },
+        )
+    return result, code
 
 
 def render_step(preview: dict[str, object]) -> str:

@@ -113,7 +113,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 (cd "$FIXTURE" && ./.githooks/dw doctor) >/dev/null \
   || fail "fixture doctor not green after packaged install"
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
-  'from dw_pmo import build_step; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api; assert callable(build_step); assert "dw_status" in TOOLS; assert callable(handle_api)' \
+  'from dw_pmo import STEP_RESULT_KIND, StepChild, build_step; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api; assert callable(build_step); assert STEP_RESULT_KIND == "delivery-workbench-step-result"; assert StepChild(0).started; assert "dw_status" in TOOLS; assert callable(handle_api)' \
   || fail "packaged core and MCP/HTTP adapters do not expose the guided operations"
 set +e
 (cd "$FIXTURE" && ./.githooks/dw status --json) > "$TMP_ROOT/status.json"

@@ -236,7 +236,7 @@ On 2026-07-15 in this checkout:
   under an explicitly unpublished changelog section;
 - phases 0–22 are closed; Phase 23 is active with its core/CLI deliberate-
   step slice implemented but not published as a new release;
-- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 226 tests on the local
+- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 228 tests on the local
   interpreter and on the declared Python 3.9 floor;
 - every locally runnable non-Homebrew shell/integration suite in the CI
   workflow passed,
@@ -402,7 +402,8 @@ without turning the product into an autonomous shell:
 
 1. core and CLI preview/apply with a complete-state token and closed argv
    table (implemented in WLA-23-01);
-2. bounded, versioned success/failure receipts plus safe event correlation;
+2. bounded, versioned success/failure receipts, atomic replay prevention,
+   and safe event correlation (implemented in WLA-23-02);
 3. identical MCP and HTTP preview/result models;
 4. an explicit workbench confirmation and updated generated riders; and
 5. a wheel-installed exit exam that repeatedly authorizes one transition at

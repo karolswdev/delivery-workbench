@@ -36,6 +36,11 @@ EVENT_TYPES: dict[str, frozenset[str]] = {
     # v1.1 (WLA-17-02): the pause/resume moments.
     "phase_paused": frozenset({"phase"}),
     "phase_resumed": frozenset({"phase"}),
+    # v1.2 (WLA-23-02): one content-free correlation receipt for each
+    # child that crossed the deliberate-step execution boundary.
+    "step_execution": frozenset(
+        {"action", "outcome", "exit_code", "before", "after", "next_action"}
+    ),
 }
 
 
