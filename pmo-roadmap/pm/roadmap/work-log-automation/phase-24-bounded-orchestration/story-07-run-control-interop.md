@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 24
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-24-03, WLA-24-04, WLA-24-06
 - **Unblocks:** WLA-24-08
 - **Owner:** unassigned
@@ -28,20 +28,20 @@ MCP, HTTP, the rich Workbench Run view, and mission-control summaries.
 
 ## Acceptance criteria
 
-- [ ] CLI JSON, MCP `structuredContent`, and HTTP `data` return byte-equivalent
+- [x] CLI JSON, MCP `structuredContent`, and HTTP `data` return byte-equivalent
   compiler, plan, projection, tick-result, and act documents; adapters accept
   only score/run ids and exact tokens, never score semantics or driver/check
   argv.
-- [ ] Workbench Run renders the graph as live state with agents, attempts,
+- [x] Workbench Run renders the graph as live state with agents, attempts,
   checks, artifacts/lineage, budgets, failures/routes, ledger receipts, and
   terminal meaning; inspection does not write or pollute rail/run events.
-- [ ] Grant/start, checkpoint, pause/resume, retry/elevation where permitted,
+- [x] Grant/start, checkpoint, pause/resume, retry/elevation where permitted,
   and cancel are separate preview→confirm acts with changed-state refusal;
   unsupported/manual/certification/commit states have no apply control.
-- [ ] Output/check streams are bounded and explicitly opened; secrets,
+- [x] Output/check streams are bounded and explicitly opened; secrets,
   prompts, transcripts, source content, and undeclared artifacts never appear
   in list/feed/event documents.
-- [ ] MCP/HTTP inventories, parity, read purity, replay/injection/stale red
+- [x] MCP/HTTP inventories, parity, read purity, replay/injection/stale red
   paths,  desktop/mobile/a11y visual states, and installed package surfaces are
   pinned in tests and interop docs.
 

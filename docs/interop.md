@@ -36,6 +36,10 @@ is added when an external consumer asks for one.
 | Orchestration run grant | `delivery-workbench-run-grant` v1 | `orchestration_run.start_run` |
 | Orchestration run event | `delivery-workbench-run-event` v1 | `orchestration_run` ledger |
 | Orchestration run projection | `delivery-workbench-run` v1 | `orchestration_run.replay_run` |
+| Orchestration run-act preview | `delivery-workbench-run-act-preview` v1 | `orchestration_surface.build_run_act_preview` |
+| Orchestration Run view | `delivery-workbench-run-view` v1 | `orchestration_surface.build_run_view` |
+| Explicit bounded run stream | `delivery-workbench-run-stream` v1 | `orchestration_surface.read_run_stream` |
+| Mission-control run summary | `delivery-workbench-run-summary-list` v1 | `orchestration_surface.run_summary_inventory` |
 | Driver capability | `delivery-workbench-driver-capability` v1 | `orchestration_driver.driver_capability` |
 | Agent work packet | `delivery-workbench-work-packet` v1 | `orchestration_driver.build_work_packet` |
 | Driver receipt | `delivery-workbench-driver-receipt` v1 | `orchestration_driver.DriverManager` |
@@ -64,10 +68,17 @@ is added when an external consumer asks for one.
 | `dw run plan <score> --project <slug> --story <id> --json` | `orchestration_run.build_run_plan` | pure exact score/repository/status/story/capability/budget/expiry binding plus single-use start token |
 | `dw run start --plan <file> --expect <token> --approve --operator <id> --json` | `orchestration_run.start_run` | immutable local grant and initial hash-chained projection; no node dispatch |
 | `dw run list|show [<run>] --json` | `orchestration_run.run_inventory/replay_run` | authoritative ledger-derived projections; disposable cache is ignored |
-| `dw run pause|resume|revoke|cancel <run> --expect <ledger-head> --json` | `orchestration_run.transition_run` | one exact append-only lifecycle transition that immediately gates future dispatch |
-| `dw run tick <run> --json` | `orchestration_conductor.tick_run` | one replay/reconcile/route/schedule boundary with exact receipts and no hidden continuation |
+| `dw run view <run> --json` | `orchestration_surface.build_run_view` | pure content-safe live graph, attempts, sessions/checks, artifact lineage, budgets, routes, controls, and ledger |
+| `dw run preview <run> <act> --json` | `orchestration_surface.build_run_act_preview` | pure action+parameters+ledger-bound consent document and exact `act_token` |
+| `dw run pause|resume|revoke|cancel <run> --expect <act-token> --json` | `orchestration_surface.apply_run_act` | one exact preview-confirm lifecycle transition that immediately gates future dispatch |
+| `dw run tick <run> --expect <act-token> --json` | `orchestration_surface.apply_run_act` → `orchestration_conductor.tick_run` | one explicitly confirmed replay/reconcile/route/schedule boundary with exact receipts and no hidden continuation |
 | `dw run supervise <run> --max-ticks <n> --interval <s> --json` | `orchestration_conductor.supervise_run` | bounded repetition over `tick_run`, stopping at terminal/pause/approval/no-progress |
-| `dw run checkpoint <run> approve|reject --expect <ledger-head> --json` | `orchestration_run.decide_checkpoint` | one fresh decision over the exact pending named checkpoint |
+| `dw run checkpoint <run> approve|reject --expect <act-token> --json` | `orchestration_surface.apply_run_act` → `orchestration_run.decide_checkpoint` | one fresh decision over the exact pending named checkpoint |
+| `dw run stream <run> agent|check <execution> stdout|stderr --json` | `orchestration_surface.read_run_stream` | one explicitly opened log, independently bounded to 100,000 bytes; never a list/feed/event field |
+
+The individual lifecycle spellings are `dw run show`, `dw run pause`,
+`dw run resume`, `dw run revoke`, and `dw run cancel`; the grouped rows above
+do not imply a combined command.
 | `dw context [project] [--compact] [--trace]` | `api.build_context_payload` | the stamped roadmap context |
 | `dw state --json` | `statefeed.build_state_feed` | the mission-control feed (`feed_schema` 1) |
 | `dw next [project] --json` | `api.next_story` | the next actionable story or `{next_story: null, parked}` |
@@ -96,8 +107,18 @@ or provider argv.
 | `POST /api/step/apply` | `step.apply_step` | exact stamped result in `data`; 409 for a non-started refusal |
 | `GET /api/orchestration` | `orchestration.score_inventory` | contained score inventory with validity and hashes; pure |
 | `GET /api/orchestration/<score>` | shared compiler | raw score plus validation, compiled model, and simulation; pure |
+| `GET /api/orchestration/<score>/compiled` | `orchestration.compile_score_path` | byte-identical compiled score in `data` |
+| `GET /api/orchestration/<score>/simulation` | `orchestration.simulate_score` | byte-identical pure simulation in `data` |
 | `POST /api/orchestration/preview` | `orchestration_edit.build_score_mutation_plan` | normalized save/delete diff, compiler verdict, and state fingerprint; no write/run/event |
 | `POST /api/orchestration/apply` | `orchestration_edit.apply_score_mutation` | one fresh atomic score save/delete with read-back verification and rollback; never starts a run |
+| `GET /api/run-plan?score=…&project=…&story=…` | `orchestration_run.build_run_plan` | exact pure grant/start preview; identifiers and timestamps only |
+| `GET /api/runs` | `orchestration_run.run_inventory` | authoritative local projections; no prompts, argv, source, transcripts, or artifact bytes |
+| `GET /api/runs/<run>` | `orchestration_run.replay_run` | byte-identical projection in `data` |
+| `GET /api/runs/<run>/view` | `orchestration_surface.build_run_view` | pure live explanation/consent model used by Workbench Run |
+| `GET /api/runs/<run>/act/<action>` / `POST /api/runs/preview` | `orchestration_surface.build_run_act_preview` | exact pure act preview; POST keeps operator reasons out of the address bar |
+| `POST /api/runs/start` | `orchestration_surface.start_run_by_id` | identifiers/timestamps/token/approval only; grant creation dispatches nothing |
+| `POST /api/runs/tick`, `POST /api/runs/pause`, `POST /api/runs/resume`, `POST /api/runs/revoke`, `POST /api/runs/cancel`, `POST /api/runs/checkpoint` | `orchestration_surface.apply_run_act` | exact preview token plus only its bound reason/decision; stale is HTTP 409 |
+| `GET /api/runs/<run>/streams/<executor>/<execution>/<stream>` | `orchestration_surface.read_run_stream` | explicit bounded stdout/stderr; no packets, prompts, final message, or artifact content |
 | `POST /api/mutations/preview` | guarded editor plan | content diff + state fingerprint; no write |
 | `POST /api/mutations/apply` | guarded editor apply | applies only the matching fresh fingerprint inside `pm/roadmap` |
 | `/api/context` | `api.build_context_payload` | the roadmap context |
@@ -117,11 +138,17 @@ or provider argv.
 ## MCP tools (`dw-mcp`, stdio)
 
 The full tool table with input schemas lives in [mcp.md](./mcp.md);
-this is the inventory. Read-only: `dw_status`, `dw_step`, `dw_context`, `dw_next`,
-`dw_check`, `dw_doctor`, `dw_board`, `dw_holds`, `dw_story_show`,
-`dw_verify`, `dw_gate`. Exact-token action: `dw_step_apply`. Guarded mutations: `dw_story_status`,
-`dw_evidence_capture`, `dw_contract_new`. Certification is never a
-tool call.
+this is the inventory. Read-only: `dw_status`, `dw_step`, `dw_context`,
+`dw_next`, `dw_check`, `dw_doctor`, `dw_board`, `dw_holds`,
+`dw_story_show`, `dw_verify`, `dw_gate`, `dw_orchestration_list`,
+`dw_orchestration_show`, `dw_orchestration_simulate`, `dw_run_plan`,
+`dw_run_list`, `dw_run_show`, `dw_run_view`, and `dw_run_preview`.
+Exact-token actions: `dw_step_apply`, `dw_run_start`, `dw_run_tick`,
+`dw_run_pause`, `dw_run_resume`, `dw_run_revoke`, `dw_run_cancel`, and
+`dw_run_checkpoint`. The explicitly opened and bounded `dw_run_stream` is
+the only run tool returning log content. Other guarded mutations:
+`dw_story_status`, `dw_evidence_capture`, `dw_contract_new`.
+Certification and commit are never tool calls.
 
 ## The pin
 

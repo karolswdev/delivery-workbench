@@ -9,6 +9,9 @@ fallback behavior. Stdlib only.
 
 from __future__ import annotations
 
+import importlib.util
+from importlib.machinery import SourceFileLoader
+import io
 import json
 import os
 import shutil
@@ -19,6 +22,7 @@ import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from contextlib import redirect_stdout
 from unittest import mock
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -113,8 +117,8 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 5,
-            "exactly deliberate-step apply, two roadmap mutation routes, and two score-content routes may POST; "
+            len(post_routes), 7,
+            "only deliberate-step, guarded roadmap/score edits, and run preview/start use direct POST equality routes; "
             f"found: {post_routes}",
         )
         self.assertTrue(any('/api/step/apply' in line for line in post_routes))
@@ -122,6 +126,8 @@ class DwCoreTest(unittest.TestCase):
         self.assertTrue(any('/api/mutations/apply' in line for line in post_routes))
         self.assertTrue(any('/api/orchestration/preview' in line for line in post_routes))
         self.assertTrue(any('/api/orchestration/apply' in line for line in post_routes))
+        self.assertTrue(any('/api/runs/preview' in line for line in post_routes))
+        self.assertTrue(any('/api/runs/start' in line for line in post_routes))
 
     def test_missioncontrol_readonly_guard_catches_a_planted_write(self):
         # The guard must FAIL on a violation or it guards nothing:
@@ -1526,6 +1532,9 @@ class DwCoreTest(unittest.TestCase):
                 "/api/step/apply",
                 "/api/mutations/preview", "/api/mutations/apply",
                 "/api/orchestration/preview", "/api/orchestration/apply",
+                "/api/runs/preview", "/api/runs/start", "/api/runs/tick",
+                "/api/runs/pause", "/api/runs/resume", "/api/runs/revoke",
+                "/api/runs/cancel", "/api/runs/checkpoint",
             },
         )
         self.assertEqual(self._interop_missing(post_routes, doc), [])
@@ -1534,6 +1543,10 @@ class DwCoreTest(unittest.TestCase):
             "dw status", "dw step", "dw context", "dw state --json", "dw next", "dw board",
             "dw holds", "dw story show", "dw sessions --json", "dw events",
             "dw check", "dw gate --porcelain", "dw verify",
+            "dw orchestration list", "dw orchestration show", "dw orchestration simulate",
+            "dw run plan", "dw run start", "dw run list", "dw run show", "dw run view",
+            "dw run preview", "dw run tick", "dw run pause", "dw run resume",
+            "dw run revoke", "dw run cancel", "dw run checkpoint", "dw run stream",
         ]
         self.assertEqual(self._interop_missing(verbs, doc), [])
         # the stamped models
@@ -1541,7 +1554,9 @@ class DwCoreTest(unittest.TestCase):
                       "delivery-workbench-step-result",
                       "delivery-workbench-roadmap-context",
                       "delivery-workbench-workbench-response",
-                      "delivery-workbench-board", "feed_schema"):
+                      "delivery-workbench-board", "delivery-workbench-run-act-preview",
+                      "delivery-workbench-run-view", "delivery-workbench-run-stream",
+                      "delivery-workbench-run-summary-list", "feed_schema"):
             self.assertIn(stamp, doc)
         # the pin must actually bite: a planted surface reads as missing
         self.assertEqual(
@@ -2677,11 +2692,18 @@ class MCPServerTest(unittest.TestCase):
             "dw_check", "dw_doctor",
             "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",
+            "dw_orchestration_list", "dw_orchestration_show",
+            "dw_orchestration_simulate", "dw_run_plan", "dw_run_list",
+            "dw_run_show", "dw_run_view", "dw_run_preview", "dw_run_start",
+            "dw_run_tick", "dw_run_pause", "dw_run_resume", "dw_run_revoke",
+            "dw_run_cancel", "dw_run_checkpoint", "dw_run_stream",
         ])
         for banned in ("certify", "commit", "bundle"):
             self.assertFalse(any(banned in n for n in names), names)
         for tool in tools:
             self.assertIn("inputSchema", tool)
+            self.assertTrue(tool["description"])
+        for tool in tools[:15]:
             self.assertIn("Adapter over dw_pmo.", tool["description"])
 
     # -- thin-adapter parity -------------------------------------------------
@@ -3809,7 +3831,7 @@ class StateFeedTest(unittest.TestCase):
 
     REPO_ROOT = TESTS_DIR.parent.parent
 
-    TOP_KEYS = ["feed_schema", "generated_at_tree", "projects"]
+    TOP_KEYS = ["feed_schema", "generated_at_tree", "orchestration_runs", "projects"]
     PROJECT_KEYS = [
         "current_phase", "next_story", "phases", "prefix", "slug",
         "stories", "warnings",
@@ -3827,6 +3849,10 @@ class StateFeedTest(unittest.TestCase):
     def test_schema_is_pinned(self) -> None:
         self.assertEqual(sorted(self.feed.keys()), self.TOP_KEYS)
         self.assertEqual(self.feed["feed_schema"], 1)
+        self.assertEqual(
+            sorted(self.feed["orchestration_runs"].keys()),
+            ["kind", "runs", "schema_version", "starts_work", "writes_events"],
+        )
         for project in self.feed["projects"]:
             self.assertEqual(sorted(project.keys()), self.PROJECT_KEYS)
             for phase in project["phases"]:
@@ -5319,13 +5345,20 @@ class OrchestrationRunAuthorityTest(unittest.TestCase):
         self.assertEqual(shown["ledger_head"], projection["ledger_head"])
         inventory = json.loads(self._dw("run", "list", "--json").stdout)
         self.assertEqual(inventory["runs"][0]["run_id"], projection["run_id"])
+        pause_preview = json.loads(self._dw(
+            "run", "preview", projection["run_id"], "pause",
+            "--reason", "inspect", "--json",
+        ).stdout)
         paused = json.loads(self._dw(
             "run", "pause", projection["run_id"], "--expect",
-            projection["ledger_head"], "--reason", "inspect", "--json",
+            pause_preview["act_token"], "--reason", "inspect", "--json",
+        ).stdout)
+        resume_preview = json.loads(self._dw(
+            "run", "preview", projection["run_id"], "resume", "--json",
         ).stdout)
         resumed = json.loads(self._dw(
             "run", "resume", projection["run_id"], "--expect",
-            paused["ledger_head"], "--json",
+            resume_preview["act_token"], "--json",
         ).stdout)
         self.assertEqual(resumed["state"], "active")
 
@@ -6324,9 +6357,13 @@ class OrchestrationConductorTest(unittest.TestCase):
                         "output_bytes": 1000, "writes": []}},
         ])
         projection = self._start("cancel-check")
+        preview = core.build_run_act_preview(
+            self.root, projection["run_id"], "tick"
+        )
         child = subprocess.Popen(
             [sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
-             "--root", str(self.root), "run", "tick", projection["run_id"], "--json"],
+             "--root", str(self.root), "run", "tick", projection["run_id"],
+             "--expect", preview["act_token"], "--json"],
             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
         self.addCleanup(lambda: child.kill() if child.poll() is None else None)
@@ -6552,6 +6589,342 @@ class OrchestrationConductorTest(unittest.TestCase):
             replayed["external_commits"][-1]["previous_head"],
             replayed["external_commits"][-1]["head"],
         )
+
+    def test_run_interop_compiler_plan_projection_and_preview_are_exact(self):
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.orchestration as orch
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+        import dw_pmo.workbench as wb
+
+        issued = self.now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        expires = (self.now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        compiled = orch.compile_score_path(
+            self.root / "pm" / "orchestration" / "research-build-review.json"
+        )
+        cli_compiled = json.loads(self._dw(
+            "orchestration", "show", "research-build-review", "--json"
+        ).stdout)
+        mcp_compiled = mcp.call_tool(
+            self.root, "dw_orchestration_show", {"score": "research-build-review"}
+        )["structuredContent"]
+        status, http_compiled = wb.handle_api(
+            self.root, "/api/orchestration/research-build-review/compiled", {}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(compiled, cli_compiled)
+        self.assertEqual(compiled, mcp_compiled)
+        self.assertEqual(compiled, http_compiled["data"])
+
+        plan = runs.build_run_plan(
+            self.root, "research-build-review", "sample", "SMP-0-01",
+            issued_at=issued, expires_at=expires,
+        )
+        cli_plan = json.loads(self._dw(
+            "run", "plan", "research-build-review", "--project", "sample",
+            "--story", "SMP-0-01", "--issued-at", issued,
+            "--expires-at", expires, "--json",
+        ).stdout)
+        mcp_plan = mcp.call_tool(self.root, "dw_run_plan", {
+            "score": "research-build-review", "project": "sample",
+            "story": "SMP-0-01", "issued_at": issued, "expires_at": expires,
+        })["structuredContent"]
+        status, http_plan = wb.handle_api(self.root, "/api/run-plan", {
+            "score": ["research-build-review"], "project": ["sample"],
+            "story": ["SMP-0-01"], "issued_at": [issued], "expires_at": [expires],
+        })
+        self.assertEqual(plan, cli_plan)
+        self.assertEqual(plan, mcp_plan)
+        self.assertEqual(plan, http_plan["data"])
+
+        status, started = wb.handle_mutation(self.root, "/api/runs/start", {
+            "score": "research-build-review", "project": "sample",
+            "story": "SMP-0-01", "issued_at": issued, "expires_at": expires,
+            "expect": plan["start_token"], "approve": True, "operator": "interop-test",
+        })
+        self.assertEqual(status, 200, started)
+        run_id = started["data"]["run_id"]
+        projection = runs.replay_run(self.root, run_id)
+        self.assertEqual(
+            mcp.call_tool(self.root, "dw_run_show", {"run_id": run_id})["structuredContent"],
+            projection,
+        )
+        status, shown = wb.handle_api(self.root, f"/api/runs/{run_id}", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(shown["data"], projection)
+
+        preview = surface.build_run_act_preview(
+            self.root, run_id, "pause", reason="inspect exact state"
+        )
+        mcp_preview = mcp.call_tool(self.root, "dw_run_preview", {
+            "run_id": run_id, "action": "pause", "reason": "inspect exact state",
+        })["structuredContent"]
+        status, http_preview = wb.handle_api(
+            self.root, f"/api/runs/{run_id}/act/pause",
+            {"reason": ["inspect exact state"]},
+        )
+        self.assertEqual(preview, mcp_preview)
+        self.assertEqual(preview, http_preview["data"])
+        self.assertEqual(surface.document_bytes(preview), surface.document_bytes(mcp_preview))
+
+    def test_tick_result_is_returned_unmodified_by_cli_mcp_and_http(self):
+        """Applying adapters wrap the one core document; none reinterprets it."""
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.orchestration_surface as surface
+        import dw_pmo.workbench as wb
+
+        sentinel = {
+            "kind": "delivery-workbench-conductor-tick",
+            "schema_version": 1,
+            "run_id": "run-000000000000000000000000",
+            "before_head": "sha256:before",
+            "after_head": "sha256:after",
+            "state": "active",
+            "progressed": True,
+            "actions": [{"action": "claim", "node_id": "research-api", "attempt": 1}],
+            "eligible": ["research-api"],
+            "scheduled": [{"node_id": "research-api", "kind": "agent", "attempt": 1}],
+            "blocked": [],
+            "active_claims": 1,
+            "next_poll_seconds": 1,
+            "terminal": False,
+        }
+        cli_path = TESTS_DIR.parent / "bin" / "dw"
+        loader = SourceFileLoader("dw_tick_adapter_fixture", str(cli_path))
+        spec = importlib.util.spec_from_loader("dw_tick_adapter_fixture", loader)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        cli = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cli)
+        output = io.StringIO()
+        with mock.patch.object(cli, "apply_run_act", return_value=sentinel) as call:
+            with redirect_stdout(output):
+                code = cli.main([
+                    "--root", str(self.root), "run", "tick", sentinel["run_id"],
+                    "--expect", "exact-act-token", "--json",
+                ])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(output.getvalue()), sentinel)
+        call.assert_called_once_with(
+            self.root, sentinel["run_id"], "tick", "exact-act-token"
+        )
+
+        with mock.patch(
+            "dw_pmo.orchestration_surface.apply_run_act", return_value=sentinel
+        ) as call:
+            mcp_result = mcp.call_tool(self.root, "dw_run_tick", {
+                "run_id": sentinel["run_id"], "expect": "exact-act-token",
+            })
+            status, http_result = wb.handle_mutation(
+                self.root, "/api/runs/tick",
+                {"run_id": sentinel["run_id"], "expect": "exact-act-token"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual(mcp_result["structuredContent"], sentinel)
+        self.assertEqual(http_result["data"], sentinel)
+        self.assertEqual(
+            surface.document_bytes(json.loads(output.getvalue())),
+            surface.document_bytes(mcp_result["structuredContent"]),
+        )
+        self.assertEqual(
+            surface.document_bytes(mcp_result["structuredContent"]),
+            surface.document_bytes(http_result["data"]),
+        )
+        self.assertEqual(call.call_count, 2)
+
+    def test_run_act_token_binds_action_reason_decision_and_state(self):
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+
+        projection = self._start()
+        run_id = projection["run_id"]
+        preview = surface.build_run_act_preview(
+            self.root, run_id, "pause", reason="bounded inspection", now=self.now
+        )
+        ledger = self.root / ".git" / "pmo-orchestration" / "runs" / run_id / "ledger.jsonl"
+        before = ledger.read_bytes()
+        with self.assertRaisesRegex(DwError, "stale or altered"):
+            surface.apply_run_act(
+                self.root, run_id, "pause", preview["act_token"],
+                reason="different reason", now=self.now,
+            )
+        self.assertEqual(ledger.read_bytes(), before)
+        paused = surface.apply_run_act(
+            self.root, run_id, "pause", preview["act_token"],
+            reason="bounded inspection", now=self.now,
+        )
+        self.assertEqual(paused["state"], "paused")
+        with self.assertRaisesRegex(DwError, "stale or altered"):
+            surface.apply_run_act(
+                self.root, run_id, "pause", preview["act_token"],
+                reason="bounded inspection", now=self.now,
+            )
+        self.assertEqual(runs.replay_run(self.root, run_id, now=self.now)["state"], "paused")
+
+    def test_stale_tick_preview_refuses_before_dispatch_or_event(self):
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+
+        projection = self._start()
+        run_id = projection["run_id"]
+        tick = surface.build_run_act_preview(self.root, run_id, "tick", now=self.now)
+        paused = runs.transition_run(
+            self.root, run_id, "pause", projection["ledger_head"],
+            reason="operator won race", now=self.now,
+        )
+        ledger = self.root / ".git" / "pmo-orchestration" / "runs" / run_id / "ledger.jsonl"
+        before = ledger.read_bytes()
+        with self.assertRaisesRegex(DwError, "stale or altered"):
+            surface.apply_run_act(
+                self.root, run_id, "tick", tick["act_token"], now=self.now
+            )
+        self.assertEqual(ledger.read_bytes(), before)
+        self.assertEqual(paused["state"], "paused")
+        self.assertFalse((ledger.parent / "driver-sessions").exists())
+
+    def test_run_view_is_pure_rich_and_excludes_private_semantics(self):
+        import dw_pmo.orchestration_surface as surface
+
+        projection = self._start()
+        run_id = projection["run_id"]
+        run_dir = self.root / ".git" / "pmo-orchestration" / "runs" / run_id
+        before = {
+            str(path.relative_to(run_dir)): path.read_bytes()
+            for path in run_dir.rglob("*") if path.is_file()
+        }
+        first = surface.build_run_view(self.root, run_id, now=self.now)
+        second = surface.build_run_view(self.root, run_id, now=self.now)
+        after = {
+            str(path.relative_to(run_dir)): path.read_bytes()
+            for path in run_dir.rglob("*") if path.is_file()
+        }
+        self.assertEqual(first, second)
+        self.assertEqual(before, after)
+        self.assertEqual(first["kind"], surface.RUN_VIEW_KIND)
+        self.assertEqual(len(first["graph"]["nodes"]), 7)
+        self.assertIn("budgets", first)
+        self.assertIn("timeline", first)
+        self.assertTrue(any(item["action"] == "tick" for item in first["controls"]))
+
+        keys: set[str] = set()
+        def collect(value):
+            if isinstance(value, dict):
+                keys.update(str(key) for key in value)
+                for item in value.values(): collect(item)
+            elif isinstance(value, list):
+                for item in value: collect(item)
+        collect(first)
+        self.assertTrue({
+            "prompt", "argv", "command", "packet", "packet_path", "staging",
+            "credentials", "approved_by", "content", "pid",
+        }.isdisjoint(keys), sorted(keys))
+
+    def test_run_stream_is_explicit_bounded_and_injection_safe(self):
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.orchestration_surface as surface
+
+        projection = self._start()
+        run_id = projection["run_id"]
+        directory = (
+            self.root / ".git" / "pmo-orchestration" / "runs" / run_id
+            / "check-sessions" / "check-fixture"
+        )
+        directory.mkdir(parents=True)
+        (directory / "stdout.log").write_bytes(b"0123456789" * 3000)
+        document = surface.read_run_stream(
+            self.root, run_id, "check", "check-fixture", "stdout", max_bytes=17
+        )
+        self.assertEqual(document["included_bytes"], 17)
+        self.assertEqual(len(document["content"]), 17)
+        self.assertTrue(document["truncated"])
+        via_mcp = mcp.call_tool(self.root, "dw_run_stream", {
+            "run_id": run_id, "executor": "check", "execution_id": "check-fixture",
+            "stream": "stdout", "max_bytes": 17,
+        })["structuredContent"]
+        self.assertEqual(document, via_mcp)
+        for malicious in ("../check-fixture", "check-fixture/../../grant"):
+            with self.assertRaises(DwError):
+                surface.read_run_stream(
+                    self.root, run_id, "check", malicious, "stdout"
+                )
+
+    def test_cli_and_mcp_controls_require_fresh_preview_tokens(self):
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.orchestration_run as runs
+
+        projection = self._start()
+        run_id = projection["run_id"]
+        preview = json.loads(self._dw(
+            "run", "preview", run_id, "pause", "--reason", "cli review", "--json"
+        ).stdout)
+        paused = json.loads(self._dw(
+            "run", "pause", run_id, "--reason", "cli review",
+            "--expect", preview["act_token"], "--json",
+        ).stdout)
+        self.assertEqual(paused["state"], "paused")
+        resume = mcp.call_tool(self.root, "dw_run_preview", {
+            "run_id": run_id, "action": "resume",
+        })["structuredContent"]
+        applied = mcp.call_tool(self.root, "dw_run_resume", {
+            "run_id": run_id, "expect": resume["act_token"],
+        })
+        self.assertFalse(applied.get("isError", False), applied)
+        self.assertEqual(applied["structuredContent"]["state"], "active")
+        self.assertEqual(runs.replay_run(self.root, run_id)["state"], "active")
+
+    def test_adapters_reject_score_semantics_driver_config_and_argv(self):
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.workbench as wb
+
+        start_schema = mcp.TOOLS["dw_run_start"]["inputSchema"]
+        serialized = json.dumps(start_schema, sort_keys=True)
+        for forbidden in ("score_document", "prompt", "argv", "driver_config", "check_runner"):
+            self.assertNotIn(forbidden, serialized)
+        result = mcp.call_tool(self.root, "dw_run_start", {
+            "score": "research-build-review", "story": "SMP-0-01",
+            "issued_at": "2026-01-01T00:00:00Z", "expires_at": "2026-01-01T01:00:00Z",
+            "expect": "sha256:nope", "approve": True, "operator": "fixture",
+            "argv": ["danger"],
+        })
+        self.assertTrue(result["isError"])
+        self.assertIn("unknown parameter", result["content"][0]["text"])
+        status, body = wb.handle_mutation(self.root, "/api/runs/tick", {
+            "run_id": "run-000000000000000000000000", "expect": "x",
+            "driver_config": {"profiles": {}},
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("unknown run tick parameter", body["issues"][0])
+
+    def test_mission_control_run_summary_is_content_safe(self):
+        import dw_pmo.orchestration_surface as surface
+        from dw_pmo.statefeed import build_state_feed
+
+        projection = self._start()
+        summary = surface.run_summary_inventory(self.root, now=self.now)
+        self.assertEqual(summary["runs"][0]["run_id"], projection["run_id"])
+        feed = build_state_feed(self.root)
+        self.assertEqual(feed["orchestration_runs"]["kind"], surface.RUN_SUMMARY_KIND)
+        serialized = json.dumps(feed["orchestration_runs"], sort_keys=True)
+        for forbidden in ("prompt", "argv", "transcript", "source content", "artifact content"):
+            self.assertNotIn(forbidden, serialized)
+
+    def test_run_view_static_contract_has_consent_privacy_and_no_poller(self):
+        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
+        run_source = app[app.index("function runStateBadge"):app.index("/* ── router")]
+        for token in (
+            "live run · ledger replay", "fail checks", "Artifact metadata and lineage",
+            "failure routes", "human checkpoints", "hash-chained receipts",
+            "preview exact grant", "confirm this exact act", "no automatic continuation",
+            "No certification, commit, elevation, retry", "close explicit stream",
+        ):
+            self.assertIn(token, run_source)
+        self.assertNotIn("setInterval", run_source)
+        self.assertNotIn("driver_config", run_source)
+        self.assertNotIn("argv:", run_source)
+        self.assertIn("aria-labelledby=\"run-graph-title\"", run_source)
+        self.assertIn("@media (max-width: 520px)", css)
+        self.assertIn(".run-node.state-active", css)
 
 
 class AgentHooksTest(unittest.TestCase):

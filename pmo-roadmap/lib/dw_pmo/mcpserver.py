@@ -316,7 +316,143 @@ def _tool_contract_new(root: Path, args: dict) -> tuple[str, dict]:
     return text, structured
 
 
+def _json_tool(payload: dict) -> tuple[str, dict]:
+    return json.dumps(payload, sort_keys=True), payload
+
+
+def _tool_orchestration_list(root: Path, _args: dict) -> tuple[str, dict]:
+    from .orchestration import score_inventory
+
+    return _json_tool(score_inventory(root))
+
+
+def _tool_orchestration_show(root: Path, args: dict) -> tuple[str, dict]:
+    from .orchestration import compile_score_path, find_score_path
+
+    return _json_tool(compile_score_path(find_score_path(root, str(args["score"]))))
+
+
+def _tool_orchestration_simulate(root: Path, args: dict) -> tuple[str, dict]:
+    from .orchestration import find_score_path, load_score, simulate_score
+
+    return _json_tool(simulate_score(load_score(find_score_path(root, str(args["score"])))))
+
+
+def _tool_run_plan(root: Path, args: dict) -> tuple[str, dict]:
+    from .orchestration_run import build_run_plan
+
+    return _json_tool(build_run_plan(
+        root,
+        str(args["score"]),
+        str(args.get("project") or "") or None,
+        str(args["story"]),
+        issued_at=args.get("issued_at"),
+        expires_at=args.get("expires_at"),
+    ))
+
+
+def _tool_run_list(root: Path, _args: dict) -> tuple[str, dict]:
+    from .orchestration_run import run_inventory
+
+    return _json_tool(run_inventory(root))
+
+
+def _tool_run_show(root: Path, args: dict) -> tuple[str, dict]:
+    from .orchestration_run import replay_run
+
+    return _json_tool(replay_run(root, str(args["run_id"])))
+
+
+def _tool_run_view(root: Path, args: dict) -> tuple[str, dict]:
+    from .orchestration_surface import build_run_view
+
+    return _json_tool(build_run_view(root, str(args["run_id"])))
+
+
+def _tool_run_preview(root: Path, args: dict) -> tuple[str, dict]:
+    from .orchestration_surface import build_run_act_preview
+
+    return _json_tool(build_run_act_preview(
+        root,
+        str(args["run_id"]),
+        str(args["action"]),
+        reason=str(args.get("reason") or ""),
+        decision=str(args.get("decision") or ""),
+    ))
+
+
+def _tool_run_start(root: Path, args: dict) -> tuple[str, dict]:
+    from .orchestration_surface import start_run_by_id
+
+    return _json_tool(start_run_by_id(
+        root,
+        str(args["score"]),
+        str(args.get("project") or "") or None,
+        str(args["story"]),
+        str(args["issued_at"]),
+        str(args["expires_at"]),
+        str(args["expect"]),
+        approved=bool(args.get("approve")),
+        approved_by=str(args.get("operator") or ""),
+    ))
+
+
+def _apply_run_tool(root: Path, args: dict, action: str) -> tuple[str, dict]:
+    from .orchestration_surface import apply_run_act
+
+    return _json_tool(apply_run_act(
+        root,
+        str(args["run_id"]),
+        action,
+        str(args["expect"]),
+        reason=str(args.get("reason") or ""),
+        decision=str(args.get("decision") or ""),
+    ))
+
+
+def _tool_run_tick(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_run_tool(root, args, "tick")
+
+
+def _tool_run_pause(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_run_tool(root, args, "pause")
+
+
+def _tool_run_resume(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_run_tool(root, args, "resume")
+
+
+def _tool_run_revoke(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_run_tool(root, args, "revoke")
+
+
+def _tool_run_cancel(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_run_tool(root, args, "cancel")
+
+
+def _tool_run_checkpoint(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_run_tool(root, args, "checkpoint")
+
+
+def _tool_run_stream(root: Path, args: dict) -> tuple[str, dict]:
+    from .orchestration_surface import read_run_stream
+
+    return _json_tool(read_run_stream(
+        root,
+        str(args["run_id"]),
+        str(args["executor"]),
+        str(args["execution_id"]),
+        str(args["stream"]),
+        max_bytes=int(args.get("max_bytes", 20_000)),
+    ))
+
+
 _PROJECT_PROP = {"type": "string", "description": "Project slug (optional when the repo has exactly one project)"}
+_RUN_ID_PROP = {"type": "string", "description": "Local orchestration run id"}
+_RUN_EXPECT_PROP = {
+    "type": "string",
+    "description": "Exact act_token from a fresh matching dw_run_preview",
+}
 
 TOOLS: dict[str, dict] = {
     "dw_status": {
@@ -560,6 +696,169 @@ TOOLS: dict[str, dict] = {
         },
         "handler": _tool_contract_new,
     },
+    "dw_orchestration_list": {
+        "description": "Pure score inventory. Adapter over orchestration.score_inventory.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "handler": _tool_orchestration_list,
+    },
+    "dw_orchestration_show": {
+        "description": "Compile one score through the shared exact compiler; starts nothing.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"score": {"type": "string", "description": "Score slug or filename stem"}},
+            "required": ["score"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_orchestration_show,
+    },
+    "dw_orchestration_simulate": {
+        "description": "Pure deterministic score simulation; writes no run state or events.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"score": {"type": "string", "description": "Score slug or filename stem"}},
+            "required": ["score"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_orchestration_simulate,
+    },
+    "dw_run_plan": {
+        "description": (
+            "Pure grant/start preview rebuilt from local score and rail facts; accepts identifiers "
+            "and timestamps, never score semantics, prompts, driver config, or argv."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "string"}, "project": _PROJECT_PROP,
+                "story": {"type": "string"},
+                "issued_at": {"type": "string", "description": "Exact ISO-8601 issuance for parity/replay"},
+                "expires_at": {"type": "string", "description": "Exact ISO-8601 grant expiry"},
+            },
+            "required": ["score", "story"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_run_plan,
+    },
+    "dw_run_list": {
+        "description": "Replay all local run ledgers; returns projections and no prompt/source/output content.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "handler": _tool_run_list,
+    },
+    "dw_run_show": {
+        "description": "Replay one authoritative hash-chained run projection; pure.",
+        "inputSchema": {
+            "type": "object", "properties": {"run_id": _RUN_ID_PROP},
+            "required": ["run_id"], "additionalProperties": False,
+        },
+        "handler": _tool_run_show,
+    },
+    "dw_run_view": {
+        "description": "Content-safe live graph, attempts, sessions, checks, artifacts, budgets, routes, controls, and ledger timeline; pure.",
+        "inputSchema": {
+            "type": "object", "properties": {"run_id": _RUN_ID_PROP},
+            "required": ["run_id"], "additionalProperties": False,
+        },
+        "handler": _tool_run_view,
+    },
+    "dw_run_preview": {
+        "description": "Pure action+parameters+ledger-bound preview required before every run control act.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _RUN_ID_PROP,
+                "action": {"type": "string", "enum": ["tick", "pause", "resume", "revoke", "cancel", "checkpoint"]},
+                "reason": {"type": "string"},
+                "decision": {"type": "string", "enum": ["approve", "reject"]},
+            },
+            "required": ["run_id", "action"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_run_preview,
+    },
+    "dw_run_start": {
+        "description": "Consume one exact run plan by identifiers and token; creates a grant but dispatches no node.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "score": {"type": "string"}, "project": _PROJECT_PROP,
+                "story": {"type": "string"}, "issued_at": {"type": "string"},
+                "expires_at": {"type": "string"}, "expect": {"type": "string"},
+                "approve": {"type": "boolean"}, "operator": {"type": "string"},
+            },
+            "required": ["score", "story", "issued_at", "expires_at", "expect", "approve", "operator"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_run_start,
+    },
+    "dw_run_tick": {
+        "description": "Apply one freshly previewed deterministic conductor tick; this act may start bounded work.",
+        "inputSchema": {
+            "type": "object", "properties": {"run_id": _RUN_ID_PROP, "expect": _RUN_EXPECT_PROP},
+            "required": ["run_id", "expect"], "additionalProperties": False,
+        },
+        "handler": _tool_run_tick,
+    },
+    "dw_run_pause": {
+        "description": "Apply one freshly previewed pause with its exact bounded reason.",
+        "inputSchema": {
+            "type": "object", "properties": {"run_id": _RUN_ID_PROP, "expect": _RUN_EXPECT_PROP, "reason": {"type": "string"}},
+            "required": ["run_id", "expect", "reason"], "additionalProperties": False,
+        },
+        "handler": _tool_run_pause,
+    },
+    "dw_run_resume": {
+        "description": "Apply one freshly previewed resume after grant facts are re-observed.",
+        "inputSchema": {
+            "type": "object", "properties": {"run_id": _RUN_ID_PROP, "expect": _RUN_EXPECT_PROP},
+            "required": ["run_id", "expect"], "additionalProperties": False,
+        },
+        "handler": _tool_run_resume,
+    },
+    "dw_run_revoke": {
+        "description": "Apply one freshly previewed permanent grant revocation with reason.",
+        "inputSchema": {
+            "type": "object", "properties": {"run_id": _RUN_ID_PROP, "expect": _RUN_EXPECT_PROP, "reason": {"type": "string"}},
+            "required": ["run_id", "expect", "reason"], "additionalProperties": False,
+        },
+        "handler": _tool_run_revoke,
+    },
+    "dw_run_cancel": {
+        "description": "Apply one freshly previewed cancellation; ledger cancellation precedes interruption.",
+        "inputSchema": {
+            "type": "object", "properties": {"run_id": _RUN_ID_PROP, "expect": _RUN_EXPECT_PROP, "reason": {"type": "string"}},
+            "required": ["run_id", "expect", "reason"], "additionalProperties": False,
+        },
+        "handler": _tool_run_cancel,
+    },
+    "dw_run_checkpoint": {
+        "description": "Apply one freshly previewed approve/reject decision to the exact pending checkpoint.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _RUN_ID_PROP, "expect": _RUN_EXPECT_PROP,
+                "decision": {"type": "string", "enum": ["approve", "reject"]},
+            },
+            "required": ["run_id", "expect", "decision"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_run_checkpoint,
+    },
+    "dw_run_stream": {
+        "description": "Explicitly open one bounded agent/check stdout or stderr log; never lists packets, prompts, source, or artifact content.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _RUN_ID_PROP,
+                "executor": {"type": "string", "enum": ["agent", "check"]},
+                "execution_id": {"type": "string"},
+                "stream": {"type": "string", "enum": ["stdout", "stderr"]},
+                "max_bytes": {"type": "integer", "minimum": 1, "maximum": 100000},
+            },
+            "required": ["run_id", "executor", "execution_id", "stream"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_run_stream,
+    },
 }
 
 
@@ -574,8 +873,30 @@ def tool_definitions() -> list[dict]:
     ]
 
 
+def _schema_type_matches(value: object, expected: object) -> bool:
+    names = expected if isinstance(expected, list) else [expected]
+    for name in names:
+        if name == "string" and isinstance(value, str):
+            return True
+        if name == "boolean" and isinstance(value, bool):
+            return True
+        if name == "integer" and isinstance(value, int) and not isinstance(value, bool):
+            return True
+        if name == "number" and isinstance(value, (int, float)) and not isinstance(value, bool):
+            return True
+        if name == "array" and isinstance(value, list):
+            return True
+        if name == "object" and isinstance(value, dict):
+            return True
+        if name == "null" and value is None:
+            return True
+    return False
+
+
 def _validate_args(schema: dict, args: dict) -> str | None:
-    """Minimal schema check: unknown keys and required fields."""
+    """Validate the closed, shallow MCP input schemas used by this server."""
+    if not isinstance(args, dict):
+        return "arguments must be an object"
     props = schema.get("properties", {})
     if not schema.get("additionalProperties", True):
         unknown = [key for key in args if key not in props]
@@ -584,6 +905,26 @@ def _validate_args(schema: dict, args: dict) -> str | None:
     missing = [key for key in schema.get("required", []) if key not in args]
     if missing:
         return f"missing required parameter(s): {', '.join(missing)}"
+    for key, value in args.items():
+        field = props.get(key, {})
+        expected = field.get("type")
+        if expected is not None and not _schema_type_matches(value, expected):
+            return f"parameter {key} has the wrong type"
+        if "enum" in field and value not in field["enum"]:
+            return f"parameter {key} is not an allowed value"
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if "minimum" in field and value < field["minimum"]:
+                return f"parameter {key} is below its minimum"
+            if "maximum" in field and value > field["maximum"]:
+                return f"parameter {key} exceeds its maximum"
+        if isinstance(value, list):
+            if len(value) < int(field.get("minItems", 0)):
+                return f"parameter {key} has too few items"
+            item_type = field.get("items", {}).get("type")
+            if item_type is not None and any(
+                not _schema_type_matches(item, item_type) for item in value
+            ):
+                return f"parameter {key} has an item with the wrong type"
     return None
 
 

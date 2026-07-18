@@ -312,10 +312,13 @@ The inspector configures the complete rule surface:
 - terminal meaning such as `complete`, `blocked`, `cancelled`, or
   `awaiting-certification`.
 
-The first three views and their shared score-save boundary are delivered. The
-grant, driver, and deterministic conductor cores now supply authoritative run
-state; the visual Run view remains the WLA-24-07 interoperability slice rather
-than reconstructing policy in the browser. Graph and JSON round-trip losslessly.
+All four views are delivered. Run replays the authoritative ledger through the
+shared core and renders live graph state, attempts, agent/check/rail sessions,
+artifact metadata and lineage, finite budgets, failure routes, checkpoints,
+terminal meaning, and the content-safe ledger timeline. It never reconstructs
+policy in the browser and never polls. Every grant or control is a separate
+preview→confirm act; a state, action, reason, or decision change invalidates
+the exact token before work or an event can start. Graph and JSON round-trip losslessly.
 Saving uses preview→diff→apply through a dedicated contained score mutation;
 the browser never owns validation policy. A score with compiler errors cannot
 be saved or authorized. Presets are ordinary scores copied into the editor,
@@ -403,10 +406,13 @@ recovery, CLI operation, and hosted schedulers. It never follows an unrecorded
 decision.
 
 This runtime is delivered as one shared core: `schedule_decision` is pure;
-`dw run tick <run>` performs one reconciliation/dispatch boundary; and
+`dw run preview <run> tick` produces its exact consent document and
+`dw run tick <run> --expect <act-token>` performs one
+reconciliation/dispatch boundary; and
 `dw run supervise <run> --max-ticks N --interval S` is finite repetition over
-that same tick. `dw run checkpoint <run> approve|reject --expect <ledger-head>`
-is the exact-token human decision. A tick first polls or recovers existing
+that same tick for an explicitly requested CLI supervisor.
+`dw run checkpoint <run> approve|reject --expect <act-token>` is the
+preview-bound human decision. A tick first polls or recovers existing
 claims, then records configured failure routes, then schedules in immutable
 score order. A repair receipt binds source attempt, visit, repair node and
 repair attempt; successful repair re-enables exactly the failed source, while
@@ -499,7 +505,7 @@ budgets, driver/check outcomes, and artifact metadata—not prompts, model
 transcripts, source content, credentials, or raw check output. Detailed
 streams remain bounded local artifacts and appear only on explicit inspection.
 
-One cross-process ledger lock, stale ledger-head acts, single-use start tokens,
+Cross-process ledger and whole-tick locks, stale intent-bound acts, single-use start tokens,
 and unique node-attempt/idempotency claims make dispatch at-most-once. Driver,
 check, and rail executors persist an idempotent local receipt before a retry;
 an uncertain started check/rail becomes `lost` rather than running twice. Deleting
@@ -518,10 +524,10 @@ and never deletes the audit trail.
 One core owns score compilation, grant planning, run projection, tick, and
 cancellation. Adapters remain thin:
 
-- CLI: `dw orchestration list|show|validate|simulate`, `dw run plan|start|list|show|pause|resume|revoke|cancel|tick|supervise|checkpoint`;
-- MCP: pure score/run reads plus exact-token run acts, never provider argv;
-- HTTP: versioned envelopes for the visual editor and run monitor;
-- Workbench: Design, Validate, and Run views over those HTTP models; and
+- CLI: `dw orchestration list|show|validate|simulate`, plus `dw run plan|start|list|show|view|preview|pause|resume|revoke|cancel|tick|supervise|checkpoint|stream`;
+- MCP: byte-identical score/run reads, previews, exact-token acts, and explicit bounded streams—never caller-supplied score semantics or provider/check argv;
+- HTTP: the same documents inside versioned envelopes, with stale acts as 409;
+- Workbench: Design, Validate, JSON, and Run views over those HTTP models, with manual refresh and no authorization poller; and
 - events/state feed: bounded run summaries for mission-control clients.
 
 Remote or hosted schedulers may call `tick`, but the local runner holding the

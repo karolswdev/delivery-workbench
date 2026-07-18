@@ -380,7 +380,7 @@ before process start. CLI, MCP, HTTP, the browser, and generated riders share
 that boundary, and the wheel-installed exit exam proves it through a real
 story.
 
-### 10. Multi-agent coordination had no exact, inspectable score — active Phase 24
+### 10. Multi-agent coordination had no exact, inspectable score — addressed through WLA-24-07
 
 The system could expose state, correlate sessions, steer an armed agent, and
 apply one fresh rail step, but it could not describe a whole coordinated run:
@@ -392,6 +392,16 @@ editor and pure compiler, then separates that configuration from a revocable
 run grant. The conductor can interpret only compiled rules and structured
 driver/check receipts; agent harnesses retain model/sandbox authority, and
 certification/commit remain explicit.
+
+Seven delivered slices now cover that complete local product loop: the exact
+score/compiler, rich Design/Validate/JSON editor, hash-bound grants and
+ledger, provider-neutral drivers and isolated worktrees, deterministic
+conductor/check/repair runtime, and byte-equivalent CLI/MCP/HTTP/Workbench Run
+surfaces. The Run tab is the explanation and consent center: it shows live
+node attempts, research/work sessions, fail checks, typed artifact lineage,
+budgets, routes, checkpoints, and hash-chained receipts, but refreshes and
+opens streams only when explicitly requested. The remaining Phase 24 work is
+the packaged whole-score exit exam, not another capability layer.
 
 ## Phase 22: delivered product step
 

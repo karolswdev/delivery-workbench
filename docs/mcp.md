@@ -88,6 +88,44 @@ to `isError`.
 | `dw_verify` | `verify.run_verify` | `{range?: string, all?: boolean, epoch?: string}` — result mirrors `--porcelain`: `{ok, verified, pre_epoch_skipped, out_of_scope, epoch, violations: [{sha, rule, message}]}` |
 | `dw_gate` | `gate.run_gate` | `{}` — result mirrors `dw gate --porcelain` (pass/fail, tier, boxes, shipped stories, failing rule + remediation) — preflight only; never consumes the contract |
 
+### Bounded orchestration (read-only and preview)
+
+These tools accept only selectors, run ids, timestamps, and bounded preview
+parameters. They do not accept score documents, prompts, provider/check
+commands, driver configuration, scheduling choices, or credentials.
+
+| Tool | Core function | Input schema |
+|---|---|---|
+| `dw_orchestration_list` | `orchestration.score_inventory` | `{}` |
+| `dw_orchestration_show` | `orchestration.compile_score_path` | `{score}` |
+| `dw_orchestration_simulate` | `orchestration.simulate_score` | `{score}`; pure, starts nothing |
+| `dw_run_plan` | `orchestration_run.build_run_plan` | `{score, story, project?, issued_at?, expires_at?}`; exact pure grant preview |
+| `dw_run_list` | `orchestration_run.run_inventory` | `{}`; content-safe projections only |
+| `dw_run_show` | `orchestration_run.replay_run` | `{run_id}` |
+| `dw_run_view` | `orchestration_surface.build_run_view` | `{run_id}`; live graph, attempts, sessions/check receipts, artifact metadata/lineage, budgets, routes, controls, and ledger timeline |
+| `dw_run_preview` | `orchestration_surface.build_run_act_preview` | `{run_id, action, reason?, decision?}`; binds the exact action and parameters to the current ledger head in one `act_token` |
+
+### Bounded orchestration (exact-token acts)
+
+Every act is separate from preview. A ledger, action, reason, or checkpoint
+decision change makes the token unusable. Expected state races are tool
+errors with the shared refusal text; nothing is automatically re-previewed.
+
+| Tool | Core function | Input schema |
+|---|---|---|
+| `dw_run_start` | `orchestration_surface.start_run_by_id` | `{score, story, project?, issued_at, expires_at, expect, approve, operator}`; rebuilds the exact plan and creates a grant, but dispatches nothing |
+| `dw_run_tick` | `orchestration_surface.apply_run_act` | `{run_id, expect}`; one tick preview token; may start only score-authorized bounded work |
+| `dw_run_pause` | `orchestration_surface.apply_run_act` | `{run_id, expect, reason}` |
+| `dw_run_resume` | `orchestration_surface.apply_run_act` | `{run_id, expect}`; re-observes grant facts |
+| `dw_run_revoke` | `orchestration_surface.apply_run_act` | `{run_id, expect, reason}`; permanent for that grant |
+| `dw_run_cancel` | `orchestration_surface.apply_run_act` | `{run_id, expect, reason}`; cancellation is ledgered before interruption |
+| `dw_run_checkpoint` | `orchestration_surface.apply_run_act` | `{run_id, expect, decision: "approve"|"reject"}` |
+| `dw_run_stream` | `orchestration_surface.read_run_stream` | `{run_id, executor: "agent"|"check", execution_id, stream: "stdout"|"stderr", max_bytes?}`; explicit, independently bounded open only |
+
+Retry remains an immutable score failure policy exercised by a confirmed
+tick; it is not a manual retry tool. Authority elevation requires a new grant.
+Certification, commit, push, release, and deploy remain permanently absent.
+
 ### Guarded mutations
 
 | Tool | Core function | Input schema |

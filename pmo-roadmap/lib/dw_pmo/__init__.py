@@ -257,5 +257,19 @@ from .orchestration_conductor import (
     supervise_run,
     tick_run,
 )
+from .orchestration_surface import (
+    RUN_ACT_PREVIEW_KIND,
+    RUN_STREAM_KIND,
+    RUN_SUMMARY_KIND,
+    RUN_SURFACE_SCHEMA_VERSION,
+    RUN_VIEW_KIND,
+    apply_run_act,
+    build_run_act_preview,
+    build_run_view,
+    document_bytes,
+    read_run_stream,
+    run_summary_inventory,
+    start_run_by_id,
+)
 
 __version__ = "1.14.0"

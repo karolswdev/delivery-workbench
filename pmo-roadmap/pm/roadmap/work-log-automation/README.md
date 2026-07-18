@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-17 (Phase 24 is open 6/8: the deterministic conductor and bounded checks/recovery are complete).
+**Last updated:** 2026-07-17 (Phase 24 is open 7/8: exact run interop and the rich live Run view are complete).
 **Current phase:** [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/current-phase-status.md).
-**Status:** active — WLA-24-07 is next: byte-equivalent run control plus the visual live Run view across every surface.
+**Status:** active — WLA-24-08 is next: the wheel-installed multi-agent orchestration exit exam and phase close.
 
 ## Vision
 
@@ -126,7 +126,7 @@ behavior is:
 
 ## Active extension
 
-Phase 24 (The conductor's score — visual orchestration) is active at 6/8.
+Phase 24 (The conductor's score — visual orchestration) is active at 7/8.
 Its completed architecture contract and exact score compiler turn the Phase-22 observation and
 Phase-23 one-step lease into a
 configurable coordination framework rather than a hidden loop. A rich
@@ -152,8 +152,14 @@ grant concurrency/resource/budget limits, runs exact contained command and
 built-in checks, validates artifact fan-in, consumes fresh declared `dw step`
 leases, and records bounded retry/repair/approval/pause/abort/cancel routes.
 Crash boundaries recover without duplicate starts, and terminal handoff stays
-`awaiting-certification`. The remaining work is interoperable live run control
-and the visual Run view. See the
+`awaiting-certification`. The delivered interop layer now returns those exact
+models through CLI, MCP, and HTTP, while the rich Workbench Run view explains
+the live graph, attempts, agent/check sessions, explicit bounded streams,
+artifact lineage, budgets, failure routes, checkpoints, controls, and ledger
+without polling or acquiring shell/certification/commit authority. A
+real-process fixture crosses each applying adapter, and 32 desktop/mobile
+renders cover active, repair, and terminal states. The remaining work is the
+wheel-installed whole-score exit exam and phase close. See the
 [Phase 24 plan](./phase-24-bounded-orchestration/current-phase-status.md) and
 [visual orchestration contract](../../../../docs/orchestration.md).
 

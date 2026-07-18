@@ -33,6 +33,11 @@ and drift warnings), `trace` (commit and work-log correlation),
 `render`/`mutations` (content generation and guarded writes), `api`
 (context envelopes, timelines, handoffs), plus `gate`, `contract`,
 `evidence`, `agentdocs`, `doctor`, `status`, `step`, `adopt`, and `workbench`.
+Phase 24 adds `orchestration` (pure compiler), `orchestration_edit` (guarded
+score writes), `orchestration_run` (grants and ledger),
+`orchestration_driver` (provider-neutral execution),
+`orchestration_conductor` (deterministic scheduling/checks/routes), and
+`orchestration_surface` (privacy-preserving adapter and Run-view models).
 
 `status` is the read-only composition root for an agent's first question. It
 joins doctor, roadmap validation, git/contract/gate state, current progress,
@@ -215,7 +220,7 @@ installs a built wheel into a fresh consumer, rotates seven separately reviewed
 applies across CLI/MCP/HTTP, and asserts exact event/receipt/manual-commit
 boundaries. Package smoke cannot pass from imports or one happy-path adapter.
 
-Phase 24's active layer is visual orchestration, not an implicit
+Phase 24's orchestration layer is not an implicit
 `while status: step` loop. A tracked score can describe research/worker roles,
 graph dependencies, context, typed outputs, exact checks, failure routes,
 budgets, concurrency, approvals, and terminal meanings. A pure compiler owns
@@ -230,9 +235,14 @@ concurrency/resource exclusion, exact contained command and built-in checks,
 validation-gated fan-in, finite retry/repair/approval/pause/abort routes, fresh
 `dw step` rail leases, cancellation-first interruption, budget/expiry stops,
 and an `awaiting-certification` terminal. `run supervise` is bounded repetition
-over the same tick, not a second scheduler. The visual/transport run monitor is
-the remaining interoperability slice; the design and threat model are
-[orchestration.md](./orchestration.md).
+over the same tick, not a second scheduler. The shared interop surface now
+returns byte-identical compiler/plan/projection/act documents through CLI,
+MCP, and HTTP; exposes only ids and intent-bound tokens on applying adapters;
+publishes a content-safe mission-control summary; and drives the rich,
+manually refreshed Workbench Run view. That view explains live graph state,
+sessions/checks, artifact lineage, budgets, routes, checkpoints, terminal
+meaning, and the ledger while keeping streams behind explicit bounded opens.
+The design and threat model are [orchestration.md](./orchestration.md).
 
 Viewport rendering is smoke-tested headlessly at desktop and mobile
 (`tests/workbench-ui-smoke.sh`, CI-run where Firefox exists).

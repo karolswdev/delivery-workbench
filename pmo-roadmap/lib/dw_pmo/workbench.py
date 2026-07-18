@@ -103,6 +103,14 @@ def _error(status: int, message: str) -> tuple[int, dict[str, object]]:
     return status, envelope({"error": message}, ok=False, issues=[message])
 
 
+def _run_error(err: DwError) -> tuple[int, dict[str, object]]:
+    conflict = any(
+        token in err.message
+        for token in ("stale", "altered", "already consumed", "not applicable")
+    )
+    return _error(409 if conflict else 400, err.message)
+
+
 def _project_summary(project, root: Path) -> dict[str, object]:
     phases = discover_phases(project)
     active = 0
@@ -218,6 +226,93 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             from .orchestration import score_inventory
 
             return 200, envelope(score_inventory(root))
+
+        if (
+            len(parts) == 4
+            and parts[:2] == ["api", "orchestration"]
+            and parts[3] in {"compiled", "simulation"}
+        ):
+            from .orchestration import (
+                compile_score_path,
+                find_score_path,
+                load_score,
+                simulate_score,
+            )
+
+            score_path = find_score_path(root, parts[2])
+            if parts[3] == "compiled":
+                return 200, envelope(compile_score_path(score_path))
+            return 200, envelope(simulate_score(load_score(score_path)))
+
+        if parts == ["api", "run-plan"]:
+            from .orchestration_run import build_run_plan
+
+            score = query.get("score", [""])[0].strip()
+            story = query.get("story", [""])[0].strip()
+            if not score or not story:
+                raise DwError("run plan requires score and story identifiers")
+            project = query.get("project", [""])[0].strip() or None
+            issued_at = query.get("issued_at", [""])[0].strip() or None
+            expires_at = query.get("expires_at", [""])[0].strip() or None
+            return 200, envelope(build_run_plan(
+                root,
+                score,
+                project,
+                story,
+                issued_at=issued_at,
+                expires_at=expires_at,
+            ))
+
+        if parts == ["api", "runs"]:
+            from .orchestration_run import run_inventory
+
+            return 200, envelope(run_inventory(root))
+
+        if len(parts) == 3 and parts[:2] == ["api", "runs"]:
+            from .orchestration_run import replay_run
+
+            return 200, envelope(replay_run(root, parts[2]))
+
+        if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "view":
+            from .orchestration_surface import build_run_view
+
+            return 200, envelope(build_run_view(root, parts[2]))
+
+        if (
+            len(parts) == 5
+            and parts[:2] == ["api", "runs"]
+            and parts[3] == "act"
+        ):
+            from .orchestration_surface import build_run_act_preview
+
+            return 200, envelope(build_run_act_preview(
+                root,
+                parts[2],
+                parts[4],
+                reason=query.get("reason", [""])[0],
+                decision=query.get("decision", [""])[0],
+            ))
+
+        if (
+            len(parts) == 7
+            and parts[:2] == ["api", "runs"]
+            and parts[3] == "streams"
+        ):
+            from .orchestration_surface import read_run_stream
+
+            raw_max = query.get("max_bytes", ["20000"])[0]
+            try:
+                max_bytes = int(raw_max)
+            except ValueError as exc:
+                raise DwError("stream max_bytes must be an integer") from exc
+            return 200, envelope(read_run_stream(
+                root,
+                parts[2],
+                parts[4],
+                parts[5],
+                parts[6],
+                max_bytes=max_bytes,
+            ))
 
         if len(parts) == 3 and parts[:2] == ["api", "orchestration"]:
             from .orchestration import (
@@ -473,6 +568,82 @@ def _issues_guard(root: Path, body: dict[str, object], plan) -> tuple[int, dict[
 def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
     """POST routes: deliberate step, roadmap edits, and score content edits."""
     route = path.rstrip("/")
+    if route == "/api/runs/preview":
+        unknown = sorted(set(body) - {"run_id", "action", "reason", "decision"})
+        if unknown:
+            return _error(400, f"unknown run preview parameter(s): {', '.join(unknown)}")
+        try:
+            run_id, action = _require(body, "run_id", "action")
+            from .orchestration_surface import build_run_act_preview
+
+            return 200, envelope(build_run_act_preview(
+                root,
+                run_id,
+                action,
+                reason=str(body.get("reason", "") or ""),
+                decision=str(body.get("decision", "") or ""),
+            ))
+        except DwError as err:
+            return _run_error(err)
+
+    if route == "/api/runs/start":
+        allowed = {
+            "score", "project", "story", "issued_at", "expires_at",
+            "expect", "approve", "operator",
+        }
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(400, f"unknown run start parameter(s): {', '.join(unknown)}")
+        try:
+            score, story, issued_at, expires_at, expect, operator = _require(
+                body, "score", "story", "issued_at", "expires_at", "expect", "operator"
+            )
+            if body.get("approve") is not True:
+                raise DwError("run start requires approve=true for the exact preview")
+            from .orchestration_surface import start_run_by_id
+
+            return 200, envelope(start_run_by_id(
+                root,
+                score,
+                str(body.get("project", "") or "") or None,
+                story,
+                issued_at,
+                expires_at,
+                expect,
+                approved=True,
+                approved_by=operator,
+            ))
+        except DwError as err:
+            return _run_error(err)
+
+    if route in {
+        "/api/runs/tick", "/api/runs/pause", "/api/runs/resume",
+        "/api/runs/revoke", "/api/runs/cancel", "/api/runs/checkpoint",
+    }:
+        action = route.rsplit("/", 1)[-1]
+        allowed = {"run_id", "expect"}
+        if action in {"pause", "revoke", "cancel"}:
+            allowed.add("reason")
+        if action == "checkpoint":
+            allowed.add("decision")
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(400, f"unknown run {action} parameter(s): {', '.join(unknown)}")
+        try:
+            run_id, expect = _require(body, "run_id", "expect")
+            from .orchestration_surface import apply_run_act
+
+            return 200, envelope(apply_run_act(
+                root,
+                run_id,
+                action,
+                expect,
+                reason=str(body.get("reason", "") or ""),
+                decision=str(body.get("decision", "") or ""),
+            ))
+        except DwError as err:
+            return _run_error(err)
+
     if route == "/api/step/apply":
         unknown = sorted(set(body) - {"project", "expect"})
         if unknown:
@@ -619,7 +790,7 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
         405,
         "unsupported method or route; use /api/step/apply, guarded roadmap "
         "/api/mutations/preview|apply, or guarded score "
-        "/api/orchestration/preview|apply routes",
+        "/api/orchestration/preview|apply, or exact-token /api/runs/* routes",
     )
 
 def create_handler(root: Path, static_dir: Path | None):

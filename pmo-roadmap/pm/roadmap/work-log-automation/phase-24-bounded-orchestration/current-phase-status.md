@@ -49,7 +49,7 @@ quietly acquiring certification and commit authority.
   `dw step` leases only for declared rail nodes, enforces exact check/failure/
   retry/cancellation policy and all budgets, recovers without duplicate work,
   and stops at named human checkpoints (WLA-24-06).
-- [ ] CLI, MCP, HTTP, and Workbench expose byte-equivalent score/run models and
+- [x] CLI, MCP, HTTP, and Workbench expose byte-equivalent score/run models and
   exact-token acts; the visual Run view makes agents, checks, artifacts,
   attempts, failures, budgets, approvals, cancellation, and terminal handoff
   legible without accepting provider or shell argv (WLA-24-07).
@@ -69,25 +69,28 @@ quietly acquiring certification and commit authority.
 | WLA-24-04 | Authorize runs with grants and an append-only ledger | done | [story-04-run-grants-ledger](./story-04-run-grants-ledger.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-24-05 | Drive research and worker agents in isolated workspaces | done | [story-05-agent-drivers-workspaces](./story-05-agent-drivers-workspaces.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-24-06 | Schedule nodes, checks, failure routes, and recovery | done | [story-06-conductor-runtime](./story-06-conductor-runtime.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-24-07 | Expose and monitor runs across every surface | backlog | [story-07-run-control-interop](./story-07-run-control-interop.md) | - |
+| WLA-24-07 | Expose and monitor runs across every surface | done | [story-07-run-control-interop](./story-07-run-control-interop.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-24-08 | Prove a packaged multi-agent orchestration | backlog | [story-08-packaged-orchestration-exam](./story-08-packaged-orchestration-exam.md) | - |
 
 ## Where we are
 
-Phase OPEN 6/8. WLA-24-06 has delivered the conductor that turns the score,
-grant, ledger, drivers, artifacts, and rails into coordination. One pure
-decision and one idempotent tick reconcile existing claims before work,
-schedule stable eligible sets under concurrency/resource/start/time/artifact
-budgets, validate fan-in, and persist exact driver/check/rail receipts. Command
-and built-in checks run in contained workspaces; finite retry→repair→source
-routes, approval, pause, abort, exhaustion, expiry, unsupported authority, and
-cancellation all become ledger facts. Crash recovery after claim, driver
-start, artifact collection, or check completion polls persisted execution
-instead of duplicating it. Bounded supervision calls only that tick, fresh
-`dw step` leases power declared rail nodes, and every green graph stops at
-`awaiting-certification`; an external commit is observed but never claimed as
-shipped. WLA-24-07 is next: expose these byte-equivalent score/run/control
-models and a legible visual Run view across CLI, MCP, HTTP, and Workbench.
+Phase OPEN 7/8. WLA-24-07 has made coordination a coherent product surface,
+not a Python-only runtime. CLI JSON, MCP `structuredContent`, and HTTP `data`
+now carry the same compiler, plan, projection, tick, act-preview, Run-view,
+and explicit stream documents. Applying adapters accept identifiers and fresh
+intent-bound tokens—not score semantics, prompts, driver config, or check
+argv—and stale or altered acts refuse before dispatch or ledger mutation. The
+Workbench Run tab replays the authoritative graph with attempts, research and
+worker sessions, fail-check receipts and bounded streams, typed artifact
+lineage, budgets, failure/repair routes, checkpoints, hash-chain timeline,
+and exact preview→confirm controls. It refreshes only on request, exposes no
+generic terminal, and offers no manual retry, elevation, certification, or
+commit shortcut. Mission control receives content-safe summaries only. A
+real-process installed-fixture walk crossed start/tick/pause/resume/checkpoint
+over HTTP, MCP, and CLI, deliberate cross-adapter stale replay, and terminal
+handoff; 32 Firefox renders cover active, repair, and terminal Run states at
+desktop and mobile sizes. WLA-24-08 is the remaining exit exam: prove the
+whole packaged multi-agent score and close the phase.
 
 ## Active risks
 
@@ -121,6 +124,9 @@ models and a legible visual Run view across CLI, MCP, HTTP, and Workbench.
 - 2026-07-17 - Bind repair routing to source attempt, visit, target, and target attempt, then retry the exact source only after a successful repair - red paths remain finite and cannot silently skip required work - WLA-24-06.
 - 2026-07-17 - Run exact command checks in external grant-HEAD or predecessor worktrees with a minimal environment and bounded filesystem snapshots - a failing check cannot dirty the operator tree or inherit agent/provider authority - WLA-24-06.
 - 2026-07-17 - Observe external commits without advancing `awaiting-certification` to a shipped state - orchestration can explain operator integration but cannot certify it - WLA-24-06.
+- 2026-07-17 - Bind every run control token to action, reason/decision, ledger head, state, and generation, then re-preview inside one serialized conductor boundary - two clients cannot turn one observation into two dispatches - WLA-24-07.
+- 2026-07-17 - Make Run an explanation and consent view with explicit refresh and explicit bounded stream opens - visibility must not become an authorization poller or content leak - WLA-24-07.
+- 2026-07-17 - Keep retry policy immutable in the score and require a new grant for capability elevation - operators may pause, resume, decide checkpoints, revoke, or cancel, but cannot invent runtime policy - WLA-24-07.
 
 ## Decisions deferred
 

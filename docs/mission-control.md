@@ -67,7 +67,19 @@ shape; the feed may not, without a version bump:
     "stories": [{"story_id": "…", "title": "…", "status": "…",
                   "phase": 12, "evidence_exists": true}],
     "warnings": 2
-  }]
+  }],
+  "orchestration_runs": {
+    "kind": "delivery-workbench-run-summary-list",
+    "schema_version": 1,
+    "runs": [{
+      "run_id": "run-…", "state": "active", "score": "research-build-review",
+      "project": "…", "story": "…", "active_claims": 2,
+      "completed_claims": 0, "ledger_events": 5, "ledger_head": "sha256:…",
+      "expired": false, "expires_at": "…", "budgets": {}
+    }],
+    "starts_work": false,
+    "writes_events": false
+  }
 }
 ```
 
@@ -77,6 +89,12 @@ freezing — the Desk conveyor renders phases as the belt, and the
 actuator pack validates create-targets against phases that may
 hold no stories yet; neither works from `current_phase` alone.
 `current_phase` uses the same phase shape.)*
+
+*Phase 24 adds the stamped, content-safe `orchestration_runs` summary under
+the repository-wide additive-versioning rule in `interop.md`. It contains
+only ids, states, counts, hashes, expiry, and budgets—never score prompts,
+provider/check argv, credentials, transcripts, source, or artifact content.
+The run ledger remains separate from the rail event journal.*
 
 Schema-pinning tests fail on unannounced shape changes. Consumers
 declare the `feed_schema` they were proven against, the way the

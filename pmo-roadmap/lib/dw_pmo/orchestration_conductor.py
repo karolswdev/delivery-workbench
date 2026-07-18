@@ -10,15 +10,17 @@ only bounded repetition around that primitive.
 from __future__ import annotations
 
 import fnmatch
+import fcntl
 import hashlib
 import json
 import os
 import signal
 import subprocess
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterator
 
 from .gitio import head_sha, in_rewrite_state
 from .model import DwError
@@ -1181,7 +1183,7 @@ def _observe_external_commit(
     return updated, True
 
 
-def tick_run(
+def _tick_run_once(
     root: Path,
     run_id: str,
     *,
@@ -1364,6 +1366,88 @@ def _tick_document(
         "next_poll_seconds": next_poll,
         "terminal": after["state"] in TERMINAL_STATES,
     }
+
+
+@contextmanager
+def _conductor_lock(root: Path, run_id: str) -> Iterator[None]:
+    """Serialize whole ticks, including provider/check side effects.
+
+    Ledger appends are already individually locked, but an exact-token control
+    surface also needs the observation and the first possible dispatch to be
+    one critical section.  Otherwise two HTTP/MCP clients could both observe
+    the same head before either has claimed work.
+    """
+    path = _run_dir(root, run_id) / ".conductor.lock"
+    with path.open("a+", encoding="utf-8") as handle:
+        os.chmod(path, 0o600)
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def tick_run(
+    root: Path,
+    run_id: str,
+    *,
+    expect: str | None = None,
+    driver_config: object | None = None,
+    adapters: dict[str, object] | None = None,
+    check_runner: CheckRunner | None = None,
+    rail_runner: Callable[[list[str], Path], StepChild] | None = None,
+    now: datetime | None = None,
+    boundary_hook: BoundaryHook | None = None,
+) -> dict[str, object]:
+    """Run one serialized tick, optionally bound to an exact ledger head.
+
+    Internal supervisors may omit ``expect``.  Every agent/HTTP/Workbench
+    applying surface supplies the head from a fresh act preview; a mismatch is
+    refused before reconciliation, dispatch, checks, rails, or ledger writes.
+    """
+    root = root.resolve()
+
+    # A terminal control event may be appended while a synchronous provider
+    # or check is still inside the serialized dispatch tick.  Cancellation
+    # must be able to cross that boundary immediately: this cleanup-only tick
+    # cannot schedule work because replay already says authority has ended.
+    # Ledger compare-and-append still serializes the two reconcilers; the
+    # dispatching tick is expected to lose that race and stop on its stale
+    # head after the contained process has been interrupted.
+    observed = replay_run(root, run_id, now=now)
+    cleanup_states = {"cancelled", "revoked", "blocked", "awaiting-certification"}
+    if observed["state"] in cleanup_states and observed["active_claims"]:
+        if expect is not None and str(expect or "") != observed["ledger_head"]:
+            raise DwError(
+                "stale run tick token refused; no work started and no event was appended"
+            )
+        return _tick_run_once(
+            root,
+            run_id,
+            driver_config=driver_config,
+            adapters=adapters,
+            check_runner=check_runner,
+            rail_runner=rail_runner,
+            now=now,
+            boundary_hook=boundary_hook,
+        )
+    with _conductor_lock(root, run_id):
+        if expect is not None:
+            observed = replay_run(root, run_id, now=now)
+            if str(expect or "") != observed["ledger_head"]:
+                raise DwError(
+                    "stale run tick token refused; no work started and no event was appended"
+                )
+        return _tick_run_once(
+            root,
+            run_id,
+            driver_config=driver_config,
+            adapters=adapters,
+            check_runner=check_runner,
+            rail_runner=rail_runner,
+            now=now,
+            boundary_hook=boundary_hook,
+        )
 
 
 def supervise_run(

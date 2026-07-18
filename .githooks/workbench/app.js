@@ -1141,6 +1141,10 @@ const ORCH_TERMINALS = ["", "complete", "blocked", "cancelled", "awaiting-certif
 let orchState = {
   name: "", score: null, exists: false, selected: null, view: "design",
   preview: null, inventory: [], validationTimer: null, jsonDraft: "",
+  runInventory: [], runs: [], runId: "", runView: null, runLoading: false,
+  runError: "", runPlan: null, runAct: null, runStream: null,
+  grantDraft: { project: "", story: "", operator: "", minutes: 60 },
+  controlReason: "",
 };
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
@@ -1422,14 +1426,149 @@ function jsonView() {
     <div id="orch-json-error" class="guard" hidden></div><p class="hint">Unknown schema fields are preserved in this text and refused by the compiler; they are never silently dropped.</p></div>`;
 }
 
-function runPlaceholder() {
-  return `<div class="orch-run-placeholder"><h2>Run view</h2><p>The score is configuration, not authority. Saving it starts nothing.</p><p>Run grants, live node state, receipts, budgets, pause/cancel, and human checkpoint controls arrive through the separately evidence-gated runtime stories. No provisional start button is exposed here.</p>${badge("no grant · no run · no event", "warn")}</div>`;
+function runStateBadge(state) {
+  const cls = ["active", "succeeded", "complete"].includes(state) ? "ok"
+    : ["failed", "blocked", "cancelled", "revoked"].includes(state) ? "issue"
+      : ["awaiting-approval", "awaiting-certification", "paused"].includes(state) ? "warn" : "";
+  return badge(state, cls);
+}
+
+function liveRunGraph(view) {
+  const nodes = view.graph.nodes || [];
+  const positions = view.graph.layout?.nodes || {};
+  const maxX = Math.max(820, ...nodes.map((n) => Number(positions[n.id]?.x || 0) + 225));
+  const maxY = Math.max(430, ...nodes.map((n) => Number(positions[n.id]?.y || 0) + 145));
+  const edges = [];
+  nodes.forEach((node) => {
+    const target = positions[node.id] || { x: 0, y: 0 };
+    (node.needs || []).forEach((need) => {
+      const source = positions[need];
+      if (source) edges.push(`<path class="orch-edge success" d="M ${Number(source.x) + 190} ${Number(source.y) + 48} C ${Number(source.x) + 220} ${Number(source.y) + 48}, ${Number(target.x) - 30} ${Number(target.y) + 48}, ${Number(target.x)} ${Number(target.y) + 48}" marker-end="url(#run-arrow)"></path>`);
+    });
+    if (node.on_failure?.action === "route" && positions[node.on_failure.node]) {
+      const failure = positions[node.on_failure.node];
+      edges.push(`<path class="orch-edge failure" d="M ${Number(target.x) + 95} ${Number(target.y) + 96} C ${Number(target.x) + 95} ${Number(target.y) + 130}, ${Number(failure.x) + 95} ${Number(failure.y) - 30}, ${Number(failure.x) + 95} ${Number(failure.y)}" marker-end="url(#run-fail-arrow)"></path>`);
+    }
+  });
+  return `<div class="run-graph-wrap"><svg class="orch-canvas run-graph" viewBox="0 0 ${maxX} ${maxY}" role="img" aria-labelledby="run-graph-title">
+    <title id="run-graph-title">Live orchestration graph. Nodes show authoritative replayed state and attempt.</title>
+    <defs><marker id="run-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-success"></path></marker><marker id="run-fail-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="arrow-failure"></path></marker></defs>
+    ${edges.join("")}
+    ${nodes.map((node) => {
+      const pos = positions[node.id] || { x: 0, y: 0 };
+      return `<g class="orch-node run-node state-${esc(node.state)} type-${esc(node.type)}" transform="translate(${Number(pos.x)},${Number(pos.y)})" tabindex="0" role="group" aria-label="${esc(node.id)}, ${esc(node.state)}, attempt ${esc(node.attempt)}">
+        <title>${esc(node.id)} — ${esc(node.state)} — attempt ${esc(node.attempt)}${node.blocked_reason ? ` — ${esc(node.blocked_reason)}` : ""}</title><rect width="190" height="96" rx="9"></rect>
+        <circle class="port input" cx="0" cy="48" r="5"></circle><circle class="port output" cx="190" cy="48" r="5"></circle>
+        <text class="node-type" x="14" y="20">${esc(node.type)} · attempt ${esc(node.attempt)}</text><text class="node-id" x="14" y="46">${esc(node.id)}</text><text class="node-detail" x="14" y="70">${esc(node.state)}</text>
+        ${node.blocked_reason ? `<text class="run-node-reason" x="14" y="87">${esc(node.blocked_reason).slice(0, 28)}</text>` : ""}
+      </g>`;
+    }).join("")}
+  </svg></div>`;
+}
+
+function runBudgetHtml(budgets) {
+  return `<div class="run-budgets">${Object.entries(budgets || {}).map(([name, budget]) => {
+    const used = Number(budget.used || 0); const limit = Number(budget.limit || 0);
+    const percent = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+    return `<div class="run-budget"><span>${esc(name.replace(/^max_/, "").replaceAll("_", " "))}</span><strong>${esc(used)} / ${esc(limit)}</strong><div><i style="width:${percent}%"></i></div></div>`;
+  }).join("")}</div>`;
+}
+
+function runArtifactHtml(view) {
+  const actual = new Map((view.artifacts || []).map((item) => [item.name, item]));
+  const declared = [];
+  (view.graph.nodes || []).forEach((node) => (node.outputs || []).forEach((output) => declared.push({ ...output, producer: node.id })));
+  return `<div class="tablewrap"><table class="run-table"><thead><tr><th>artifact</th><th>producer</th><th>format</th><th>lineage / conventions</th><th>receipt</th></tr></thead><tbody>${declared.map((item) => {
+    const receipt = actual.get(item.name);
+    const conventions = [item.citations === "required" ? "citations" : "", ...(item.required_sections || [])].filter(Boolean).join(" · ") || `${item.max_bytes || "?"} byte ceiling`;
+    return `<tr><td><code>${esc(item.name)}</code></td><td>${esc(item.producer)}</td><td>${esc(item.format)}</td><td>${esc(conventions)}</td><td>${receipt ? `${badge("validated", "ok")} ${esc(receipt.bytes)} B · <code>${esc(receipt.sha256).slice(0, 24)}…</code>` : badge("declared · not produced", "warn")}</td></tr>`;
+  }).join("") || '<tr><td colspan="5">No declared artifacts.</td></tr>'}</tbody></table></div>`;
+}
+
+function streamButtons(executor, session) {
+  const id = session.session_id || session.execution_id;
+  if (!id) return "";
+  return ["stdout", "stderr"].map((stream) => Number(session[`${stream}_bytes`] || 0) > 0
+    ? `<button type="button" data-run-stream="${stream}" data-executor="${executor}" data-execution-id="${esc(id)}">open ${stream} · ${esc(session[`${stream}_bytes`])} B</button>` : "").join("");
+}
+
+function runSessionsHtml(view) {
+  const agents = view.sessions?.agents || [];
+  const checks = view.sessions?.checks || [];
+  return `<div class="run-session-columns"><section><h3>research / work agents ${badge(agents.length)}</h3>${agents.map((session) => `<article class="run-session"><div><strong>${esc(session.node_id)}</strong>${runStateBadge(session.state)}</div><small>${esc(session.profile)} · ${esc(session.adapter)} · attempt ${esc(session.attempt)}</small><code>${esc(session.session_id || "no session")}</code><p>${esc(session.reason)}</p><div class="run-stream-buttons">${streamButtons("agent", session)}</div></article>`).join("") || '<p class="hint">No agent session has crossed the driver boundary.</p>'}</section>
+    <section><h3>fail checks ${badge(checks.length)}</h3>${checks.map((session) => `<article class="run-session"><div><strong>${esc(session.node_id)}</strong>${runStateBadge(session.state)}</div><small>${esc(session.runner_kind)} · attempt ${esc(session.attempt)} · exit ${esc(session.actual_exit_code ?? "—")}/${esc(session.expected_exit_code)}</small><code>${esc(session.runner_hash)}</code><p>${esc(session.reason)}${(session.changed_paths || []).length ? ` · changed: ${esc(session.changed_paths.join(", "))}` : ""}</p><div class="run-stream-buttons">${streamButtons("check", session)}</div></article>`).join("") || '<p class="hint">No check session has executed.</p>'}</section></div>`;
+}
+
+function runRoutesHtml(view) {
+  return `<div class="run-route-grid"><section><h3>failure routes</h3>${(view.routes || []).map((route) => `<div class="run-route"><code>${esc(route.node_id)} #${esc(route.attempt)}</code><strong>${esc(route.action)}</strong><span>${esc(route.target)}${route.target_attempt ? ` #${esc(route.target_attempt)}` : ""}</span>${route.resolved ? badge(`resolved · ${route.outcome}`, "ok") : badge("open", "warn")}</div>`).join("") || '<p class="hint">No failure route has fired.</p>'}</section><section><h3>human checkpoints</h3>${(view.checkpoints || []).map((point) => `<div class="run-route"><code>${esc(point.checkpoint)}</code><strong>${esc(point.mode)}</strong><span>${esc(point.reason)}</span>${point.decision ? badge(point.decision, point.decision === "approve" ? "ok" : "issue") : badge("waiting", "warn")}</div>`).join("") || '<p class="hint">No checkpoint has been reached.</p>'}</section></div>`;
+}
+
+function runTimelineHtml(view) {
+  return `<ol class="run-timeline">${(view.timeline || []).map((event) => `<li><div><strong>${esc(event.event)}</strong><time>${esc(event.ts)}</time>${badge(`#${event.seq}`)}</div><p>${Object.entries(event.detail || {}).map(([key, value]) => `<span><b>${esc(key)}</b> ${esc(value)}</span>`).join("")}</p><code>${esc(event.event_hash)}</code></li>`).join("")}</ol>`;
+}
+
+function runControlsHtml(view) {
+  const available = (view.controls || []).filter((control) => control.available);
+  const unavailable = (view.controls || []).filter((control) => !control.available);
+  if (view.terminal) return `<section class="run-controls terminal"><div><span>terminal handoff</span><strong>${esc(view.state)}</strong></div><p>${esc(view.terminal_meaning)}</p><p class="guard">No certification, commit, elevation, retry, or apply control is exposed in this state.</p></section>`;
+  return `<section class="run-controls"><div class="run-control-head"><div><span>separate act boundary</span><strong>Preview, inspect, then confirm exactly one control</strong></div>${badge("no automatic continuation", "warn")}</div>
+    ${available.some((control) => control.reason_required) ? `<label class="run-reason">operator reason<input id="run-control-reason" value="${esc(orchState.controlReason)}" placeholder="bounded reason, required"></label>` : ""}
+    <div class="run-control-buttons">${available.map((control) => `<button type="button" data-run-act="${esc(control.action)}" data-run-decision="${esc(control.decision)}" class="${control.action === "cancel" || control.decision === "reject" ? "danger" : control.starts_work ? "starts-work" : ""}">preview ${esc(control.action)}${control.decision ? ` · ${esc(control.decision)}` : ""}${control.starts_work ? " (may start work)" : ""}</button>`).join("") || '<span class="hint">No bounded control is applicable.</span>'}</div>
+    <div class="run-unavailable">${unavailable.map((control) => `<div><strong>${esc(control.action)}${control.decision ? ` · ${esc(control.decision)}` : ""}</strong><span>${esc((control.issues || []).join("; "))}</span></div>`).join("")}</div>
+  </section>`;
+}
+
+function runActPreviewHtml(preview) {
+  if (!preview) return "";
+  return `<section class="run-consent ${preview.applicable ? "" : "refused"}" aria-live="polite"><div class="run-consent-head"><div><span>exact control preview</span><strong>${esc(preview.action)}${preview.decision ? ` · ${esc(preview.decision)}` : ""}</strong></div>${badge(preview.starts_work ? "may start bounded work" : "one ledger act", preview.starts_work ? "warn" : "ok")}</div>
+    <div class="run-token"><span>state + intent token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.control_generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p>
+    ${preview.reason ? `<p><strong>bound reason:</strong> ${esc(preview.reason)}</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}
+    <div class="run-consent-actions">${preview.applicable ? '<button type="button" id="run-act-confirm">confirm this exact act</button>' : ""}<button type="button" id="run-act-close">close preview</button></div>
+    <small>Any ledger change, action change, decision change, or reason change invalidates this token.</small></section>`;
+}
+
+function runStreamHtml(stream) {
+  if (!stream) return "";
+  return `<section class="run-open-stream" aria-live="polite"><div><strong>${esc(stream.executor)} · ${esc(stream.execution_id)} · ${esc(stream.stream)}</strong><button type="button" id="run-stream-close">close explicit stream</button></div><small>${esc(stream.included_bytes)} / ${esc(stream.bytes)} bytes · ${stream.truncated ? "truncated" : "complete"} · ${esc(stream.sha256)}</small><pre>${esc(stream.content)}</pre></section>`;
+}
+
+function grantPreviewHtml(plan) {
+  if (!plan) return "";
+  return `<section class="run-consent ${plan.applicable ? "" : "refused"}" aria-live="polite"><div class="run-consent-head"><div><span>immutable grant preview</span><strong>${esc(plan.story.id)} · ${esc(plan.score.slug)}</strong></div>${badge("starts no work", "ok")}</div>
+    <div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div>
+    <div class="run-grant-facts"><div><span>repository</span><code>${esc(plan.repository.branch)} · ${esc(plan.repository.head)}</code></div><div><span>expiry</span><strong>${esc(plan.request.expires_at)}</strong></div><div><span>capabilities</span><strong>${esc(plan.authority.capabilities.join(", ") || "none")}</strong></div><div><span>profiles / workspaces</span><strong>${esc(plan.authority.profiles.join(", ") || "none")} · ${esc(plan.authority.workspace_modes.join(", ") || "none")}</strong></div></div>
+    ${runBudgetHtml(Object.fromEntries(Object.entries(plan.authority.budgets).map(([key, value]) => [key, { used: 0, limit: value }]))) }
+    ${(plan.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}
+    <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="run-start-confirm">grant authority and create run — dispatch nothing</button>' : ""}<button type="button" id="run-plan-close">close preview</button></div></section>`;
+}
+
+function runEmptyHtml() {
+  const draft = orchState.grantDraft;
+  return `<div class="run-empty"><section><span class="orch-eyebrow">score ≠ authority</span><h2>No local run for this score</h2><p>Saving and validating this score starts nothing. Build a grant preview from current repository, story, score, capability, budget, and expiry facts; only a second explicit confirmation creates immutable local authority.</p>${badge("preview is pure", "ok")} ${badge("grant dispatches nothing", "warn")}</section>
+    <form id="run-grant-form" class="run-grant-form"><label>project slug<input name="project" required value="${esc(draft.project || orchState.score.project || "")}"></label><label>in-progress story id<input name="story" required value="${esc(draft.story)}" placeholder="WLA-24-07"></label><label>operator identity<input name="operator" required value="${esc(draft.operator)}" placeholder="human or accountable agent"></label><label>grant minutes<input name="minutes" type="number" min="1" max="1440" value="${esc(draft.minutes || 60)}"></label><button type="submit">preview exact grant</button></form>${grantPreviewHtml(orchState.runPlan)}</div>`;
+}
+
+function runViewHtml() {
+  if (orchState.runLoading) return `<div class="orch-run-shell">${stateHtml("Replaying the authoritative run ledger…")}</div>`;
+  const error = orchState.runError ? `<div class="guard run-error" role="alert">${esc(orchState.runError)}</div>` : "";
+  if (!orchState.runs.length || !orchState.runView) return `<div class="orch-run-shell">${error}${runEmptyHtml()}</div>`;
+  const view = orchState.runView;
+  return `<div class="orch-run-shell" data-run-id="${esc(view.run_id)}">${error}<header class="run-toolbar"><div><span class="orch-eyebrow">live run · ledger replay</span><h2>${esc(view.run_id)} ${runStateBadge(view.state)}</h2><p>${esc(view.story.id)} · ${esc(view.story.title)} · expires ${esc(view.expires_at)}</p></div><div><label>run<select id="run-select">${orchState.runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run_id)} · ${esc(item.run.state)}</option>`).join("")}</select></label><button type="button" id="run-refresh">refresh once</button></div></header>
+    <div class="run-summary"><div><span>state</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>ledger</span><strong>${esc(view.ledger_events)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>attempts</span><strong>${esc(view.attempts.active.length)} active · ${esc(view.attempts.completed.length)} complete</strong><small>generation ${esc(view.control_generation)}</small></div><div><span>authority</span><strong>${view.dispatch_allowed ? "dispatch permitted" : "dispatch stopped"}</strong><small>${view.expired ? "grant expired" : "grant fresh by time"}</small></div></div>
+    ${runBudgetHtml(view.budgets)}
+    <section class="run-panel"><div class="run-panel-head"><div><span>authoritative graph state</span><strong>Why every node is waiting, eligible, active, failed, or complete</strong></div>${badge("inspection is pure", "ok")}</div>${liveRunGraph(view)}</section>
+    <section class="run-panel"><div class="run-panel-head"><div><span>executors and fail checks</span><strong>Sessions expose receipts and bounded streams, never prompts or commands</strong></div></div>${runSessionsHtml(view)}${runStreamHtml(orchState.runStream)}</section>
+    <section class="run-panel"><div class="run-panel-head"><div><span>declared output conventions</span><strong>Artifact metadata and lineage</strong></div></div>${runArtifactHtml(view)}</section>
+    <section class="run-panel">${runRoutesHtml(view)}</section>
+    ${runControlsHtml(view)}${runActPreviewHtml(orchState.runAct)}
+    <section class="run-panel"><div class="run-panel-head"><div><span>hash-chained receipts</span><strong>Run ledger timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${runTimelineHtml(view)}</section>
+  </div>`;
 }
 
 function orchestrationBody() {
   if (orchState.view === "validate") return validateView();
   if (orchState.view === "json") return jsonView();
-  if (orchState.view === "run") return runPlaceholder();
+  if (orchState.view === "run") return runViewHtml();
   return `<div class="orch-design"><div class="orch-palette" aria-label="node palette">
       <button type="button" data-orch-settings>score settings</button>${ORCH_NODE_TYPES.map((type) => `<button type="button" data-orch-add="${type}">+ ${type}</button>`).join("")}
     </div><div class="orch-workarea">${orchGraph()}</div><aside class="orch-inspector" aria-label="rule inspector">${orchState.selected ? nodeInspector(orchState.score.nodes.find((n) => n.id === orchState.selected)) : scoreInspector()}</aside></div>`;
@@ -1665,8 +1804,106 @@ function wireJsonView() {
   });
 }
 
+function selectScoreRuns() {
+  const slug = orchState.score?.slug;
+  orchState.runs = (orchState.runInventory || []).filter((item) => item.valid && item.run?.score?.slug === slug);
+  if (!orchState.runs.some((item) => item.run_id === orchState.runId)) {
+    orchState.runId = orchState.runs.length ? orchState.runs[orchState.runs.length - 1].run_id : "";
+    orchState.runView = null;
+  }
+}
+
+async function refreshRunData() {
+  orchState.runLoading = true; orchState.runError = ""; renderOrchestration();
+  try {
+    const inventory = await api("/api/runs");
+    orchState.runInventory = inventory.data.runs || [];
+    selectScoreRuns();
+    orchState.runView = orchState.runId ? (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data : null;
+  } catch (err) {
+    orchState.runError = err.message; orchState.runView = null;
+  } finally {
+    orchState.runLoading = false; renderOrchestration();
+  }
+}
+
+async function previewRunGrant(form) {
+  const values = Object.fromEntries(new FormData(form).entries());
+  const minutes = Math.max(1, Math.min(1440, Number(values.minutes) || 60));
+  orchState.grantDraft = { project: String(values.project || "").trim(), story: String(values.story || "").trim(), operator: String(values.operator || "").trim(), minutes };
+  orchState.runError = ""; orchState.runPlan = null; renderOrchestration();
+  const issued = new Date(); const expires = new Date(issued.getTime() + minutes * 60_000);
+  const params = new URLSearchParams({ score: orchState.score.slug, project: orchState.grantDraft.project, story: orchState.grantDraft.story, issued_at: issued.toISOString(), expires_at: expires.toISOString() });
+  try { orchState.runPlan = (await api(`/api/run-plan?${params}`)).data; }
+  catch (err) { orchState.runError = err.message; }
+  renderOrchestration();
+}
+
+async function confirmRunGrant() {
+  const plan = orchState.runPlan;
+  if (!plan?.applicable) return;
+  const request = {
+    score: plan.request.score, project: plan.request.project, story: plan.request.story,
+    issued_at: plan.request.issued_at, expires_at: plan.request.expires_at,
+    expect: plan.start_token, approve: true, operator: orchState.grantDraft.operator,
+  };
+  orchState.runLoading = true; renderOrchestration();
+  const { status, body } = await postJson("/api/runs/start", request);
+  orchState.runLoading = false;
+  if (status === 409) { orchState.runPlan = null; orchState.runError = "Stale grant preview refused. Repository, score, story, or time facts changed; build a fresh preview."; renderOrchestration(); return; }
+  if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run start failed (${status})`; renderOrchestration(); return; }
+  orchState.runId = body.data.run_id; orchState.runPlan = null; await refreshRunData();
+}
+
+async function previewRunAct(action, decision) {
+  const control = (orchState.runView?.controls || []).find((item) => item.action === action && String(item.decision || "") === String(decision || ""));
+  const reason = control?.reason_required ? orchState.controlReason.trim() : "";
+  orchState.runAct = null; orchState.runError = ""; renderOrchestration();
+  const { status, body } = await postJson("/api/runs/preview", { run_id: orchState.runId, action, ...(reason ? { reason } : {}), ...(decision ? { decision } : {}) });
+  if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run preview failed (${status})`; }
+  else orchState.runAct = body.data;
+  renderOrchestration();
+}
+
+async function confirmRunAct() {
+  const preview = orchState.runAct;
+  if (!preview?.applicable) return;
+  const request = { run_id: preview.run_id, expect: preview.act_token, ...(preview.reason ? { reason: preview.reason } : {}), ...(preview.decision ? { decision: preview.decision } : {}) };
+  orchState.runLoading = true; renderOrchestration();
+  const { status, body } = await postJson(`/api/runs/${encodeURIComponent(preview.action)}`, request);
+  orchState.runLoading = false;
+  if (status === 409) { orchState.runAct = null; orchState.runError = "Stale run act refused before work or ledger change. Refresh once and preview the current state."; renderOrchestration(); return; }
+  if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run act failed (${status})`; renderOrchestration(); return; }
+  orchState.runAct = null; orchState.controlReason = ""; await refreshRunData();
+}
+
+async function openRunStream(button) {
+  orchState.runStream = null; renderOrchestration();
+  const path = `/api/runs/${encodeURIComponent(orchState.runId)}/streams/${encodeURIComponent(button.dataset.executor)}/${encodeURIComponent(button.dataset.executionId)}/${encodeURIComponent(button.dataset.runStream)}?max_bytes=20000`;
+  try { orchState.runStream = (await api(path)).data; }
+  catch (err) { orchState.runError = err.message; }
+  renderOrchestration();
+}
+
+function wireRunView() {
+  document.getElementById("run-refresh")?.addEventListener("click", refreshRunData);
+  document.getElementById("run-select")?.addEventListener("change", async (event) => { orchState.runId = event.target.value; orchState.runAct = null; orchState.runStream = null; await refreshRunData(); });
+  document.getElementById("run-grant-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewRunGrant(event.currentTarget); });
+  document.getElementById("run-start-confirm")?.addEventListener("click", confirmRunGrant);
+  document.getElementById("run-plan-close")?.addEventListener("click", () => { orchState.runPlan = null; renderOrchestration(); });
+  document.getElementById("run-control-reason")?.addEventListener("input", (event) => { orchState.controlReason = event.target.value; });
+  document.querySelectorAll("[data-run-act]").forEach((button) => button.addEventListener("click", () => previewRunAct(button.dataset.runAct, button.dataset.runDecision)));
+  document.getElementById("run-act-confirm")?.addEventListener("click", confirmRunAct);
+  document.getElementById("run-act-close")?.addEventListener("click", () => { orchState.runAct = null; renderOrchestration(); });
+  document.querySelectorAll("[data-run-stream]").forEach((button) => button.addEventListener("click", () => openRunStream(button)));
+  document.getElementById("run-stream-close")?.addEventListener("click", () => { orchState.runStream = null; renderOrchestration(); });
+}
+
 function wireOrchestration() {
-  document.querySelectorAll("[data-orch-view]").forEach((button) => button.addEventListener("click", () => { orchState.view = button.dataset.orchView; renderOrchestration(); }));
+  document.querySelectorAll("[data-orch-view]").forEach((button) => button.addEventListener("click", async () => {
+    orchState.view = button.dataset.orchView; orchState.runError = ""; renderOrchestration();
+    if (orchState.view === "run" && !orchState.runView) await refreshRunData();
+  }));
   document.getElementById("orch-score-select")?.addEventListener("change", (e) => { location.hash = e.target.value ? `#/orchestration/${encodeURIComponent(e.target.value)}` : "#/orchestration"; });
   document.getElementById("orch-new")?.addEventListener("click", () => { orchState.score = minimalScore(); orchState.name = orchState.score.slug; orchState.exists = false; orchState.selected = null; orchState.preview = null; renderOrchestration(); queueOrchValidation(); });
   document.getElementById("orch-duplicate")?.addEventListener("click", () => { const used = new Set(orchState.inventory.map((s) => s.name)); let slug = `${orchState.score.slug}-copy`; let i = 2; while (used.has(slug)) slug = `${orchState.score.slug}-copy-${i++}`; orchState.score = clone(orchState.score); orchState.score.slug = slug; orchState.score.title = `${orchState.score.title} copy`; orchState.name = slug; orchState.exists = false; orchState.selected = null; renderOrchestration(); queueOrchValidation(); });
@@ -1674,13 +1911,15 @@ function wireOrchestration() {
   document.getElementById("orch-preview-delete")?.addEventListener("click", () => previewScoreAction("delete"));
   if (orchState.view === "design") wireOrchDesign();
   if (orchState.view === "json") wireJsonView();
+  if (orchState.view === "run") wireRunView();
   document.querySelectorAll(".orch-diagnostics [data-pointer], .orch-diagnostics li[data-pointer]").forEach((item) => item.addEventListener("click", () => { const match = item.dataset.pointer?.match(/^\/nodes\/(\d+)/); if (match && orchState.score.nodes[Number(match[1])]) { orchState.selected = orchState.score.nodes[Number(match[1])].id; orchState.view = "design"; renderOrchestration(); } }));
 }
 
 async function viewOrchestration(name) {
   setCrumbs([{ label: "overview", href: "#/" }, { label: "orchestration" }, ...(name ? [{ label: name }] : [])]);
-  const inventoryBody = await api("/api/orchestration");
+  const [inventoryBody, runInventoryBody] = await Promise.all([api("/api/orchestration"), api("/api/runs")]);
   orchState.inventory = inventoryBody.data.scores;
+  orchState.runInventory = runInventoryBody.data.runs || [];
   if (name) {
     const body = await api(`/api/orchestration/${encodeURIComponent(name)}`);
     orchState.name = body.data.name; orchState.score = ensureOrchShape(clone(body.data.raw)); orchState.exists = true; orchState.preview = {
@@ -1694,8 +1933,13 @@ async function viewOrchestration(name) {
     orchState.score = minimalScore(); orchState.name = orchState.score.slug; orchState.exists = false; orchState.preview = null;
   }
   orchState.selected = null; orchState.jsonDraft = "";
+  selectScoreRuns();
   const requestedView = new URLSearchParams(location.search).get("orchview");
   if (["design", "validate", "json", "run"].includes(requestedView)) orchState.view = requestedView;
+  if (orchState.view === "run" && orchState.runId) {
+    try { orchState.runView = (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data; }
+    catch (err) { orchState.runError = err.message; orchState.runView = null; }
+  }
   renderOrchestration();
   await refreshOrchValidation();
 }

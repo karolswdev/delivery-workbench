@@ -150,6 +150,8 @@ def _project_state(project: Project, root: Path) -> dict:
 
 
 def build_state_feed(root: Path) -> dict:
+    from .orchestration_surface import run_summary_inventory
+
     return {
         "feed_schema": FEED_SCHEMA,
         "generated_at_tree": write_tree(root) or "unknown",
@@ -157,6 +159,7 @@ def build_state_feed(root: Path) -> dict:
             _project_state(project, root)
             for project in discover_projects(root)
         ],
+        "orchestration_runs": run_summary_inventory(root),
     }
 
 
