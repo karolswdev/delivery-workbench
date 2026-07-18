@@ -165,5 +165,31 @@ from .step import (
     build_step,
     render_step,
 )
+from .orchestration import (
+    BUILTIN_CHECKS,
+    CAPABILITIES,
+    COMPILED_SCORE_KIND,
+    NODE_TYPES,
+    OUTPUT_FORMATS,
+    ROLE_PRESETS,
+    SCORE_KIND,
+    SCORE_SCHEMA_VERSION,
+    SIMULATION_KIND,
+    TERMINALS,
+    VALIDATION_KIND,
+    WORKSPACE_MODES,
+    OrchestrationValidationError,
+    canonical_json,
+    compile_score,
+    compile_score_path,
+    discover_score_paths,
+    find_score_path,
+    load_score,
+    orchestration_dir,
+    parse_score_text,
+    score_inventory,
+    simulate_score,
+    validate_score,
+)
 
 __version__ = "1.14.0"

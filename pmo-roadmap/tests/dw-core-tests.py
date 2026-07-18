@@ -4461,6 +4461,278 @@ class RiderDocsTest(unittest.TestCase):
 
 
 
+class OrchestrationCompilerTest(unittest.TestCase):
+    """WLA-24-02: one exact, pure score compiler for every surface."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-orchestration-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.scores = self.root / "pm" / "orchestration"
+        self.scores.mkdir(parents=True)
+        self.preset_path = TESTS_DIR.parent / "templates" / "orchestration" / "research-build-review.json"
+
+    @staticmethod
+    def minimal():
+        return {
+            "kind": "delivery-workbench-orchestration",
+            "schema_version": 1,
+            "slug": "minimal",
+            "title": "Minimal handoff",
+            "nodes": [{
+                "id": "handoff",
+                "type": "approval",
+                "prompt": "Review before certification.",
+                "terminal": "awaiting-certification",
+            }],
+        }
+
+    @staticmethod
+    def codes(document):
+        return {item["code"] for item in document["diagnostics"]}
+
+    def write_score(self, name, score):
+        path = self.scores / f"{name}.json"
+        path.write_text(json.dumps(score, indent=2) + "\n", encoding="utf-8")
+        return path
+
+    def cli(self, *args):
+        return subprocess.run(
+            [sys.executable, str(TESTS_DIR.parent / "bin" / "dw"), "--root", str(self.root),
+             "orchestration", *args],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def test_representative_preset_compiles_and_simulates_parallel_fan_in(self):
+        import dw_pmo.orchestration as orch
+
+        compiled = orch.compile_score_path(self.preset_path)
+        self.assertEqual(compiled["kind"], orch.COMPILED_SCORE_KIND)
+        self.assertRegex(compiled["semantic_hash"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual(compiled["analysis"]["fan_in"], ["synthesize"])
+        self.assertEqual(
+            compiled["analysis"]["role_presets"], list(orch.ROLE_PRESETS)
+        )
+        simulation = orch.simulate_score(compiled)
+        self.assertEqual(
+            simulation["waves"][0]["scheduled"],
+            ["research-api", "research-risks"],
+        )
+        self.assertEqual(simulation["waves"][-1]["scheduled"], ["human-handoff"])
+        self.assertIn("repair", [b.get("node") for b in simulation["failure_branches"]])
+        self.assertEqual(
+            simulation["terminals"],
+            [{"node": "human-handoff", "meaning": "awaiting-certification"}],
+        )
+        self.assertFalse(simulation["starts_work"])
+        self.assertFalse(simulation["writes_events"])
+
+    def test_minimal_and_custom_role_round_trip(self):
+        import dw_pmo.orchestration as orch
+
+        score = self.minimal()
+        score["nodes"].insert(0, {
+            "id": "specialist",
+            "type": "agent",
+            "role": "domain-specialist",
+            "profile": "readonly-local",
+            "capabilities": ["repository-read"],
+            "workspace": "read-only",
+            "outputs": [{
+                "name": "notes", "format": "text", "path": "artifacts/notes.txt",
+            }],
+        })
+        score["nodes"][1]["needs"] = ["specialist"]
+        compiled = orch.compile_score(score)
+        self.assertEqual(compiled["score"]["nodes"][0]["role"], "domain-specialist")
+        self.assertEqual(compiled["score"]["nodes"][0]["capabilities"], ["repository-read"])
+        self.assertNotIn("domain-specialist", orch.ROLE_PRESETS)
+
+    def test_semantic_hash_ignores_object_key_order_and_layout_only(self):
+        import dw_pmo.orchestration as orch
+
+        score = self.minimal()
+        score["layout"] = {
+            "nodes": {"handoff": {"x": 10, "y": 20}},
+            "viewport": {"zoom": 1, "y": 0, "x": 0},
+        }
+        reordered = json.loads(json.dumps(score, sort_keys=True))
+        first = orch.compile_score(score)
+        second = orch.compile_score(reordered)
+        self.assertEqual(first["semantic_hash"], second["semantic_hash"])
+        self.assertEqual(first["document_hash"], second["document_hash"])
+        moved = json.loads(json.dumps(score))
+        moved["layout"]["nodes"]["handoff"]["x"] = 999
+        third = orch.compile_score(moved)
+        self.assertEqual(first["semantic_hash"], third["semantic_hash"])
+        self.assertNotEqual(first["document_hash"], third["document_hash"])
+        changed = json.loads(json.dumps(score))
+        changed["nodes"][0]["prompt"] = "A different runtime prompt"
+        self.assertNotEqual(
+            first["semantic_hash"], orch.compile_score(changed)["semantic_hash"]
+        )
+
+    def test_exact_keys_duplicate_ids_and_dangling_references_refuse(self):
+        import dw_pmo.orchestration as orch
+
+        score = self.minimal()
+        score["surprise"] = True
+        score["nodes"].append({
+            "id": "handoff", "type": "approval", "needs": ["missing"],
+            "prompt": "Again", "terminal": "complete", "mystery": "x",
+        })
+        validation = orch.validate_score(score)
+        self.assertFalse(validation["valid"])
+        self.assertTrue(
+            {"unknown-key", "duplicate-node-id", "dangling-node-reference"}
+            <= self.codes(validation)
+        )
+        pointers = {item["pointer"] for item in validation["diagnostics"]}
+        self.assertIn("/surprise", pointers)
+        self.assertIn("/nodes/1/mystery", pointers)
+
+    def test_success_cycles_and_unbounded_failure_policies_refuse(self):
+        import dw_pmo.orchestration as orch
+
+        score = self.minimal()
+        score["nodes"] = [
+            {"id": "one", "type": "collect", "needs": ["two"], "inputs": [],
+             "on_failure": {"action": "retry"}},
+            {"id": "two", "type": "collect", "needs": ["one"], "inputs": [],
+             "on_failure": {"action": "route", "node": "repair", "max_visits": 999}},
+            {"id": "repair", "type": "collect", "activation": "success", "inputs": []},
+        ]
+        score["defaults"] = {"max_concurrency": 9999}
+        validation = orch.validate_score(score)
+        self.assertTrue(
+            {"success-cycle", "missing-bound", "unbounded-value", "unsafe-failure-route"}
+            <= self.codes(validation),
+            validation["diagnostics"],
+        )
+
+    def test_output_producer_type_and_order_checks_refuse(self):
+        import dw_pmo.orchestration as orch
+
+        output = {"name": "result", "format": "json", "path": "artifacts/result.json"}
+        score = self.minimal()
+        score["nodes"] = [
+            {"id": "produce-a", "type": "agent", "role": "research", "profile": "r",
+             "capabilities": ["repository-read"], "outputs": [output]},
+            {"id": "produce-b", "type": "agent", "role": "research", "profile": "r",
+             "capabilities": ["repository-read"], "outputs": [dict(output)]},
+            {"id": "consume", "type": "agent", "role": "synthesis", "profile": "s",
+             "needs": [], "capabilities": ["repository-read"],
+             "inputs": [{"artifact": "result", "format": "markdown"}], "outputs": []},
+        ]
+        validation = orch.validate_score(score)
+        self.assertTrue(
+            {"multiple-producers", "artifact-order", "incompatible-artifact"}
+            <= self.codes(validation),
+            validation["diagnostics"],
+        )
+
+    def test_unsafe_paths_shell_strings_and_undeclared_runners_refuse(self):
+        import dw_pmo.orchestration as orch
+
+        score = self.minimal()
+        score["nodes"] = [
+            {"id": "bad-agent", "type": "agent", "role": "research", "profile": "r",
+             "context": ["../secret"], "capabilities": ["repository-read"],
+             "outputs": [{"name": "bad", "format": "text", "path": "../escape"}]},
+            {"id": "string-check", "type": "check", "runner": "pytest -q"},
+            {"id": "shell-check", "type": "check",
+             "runner": {"kind": "command", "argv": ["bash", "-c", "pytest -q"]}},
+        ]
+        validation = orch.validate_score(score)
+        self.assertTrue(
+            {"unsafe-path", "undeclared-executable", "shell-string"}
+            <= self.codes(validation),
+            validation["diagnostics"],
+        )
+
+    def test_impossible_capabilities_and_forbidden_rail_authority_refuse(self):
+        import dw_pmo.orchestration as orch
+
+        score = self.minimal()
+        score["nodes"] = [
+            {"id": "writer", "type": "agent", "role": "implementation", "profile": "w",
+             "capabilities": ["repository-write", "root-access"], "workspace": "read-only",
+             "outputs": []},
+            {"id": "commit", "type": "rail", "action": "commit"},
+        ]
+        validation = orch.validate_score(score)
+        self.assertTrue(
+            {"unsupported-value", "impossible-capability", "forbidden-authority"}
+            <= self.codes(validation),
+            validation["diagnostics"],
+        )
+
+    def test_resource_locks_and_concurrency_make_simulation_deterministic(self):
+        import dw_pmo.orchestration as orch
+
+        score = self.minimal()
+        score["defaults"] = {"max_concurrency": 3}
+        score["nodes"] = [
+            {"id": "alpha", "type": "collect", "inputs": [], "resource_groups": ["repo"]},
+            {"id": "beta", "type": "collect", "inputs": [], "resource_groups": ["repo"]},
+            {"id": "gamma", "type": "collect", "inputs": [], "resource_groups": ["network"]},
+            {"id": "done", "type": "approval", "needs": ["alpha", "beta", "gamma"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ]
+        simulation = orch.simulate_score(score)
+        self.assertEqual(simulation["waves"][0]["scheduled"], ["alpha", "gamma"])
+        self.assertEqual(simulation["waves"][1]["scheduled"], ["beta"])
+        self.assertEqual(simulation["waves"][2]["scheduled"], ["done"])
+
+    def test_duplicate_json_keys_nonfinite_numbers_and_escaped_symlinks_refuse(self):
+        import dw_pmo.orchestration as orch
+
+        with self.assertRaises(DwError):
+            orch.parse_score_text('{"kind":"a","kind":"b"}')
+        with self.assertRaises(DwError):
+            orch.parse_score_text('{"x": NaN}')
+        outside = self.tmp / "outside.json"
+        outside.write_text(json.dumps(self.minimal()), encoding="utf-8")
+        (self.scores / "escape.json").symlink_to(outside)
+        with self.assertRaises(DwError):
+            orch.discover_score_paths(self.root)
+
+    def test_cli_list_show_validate_and_simulate_share_core_documents(self):
+        import dw_pmo.orchestration as orch
+
+        path = self.write_score("minimal", self.minimal())
+        inventory = self.cli("list", "--json")
+        self.assertEqual(inventory.returncode, 0, inventory.stderr)
+        listed = json.loads(inventory.stdout)
+        self.assertEqual(listed["kind"], "delivery-workbench-orchestration-list")
+        self.assertEqual(listed["scores"][0]["path"], "pm/orchestration/minimal.json")
+        shown = self.cli("show", "minimal", "--json")
+        self.assertEqual(shown.returncode, 0, shown.stderr)
+        self.assertEqual(json.loads(shown.stdout), orch.compile_score_path(path))
+        valid = self.cli("validate", "minimal", "--json")
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        self.assertTrue(json.loads(valid.stdout)["valid"])
+        before = sorted(str(item.relative_to(self.root)) for item in self.root.rglob("*"))
+        simulated = self.cli("simulate", "minimal", "--json")
+        after = sorted(str(item.relative_to(self.root)) for item in self.root.rglob("*"))
+        self.assertEqual(simulated.returncode, 0, simulated.stderr)
+        self.assertEqual(json.loads(simulated.stdout), orch.simulate_score(self.minimal()))
+        self.assertEqual(before, after, "pure CLI reads must not create run/event/cache state")
+
+    def test_cli_invalid_score_returns_pointer_diagnostics_and_exit_one(self):
+        score = self.minimal()
+        score["nodes"][0]["unknown"] = True
+        self.write_score("broken", score)
+        result = self.cli("validate", "broken", "--json")
+        self.assertEqual(result.returncode, 1)
+        document = json.loads(result.stdout)
+        self.assertFalse(document["valid"])
+        self.assertEqual(document["diagnostics"][0]["pointer"], "/nodes/0/unknown")
+        self.assertIn("remediation", document["diagnostics"][0])
+
+
 class AgentHooksTest(unittest.TestCase):
     """The agent hook seam (WLA-14-02): installer discipline, the
     emit whitelist, and the guards — docs/absorption-ccgram.md §1."""

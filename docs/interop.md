@@ -28,6 +28,10 @@ is added when an external consumer asks for one.
 | Status briefing | `delivery-workbench-status` v1 | `status.build_status` |
 | Deliberate-step preview | `delivery-workbench-step` v1 | `step.build_step` |
 | Deliberate-step result | `delivery-workbench-step-result` v1 | `step.apply_step` |
+| Orchestration score | `delivery-workbench-orchestration` v1 | `orchestration.validate_score` |
+| Compiled orchestration | `delivery-workbench-compiled-orchestration` v1 | `orchestration.compile_score` |
+| Orchestration validation | `delivery-workbench-orchestration-validation` v1 | `orchestration.validate_score` |
+| Orchestration simulation | `delivery-workbench-orchestration-simulation` v1 | `orchestration.simulate_score` |
 | Roadmap context | `delivery-workbench-roadmap-context` v1 | `api.build_context_payload` |
 | Workbench envelope | `delivery-workbench-workbench-response` v1 | `workbench.envelope` (wraps every HTTP response) |
 | Board | `delivery-workbench-board` v1 | `board.board_model` |
@@ -40,6 +44,10 @@ is added when an external consumer asks for one.
 |---|---|---|
 | `dw status [project] --json` | `status.build_status` | the stamped briefing; exit 0 `ready`, 1 `attention` |
 | `dw step [project] --json` | `step.build_step` | pure state-bound preview; add `--apply --expect <token>` for exactly one closed-table action and the stamped result |
+| `dw orchestration list --json` | `orchestration.score_inventory` | contained `pm/orchestration/*.json` inventory with validation and stable hashes |
+| `dw orchestration show <score> --json` | `orchestration.compile_score` | normalized runtime score, layout, analysis, semantic hash, and document hash |
+| `dw orchestration validate <score> --json` | `orchestration.validate_score` | exact-key verdict plus JSON-pointer diagnostics/remediation; exit 1 invalid |
+| `dw orchestration simulate <score> --json` | `orchestration.simulate_score` | pure scheduling waves, locks, lineage, branches, budgets, checkpoints, and terminals |
 | `dw context [project] [--compact] [--trace]` | `api.build_context_payload` | the stamped roadmap context |
 | `dw state --json` | `statefeed.build_state_feed` | the mission-control feed (`feed_schema` 1) |
 | `dw next [project] --json` | `api.next_story` | the next actionable story or `{next_story: null, parked}` |

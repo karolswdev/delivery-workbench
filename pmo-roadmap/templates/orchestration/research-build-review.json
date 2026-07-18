@@ -1,0 +1,286 @@
+{
+  "kind": "delivery-workbench-orchestration",
+  "schema_version": 1,
+  "slug": "research-build-review",
+  "title": "Research, implement, verify, and hand back",
+  "description": "Two research agents fan into synthesis before isolated implementation, an exact check, bounded repair, and operator certification.",
+  "defaults": {
+    "max_concurrency": 3,
+    "max_wall_seconds": 7200,
+    "max_agent_starts": 8,
+    "max_check_starts": 20,
+    "default_timeout_seconds": 1200,
+    "max_artifact_bytes": 1000000
+  },
+  "nodes": [
+    {
+      "id": "research-api",
+      "type": "agent",
+      "role": "research",
+      "profile": "research-readonly",
+      "needs": [],
+      "capabilities": [
+        "repository-read",
+        "network"
+      ],
+      "workspace": "read-only",
+      "inputs": [
+        "story",
+        "status",
+        "docs/**"
+      ],
+      "outputs": [
+        {
+          "name": "api-findings",
+          "format": "markdown",
+          "path": "artifacts/api-findings.md",
+          "required_sections": [
+            "Findings",
+            "Sources",
+            "Risks"
+          ],
+          "citations": "required",
+          "max_bytes": 30000
+        }
+      ],
+      "timeout_seconds": 1200,
+      "on_failure": {
+        "action": "pause"
+      }
+    },
+    {
+      "id": "research-risks",
+      "type": "agent",
+      "role": "research",
+      "profile": "research-readonly",
+      "needs": [],
+      "capabilities": [
+        "repository-read"
+      ],
+      "workspace": "read-only",
+      "inputs": [
+        "story",
+        "architecture"
+      ],
+      "outputs": [
+        {
+          "name": "risk-register",
+          "format": "json",
+          "path": "artifacts/risks.json",
+          "schema": "schemas/risk-register-v1.json",
+          "max_bytes": 20000
+        }
+      ],
+      "timeout_seconds": 900,
+      "on_failure": {
+        "action": "retry",
+        "max_attempts": 2
+      }
+    },
+    {
+      "id": "synthesize",
+      "type": "agent",
+      "role": "synthesis",
+      "profile": "reasoning-readonly",
+      "needs": [
+        "research-api",
+        "research-risks"
+      ],
+      "capabilities": [
+        "repository-read"
+      ],
+      "workspace": "read-only",
+      "inputs": [
+        {
+          "artifact": "api-findings",
+          "format": "markdown"
+        },
+        {
+          "artifact": "risk-register",
+          "format": "json"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "implementation-brief",
+          "format": "markdown",
+          "path": "artifacts/implementation-brief.md",
+          "required_sections": [
+            "Scope",
+            "Decisions",
+            "Acceptance checks"
+          ],
+          "max_bytes": 30000
+        }
+      ],
+      "on_failure": {
+        "action": "approval",
+        "checkpoint": "research-review"
+      }
+    },
+    {
+      "id": "implement",
+      "type": "agent",
+      "role": "implementation",
+      "profile": "worker-write",
+      "needs": [
+        "synthesize"
+      ],
+      "resource_groups": [
+        "working-tree"
+      ],
+      "capabilities": [
+        "repository-read",
+        "repository-write"
+      ],
+      "workspace": "isolated-worktree",
+      "inputs": [
+        "story",
+        {
+          "artifact": "implementation-brief",
+          "format": "markdown"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "implementation-diff",
+          "format": "git-diff",
+          "path": "workspace",
+          "allowed_paths": [
+            "src/**",
+            "tests/**",
+            "docs/**"
+          ],
+          "max_bytes": 500000
+        }
+      ],
+      "on_failure": {
+        "action": "route",
+        "node": "repair",
+        "max_visits": 1
+      }
+    },
+    {
+      "id": "tests",
+      "type": "check",
+      "needs": [
+        "implement"
+      ],
+      "resource_groups": [
+        "working-tree"
+      ],
+      "runner": {
+        "kind": "command",
+        "argv": [
+          "python3",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "cwd": "workspace",
+        "timeout_seconds": 1200,
+        "output_bytes": 30000,
+        "writes": []
+      },
+      "expect": {
+        "exit_code": 0
+      },
+      "on_failure": {
+        "action": "route",
+        "node": "repair",
+        "max_visits": 1
+      }
+    },
+    {
+      "id": "repair",
+      "type": "agent",
+      "activation": "failure",
+      "role": "repair",
+      "profile": "worker-write",
+      "needs": [
+        "implement"
+      ],
+      "resource_groups": [
+        "working-tree"
+      ],
+      "capabilities": [
+        "repository-read",
+        "repository-write"
+      ],
+      "workspace": "isolated-worktree",
+      "inputs": [
+        "story",
+        {
+          "artifact": "implementation-brief",
+          "format": "markdown"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "repair-diff",
+          "format": "git-diff",
+          "path": "workspace",
+          "allowed_paths": [
+            "src/**",
+            "tests/**",
+            "docs/**"
+          ],
+          "max_bytes": 500000
+        }
+      ],
+      "on_failure": {
+        "action": "abort"
+      }
+    },
+    {
+      "id": "human-handoff",
+      "type": "approval",
+      "needs": [
+        "tests"
+      ],
+      "prompt": "Review the diff, evidence, and contract before certification.",
+      "options": [
+        "approve",
+        "reject"
+      ],
+      "terminal": "awaiting-certification"
+    }
+  ],
+  "layout": {
+    "nodes": {
+      "research-api": {
+        "x": 40,
+        "y": 40
+      },
+      "research-risks": {
+        "x": 40,
+        "y": 240
+      },
+      "synthesize": {
+        "x": 330,
+        "y": 140
+      },
+      "implement": {
+        "x": 620,
+        "y": 140
+      },
+      "tests": {
+        "x": 910,
+        "y": 140
+      },
+      "repair": {
+        "x": 910,
+        "y": 360
+      },
+      "human-handoff": {
+        "x": 1200,
+        "y": 140
+      }
+    },
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  }
+}

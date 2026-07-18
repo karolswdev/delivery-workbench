@@ -90,23 +90,25 @@ The installer:
 
 1. Copies `templates/roadmap-builder.md` → `target/pm/roadmap/roadmap-builder.md`
 2. Copies `templates/PMO-CONTRACT.md` → `target/pm/roadmap/PMO-CONTRACT.md`
-3. Copies the three hooks — `hooks/pre-commit`, `hooks/commit-msg`,
+3. Seeds ordinary visual-orchestration presets into
+   `target/pm/orchestration/` without overwriting existing scores
+4. Copies the three hooks — `hooks/pre-commit`, `hooks/commit-msg`,
    `hooks/post-commit` — into `target/.githooks/` (chmod +x)
-4. Copies `bin/dw` → `target/.githooks/dw` and the `lib/dw_pmo/` core
+5. Copies `bin/dw` → `target/.githooks/dw` and the `lib/dw_pmo/` core
    package → `target/.githooks/dw_pmo/`
-5. Copies `bin/dw-workbench` → `target/.githooks/dw-workbench` and the
+6. Copies `bin/dw-workbench` → `target/.githooks/dw-workbench` and the
    web UI → `target/.githooks/workbench/`
-6. Copies `bin/work-log-summarize` → `target/.githooks/work-log-summarize`
-7. Copies `bin/work-log-read` → `target/.githooks/work-log-read`
-8. Copies `agent/dw-*.md` → `target/.claude/commands/` (agent slash
+7. Copies `bin/work-log-summarize` → `target/.githooks/work-log-summarize`
+8. Copies `bin/work-log-read` → `target/.githooks/work-log-read`
+9. Copies `agent/dw-*.md` → `target/.claude/commands/` (agent slash
    commands: `/dw-next`, `/dw-contract`, `/dw-story-done`, `/dw-adopt`)
-9. Writes the managed Delivery Workbench block into `CLAUDE.md` (or an
+10. Writes the managed Delivery Workbench block into `CLAUDE.md` (or an
    existing `AGENTS.md`) between markers; `update.sh` refreshes only
    inside them, user content is never touched (`--no-agent-docs` to opt
    out; `dw agent-docs` to re-run it any time)
-10. Sets `git config core.hooksPath .githooks` in target
-11. Adds `.tmp/` to target `.gitignore` if missing
-12. (Optional) scaffolds `pm/roadmap/{slug}/` with `README.md` + a starter
+11. Sets `git config core.hooksPath .githooks` in target
+12. Adds `.tmp/` to target `.gitignore` if missing
+13. (Optional) scaffolds `pm/roadmap/{slug}/` with `README.md` + a starter
     `phase-0-setup/` folder
 
 Verify any clone's wiring with `.githooks/dw doctor` — it names unset

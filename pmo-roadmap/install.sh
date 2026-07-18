@@ -11,6 +11,7 @@ Usage: $0 <target-dir> [options]
 Installs the pmo-roadmap framework into <target-dir>:
   - copies templates/roadmap-builder.md   → pm/roadmap/roadmap-builder.md
   - copies templates/PMO-CONTRACT.md      → pm/roadmap/PMO-CONTRACT.md
+  - seeds ordinary orchestration presets  → pm/orchestration/*.json
   - copies hooks/pre-commit               → .githooks/pre-commit (chmod +x)
   - copies hooks/commit-msg               → .githooks/commit-msg (chmod +x)
   - copies hooks/post-commit              → .githooks/post-commit (chmod +x)
@@ -109,6 +110,11 @@ else
   mkdir -p "$TARGET/pm/roadmap"
   copy_template "$SOURCE_DIR/templates/roadmap-builder.md" "$TARGET/pm/roadmap/roadmap-builder.md"
   copy_template "$SOURCE_DIR/templates/PMO-CONTRACT.md"    "$TARGET/pm/roadmap/PMO-CONTRACT.md"
+  mkdir -p "$TARGET/pm/orchestration"
+  for preset in "$SOURCE_DIR"/templates/orchestration/*.json; do
+    [ -f "$preset" ] || continue
+    copy_template "$preset" "$TARGET/pm/orchestration/$(basename "$preset")"
+  done
 fi
 
 # 2. Hooks — refuse to clobber a foreign hook manager silently.

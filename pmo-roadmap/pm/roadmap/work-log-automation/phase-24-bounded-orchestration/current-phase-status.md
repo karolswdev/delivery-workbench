@@ -27,7 +27,7 @@ quietly acquiring certification and commit authority.
 
 ## Exit criteria (evidence required)
 
-- [ ] One exact, versioned score model can express agent roles/profiles,
+- [x] One exact, versioned score model can express agent roles/profiles,
   dependencies, context inputs, typed output conventions, exact checks,
   failure routes, budgets, concurrency, and approval/terminal nodes; its pure
   compiler rejects malformed, cyclic, unbounded, escaped, or capability-
@@ -64,7 +64,7 @@ quietly acquiring certification and commit authority.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-24-01 | Contract the visual score and orchestration authority | done | [story-01-orchestration-contract](./story-01-orchestration-contract.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-24-02 | Compile and validate exact orchestration rules | backlog | [story-02-orchestration-manifest-core](./story-02-orchestration-manifest-core.md) | - |
+| WLA-24-02 | Compile and validate exact orchestration rules | done | [story-02-orchestration-manifest-core](./story-02-orchestration-manifest-core.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-24-03 | Build the rich visual orchestration editor | backlog | [story-03-visual-orchestration-editor](./story-03-visual-orchestration-editor.md) | - |
 | WLA-24-04 | Authorize runs with grants and an append-only ledger | backlog | [story-04-run-grants-ledger](./story-04-run-grants-ledger.md) | - |
 | WLA-24-05 | Drive research and worker agents in isolated workspaces | backlog | [story-05-agent-drivers-workspaces](./story-05-agent-drivers-workspaces.md) | - |
@@ -74,14 +74,15 @@ quietly acquiring certification and commit authority.
 
 ## Where we are
 
-Phase OPEN 1/8. WLA-24-01 has fixed the product and authority contract: a score
-is a complete, visually authored delivery graph—not a hard-coded loop—and can
-describe parallel research, synthesis, implementation, review/repair, exact
-output contracts, checks and fail routes, budgets, concurrency, approvals,
-and terminal conditions. A score is tracked configuration, never authority;
-the conductor requires a separate revocable grant bound to its exact compiled
-hash. WLA-24-02 is next: turn the representative score and these invariants
-into a pure compiler, canonical model, diagnostics, and schedule simulation.
+Phase OPEN 2/8. WLA-24-02 has made the score executable as policy without
+making it executable authority. One stdlib core discovers contained scores,
+normalizes the exact schema, rejects unsafe graph/type/capability/path/bound/
+command behavior with pointer remediation, stamps semantic and document
+hashes, and simulates deterministic waves, locks, fan-in, lineage, failure
+branches, budgets, checkpoints, and terminals. The CLI and wheel-installed
+ordinary preset exercise that core without creating events or starting work.
+WLA-24-03 is next: put this compiler behind the rich Design/Validate editor
+and guarded score-save boundary.
 
 ## Active risks
 
@@ -103,6 +104,8 @@ into a pure compiler, canonical model, diagnostics, and schedule simulation.
 - 2026-07-17 - Separate score from grant - tracked configuration is reviewable intent; execution needs a fresh, revocable authorization over the exact compiled hash and capabilities - consent spine.
 - 2026-07-17 - Keep agent execution in provider drivers and harness sandboxes - Delivery Workbench coordinates structured packets, workspaces, receipts, and policy rather than becoming a provider-specific shell runner - architecture boundary.
 - 2026-07-17 - Permit exact command checks only as tokenized argv in an authorized score with cwd/time/output/write bounds - real projects need pytest/npm/build checks, while shell strings and agent-invented commands remain out - fail-check requirement.
+- 2026-07-17 - Hash runtime semantics separately from editor layout while hashing the complete normalized document for stale-safe saves - canvas movement cannot change authority, but no layout edit is silently lost - WLA-24-02.
+- 2026-07-17 - Treat failure-only repair nodes as explicitly activated and bounded route targets - the success graph stays acyclic and simulation cannot accidentally schedule repair work on the green path - WLA-24-02.
 
 ## Decisions deferred
 

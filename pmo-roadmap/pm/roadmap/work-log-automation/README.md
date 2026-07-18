@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-17 (Phase 24 is open 1/8: the visual orchestration contract is complete).
+**Last updated:** 2026-07-17 (Phase 24 is open 2/8: the exact orchestration compiler is complete).
 **Current phase:** [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/current-phase-status.md).
-**Status:** active — WLA-24-02 is next: compile, validate, canonicalize, and simulate the exact orchestration score before runtime execution.
+**Status:** active — WLA-24-03 is next: build the rich Design/Validate editor and guarded score save over the shared compiler.
 
 ## Vision
 
@@ -126,15 +126,16 @@ behavior is:
 
 ## Active extension
 
-Phase 24 (The conductor's score — visual orchestration) is active at 1/8.
-Its completed architecture contract turns the Phase-22 observation and
+Phase 24 (The conductor's score — visual orchestration) is active at 2/8.
+Its completed architecture contract and exact score compiler turn the Phase-22 observation and
 Phase-23 one-step lease into a
 configurable coordination framework rather than a hidden loop. A rich
 Workbench editor authors a tracked, versioned score: research/synthesis/
 implementation/review/repair agents, dependencies and concurrency, bounded
 context, typed output conventions, exact checks, fail routes, retries,
-budgets, approvals, and terminal meanings. One pure compiler owns semantics
-and simulation. Saving a score starts nothing; a separate expiring, revocable
+budgets, approvals, and terminal meanings. One delivered pure compiler owns
+schema semantics, stable hashes, diagnostics, and scheduling simulation;
+the rich editor is the next slice. Saving a score starts nothing; a separate expiring, revocable
 grant binds its exact hash and capabilities before a deterministic conductor
 can schedule structured work packets, isolated workspaces, checks, rail
 steps, receipts, and recovery. See the

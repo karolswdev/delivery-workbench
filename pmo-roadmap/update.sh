@@ -14,6 +14,7 @@ Usage: $0 <target-dir> [--force] [--check]
 
 Always overwrites (these are framework-owned):
   - templates/roadmap-builder.md → pm/roadmap/roadmap-builder.md
+  - missing orchestration presets → pm/orchestration/*.json (never overwrites)
   - hooks/pre-commit             → .githooks/pre-commit
   - hooks/commit-msg             → .githooks/commit-msg, unless a
                                     non-framework hook exists without --force
@@ -115,6 +116,17 @@ else
   mkdir -p "$TARGET/pm/roadmap"
   cp "$SOURCE_DIR/templates/roadmap-builder.md" "$TARGET/pm/roadmap/roadmap-builder.md"
   echo "  ✓ roadmap-builder.md updated"
+  mkdir -p "$TARGET/pm/orchestration"
+  for preset in "$SOURCE_DIR"/templates/orchestration/*.json; do
+    [ -f "$preset" ] || continue
+    destination="$TARGET/pm/orchestration/$(basename "$preset")"
+    if [ -e "$destination" ]; then
+      echo "  · orchestration preset already exists; preserved: ${destination#"$TARGET"/}"
+    else
+      cp "$preset" "$destination"
+      echo "  ✓ seeded ${destination#"$TARGET"/}"
+    fi
+  done
 fi
 
 cp "$SOURCE_DIR/hooks/pre-commit" "$TARGET/.githooks/pre-commit"

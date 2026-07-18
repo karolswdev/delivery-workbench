@@ -1,7 +1,7 @@
 # Visual orchestration contract
 
-**Status:** Phase 24 architecture contract; implementation is sequenced by
-WLA-24-02 through WLA-24-08.
+**Status:** Phase 24 score contract and compiler delivered; editor and runtime
+implementation continue through WLA-24-03 to WLA-24-08.
 **Product claim:** Delivery Workbench **can coordinate** a bounded multi-agent
 delivery run when an operator has configured an exact orchestration score and
 authorized a grant over that score. It does not claim that every repository
@@ -78,8 +78,10 @@ without a second parser, canonical serialization is hashable, and Git still
 shows the operator the complete diff. Markdown remains the roadmap source of
 truth; the score is executable delivery policy, not another roadmap.
 
-A representative score is below. The exact-key schema is pinned when
-WLA-24-02 implements the compiler.
+A representative score is below. The shipped ordinary preset is
+[`research-build-review.json`](../pmo-roadmap/templates/orchestration/research-build-review.json);
+`dw_pmo.orchestration` is the exact schema and semantic owner. Install seeds
+that file into `pm/orchestration/` without overwriting an operator's copy.
 
 ```json
 {
@@ -92,7 +94,9 @@ WLA-24-02 implements the compiler.
     "max_concurrency": 3,
     "max_wall_seconds": 7200,
     "max_agent_starts": 8,
-    "max_check_starts": 20
+    "max_check_starts": 20,
+    "default_timeout_seconds": 1200,
+    "max_artifact_bytes": 1000000
   },
   "nodes": [
     {
@@ -102,6 +106,7 @@ WLA-24-02 implements the compiler.
       "profile": "research-readonly",
       "needs": [],
       "capabilities": ["repository-read", "network"],
+      "workspace": "read-only",
       "inputs": ["story", "status", "docs/**"],
       "outputs": [{
         "name": "api-findings",
@@ -121,6 +126,7 @@ WLA-24-02 implements the compiler.
       "profile": "research-readonly",
       "needs": [],
       "capabilities": ["repository-read"],
+      "workspace": "read-only",
       "inputs": ["story", "architecture"],
       "outputs": [{
         "name": "risk-register",
@@ -138,7 +144,12 @@ WLA-24-02 implements the compiler.
       "role": "synthesis",
       "profile": "reasoning-readonly",
       "needs": ["research-api", "research-risks"],
-      "inputs": ["artifact:api-findings", "artifact:risk-register"],
+      "capabilities": ["repository-read"],
+      "workspace": "read-only",
+      "inputs": [
+        {"artifact": "api-findings", "format": "markdown"},
+        {"artifact": "risk-register", "format": "json"}
+      ],
       "outputs": [{
         "name": "implementation-brief",
         "format": "markdown",
@@ -153,15 +164,21 @@ WLA-24-02 implements the compiler.
       "role": "implementation",
       "profile": "worker-write",
       "needs": ["synthesize"],
+      "resource_groups": ["working-tree"],
+      "capabilities": ["repository-read", "repository-write"],
       "workspace": "isolated-worktree",
-      "inputs": ["story", "artifact:implementation-brief"],
+      "inputs": [
+        "story",
+        {"artifact": "implementation-brief", "format": "markdown"}
+      ],
       "outputs": [{
-        "name": "working-tree",
+        "name": "implementation-diff",
         "format": "git-diff",
         "path": "workspace",
-        "allowed_paths": ["src/**", "tests/**", "docs/**"]
+        "allowed_paths": ["src/**", "tests/**", "docs/**"],
+        "max_bytes": 500000
       }],
-      "on_failure": {"action": "route", "node": "repair"}
+      "on_failure": {"action": "route", "node": "repair", "max_visits": 1}
     },
     {
       "id": "tests",
@@ -172,21 +189,63 @@ WLA-24-02 implements the compiler.
         "argv": ["python3", "-m", "pytest", "-q"],
         "cwd": "workspace",
         "timeout_seconds": 1200,
-        "output_bytes": 30000
+        "output_bytes": 30000,
+        "writes": []
       },
       "expect": {"exit_code": 0},
       "on_failure": {"action": "route", "node": "repair", "max_visits": 1}
+    },
+    {
+      "id": "repair",
+      "type": "agent",
+      "activation": "failure",
+      "role": "repair",
+      "profile": "worker-write",
+      "needs": ["implement"],
+      "resource_groups": ["working-tree"],
+      "capabilities": ["repository-read", "repository-write"],
+      "workspace": "isolated-worktree",
+      "inputs": [
+        "story",
+        {"artifact": "implementation-brief", "format": "markdown"}
+      ],
+      "outputs": [{
+        "name": "repair-diff",
+        "format": "git-diff",
+        "path": "workspace",
+        "allowed_paths": ["src/**", "tests/**", "docs/**"],
+        "max_bytes": 500000
+      }],
+      "on_failure": {"action": "abort"}
     },
     {
       "id": "human-handoff",
       "type": "approval",
       "needs": ["tests"],
       "prompt": "Review the diff, evidence, and contract before certification.",
+      "options": ["approve", "reject"],
       "terminal": "awaiting-certification"
     }
   ]
 }
 ```
+
+Schema v1 is closed by level: unknown top-level, default, node, output,
+artifact-input, runner, expectation, failure-policy, and layout keys are
+diagnostics rather than ignored behavior. The compiler normalizes every
+finite default and stamps two hashes:
+
+- `semantic_hash` covers every runtime rule and excludes only top-level
+  editor layout;
+- `document_hash` covers the normalized score including layout, so a save can
+  still be stale-safe and lossless; and
+- validation errors carry `pointer`, `code`, `message`, and `remediation`.
+
+The pure CLI surface is `dw orchestration list|show|validate|simulate`.
+`simulate` reports deterministic waves, locks, fan-out/fan-in, capability and
+profile inventory, output lineage, checkpoints, failure branches, budgets,
+and terminal meanings; it explicitly reports `starts_work: false` and
+`writes_events: false`.
 
 ### Score invariants
 

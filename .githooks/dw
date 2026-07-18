@@ -43,8 +43,10 @@ try:
         build_status,
         build_step,
         contract_digest,
+        compile_score_path,
         discover_phases,
         discover_projects,
+        find_score_path,
         find_root,
         get_phase,
         get_project,
@@ -77,6 +79,10 @@ try:
         run_verify,
         story_detail,
         story_num_from_file,
+        score_inventory,
+        simulate_score,
+        validate_score,
+        load_score,
         write_agent_docs,
         write_contract,
     )
@@ -105,6 +111,75 @@ def read_body_arg(body: str | None, from_file: Path | None) -> str:
 def command_projects(args: argparse.Namespace) -> int:
     for project in discover_projects(args.root):
         print(f"{project.slug}\t{project.prefix}\t{project.path.relative_to(args.root)}")
+    return 0
+
+
+def command_orchestration_list(args: argparse.Namespace) -> int:
+    inventory = score_inventory(args.root)
+    if args.json:
+        print(json.dumps(inventory, sort_keys=True))
+        return 0
+    scores = inventory["scores"]
+    if not scores:
+        print("dw orchestration list: no scores under pm/orchestration", file=sys.stderr)
+        return 0
+    for score in scores:
+        state = "valid" if score["valid"] else "invalid"
+        semantic_hash = score.get("semantic_hash", "-")
+        print(f"{score['slug'] or score['name']}\t{state}\t{score['path']}\t{semantic_hash}\t{score['title'] or '-'}")
+    return 0
+
+
+def command_orchestration_show(args: argparse.Namespace) -> int:
+    path = find_score_path(args.root, args.score)
+    compiled = compile_score_path(path)
+    if args.json:
+        print(json.dumps(compiled, sort_keys=True))
+        return 0
+    score = compiled["score"]
+    print(f"{score['slug']} — {score['title']}")
+    print(f"path\t{path.relative_to(args.root)}")
+    print(f"semantic-hash\t{compiled['semantic_hash']}")
+    print(f"document-hash\t{compiled['document_hash']}")
+    print(f"nodes\t{len(score['nodes'])}")
+    print(json.dumps(score, indent=2, sort_keys=True))
+    return 0
+
+
+def command_orchestration_validate(args: argparse.Namespace) -> int:
+    path = find_score_path(args.root, args.score)
+    document = validate_score(load_score(path))
+    if args.json:
+        print(json.dumps(document, sort_keys=True))
+    elif document["valid"]:
+        compiled = compile_score_path(path)
+        print(f"valid\t{path.relative_to(args.root)}\t{compiled['semantic_hash']}")
+    else:
+        for diagnostic in document["diagnostics"]:
+            print(
+                f"ERROR {diagnostic['pointer']} [{diagnostic['code']}] "
+                f"{diagnostic['message']}; {diagnostic['remediation']}"
+            )
+    return 0 if document["valid"] else 1
+
+
+def command_orchestration_simulate(args: argparse.Namespace) -> int:
+    path = find_score_path(args.root, args.score)
+    simulation = simulate_score(load_score(path))
+    if args.json:
+        print(json.dumps(simulation, sort_keys=True))
+        return 0
+    print(f"score\t{args.score}\t{simulation['semantic_hash']}")
+    for wave in simulation["waves"]:
+        scheduled = ", ".join(wave["scheduled"])
+        eligible = ", ".join(wave["eligible"])
+        locks = ", ".join(wave["resource_groups"]) or "-"
+        print(f"wave {wave['wave']}\tscheduled={scheduled}\teligible={eligible}\tlocks={locks}")
+    for branch in simulation["failure_branches"]:
+        detail = branch.get("node") or branch.get("checkpoint") or "-"
+        print(f"failure\t{branch['source']}\t{branch['action']}\t{detail}")
+    for terminal in simulation["terminals"]:
+        print(f"terminal\t{terminal['node']}\t{terminal['meaning']}")
     return 0
 
 
@@ -722,6 +797,27 @@ def build_parser() -> argparse.ArgumentParser:
     step.add_argument("--apply", action="store_true", help="apply one current action after validating --expect")
     step.add_argument("--expect", help="sha256 state token from a fresh dw step preview")
     step.set_defaults(func=command_step)
+
+    orchestration = sub.add_parser(
+        "orchestration",
+        help="compile and inspect exact visual orchestration scores (pure; starts no work)",
+    )
+    orchestration_sub = orchestration.add_subparsers(dest="orchestration_command", required=True)
+    orchestration_list = orchestration_sub.add_parser("list", help="list scores under pm/orchestration")
+    orchestration_list.add_argument("--json", action="store_true", help="emit the stamped inventory")
+    orchestration_list.set_defaults(func=command_orchestration_list)
+    orchestration_show = orchestration_sub.add_parser("show", help="compile and show one score")
+    orchestration_show.add_argument("score", help="score slug or filename stem")
+    orchestration_show.add_argument("--json", action="store_true", help="emit the compiled score")
+    orchestration_show.set_defaults(func=command_orchestration_show)
+    orchestration_validate = orchestration_sub.add_parser("validate", help="validate one score with JSON-pointer diagnostics")
+    orchestration_validate.add_argument("score", help="score slug or filename stem")
+    orchestration_validate.add_argument("--json", action="store_true", help="emit the stamped validation document")
+    orchestration_validate.set_defaults(func=command_orchestration_validate)
+    orchestration_simulate = orchestration_sub.add_parser("simulate", help="dry-run deterministic scheduling without events or work")
+    orchestration_simulate.add_argument("score", help="score slug or filename stem")
+    orchestration_simulate.add_argument("--json", action="store_true", help="emit the stamped simulation")
+    orchestration_simulate.set_defaults(func=command_orchestration_simulate)
 
     projects = sub.add_parser("projects", help="list roadmap projects")
     projects.set_defaults(func=command_projects)

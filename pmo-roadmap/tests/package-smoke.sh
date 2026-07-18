@@ -107,14 +107,23 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw_pmo/verify.py" ] || fail "vendored dw_pmo incomplete"
 [ -f "$FIXTURE/.githooks/dw_pmo/status.py" ] || fail "wheel omitted the status core"
 [ -f "$FIXTURE/.githooks/dw_pmo/step.py" ] || fail "wheel omitted the deliberate-step core"
+[ -f "$FIXTURE/.githooks/dw_pmo/orchestration.py" ] || fail "wheel omitted the orchestration compiler"
+[ -f "$FIXTURE/pm/orchestration/research-build-review.json" ] \
+  || fail "install did not seed the ordinary orchestration preset"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
 [ -x "$FIXTURE/.githooks/dw-workbench" ] || fail "install did not vendor .githooks/dw-workbench"
 [ -f "$FIXTURE/.mcp.json" ] || fail "install did not write the .mcp.json seam"
 (cd "$FIXTURE" && ./.githooks/dw doctor) >/dev/null \
   || fail "fixture doctor not green after packaged install"
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
-  'from dw_pmo import STEP_RESULT_KIND, StepChild, build_step; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api, handle_mutation; assert callable(build_step); assert STEP_RESULT_KIND == "delivery-workbench-step-result"; assert StepChild(0).started; assert {"dw_status", "dw_step", "dw_step_apply"} <= set(TOOLS); assert callable(handle_api) and callable(handle_mutation)' \
+  'from dw_pmo import SCORE_KIND, STEP_RESULT_KIND, StepChild, build_step, compile_score_path; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api, handle_mutation; assert callable(build_step); assert SCORE_KIND == "delivery-workbench-orchestration"; assert STEP_RESULT_KIND == "delivery-workbench-step-result"; assert StepChild(0).started; assert {"dw_status", "dw_step", "dw_step_apply"} <= set(TOOLS); assert callable(handle_api) and callable(handle_mutation)' \
   || fail "packaged core and MCP/HTTP adapters do not expose the guided operations"
+(cd "$FIXTURE" && ./.githooks/dw orchestration validate research-build-review --json) \
+  | grep -q '"valid": true' \
+  || fail "packaged orchestration preset did not validate"
+(cd "$FIXTURE" && ./.githooks/dw orchestration simulate research-build-review --json) \
+  | grep -q '"starts_work": false' \
+  || fail "packaged orchestration simulation was not pure"
 set +e
 (cd "$FIXTURE" && ./.githooks/dw status --json) > "$TMP_ROOT/status.json"
 STATUS_CODE=$?

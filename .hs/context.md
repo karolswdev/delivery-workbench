@@ -7,7 +7,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 ### work-log-automation
 
 - Current phase: 24 (phase-24-bounded-orchestration)
-- Next story: WLA-24-02 — Compile and validate exact orchestration rules [backlog]
+- Next story: WLA-24-03 — Build the rich visual orchestration editor [backlog]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->
