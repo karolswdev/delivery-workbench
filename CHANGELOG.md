@@ -64,8 +64,8 @@ the provisioned Telegram and pinned HoldSpeak hosts. Homebrew remains an
 explicit local abstention because its smoke will not uninstall the operator's
 existing formula; clean-machine macOS CI owns that proof.
 
-Phase 24 now has both its orchestration architecture and the first executable
-slice. Delivery Workbench **can coordinate** from an exact, visually authored
+Phase 24 now has its orchestration architecture, pure compiler, and rich
+authoring surface. Delivery Workbench **can coordinate** from an exact, visually authored
 score: research/synthesis/implementation/review/repair agents, dependencies
 and concurrency, prompts/context, typed output conventions, deterministic
 checks, fail routes, retries, budgets, approvals, and terminal meanings. The
@@ -74,8 +74,12 @@ JSON-pointer diagnostics, semantic/document hashes, graph/capability/path/
 bound checks, and a pure scheduling simulation. `dw orchestration
 list|show|validate|simulate` and an ordinary installed reference preset prove
 the same behavior from a wheel while starting no work and writing no events.
-The rich Workbench editor remains the authoring center and is the next slice.
-A tracked score starts nothing—a separate, expiring and revocable grant over
+The delivered Workbench editor renders the whole typed score as an accessible
+SVG graph with a complete property inspector, live compiler diagnostics,
+capability/output lineage and scheduling simulation, plus lossless JSON. Save
+and delete use a contained, stale-safe preview→diff→atomic-apply boundary with
+rollback; Firefox desktop/mobile and the installed server exercise it. A
+tracked score starts nothing—a separate, expiring and revocable grant over
 its compiled hash is the later authority boundary. The detailed contract and
 eight evidence-gated slices are in
 [Phase 24](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/current-phase-status.md).

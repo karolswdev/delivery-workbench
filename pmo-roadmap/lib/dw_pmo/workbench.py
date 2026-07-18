@@ -214,6 +214,36 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             project = query.get("project", [""])[0].strip() or None
             return 200, envelope(build_step(root, project))
 
+        if parts == ["api", "orchestration"]:
+            from .orchestration import score_inventory
+
+            return 200, envelope(score_inventory(root))
+
+        if len(parts) == 3 and parts[:2] == ["api", "orchestration"]:
+            from .orchestration import (
+                compile_score,
+                find_score_path,
+                load_score,
+                simulate_score,
+                validate_score,
+            )
+
+            score_path = find_score_path(root, parts[2])
+            raw = load_score(score_path)
+            validation = validate_score(raw)
+            compiled = compile_score(raw) if validation["valid"] else None
+            simulation = simulate_score(compiled) if compiled is not None else None
+            return 200, envelope({
+                "name": score_path.stem,
+                "path": rel(score_path, root),
+                "raw": raw,
+                "validation": validation,
+                "compiled": compiled,
+                "simulation": simulation,
+                "starts_work": False,
+                "writes_events": False,
+            })
+
         if parts == ["api", "context"]:
             include_trace = query.get("trace", ["0"])[0] in {"1", "true"}
             payload = build_context_payload(root, discover_projects(root), include_trace=include_trace)
@@ -441,7 +471,7 @@ def _issues_guard(root: Path, body: dict[str, object], plan) -> tuple[int, dict[
 
 
 def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
-    """POST routes: deliberate step apply and guarded roadmap mutations."""
+    """POST routes: deliberate step, roadmap edits, and score content edits."""
     route = path.rstrip("/")
     if route == "/api/step/apply":
         unknown = sorted(set(body) - {"project", "expect"})
@@ -468,6 +498,71 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
                 issues=issues,
             )
         except DwError as err:
+            return _error(400, err.message)
+
+    if route == "/api/orchestration/preview":
+        unknown = sorted(set(body) - {"action", "name", "score"})
+        if unknown:
+            return _error(400, f"unknown orchestration preview parameter(s): {', '.join(unknown)}")
+        action = str(body.get("action", "") or "")
+        name = str(body.get("name", "") or "")
+        if action == "delete" and "score" in body:
+            return _error(400, "delete preview does not accept score content")
+        try:
+            from .orchestration_edit import build_score_mutation_plan, score_mutation_preview
+
+            plan = build_score_mutation_plan(root, action, name, body.get("score"))
+            return 200, envelope(score_mutation_preview(plan))
+        except DwError as err:
+            return _error(400, err.message)
+
+    if route == "/api/orchestration/apply":
+        unknown = sorted(set(body) - {"action", "name", "score", "fingerprint"})
+        if unknown:
+            return _error(400, f"unknown orchestration apply parameter(s): {', '.join(unknown)}")
+        supplied = str(body.get("fingerprint", "") or "")
+        if not supplied:
+            return _error(400, "orchestration apply requires a preview fingerprint")
+        action = str(body.get("action", "") or "")
+        name = str(body.get("name", "") or "")
+        if action == "delete" and "score" in body:
+            return _error(400, "delete apply does not accept score content")
+        try:
+            from .orchestration_edit import (
+                apply_score_mutation,
+                build_score_mutation_plan,
+                score_mutation_preview,
+            )
+
+            plan = build_score_mutation_plan(root, action, name, body.get("score"))
+            if supplied != plan.fingerprint:
+                return 409, envelope(
+                    {
+                        "error": "stale orchestration preview: score bytes or desired content changed",
+                        "supplied_fingerprint": supplied,
+                        "current_fingerprint": plan.fingerprint,
+                        "preview": score_mutation_preview(plan),
+                    },
+                    ok=False,
+                    issues=["stale orchestration preview refused; nothing was written"],
+                )
+            if not score_mutation_preview(plan)["applicable"]:
+                return 400, envelope(
+                    {
+                        "error": "invalid orchestration scores cannot be applied",
+                        "preview": score_mutation_preview(plan),
+                    },
+                    ok=False,
+                    issues=["compiler diagnostics must be resolved before apply"],
+                )
+            return 200, envelope(apply_score_mutation(plan, supplied))
+        except DwError as err:
+            if "rolled back" in err.message:
+                return 500, envelope(
+                    {"error": err.message, "rolled_back": True},
+                    ok=False,
+                    issues=[err.message],
+                )
             return _error(400, err.message)
 
     if route == "/api/mutations/preview":
@@ -522,8 +617,9 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
 
     return _error(
         405,
-        "unsupported method or route; use /api/step/apply or the guarded "
-        "/api/mutations/preview and /api/mutations/apply routes",
+        "unsupported method or route; use /api/step/apply, guarded roadmap "
+        "/api/mutations/preview|apply, or guarded score "
+        "/api/orchestration/preview|apply routes",
     )
 
 def create_handler(root: Path, static_dir: Path | None):

@@ -53,6 +53,9 @@ DW="$PMO_DIR/bin/dw"
 "$DW" --root "$REPO" story status sample 0 SMP-0-01 "done" \
   --evidence-body "- fixture evidence body." >/dev/null
 "$DW" --root "$REPO" story create sample 0 "Second fixture story" >/dev/null
+mkdir -p "$REPO/pm/orchestration"
+cp "$PMO_DIR/templates/orchestration/research-build-review.json" \
+  "$REPO/pm/orchestration/research-build-review.json"
 
 # ── start the documented command ─────────────────────────────────────
 # Work-log root for the trace tests: exported before start, but the
@@ -141,6 +144,7 @@ PY
 # ── static shell + supplemental file reads ───────────────────────────
 curl -s "$BASE/" | grep -q 'id="app"' || fail "index.html should serve the app shell"
 curl -s "$BASE/app.js" | grep -q "read-only" || fail "app.js should be served"
+curl -s "$BASE/" | grep -q '#/orchestration' || fail "app shell should link the orchestration editor"
 curl -s "$BASE/api/file?path=pm/roadmap/sample/README.md" \
   | grep -q 'Sample - Roadmap' || fail "file endpoint should serve roadmap files"
 
@@ -166,6 +170,52 @@ for _ in 1 2 3; do
 done
 AFTER="$(sum_tree)"
 [ "$BEFORE" = "$AFTER" ] || fail "repeated API loads must not modify the roadmap tree"
+
+# ── rich orchestration editor API (WLA-24-03) ───────────────────────
+curl -s "$BASE/api/orchestration" > "$TMP_ROOT/orchestration-list.json"
+curl -s "$BASE/api/orchestration/research-build-review" > "$TMP_ROOT/orchestration-score.json"
+python3 - "$TMP_ROOT/orchestration-list.json" "$TMP_ROOT/orchestration-score.json" <<'PY' \
+  || fail "orchestration read models wrong"
+import json, sys
+inventory = json.load(open(sys.argv[1]))["data"]
+score = json.load(open(sys.argv[2]))["data"]
+assert inventory["kind"] == "delivery-workbench-orchestration-list"
+assert inventory["scores"][0]["name"] == "research-build-review"
+assert score["validation"]["valid"] is True
+assert score["simulation"]["waves"][0]["scheduled"] == ["research-api", "research-risks"]
+assert score["starts_work"] is False and score["writes_events"] is False
+PY
+ORCH_REQ='{"action":"save","name":"visual-fixture","score":{"kind":"delivery-workbench-orchestration","schema_version":1,"slug":"visual-fixture","title":"Visual fixture","nodes":[{"id":"handoff","type":"approval","prompt":"Review","terminal":"awaiting-certification"}]}}'
+curl -s -X POST -H 'Content-Type: application/json' -d "$ORCH_REQ" \
+  "$BASE/api/orchestration/preview" > "$TMP_ROOT/orchestration-preview.json"
+ORCH_FP="$(python3 -c "import json; d=json.load(open('$TMP_ROOT/orchestration-preview.json'))['data']; assert d['applicable'] and not d['starts_work']; print(d['fingerprint'])")" \
+  || fail "valid score preview should be applicable and pure"
+[ ! -e "$REPO/pm/orchestration/visual-fixture.json" ] \
+  || fail "score preview must not write"
+curl -s -X POST -H 'Content-Type: application/json' \
+  -d "${ORCH_REQ%\}},\"fingerprint\":\"$ORCH_FP\"}" \
+  "$BASE/api/orchestration/apply" > "$TMP_ROOT/orchestration-apply.json"
+python3 - "$TMP_ROOT/orchestration-apply.json" <<'PY' \
+  || fail "score apply result wrong"
+import json, sys
+body = json.load(open(sys.argv[1]))
+assert body["ok"] is True and body["data"]["changed"] is True
+assert body["data"]["starts_work"] is False and body["data"]["writes_events"] is False
+PY
+[ -f "$REPO/pm/orchestration/visual-fixture.json" ] \
+  || fail "fresh score apply did not write the contained score"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+  -d "${ORCH_REQ%\}},\"fingerprint\":\"$ORCH_FP\"}" "$BASE/api/orchestration/apply")" = "409" ] \
+  || fail "replayed score fingerprint must refuse stale"
+BAD_ORCH='{"action":"save","name":"bad-score","score":{"kind":"delivery-workbench-orchestration","schema_version":1,"slug":"bad-score","title":"Bad","nodes":[{"id":"handoff","type":"approval","prompt":"Review","terminal":"awaiting-certification","shell":"oops"}]}}'
+curl -s -X POST -H 'Content-Type: application/json' -d "$BAD_ORCH" \
+  "$BASE/api/orchestration/preview" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin)['data']; assert not d['applicable']; assert d['validation']['diagnostics'][0]['pointer'] == '/nodes/0/shell'" \
+  || fail "unknown executable field must remain visible and block score apply"
+[ ! -e "$REPO/pm/orchestration/bad-score.json" ] \
+  || fail "invalid score preview wrote a file"
+[ ! -e "$REPO/.git/pmo-orchestration" ] \
+  || fail "score authoring must not create run state"
 
 # ── health console (WLA-5-04): drift fixture renders all issue kinds ──
 DRIFT="$REPO/pm/roadmap/drifty"

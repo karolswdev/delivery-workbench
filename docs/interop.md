@@ -64,14 +64,20 @@ is added when an external consumer asks for one.
 
 Served by `dw-workbench`; every response rides the stamped envelope.
 Roadmap-content mutations use only `POST /api/mutations/preview` and
-`POST /api/mutations/apply`. The deliberate step has its own exact-token
-apply route; it accepts no caller-supplied argv.
+`POST /api/mutations/apply`. Orchestration-score content has its own
+compiler-backed `POST /api/orchestration/preview|apply` pair. The deliberate
+step has its own exact-token apply route; none accepts caller-supplied runtime
+or provider argv.
 
 | Route | Core function | Returns |
 |---|---|---|
 | `/api/status?project=<slug>` | `status.build_status` | the stamped briefing in `data`; `attention` remains HTTP 200 data |
 | `GET /api/step?project=<slug>` | `step.build_step` | the stamped pure preview in `data` |
 | `POST /api/step/apply` | `step.apply_step` | exact stamped result in `data`; 409 for a non-started refusal |
+| `GET /api/orchestration` | `orchestration.score_inventory` | contained score inventory with validity and hashes; pure |
+| `GET /api/orchestration/<score>` | shared compiler | raw score plus validation, compiled model, and simulation; pure |
+| `POST /api/orchestration/preview` | `orchestration_edit.build_score_mutation_plan` | normalized save/delete diff, compiler verdict, and state fingerprint; no write/run/event |
+| `POST /api/orchestration/apply` | `orchestration_edit.apply_score_mutation` | one fresh atomic score save/delete with read-back verification and rollback; never starts a run |
 | `POST /api/mutations/preview` | guarded editor plan | content diff + state fingerprint; no write |
 | `POST /api/mutations/apply` | guarded editor apply | applies only the matching fresh fingerprint inside `pm/roadmap` |
 | `/api/context` | `api.build_context_payload` | the roadmap context |

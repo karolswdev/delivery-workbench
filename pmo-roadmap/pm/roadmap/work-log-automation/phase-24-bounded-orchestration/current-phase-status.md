@@ -32,7 +32,7 @@ quietly acquiring certification and commit authority.
   failure routes, budgets, concurrency, and approval/terminal nodes; its pure
   compiler rejects malformed, cyclic, unbounded, escaped, or capability-
   inconsistent graphs (WLA-24-01/02).
-- [ ] The Workbench provides a rich visual score editor—graph canvas, node/
+- [x] The Workbench provides a rich visual score editor—graph canvas, node/
   edge palette, full inspector, live errors, capability/output lineage,
   scheduling simulation, JSON view, and guarded preview→diff→apply—with
   lossless graph/JSON round trips and no browser-owned policy (WLA-24-03).
@@ -65,7 +65,7 @@ quietly acquiring certification and commit authority.
 |---|---|---|---|---|
 | WLA-24-01 | Contract the visual score and orchestration authority | done | [story-01-orchestration-contract](./story-01-orchestration-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-24-02 | Compile and validate exact orchestration rules | done | [story-02-orchestration-manifest-core](./story-02-orchestration-manifest-core.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-24-03 | Build the rich visual orchestration editor | backlog | [story-03-visual-orchestration-editor](./story-03-visual-orchestration-editor.md) | - |
+| WLA-24-03 | Build the rich visual orchestration editor | done | [story-03-visual-orchestration-editor](./story-03-visual-orchestration-editor.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-24-04 | Authorize runs with grants and an append-only ledger | backlog | [story-04-run-grants-ledger](./story-04-run-grants-ledger.md) | - |
 | WLA-24-05 | Drive research and worker agents in isolated workspaces | backlog | [story-05-agent-drivers-workspaces](./story-05-agent-drivers-workspaces.md) | - |
 | WLA-24-06 | Schedule nodes, checks, failure routes, and recovery | backlog | [story-06-conductor-runtime](./story-06-conductor-runtime.md) | - |
@@ -74,15 +74,15 @@ quietly acquiring certification and commit authority.
 
 ## Where we are
 
-Phase OPEN 2/8. WLA-24-02 has made the score executable as policy without
-making it executable authority. One stdlib core discovers contained scores,
-normalizes the exact schema, rejects unsafe graph/type/capability/path/bound/
-command behavior with pointer remediation, stamps semantic and document
-hashes, and simulates deterministic waves, locks, fan-in, lineage, failure
-branches, budgets, checkpoints, and terminals. The CLI and wheel-installed
-ordinary preset exercise that core without creating events or starting work.
-WLA-24-03 is next: put this compiler behind the rich Design/Validate editor
-and guarded score-save boundary.
+Phase OPEN 3/8. WLA-24-03 has put the shared compiler behind a rich,
+dependency-free Workbench editor. Operators can author the complete typed
+score on an SVG graph, inspect every node/output/failure/budget rule, see live
+diagnostics, lineage and deterministic scheduling, round-trip canonical JSON,
+and preview the exact diff before one fingerprint-bound atomic save or delete.
+The installed editor, API, desktop/mobile Firefox render, rollback/stale/path
+red paths, and no-run purity are test-proven. WLA-24-04 is next: turn a
+compiled score into a separately authorized, expiring run grant backed by an
+append-only ledger and exclusive claims.
 
 ## Active risks
 

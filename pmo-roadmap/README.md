@@ -544,8 +544,12 @@ rollback protection; has no endpoint that stages or commits (the
 suite proves the git index stays empty); logs each request to stderr
 (`--quiet` to silence); and shuts down cleanly on SIGINT/SIGTERM.
 Views: status-first project overview (readiness, workspace, contract/gate,
-tokenized or manual next action, then project health/story counts), phase board, story/evidence pair, health console, trace
-timeline with agent handoff, work-log viewer, and the guarded editor.
+tokenized or manual next action, then project health/story counts), phase board,
+story/evidence pair, health console, trace timeline with agent handoff, work-log
+viewer, the guarded roadmap editor, and the rich orchestration score editor.
+The orchestration route couples an accessible typed SVG graph and complete
+inspector with compiler-owned Validate and lossless JSON views; score save and
+delete require a separate preview→diff→fingerprint apply and start no run.
 `?snapshot=1` switches the UI to synchronous loading for headless
 screenshot tools.
 
@@ -558,7 +562,8 @@ drift/validation report with the `mutation_safe` flag),
 chain hops with explicit absent states, plus commit events carrying
 `PMO-Story`/`PMO-Contract-Digest` trailers merged with work-log
 entries — this endpoint IS the agent-facing JSON export),
-`/api/projects/{slug}/phases/{n}/events`, `/api/file?path=…`, and
+`/api/projects/{slug}/phases/{n}/events`, `/api/file?path=…`,
+`GET /api/orchestration[/<score>]`, and
 the write-tier workflow: `POST /api/mutations/preview` accepts
 structured mutation requests (`create_phase`, `create_story`,
 `update_story_status`, `attach_evidence`, `close_phase` — one-to-one
@@ -567,8 +572,11 @@ unified diffs, validation before the write, projected validation
 after it, and a deterministic content-bound fingerprint — writing
 nothing. `POST /api/mutations/apply` requires that fingerprint and
 refuses with 409 when the source files changed after the preview;
-writes are rollback-protected and followed by revalidation. Both
-routes are guarded while the project has validation issues, except
+writes are rollback-protected and followed by revalidation. Score content has
+the parallel compiler-backed `POST /api/orchestration/preview|apply` pair,
+contained to direct `pm/orchestration/*.json` files and refusing invalid,
+stale, escaped, or unverifiable writes. Both roadmap mutation routes are
+guarded while the project has validation issues, except
 for mutations whose projected issue set strictly shrinks the current
 one — a fix is never ambiguous — or requests that explicitly
 acknowledge the issues. The server never commits.

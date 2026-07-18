@@ -176,6 +176,9 @@ def orchestration_dir(root: Path) -> Path:
 def discover_score_paths(root: Path) -> list[Path]:
     """Discover only direct, contained JSON scores; escaped symlinks refuse."""
     allowed = orchestration_dir(root).resolve()
+    resolved_root = root.resolve()
+    if allowed != resolved_root and resolved_root not in allowed.parents:
+        raise DwError("pm/orchestration resolves outside the repository")
     if not allowed.is_dir():
         return []
     paths: list[Path] = []

@@ -191,5 +191,14 @@ from .orchestration import (
     simulate_score,
     validate_score,
 )
+from .orchestration_edit import (
+    SCORE_MUTATION_PREVIEW_KIND,
+    SCORE_MUTATION_RESULT_KIND,
+    SCORE_MUTATION_SCHEMA_VERSION,
+    ScoreMutationPlan,
+    apply_score_mutation,
+    build_score_mutation_plan,
+    score_mutation_preview,
+)
 
 __version__ = "1.14.0"

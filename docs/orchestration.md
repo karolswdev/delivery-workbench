@@ -282,7 +282,7 @@ custom role without minting capabilities.
 
 ## Rich visual score editor
 
-The Workbench gets a dedicated orchestration route with three coupled views:
+The Workbench provides a dedicated orchestration route with four coupled views:
 
 1. **Design:** an SVG/canvas graph with node palette, typed ports, dependency
    and failure edges, grouping, zoom, keyboard navigation, and a property
@@ -291,7 +291,9 @@ The Workbench gets a dedicated orchestration route with three coupled views:
 2. **Validate:** the pure compiler's normalized graph, capability inventory,
    output lineage, concurrency projection, unreachable-node and cycle errors,
    unbounded retry/time/cost errors, and a dry scheduling trace.
-3. **Run:** the exact score hash and grant, live node states, agent/session
+3. **JSON:** the complete canonical document, losslessly synchronized with the
+   graph and still validated only by the shared compiler.
+4. **Run:** the exact score hash and grant, live node states, agent/session
    correlation, checks, output validation, attempts, budgets, checkpoints,
    cancellation, and terminal handoff.
 
@@ -310,11 +312,13 @@ The inspector configures the complete rule surface:
 - terminal meaning such as `complete`, `blocked`, `cancelled`, or
   `awaiting-certification`.
 
-The graph and JSON views round-trip losslessly. Saving uses the existing
-preview→diff→apply discipline through a dedicated contained score mutation;
+The first three views and their shared score-save boundary are delivered. The
+Run view remains an explicit runtime placeholder until the grant and conductor
+slices supply authoritative state. Graph and JSON round-trip losslessly.
+Saving uses preview→diff→apply through a dedicated contained score mutation;
 the browser never owns validation policy. A score with compiler errors cannot
-be authorized. Presets are ordinary scores copied into the editor, not magic
-runtime branches.
+be saved or authorized. Presets are ordinary scores copied into the editor,
+not magic runtime branches.
 
 ## Authority model
 

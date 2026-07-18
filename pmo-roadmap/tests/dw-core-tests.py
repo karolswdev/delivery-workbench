@@ -111,13 +111,15 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 3,
-            "exactly deliberate-step apply and the two roadmap mutation routes may POST; "
+            len(post_routes), 5,
+            "exactly deliberate-step apply, two roadmap mutation routes, and two score-content routes may POST; "
             f"found: {post_routes}",
         )
         self.assertTrue(any('/api/step/apply' in line for line in post_routes))
         self.assertTrue(any('/api/mutations/preview' in line for line in post_routes))
         self.assertTrue(any('/api/mutations/apply' in line for line in post_routes))
+        self.assertTrue(any('/api/orchestration/preview' in line for line in post_routes))
+        self.assertTrue(any('/api/orchestration/apply' in line for line in post_routes))
 
     def test_missioncontrol_readonly_guard_catches_a_planted_write(self):
         # The guard must FAIL on a violation or it guards nothing:
@@ -1518,7 +1520,11 @@ class DwCoreTest(unittest.TestCase):
         post_routes = set(_re.findall(r'"(/api/[a-z/]+)"', mutation_source))
         self.assertEqual(
             post_routes,
-            {"/api/step/apply", "/api/mutations/preview", "/api/mutations/apply"},
+            {
+                "/api/step/apply",
+                "/api/mutations/preview", "/api/mutations/apply",
+                "/api/orchestration/preview", "/api/orchestration/apply",
+            },
         )
         self.assertEqual(self._interop_missing(post_routes, doc), [])
         # the CLI's machine-readable verbs
@@ -4731,6 +4737,213 @@ class OrchestrationCompilerTest(unittest.TestCase):
         self.assertFalse(document["valid"])
         self.assertEqual(document["diagnostics"][0]["pointer"], "/nodes/0/unknown")
         self.assertIn("remediation", document["diagnostics"][0])
+
+
+class OrchestrationEditorTest(unittest.TestCase):
+    """WLA-24-03: compiler-backed reads and guarded score content acts."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-orch-editor-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.scores = self.root / "pm" / "orchestration"
+        self.scores.mkdir(parents=True)
+        preset = TESTS_DIR.parent / "templates" / "orchestration" / "research-build-review.json"
+        self.reference = json.loads(preset.read_text(encoding="utf-8"))
+        (self.scores / "research-build-review.json").write_text(
+            json.dumps(self.reference, indent=2) + "\n", encoding="utf-8"
+        )
+
+    @staticmethod
+    def minimal(slug="visual-score"):
+        return {
+            "kind": "delivery-workbench-orchestration",
+            "schema_version": 1,
+            "slug": slug,
+            "title": "Visual score",
+            "nodes": [{
+                "id": "handoff", "type": "approval",
+                "prompt": "Review", "terminal": "awaiting-certification",
+            }],
+            "layout": {"nodes": {"handoff": {"x": 10, "y": 20}},
+                       "viewport": {"x": 0, "y": 0, "zoom": 1}},
+        }
+
+    def test_http_inventory_and_document_use_the_shared_compiler_purely(self):
+        from dw_pmo import workbench as wb
+
+        before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*"))
+        status, body = wb.handle_api(self.root, "/api/orchestration", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["scores"][0]["name"], "research-build-review")
+        status, body = wb.handle_api(
+            self.root, "/api/orchestration/research-build-review", {}
+        )
+        self.assertEqual(status, 200)
+        data = body["data"]
+        self.assertTrue(data["validation"]["valid"])
+        self.assertEqual(data["compiled"]["kind"], "delivery-workbench-compiled-orchestration")
+        self.assertEqual(data["simulation"]["waves"][0]["scheduled"],
+                         ["research-api", "research-risks"])
+        self.assertFalse(data["starts_work"])
+        self.assertFalse(data["writes_events"])
+        after = sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*"))
+        self.assertEqual(before, after)
+        self.assertFalse((self.root / ".git" / "pmo-orchestration").exists())
+
+    def test_save_preview_diff_apply_and_reload_are_exact(self):
+        from dw_pmo import workbench as wb
+        from dw_pmo.orchestration import compile_score
+
+        score = self.minimal()
+        request = {"action": "save", "name": "visual-score", "score": score}
+        status, body = wb.handle_mutation(self.root, "/api/orchestration/preview", request)
+        self.assertEqual(status, 200)
+        preview = body["data"]
+        self.assertEqual(preview["kind"], "delivery-workbench-orchestration-mutation-preview")
+        self.assertTrue(preview["applicable"])
+        self.assertIn("+++ b/pm/orchestration/visual-score.json", preview["diff"])
+        self.assertFalse(preview["starts_work"])
+        self.assertFalse((self.scores / "visual-score.json").exists())
+        status, applied = wb.handle_mutation(
+            self.root, "/api/orchestration/apply",
+            {**request, "fingerprint": preview["fingerprint"]},
+        )
+        self.assertEqual(status, 200, applied)
+        self.assertTrue(applied["data"]["changed"])
+        saved = json.loads((self.scores / "visual-score.json").read_text())
+        self.assertEqual(compile_score(saved)["semantic_hash"], preview["compiled"]["semantic_hash"])
+        status, loaded = wb.handle_api(self.root, "/api/orchestration/visual-score", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(loaded["data"]["raw"], saved)
+        self.assertFalse((self.root / ".git" / "pmo-orchestration").exists())
+
+    def test_invalid_unknown_field_blocks_apply_without_silent_drop(self):
+        from dw_pmo import workbench as wb
+
+        score = self.minimal("invalid-score")
+        score["nodes"][0]["provider_command"] = ["agent", "--unsafe"]
+        request = {"action": "save", "name": "invalid-score", "score": score}
+        status, body = wb.handle_mutation(self.root, "/api/orchestration/preview", request)
+        self.assertEqual(status, 200)
+        preview = body["data"]
+        self.assertFalse(preview["valid"])
+        self.assertFalse(preview["applicable"])
+        self.assertEqual(preview["validation"]["diagnostics"][0]["pointer"],
+                         "/nodes/0/provider_command")
+        self.assertIn("unknown-key", {d["code"] for d in preview["validation"]["diagnostics"]})
+        status, body = wb.handle_mutation(
+            self.root, "/api/orchestration/apply",
+            {**request, "fingerprint": preview["fingerprint"]},
+        )
+        self.assertEqual(status, 400)
+        self.assertFalse((self.scores / "invalid-score.json").exists())
+
+    def test_stale_save_and_delete_previews_refuse(self):
+        from dw_pmo import workbench as wb
+
+        score = self.minimal("stale-score")
+        request = {"action": "save", "name": "stale-score", "score": score}
+        _, body = wb.handle_mutation(self.root, "/api/orchestration/preview", request)
+        fp = body["data"]["fingerprint"]
+        (self.scores / "stale-score.json").write_text(
+            json.dumps(self.minimal("stale-score")) + "\n", encoding="utf-8"
+        )
+        status, body = wb.handle_mutation(
+            self.root, "/api/orchestration/apply", {**request, "fingerprint": fp}
+        )
+        self.assertEqual(status, 409)
+        self.assertIn("nothing was written", body["issues"][0])
+
+        delete = {"action": "delete", "name": "stale-score"}
+        _, body = wb.handle_mutation(self.root, "/api/orchestration/preview", delete)
+        delete_fp = body["data"]["fingerprint"]
+        path = self.scores / "stale-score.json"
+        path.write_text(path.read_text() + "\n", encoding="utf-8")
+        status, _ = wb.handle_mutation(
+            self.root, "/api/orchestration/apply",
+            {**delete, "fingerprint": delete_fp},
+        )
+        self.assertEqual(status, 409)
+        self.assertTrue(path.exists())
+
+    def test_delete_is_a_separate_preview_apply_act(self):
+        from dw_pmo import workbench as wb
+
+        request = {"action": "delete", "name": "research-build-review"}
+        status, body = wb.handle_mutation(self.root, "/api/orchestration/preview", request)
+        self.assertEqual(status, 200)
+        preview = body["data"]
+        self.assertTrue(preview["applicable"])
+        self.assertIn("--- a/pm/orchestration/research-build-review.json", preview["diff"])
+        self.assertTrue((self.scores / "research-build-review.json").exists())
+        status, body = wb.handle_mutation(
+            self.root, "/api/orchestration/apply",
+            {**request, "fingerprint": preview["fingerprint"]},
+        )
+        self.assertEqual(status, 200)
+        self.assertFalse((self.scores / "research-build-review.json").exists())
+        self.assertFalse(body["data"]["starts_work"])
+
+    def test_apply_failure_rolls_back_the_original_bytes(self):
+        import dw_pmo.orchestration_edit as edit
+
+        path = self.scores / "research-build-review.json"
+        before = path.read_bytes()
+        changed = json.loads(json.dumps(self.reference))
+        changed["title"] = "Changed after atomic write"
+        plan = edit.build_score_mutation_plan(
+            self.root, "save", "research-build-review", changed
+        )
+        with mock.patch.object(edit, "load_score", side_effect=DwError("planted read-back failure")):
+            with self.assertRaises(DwError) as raised:
+                edit.apply_score_mutation(plan, plan.fingerprint)
+        self.assertIn("rolled back", str(raised.exception))
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_score_routes_reject_injection_and_outside_symlink(self):
+        from dw_pmo import workbench as wb
+
+        status, _ = wb.handle_mutation(
+            self.root, "/api/orchestration/preview",
+            {"action": "save", "name": "../escape", "score": self.minimal()},
+        )
+        self.assertEqual(status, 400)
+        status, _ = wb.handle_mutation(
+            self.root, "/api/orchestration/preview",
+            {"action": "save", "name": "visual-score", "score": self.minimal(),
+             "command": ["sh", "-c", "oops"]},
+        )
+        self.assertEqual(status, 400)
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        shutil.rmtree(self.scores)
+        self.scores.symlink_to(outside, target_is_directory=True)
+        status, body = wb.handle_mutation(
+            self.root, "/api/orchestration/preview",
+            {"action": "save", "name": "visual-score", "score": self.minimal()},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("outside the repository", body["issues"][0])
+
+    def test_visual_editor_static_contract_names_every_rule_surface(self):
+        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        html = (TESTS_DIR.parent / "workbench" / "index.html").read_text(encoding="utf-8")
+        css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
+        self.assertIn('href="#/orchestration"', html)
+        for needle in (
+            "orch-canvas", "node palette", "rule inspector", "command argv tokens",
+            "context selectors", "typed outputs", "success dependencies",
+            "failure route", "maximum concurrency", "output lineage",
+            "scheduling simulation", "semantic hash", "document hash",
+            "apply JSON to graph", "preview save", "preview delete",
+            "no run, stage, or commit",
+        ):
+            self.assertIn(needle, app)
+        self.assertNotIn('name="shell"', app)
+        self.assertNotIn('name="provider_command"', app)
+        self.assertIn("@media (max-width: 520px)", css)
+        self.assertIn('tabindex="0" role="button"', app)
 
 
 class AgentHooksTest(unittest.TestCase):

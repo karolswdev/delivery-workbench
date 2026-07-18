@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 24
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-24-02
 - **Unblocks:** WLA-24-07, WLA-24-08
 - **Owner:** unassigned
@@ -29,23 +29,23 @@ granting a run—and must still be able to inspect the canonical diff.
 
 ## Acceptance criteria
 
-- [ ] An operator can visually author the representative parallel research→
+- [x] An operator can visually author the representative parallel research→
   synthesis→implementation→check/repair→approval score without editing JSON;
   every contract field is visible and editable in the inspector.
-- [ ] Canvas and canonical JSON round-trip without semantic/hash drift,
+- [x] Canvas and canonical JSON round-trip without semantic/hash drift,
   including custom roles, output schemas/conventions, failure edges, and
   layout metadata that cannot affect runtime semantics.
-- [ ] Compiler errors attach to nodes/ports/fields, block apply, and explain
+- [x] Compiler errors attach to nodes/ports/fields, block apply, and explain
   remediation; Validate shows normalized graph, capability inventory, output
   lineage, bounds, and deterministic scheduling/failure simulation.
-- [ ] Save is two-act preview→diff→apply, contained to
+- [x] Save is two-act preview→diff→apply, contained to
   `pm/orchestration/*.json`, fingerprint-stale safe, atomic/rollback protected,
   and never starts a run. Unknown JSON fields are preserved or explicitly
   refused—never silently dropped.
-- [ ] The UI has no generic shell field: command checks use tokenized argv;
+- [x] The UI has no generic shell field: command checks use tokenized argv;
   secrets/provider executables cannot be entered; opening/saving a score emits
   no run/agent/check event.
-- [ ] Firefox desktop/mobile visual coverage plus keyboard/a11y and static
+- [x] Firefox desktop/mobile visual coverage plus keyboard/a11y and static
   policy guards are green; generated assets/docs and installed Workbench
   exercise the editor from the shared compiler.
 

@@ -11,6 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PMO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/pmo-ui-smoke.XXXXXX")"
 SERVER_PID=""
+CAPTURE_DIR="${DW_UI_CAPTURE_DIR:-}"
+CAPTURE_PATTERN="${DW_UI_CAPTURE_PATTERN:-}"
 
 cleanup() {
   if [ -n "$SERVER_PID" ]; then
@@ -125,9 +127,17 @@ shot() { # name geometry url
   # a data-bearing render is markedly larger than the empty shell
   size=$(wc -c < "$out" | tr -d ' ')
   [ "$size" -gt 20000 ] || fail "$1 appears unrendered (only $size bytes)"
+  if [ -n "$CAPTURE_DIR" ] && [ -n "$CAPTURE_PATTERN" ]; then
+    case "$1" in
+      $CAPTURE_PATTERN)
+        mkdir -p "$CAPTURE_DIR"
+        cp "$out" "$CAPTURE_DIR/$1.png"
+        ;;
+    esac
+  fi
 }
 
-VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample"
+VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review"
 for spec in $VIEWS; do
   name="${spec%%:*}"
   route="${spec#*:}"
@@ -135,6 +145,8 @@ for spec in $VIEWS; do
   case "$name" in
     preview) extra="&autopreview=1" ;;
     step-confirm) extra="&confirmstep=1" ;;
+    orchestration-validate) extra="&orchview=validate" ;;
+    orchestration-json) extra="&orchview=json" ;;
   esac
   shot "$name-desktop" 1440,900 "$BASE/?snapshot=1$extra$route"
   shot "$name-mobile" 390,844 "$BASE/?snapshot=1$extra$route"
@@ -153,4 +165,4 @@ mv "$REPO/.githooks/pre-commit.off" "$REPO/.githooks/pre-commit"
 shot "overview-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
 shot "overview-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
 
-echo "workbench-ui-smoke.sh: ok (20 viewport renders: 8 views + attention + ambiguity, desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (26 viewport renders: 11 views + attention + ambiguity, desktop+mobile)"

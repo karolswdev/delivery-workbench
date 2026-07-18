@@ -212,6 +212,13 @@ over your own Tailscale network too (a `.ts.net` Host header is
 allowed, since that name only resolves through your own
 authenticated tailnet).
 
+At `#/orchestration`, the same local Workbench now visually authors exact
+coordination scores: typed agent/check/rail/approval/collect nodes, parallel
+research and fan-in, prompts and context, output conventions, checks and red
+failure routes, finite budgets, and terminal handoffs. Design, Validate, and
+canonical JSON share one compiler; save/delete is a stale-safe
+preview→diff→apply act and never grants or starts a run.
+
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 
 More screenshots and two terminal recordings are in
