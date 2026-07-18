@@ -200,5 +200,22 @@ from .orchestration_edit import (
     build_score_mutation_plan,
     score_mutation_preview,
 )
+from .orchestration_run import (
+    MAX_GRANT_SECONDS,
+    PERMANENT_EXCLUSIONS,
+    RUN_EVENT_KIND,
+    RUN_GRANT_KIND,
+    RUN_KIND,
+    RUN_PLAN_KIND,
+    RUN_SCHEMA_VERSION,
+    build_run_plan,
+    claim_node,
+    release_node_claim,
+    replay_run,
+    run_inventory,
+    run_store_dir,
+    start_run,
+    transition_run,
+)
 
 __version__ = "1.14.0"

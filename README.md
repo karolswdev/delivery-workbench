@@ -138,6 +138,7 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 | `dw status [project] [--json]` | One read-only readiness verdict and the next safe action across rails, workspace, and roadmap. |
 | `dw step [project] [--json]` | Preview one state-bound action; `--json --apply --expect <token>` returns its bounded result after at most one allowlisted argv, never certification or commit. |
 | `dw orchestration list\|show\|validate\|simulate` | Compile and explain exact `pm/orchestration/*.json` scores without starting agents or writing run state. |
+| `dw run plan\|start\|list\|show\|pause\|resume\|revoke\|cancel` | Preview a score/status/story-bound local grant, explicitly authorize it once, and replay/control its hash-chained ledger without dispatching provider work. |
 | `dw next` | The next actionable story. Exit 0 found, 2 nothing to do. |
 | `dw context --compact` | JSON snapshot of the roadmap: issues, warnings, next story, trace paths. |
 | `dw check` | Lints roadmap structure and evidence content. Greppable errors, exit 1 on issues. |

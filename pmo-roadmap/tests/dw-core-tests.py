@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -4944,6 +4945,388 @@ class OrchestrationEditorTest(unittest.TestCase):
         self.assertNotIn('name="provider_command"', app)
         self.assertIn("@media (max-width: 520px)", css)
         self.assertIn('tabindex="0" role="button"', app)
+
+
+class OrchestrationRunAuthorityTest(unittest.TestCase):
+    """WLA-24-04: score-bound grants, ledger replay, and exclusive claims."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-orch-run-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.root.mkdir()
+        self._cmd("git", "init", "-q", "-b", "main")
+        self._cmd("git", "config", "user.name", "Run Fixture")
+        self._cmd("git", "config", "user.email", "run@example.test")
+        subprocess.run(
+            [str(TESTS_DIR.parent / "bootstrap" / "new-project.sh"),
+             str(self.root), "sample", "Sample", "SMP"],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        subprocess.run(
+            [str(TESTS_DIR.parent / "install.sh"), str(self.root), "--skip-bootstrap"],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.dw = self.root / ".githooks" / "dw"
+        self._dw("story", "status", "sample", "0", "SMP-0-01", "in-progress")
+        self._dw("rider", "docs")
+        self._commit("fixture")
+        self.now = datetime.now(timezone.utc).replace(microsecond=0)
+
+    def _cmd(self, *argv, check=True):
+        return subprocess.run(
+            list(argv), cwd=self.root, check=check, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+    def _dw(self, *argv, check=True):
+        return self._cmd(str(self.dw), *argv, check=check)
+
+    def _commit(self, message):
+        self._cmd("git", "add", ".")
+        self._cmd("git", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", message)
+
+    def plan(self, offset=3600):
+        import dw_pmo.orchestration_run as runs
+
+        return runs.build_run_plan(
+            self.root, "research-build-review", "sample", "SMP-0-01",
+            issued_at=self.now, expires_at=self.now + timedelta(seconds=offset),
+        )
+
+    def start(self, plan=None, now=None):
+        import dw_pmo.orchestration_run as runs
+
+        plan = plan or self.plan()
+        return runs.start_run(
+            self.root, plan, plan["start_token"], approved=True,
+            approved_by="fixture-operator", now=now or self.now,
+        )
+
+    def test_plan_is_pure_and_binds_score_status_story_authority_and_expiry(self):
+        import dw_pmo.orchestration_run as runs
+
+        store = self.root / ".git" / "pmo-orchestration"
+        before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*"))
+        plan = self.plan()
+        after = sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*"))
+        self.assertTrue(plan["applicable"], plan["issues"])
+        self.assertEqual(before, after)
+        self.assertFalse(store.exists())
+        self.assertFalse(plan["starts_work"])
+        self.assertFalse(plan["writes_run_state"])
+        self.assertEqual(plan["repository"]["branch"], "main")
+        self.assertEqual(plan["story"]["id"], "SMP-0-01")
+        self.assertEqual(plan["story"]["status"], "in-progress")
+        self.assertEqual(
+            plan["authority"]["capabilities"],
+            ["network", "repository-read", "repository-write"],
+        )
+        self.assertIn("max_concurrency", plan["authority"]["budgets"])
+        self.assertEqual(
+            plan["authority"]["permanent_exclusions"],
+            list(runs.PERMANENT_EXCLUSIONS),
+        )
+        later = runs.build_run_plan(
+            self.root, "research-build-review", "sample", "SMP-0-01",
+            issued_at=self.now, expires_at=self.now + timedelta(seconds=3601),
+        )
+        self.assertNotEqual(plan["start_token"], later["start_token"])
+
+    def test_start_requires_exact_approval_and_writes_one_atomic_run(self):
+        import dw_pmo.orchestration_run as runs
+
+        plan = self.plan()
+        with self.assertRaises(DwError):
+            runs.start_run(
+                self.root, plan, plan["start_token"], approved=False,
+                approved_by="fixture-operator", now=self.now,
+            )
+        self.assertFalse((self.root / ".git" / "pmo-orchestration").exists())
+        projection = self.start(plan)
+        run_dir = self.root / ".git" / "pmo-orchestration" / "runs" / projection["run_id"]
+        self.assertEqual(
+            sorted(path.name for path in run_dir.iterdir()),
+            ["grant.json", "ledger.jsonl", "plan.json", "projection.json", "score.json"],
+        )
+        self.assertEqual(projection["state"], "active")
+        self.assertTrue(projection["dispatch_allowed"])
+        self.assertEqual(projection["ledger_events"], 1)
+        grant = json.loads((run_dir / "grant.json").read_text())
+        self.assertEqual(grant["start_token"], plan["start_token"])
+        self.assertEqual(grant["score"]["semantic_hash"], plan["score"]["semantic_hash"])
+        with self.assertRaisesRegex(DwError, "already consumed"):
+            self.start(plan)
+
+    def test_tampered_or_stale_plan_refuses_without_run_state(self):
+        import dw_pmo.orchestration_run as runs
+
+        plan = self.plan()
+        tampered = json.loads(json.dumps(plan))
+        tampered["authority"]["capabilities"].append("tools-write")
+        with self.assertRaisesRegex(DwError, "stale or altered"):
+            runs.start_run(
+                self.root, tampered, tampered["start_token"], approved=True,
+                approved_by="fixture-operator", now=self.now,
+            )
+        tampered = json.loads(json.dumps(plan))
+        tampered["provider_command"] = ["agent", "--unsafe"]
+        with self.assertRaisesRegex(DwError, "non-exact keys"):
+            runs.start_run(
+                self.root, tampered, tampered["start_token"], approved=True,
+                approved_by="fixture-operator", now=self.now,
+            )
+        score = self.root / "pm" / "orchestration" / "research-build-review.json"
+        document = json.loads(score.read_text())
+        document["title"] = "Changed after planning"
+        score.write_text(json.dumps(document, indent=2) + "\n")
+        self._commit("change score")
+        with self.assertRaisesRegex(DwError, "stale or altered"):
+            runs.start_run(
+                self.root, plan, plan["start_token"], approved=True,
+                approved_by="fixture-operator", now=self.now,
+            )
+        runs_dir = self.root / ".git" / "pmo-orchestration" / "runs"
+        self.assertFalse(runs_dir.exists())
+
+    def test_projection_ignores_cache_and_corrupt_ledger_fails_closed(self):
+        import dw_pmo.orchestration_run as runs
+
+        projection = self.start()
+        run_dir = self.root / ".git" / "pmo-orchestration" / "runs" / projection["run_id"]
+        (run_dir / "projection.json").unlink()
+        replayed = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(replayed, projection)
+        (run_dir / "projection.json").write_text('{"state":"fake"}\n')
+        self.assertEqual(runs.replay_run(self.root, projection["run_id"], now=self.now), projection)
+        ledger_path = run_dir / "ledger.jsonl"
+        original = ledger_path.read_bytes()
+        fork = runs._event_document(  # noqa: protected-access - chain refusal test
+            projection["run_id"], 1, "run_paused",
+            {"reason": "fork", "generation": 1}, "sha256:" + "0" * 64, self.now,
+        )
+        with ledger_path.open("ab") as handle:
+            handle.write((json.dumps(fork, sort_keys=True, separators=(",", ":")) + "\n").encode())
+        with self.assertRaisesRegex(DwError, "sequence or chain"):
+            runs.replay_run(self.root, projection["run_id"], now=self.now)
+        ledger_path.write_bytes(original)
+        with (run_dir / "ledger.jsonl").open("ab") as handle:
+            handle.write(b'{"truncated":')
+        with self.assertRaisesRegex(DwError, "truncated"):
+            runs.replay_run(self.root, projection["run_id"], now=self.now)
+
+    def test_pause_resume_revoke_cancel_are_exact_terminal_transitions(self):
+        import dw_pmo.orchestration_run as runs
+
+        first = self.start()
+        claimed = runs.claim_node(
+            self.root, first["run_id"], "research-api", 1, "in-flight",
+            first["ledger_head"], now=self.now,
+        )
+        paused = runs.transition_run(
+            self.root, first["run_id"], "pause", claimed["ledger_head"],
+            reason="operator inspection", now=self.now,
+        )
+        self.assertEqual(paused["state"], "paused")
+        self.assertFalse(paused["dispatch_allowed"])
+        self.assertEqual(len(paused["active_claims"]), 1)
+        with self.assertRaisesRegex(DwError, "does not currently permit"):
+            runs.claim_node(
+                self.root, first["run_id"], "research-risks", 1, "after-pause",
+                paused["ledger_head"], now=self.now,
+            )
+        released = runs.release_node_claim(
+            self.root, first["run_id"], paused["active_claims"][0]["claim_id"],
+            "cancelled", 0, paused["ledger_head"], now=self.now,
+        )
+        with self.assertRaisesRegex(DwError, "stale"):
+            runs.transition_run(
+                self.root, first["run_id"], "resume", first["ledger_head"], now=self.now,
+            )
+        resumed = runs.transition_run(
+            self.root, first["run_id"], "resume", released["ledger_head"], now=self.now,
+        )
+        revoked = runs.transition_run(
+            self.root, first["run_id"], "revoke", resumed["ledger_head"],
+            reason="authority withdrawn", now=self.now,
+        )
+        self.assertEqual(revoked["state"], "revoked")
+        self.assertFalse(revoked["dispatch_allowed"])
+
+        second_plan = self.plan(offset=3601)
+        second = self.start(second_plan)
+        cancelled = runs.transition_run(
+            self.root, second["run_id"], "cancel", second["ledger_head"],
+            reason="work no longer needed", now=self.now,
+        )
+        self.assertEqual(cancelled["state"], "cancelled")
+
+    def test_claim_release_idempotency_and_all_budget_counters(self):
+        import dw_pmo.orchestration_run as runs
+
+        score = self.root / "pm" / "orchestration" / "research-build-review.json"
+        document = json.loads(score.read_text())
+        document["defaults"]["max_agent_starts"] = 1
+        document["defaults"]["max_concurrency"] = 1
+        document["defaults"]["max_artifact_bytes"] = 100
+        score.write_text(json.dumps(document, indent=2) + "\n")
+        self._commit("tight budgets")
+        plan = self.plan()
+        projection = self.start(plan)
+        claimed = runs.claim_node(
+            self.root, projection["run_id"], "research-api", 1, "dispatch-1",
+            projection["ledger_head"], now=self.now,
+        )
+        self.assertEqual(claimed["budgets"]["max_concurrency"]["used"], 1)
+        claim_id = claimed["active_claims"][0]["claim_id"]
+        with self.assertRaisesRegex(DwError, "artifact-byte"):
+            runs.release_node_claim(
+                self.root, projection["run_id"], claim_id, "succeeded", 101,
+                claimed["ledger_head"], now=self.now,
+            )
+        released = runs.release_node_claim(
+            self.root, projection["run_id"], claim_id, "succeeded", 50,
+            claimed["ledger_head"], now=self.now,
+        )
+        self.assertEqual(released["budgets"]["max_agent_starts"]["used"], 1)
+        self.assertEqual(released["budgets"]["max_artifact_bytes"]["used"], 50)
+        with self.assertRaisesRegex(DwError, "already claimed|idempotency|agent-start"):
+            runs.claim_node(
+                self.root, projection["run_id"], "research-risks", 1,
+                "dispatch-1", released["ledger_head"], now=self.now,
+            )
+
+    def test_two_processes_cannot_claim_the_same_node_attempt(self):
+        projection = self.start()
+        code = (
+            "import sys; from pathlib import Path; "
+            "from dw_pmo.orchestration_run import claim_node; "
+            "from dw_pmo import DwError; "
+            "\ntry:\n claim_node(Path(sys.argv[1]),sys.argv[2],sys.argv[3],1,sys.argv[4],sys.argv[5]); print('ok')"
+            "\nexcept DwError as e:\n print('refused:'+e.message); raise SystemExit(2)"
+        )
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(TESTS_DIR.parent / "lib")
+        argv = [
+            sys.executable, "-c", code, str(self.root), projection["run_id"],
+            "research-api", "race-key", projection["ledger_head"],
+        ]
+        children = [
+            subprocess.Popen(argv, text=True, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, env=env)
+            for _ in range(2)
+        ]
+        results = [child.communicate(timeout=20) + (child.returncode,) for child in children]
+        self.assertEqual(sorted(item[2] for item in results), [0, 2], results)
+        self.assertEqual(sum(item[0].strip() == "ok" for item in results), 1)
+
+    def test_two_processes_cannot_start_the_same_plan(self):
+        plan = self.plan()
+        plan_path = self.tmp / "race-plan.json"
+        plan_path.write_text(json.dumps(plan), encoding="utf-8")
+        code = (
+            "import json,sys; from pathlib import Path; "
+            "from dw_pmo.orchestration_run import start_run; from dw_pmo import DwError; "
+            "p=json.loads(Path(sys.argv[2]).read_text()); "
+            "\ntry:\n start_run(Path(sys.argv[1]),p,p['start_token'],approved=True,approved_by='race'); print('ok')"
+            "\nexcept DwError as e:\n print('refused:'+e.message); raise SystemExit(2)"
+        )
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(TESTS_DIR.parent / "lib")
+        argv = [sys.executable, "-c", code, str(self.root), str(plan_path)]
+        children = [
+            subprocess.Popen(argv, text=True, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, env=env)
+            for _ in range(2)
+        ]
+        results = [child.communicate(timeout=20) + (child.returncode,) for child in children]
+        self.assertEqual(sorted(item[2] for item in results), [0, 2], results)
+        self.assertEqual(sum(item[0].strip() == "ok" for item in results), 1)
+
+    def test_expiry_and_store_escape_prevent_future_dispatch(self):
+        import dw_pmo.orchestration_run as runs
+
+        plan = self.plan(offset=1)
+        projection = self.start(plan)
+        expired_at = self.now + timedelta(seconds=2)
+        expired = runs.replay_run(self.root, projection["run_id"], now=expired_at)
+        self.assertTrue(expired["expired"])
+        self.assertFalse(expired["dispatch_allowed"])
+        with self.assertRaisesRegex(DwError, "does not currently permit"):
+            runs.claim_node(
+                self.root, projection["run_id"], "research-api", 1, "late",
+                expired["ledger_head"], now=expired_at,
+            )
+
+        shutil.rmtree(self.root / ".git" / "pmo-orchestration")
+        outside = self.tmp / "outside-store"
+        outside.mkdir()
+        (self.root / ".git" / "pmo-orchestration").symlink_to(
+            outside, target_is_directory=True
+        )
+        with self.assertRaisesRegex(DwError, "symlinked"):
+            runs.run_inventory(self.root)
+
+    def test_repository_or_story_drift_stales_dispatch_but_not_audit_replay(self):
+        import dw_pmo.orchestration_run as runs
+
+        projection = self.start()
+        readme = self.root / "pm" / "roadmap" / "sample" / "README.md"
+        readme.write_text(readme.read_text() + "\nworkspace drift\n")
+        with self.assertRaisesRegex(DwError, "facts are stale"):
+            runs.claim_node(
+                self.root, projection["run_id"], "research-api", 1, "drifted",
+                projection["ledger_head"], now=self.now,
+            )
+        replayed = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(replayed["ledger_head"], projection["ledger_head"])
+        self.assertEqual(replayed["state"], "active")
+
+    def test_ledger_detail_is_closed_and_content_safe(self):
+        import dw_pmo.orchestration_run as runs
+
+        projection = self.start()
+        run_dir = self.root / ".git" / "pmo-orchestration" / "runs" / projection["run_id"]
+        ledger = (run_dir / "ledger.jsonl").read_text()
+        score = (run_dir / "score.json").read_text()
+        self.assertIn("Review the diff", score)
+        self.assertNotIn("Review the diff", ledger)
+        self.assertNotIn("provider", ledger.lower())
+        with self.assertRaisesRegex(DwError, "non-exact detail"):
+            runs._event_document(  # noqa: protected-access - privacy contract test
+                projection["run_id"], 1, "run_paused",
+                {"reason": "safe", "generation": 1, "prompt": "secret"},
+                projection["ledger_head"], self.now,
+            )
+
+    def test_installed_cli_plan_start_show_list_pause_resume(self):
+        plan_result = self._dw(
+            "run", "plan", "research-build-review", "--project", "sample",
+            "--story", "SMP-0-01", "--expires-in", "3600", "--json",
+        )
+        plan = json.loads(plan_result.stdout)
+        plan_path = self.tmp / "run-plan.json"
+        plan_path.write_text(json.dumps(plan), encoding="utf-8")
+        started = self._dw(
+            "run", "start", "--plan", str(plan_path), "--expect",
+            plan["start_token"], "--approve", "--operator", "cli-fixture", "--json",
+        )
+        projection = json.loads(started.stdout)
+        shown = json.loads(self._dw(
+            "run", "show", projection["run_id"], "--json"
+        ).stdout)
+        self.assertEqual(shown["ledger_head"], projection["ledger_head"])
+        inventory = json.loads(self._dw("run", "list", "--json").stdout)
+        self.assertEqual(inventory["runs"][0]["run_id"], projection["run_id"])
+        paused = json.loads(self._dw(
+            "run", "pause", projection["run_id"], "--expect",
+            projection["ledger_head"], "--reason", "inspect", "--json",
+        ).stdout)
+        resumed = json.loads(self._dw(
+            "run", "resume", projection["run_id"], "--expect",
+            paused["ledger_head"], "--json",
+        ).stdout)
+        self.assertEqual(resumed["state"], "active")
 
 
 class AgentHooksTest(unittest.TestCase):

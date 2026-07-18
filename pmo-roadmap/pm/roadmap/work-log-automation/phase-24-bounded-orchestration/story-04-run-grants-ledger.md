@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 24
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-24-02
 - **Unblocks:** WLA-24-05, WLA-24-06, WLA-24-07
 - **Owner:** unassigned
@@ -28,19 +28,19 @@ agent, check, or rail node may start.
 
 ## Acceptance criteria
 
-- [ ] Run planning is pure and names exact score hash, branch/HEAD/status/story,
+- [x] Run planning is pure and names exact score hash, branch/HEAD/status/story,
   requested profiles/capabilities, workspace mode, every budget, expiry, and
   permanent exclusions; changing any fact changes the start token.
-- [ ] Start requires that exact token and one explicit approval, writes an
+- [x] Start requires that exact token and one explicit approval, writes an
   immutable compiled score and grant plus initial ledger event atomically,
   and refuses stale/malformed/ambiguous/overbroad input without run state.
-- [ ] Projection is a deterministic replay of schema-pinned append-only
+- [x] Projection is a deterministic replay of schema-pinned append-only
   events; disposable cache loss changes nothing, truncated/corrupt/forked
   ledgers fail closed, and content/prompt/secrets cannot enter event detail.
-- [ ] Exclusive run/node claims, idempotency keys, revocation, expiry, and all
+- [x] Exclusive run/node claims, idempotency keys, revocation, expiry, and all
   budget counters are test-proven across processes; an old start/claim cannot
   replay.
-- [ ] Pause/resume/revoke/cancel record exact transitions and prevent future
+- [x] Pause/resume/revoke/cancel record exact transitions and prevent future
   dispatch immediately; CLI JSON/human shapes, Python floors, package/update,
   docs and red-path tests are green with evidence.
 

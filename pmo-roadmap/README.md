@@ -356,6 +356,15 @@ step. The confirmation shows the token and tokenized argv, sends only
 `project` + `expect`, refreshes on success or stale conflict, and never offers
 controls for certification or commit.
 
+`run plan` is the separate orchestration consent preview: it binds the
+compiled score to current local Git/status/story facts, exact requested
+profiles/capabilities/workspaces, all finite budgets, expiry, and permanent
+exclusions while writing nothing. `run start` rechecks the complete plan and
+consumes its exact token only with `--approve --operator`; `run list`, `show`,
+`pause`, `resume`, `revoke`, and `cancel` replay or append to the authoritative
+hash-chained local ledger. A grant authorizes bounded dispatch later—it does
+not itself run an agent or check.
+
 `next` follows a strict exit contract for agents: 0 = story found,
 2 = nothing actionable, 1 = error; `--json` emits the story as one JSON
 object (or `{"next_story": null}`). Story write commands validate the

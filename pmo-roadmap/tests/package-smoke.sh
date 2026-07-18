@@ -108,6 +108,8 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw_pmo/status.py" ] || fail "wheel omitted the status core"
 [ -f "$FIXTURE/.githooks/dw_pmo/step.py" ] || fail "wheel omitted the deliberate-step core"
 [ -f "$FIXTURE/.githooks/dw_pmo/orchestration.py" ] || fail "wheel omitted the orchestration compiler"
+[ -f "$FIXTURE/.githooks/dw_pmo/orchestration_edit.py" ] || fail "wheel omitted the orchestration editor core"
+[ -f "$FIXTURE/.githooks/dw_pmo/orchestration_run.py" ] || fail "wheel omitted the orchestration run-authority core"
 [ -f "$FIXTURE/pm/orchestration/research-build-review.json" ] \
   || fail "install did not seed the ordinary orchestration preset"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
@@ -116,7 +118,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 (cd "$FIXTURE" && ./.githooks/dw doctor) >/dev/null \
   || fail "fixture doctor not green after packaged install"
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
-  'from dw_pmo import SCORE_KIND, STEP_RESULT_KIND, StepChild, build_step, compile_score_path; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api, handle_mutation; assert callable(build_step); assert SCORE_KIND == "delivery-workbench-orchestration"; assert STEP_RESULT_KIND == "delivery-workbench-step-result"; assert StepChild(0).started; assert {"dw_status", "dw_step", "dw_step_apply"} <= set(TOOLS); assert callable(handle_api) and callable(handle_mutation)' \
+  'from dw_pmo import RUN_PLAN_KIND, SCORE_KIND, STEP_RESULT_KIND, StepChild, build_run_plan, build_step, compile_score_path, replay_run, start_run; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api, handle_mutation; assert callable(build_step); assert callable(build_run_plan) and callable(start_run) and callable(replay_run); assert RUN_PLAN_KIND == "delivery-workbench-run-plan"; assert SCORE_KIND == "delivery-workbench-orchestration"; assert STEP_RESULT_KIND == "delivery-workbench-step-result"; assert StepChild(0).started; assert {"dw_status", "dw_step", "dw_step_apply"} <= set(TOOLS); assert callable(handle_api) and callable(handle_mutation)' \
   || fail "packaged core and MCP/HTTP adapters do not expose the guided operations"
 (cd "$FIXTURE" && ./.githooks/dw orchestration validate research-build-review --json) \
   | grep -q '"valid": true' \
@@ -124,6 +126,8 @@ PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
 (cd "$FIXTURE" && ./.githooks/dw orchestration simulate research-build-review --json) \
   | grep -q '"starts_work": false' \
   || fail "packaged orchestration simulation was not pure"
+(cd "$FIXTURE" && ./.githooks/dw run --help) | grep -q 'plan,start,list,show,pause,resume,revoke,cancel' \
+  || fail "packaged run authority CLI is incomplete"
 set +e
 (cd "$FIXTURE" && ./.githooks/dw status --json) > "$TMP_ROOT/status.json"
 STATUS_CODE=$?

@@ -7,7 +7,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 ### work-log-automation
 
 - Current phase: 24 (phase-24-bounded-orchestration)
-- Next story: WLA-24-04 — Authorize runs with grants and an append-only ledger [backlog]
+- Next story: WLA-24-05 — Drive research and worker agents in isolated workspaces [backlog]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

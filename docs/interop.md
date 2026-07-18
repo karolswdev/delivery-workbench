@@ -32,6 +32,10 @@ is added when an external consumer asks for one.
 | Compiled orchestration | `delivery-workbench-compiled-orchestration` v1 | `orchestration.compile_score` |
 | Orchestration validation | `delivery-workbench-orchestration-validation` v1 | `orchestration.validate_score` |
 | Orchestration simulation | `delivery-workbench-orchestration-simulation` v1 | `orchestration.simulate_score` |
+| Orchestration run plan | `delivery-workbench-run-plan` v1 | `orchestration_run.build_run_plan` |
+| Orchestration run grant | `delivery-workbench-run-grant` v1 | `orchestration_run.start_run` |
+| Orchestration run event | `delivery-workbench-run-event` v1 | `orchestration_run` ledger |
+| Orchestration run projection | `delivery-workbench-run` v1 | `orchestration_run.replay_run` |
 | Roadmap context | `delivery-workbench-roadmap-context` v1 | `api.build_context_payload` |
 | Workbench envelope | `delivery-workbench-workbench-response` v1 | `workbench.envelope` (wraps every HTTP response) |
 | Board | `delivery-workbench-board` v1 | `board.board_model` |
@@ -48,6 +52,10 @@ is added when an external consumer asks for one.
 | `dw orchestration show <score> --json` | `orchestration.compile_score` | normalized runtime score, layout, analysis, semantic hash, and document hash |
 | `dw orchestration validate <score> --json` | `orchestration.validate_score` | exact-key verdict plus JSON-pointer diagnostics/remediation; exit 1 invalid |
 | `dw orchestration simulate <score> --json` | `orchestration.simulate_score` | pure scheduling waves, locks, lineage, branches, budgets, checkpoints, and terminals |
+| `dw run plan <score> --project <slug> --story <id> --json` | `orchestration_run.build_run_plan` | pure exact score/repository/status/story/capability/budget/expiry binding plus single-use start token |
+| `dw run start --plan <file> --expect <token> --approve --operator <id> --json` | `orchestration_run.start_run` | immutable local grant and initial hash-chained projection; no node dispatch |
+| `dw run list|show [<run>] --json` | `orchestration_run.run_inventory/replay_run` | authoritative ledger-derived projections; disposable cache is ignored |
+| `dw run pause|resume|revoke|cancel <run> --expect <ledger-head> --json` | `orchestration_run.transition_run` | one exact append-only lifecycle transition that immediately gates future dispatch |
 | `dw context [project] [--compact] [--trace]` | `api.build_context_payload` | the stamped roadmap context |
 | `dw state --json` | `statefeed.build_state_feed` | the mission-control feed (`feed_schema` 1) |
 | `dw next [project] --json` | `api.next_story` | the next actionable story or `{next_story: null, parked}` |

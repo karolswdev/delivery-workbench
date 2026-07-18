@@ -80,7 +80,17 @@ capability/output lineage and scheduling simulation, plus lossless JSON. Save
 and delete use a contained, stale-safe preview→diff→atomic-apply boundary with
 rollback; Firefox desktop/mobile and the installed server exercise it. A
 tracked score starts nothing—a separate, expiring and revocable grant over
-its compiled hash is the later authority boundary. The detailed contract and
+its compiled hash is now the delivered authority boundary. `dw run plan` is a
+pure binding over the exact compiled score, local repository/HEAD/status/story
+facts, profiles/capabilities/workspaces, every finite budget, expiry, and
+permanent exclusions. `dw run start` requires that complete fresh plan, its
+single-use token, explicit approval, and an operator identity before atomically
+publishing immutable plan/score/grant documents and the first hash-chained
+ledger event. Ledger replay ignores its disposable projection cache and fails
+closed on truncation, corruption, or forks; cross-process locks, ledger-head
+tokens, node-attempt/idempotency claims, budget counters, and immediate
+pause/resume/revoke/cancel transitions prevent replay or dispatch after
+authority changes. No provider work is dispatched by this slice. The detailed contract and
 eight evidence-gated slices are in
 [Phase 24](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/current-phase-status.md).
 

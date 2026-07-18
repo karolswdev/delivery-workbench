@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-17 (Phase 24 is open 3/8: the rich visual score editor is complete).
+**Last updated:** 2026-07-17 (Phase 24 is open 4/8: explicit run grants and the authoritative ledger are complete).
 **Current phase:** [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/current-phase-status.md).
-**Status:** active — WLA-24-04 is next: bind exact compiled scores to revocable run grants and an append-only ledger.
+**Status:** active — WLA-24-05 is next: drive structured research/worker packets through capability-checked isolated workspaces.
 
 ## Vision
 
@@ -126,7 +126,7 @@ behavior is:
 
 ## Active extension
 
-Phase 24 (The conductor's score — visual orchestration) is active at 3/8.
+Phase 24 (The conductor's score — visual orchestration) is active at 4/8.
 Its completed architecture contract and exact score compiler turn the Phase-22 observation and
 Phase-23 one-step lease into a
 configurable coordination framework rather than a hidden loop. A rich
@@ -137,8 +137,11 @@ budgets, approvals, and terminal meanings. One delivered pure compiler owns
 schema semantics, stable hashes, diagnostics, and scheduling simulation. The
 delivered rich editor adds the complete typed graph/inspector, live Validate
 and JSON views, and a fingerprint-bound preview→diff→atomic-save boundary;
-opening or saving a score starts nothing. A separate expiring, revocable
-grant binds its exact hash and capabilities before a deterministic conductor
+opening or saving a score starts nothing. The delivered pure run-plan and
+exact approval boundary binds that score to local repo/status/story facts,
+capabilities, workspaces, finite budgets, expiry, and permanent exclusions;
+an immutable grant plus hash-chained, replayable ledger owns lifecycle,
+exclusive claims, revocation, and budget counters. A deterministic conductor
 can schedule structured work packets, isolated workspaces, checks, rail
 steps, receipts, and recovery. See the
 [Phase 24 plan](./phase-24-bounded-orchestration/current-phase-status.md) and

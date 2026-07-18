@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -42,6 +43,7 @@ try:
         build_context_payload,
         build_status,
         build_step,
+        build_run_plan,
         contract_digest,
         compile_score_path,
         discover_phases,
@@ -67,6 +69,7 @@ try:
         render_board,
         render_status,
         render_step,
+        replay_run,
         run_adoption,
         render_doctor,
         render_gate_failure,
@@ -81,6 +84,9 @@ try:
         story_num_from_file,
         score_inventory,
         simulate_score,
+        start_run,
+        transition_run,
+        run_inventory,
         validate_score,
         load_score,
         write_agent_docs,
@@ -180,6 +186,128 @@ def command_orchestration_simulate(args: argparse.Namespace) -> int:
         print(f"failure\t{branch['source']}\t{branch['action']}\t{detail}")
     for terminal in simulation["terminals"]:
         print(f"terminal\t{terminal['node']}\t{terminal['meaning']}")
+    return 0
+
+
+def _render_run_plan(plan: dict[str, object]) -> str:
+    score = plan["score"]
+    authority = plan["authority"]
+    lines = [
+        f"run plan\t{'applicable' if plan['applicable'] else 'refused'}",
+        f"score\t{score['slug']}\t{score['semantic_hash']}",
+        f"project\t{plan['request']['project']}",
+        f"story\t{plan['story']['id']}\t{plan['story']['status']}",
+        f"branch/head\t{plan['repository']['branch']}\t{plan['repository']['head']}",
+        f"expires\t{plan['request']['expires_at']}",
+        f"capabilities\t{','.join(authority['capabilities']) or '-'}",
+        f"profiles\t{','.join(authority['profiles']) or '-'}",
+        f"workspaces\t{','.join(authority['workspace_modes']) or '-'}",
+    ]
+    for name, value in authority["budgets"].items():
+        lines.append(f"budget\t{name}\t{value}")
+    lines.append(f"start-token\t{plan['start_token']}")
+    for issue in plan["issues"]:
+        lines.append(f"REFUSE\t{issue}")
+    lines.append("starts-work\tfalse")
+    return "\n".join(lines) + "\n"
+
+
+def _render_run(run: dict[str, object]) -> str:
+    lines = [
+        f"{run['run_id']}\t{run['state']}\t{'dispatch-ready' if run['dispatch_allowed'] else 'dispatch-refused'}",
+        f"score\t{run['score']['slug']}\t{run['score']['semantic_hash']}",
+        f"story\t{run['story']['id']}\t{run['story']['status']}",
+        f"expires\t{run['expires_at']}\texpired={str(run['expired']).lower()}",
+        f"generation\t{run['control_generation']}",
+        f"ledger\t{run['ledger_events']}\t{run['ledger_head']}",
+    ]
+    for name, budget in run["budgets"].items():
+        lines.append(f"budget\t{name}\t{budget['used']}/{budget['limit']}")
+    lines.append(f"active-claims\t{len(run['active_claims'])}")
+    return "\n".join(lines) + "\n"
+
+
+def command_run_plan(args: argparse.Namespace) -> int:
+    issued = datetime.now(timezone.utc).replace(microsecond=0)
+    if args.expires_at and args.expires_in is not None:
+        die("pass either --expires-at or --expires-in, not both")
+    expires = args.expires_at or issued + timedelta(seconds=args.expires_in or 3600)
+    plan = build_run_plan(
+        args.root,
+        args.score,
+        args.project,
+        args.story,
+        issued_at=issued,
+        expires_at=expires,
+    )
+    if args.json:
+        print(json.dumps(plan, sort_keys=True))
+    else:
+        print(_render_run_plan(plan), end="")
+    return 0 if plan["applicable"] else 1
+
+
+def _read_run_plan(path: Path) -> dict[str, object]:
+    try:
+        text = sys.stdin.read() if str(path) == "-" else path.read_text(encoding="utf-8")
+        value = json.loads(text)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DwError(f"cannot read run plan {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise DwError("run plan file must contain one JSON object")
+    return value
+
+
+def command_run_start(args: argparse.Namespace) -> int:
+    projection = start_run(
+        args.root,
+        _read_run_plan(args.plan),
+        args.expect or "",
+        approved=args.approve,
+        approved_by=args.operator or "",
+    )
+    if args.json:
+        print(json.dumps(projection, sort_keys=True))
+    else:
+        print(_render_run(projection), end="")
+    return 0
+
+
+def command_run_list(args: argparse.Namespace) -> int:
+    inventory = run_inventory(args.root)
+    if args.json:
+        print(json.dumps(inventory, sort_keys=True))
+        return 0
+    for item in inventory["runs"]:
+        if item["valid"]:
+            run = item["run"]
+            print(f"{run['run_id']}\t{run['state']}\t{run['score']['slug']}\t{run['story']['id']}")
+        else:
+            print(f"{item['run_id']}\tinvalid\t{item['error']}")
+    return 0
+
+
+def command_run_show(args: argparse.Namespace) -> int:
+    projection = replay_run(args.root, args.run_id)
+    if args.json:
+        print(json.dumps(projection, sort_keys=True))
+    else:
+        print(_render_run(projection), end="")
+    return 0
+
+
+def command_run_transition(args: argparse.Namespace) -> int:
+    projection = transition_run(
+        args.root,
+        args.run_id,
+        args.run_command,
+        args.expect or "",
+        reason=getattr(args, "reason", "") or "",
+    )
+    if args.json:
+        print(json.dumps(projection, sort_keys=True))
+    else:
+        print(_render_run(projection), end="")
     return 0
 
 
@@ -818,6 +946,46 @@ def build_parser() -> argparse.ArgumentParser:
     orchestration_simulate.add_argument("score", help="score slug or filename stem")
     orchestration_simulate.add_argument("--json", action="store_true", help="emit the stamped simulation")
     orchestration_simulate.set_defaults(func=command_orchestration_simulate)
+
+    run = sub.add_parser(
+        "run",
+        help="plan, authorize, and inspect local orchestration runs (a score alone starts nothing)",
+    )
+    run_sub = run.add_subparsers(dest="run_command", required=True)
+    run_plan = run_sub.add_parser("plan", help="pure preview over an exact score, story, repository state, grant, and expiry")
+    run_plan.add_argument("score", help="score slug or filename stem")
+    run_plan.add_argument("--project", help="roadmap project slug (required when ambiguous)")
+    run_plan.add_argument("--story", required=True, help="exact in-progress story id")
+    run_plan_expiry = run_plan.add_mutually_exclusive_group()
+    run_plan_expiry.add_argument("--expires-in", type=int, default=None, help="grant lifetime in seconds (default: 3600; maximum: 86400)")
+    run_plan_expiry.add_argument("--expires-at", help="exact ISO-8601 expiry timestamp")
+    run_plan.add_argument("--json", action="store_true", help="emit the exact start plan")
+    run_plan.set_defaults(func=command_run_plan)
+
+    run_start = run_sub.add_parser("start", help="atomically create one grant from an exact fresh plan and explicit approval")
+    run_start.add_argument("--plan", type=Path, required=True, help="plan JSON file, or - for stdin")
+    run_start.add_argument("--expect", required=True, help="exact start_token from that plan")
+    run_start.add_argument("--approve", action="store_true", help="explicitly approve this exact local grant")
+    run_start.add_argument("--operator", required=True, help="bounded operator identity recorded in the grant")
+    run_start.add_argument("--json", action="store_true", help="emit the initial run projection")
+    run_start.set_defaults(func=command_run_start)
+
+    run_list = run_sub.add_parser("list", help="list projections replayed from local run ledgers")
+    run_list.add_argument("--json", action="store_true")
+    run_list.set_defaults(func=command_run_list)
+    run_show = run_sub.add_parser("show", help="replay and show one authoritative run projection")
+    run_show.add_argument("run_id")
+    run_show.add_argument("--json", action="store_true")
+    run_show.set_defaults(func=command_run_show)
+
+    for transition in ("pause", "resume", "revoke", "cancel"):
+        command = run_sub.add_parser(transition, help=f"append one exact {transition} transition")
+        command.add_argument("run_id")
+        command.add_argument("--expect", required=True, help="fresh ledger_head from run show")
+        if transition != "resume":
+            command.add_argument("--reason", required=True, help="bounded content-safe reason")
+        command.add_argument("--json", action="store_true")
+        command.set_defaults(func=command_run_transition)
 
     projects = sub.add_parser("projects", help="list roadmap projects")
     projects.set_defaults(func=command_projects)

@@ -341,22 +341,28 @@ silently adopt the edit.
 
 ## Run grant
 
-`delivery-workbench-run-grant@1` contains at least:
+The delivered authorization core uses `delivery-workbench-run-plan@1`,
+`delivery-workbench-run-grant@1`, `delivery-workbench-run-event@1`, and the
+replayed `delivery-workbench-run@1` projection. The grant contains:
 
-- a random run id plus score slug and canonical score hash;
-- repository identity, root, branch, HEAD, selected project, phase/story, and
-  initial status token;
-- allowed node ids and requested capability summary;
+- a token-derived, single-use run id plus score slug and both canonical score
+  hashes;
+- local repository identity, branch, HEAD/index tree, selected project,
+  phase/story file hashes, and initial status hash;
+- requested profiles, capabilities, and workspace modes;
 - maximum concurrency, wall time, agent/check starts, attempts, and artifact
   bytes;
-- workspace/isolation policy;
 - issued/expiry timestamps and revocation generation; and
-- the operator's explicit approval receipt.
+- the operator's explicit approval identity/time plus permanent exclusions.
 
-The grant lives under `.git/pmo-orchestration/runs/<run-id>/grant.json`. It is
-local authority, not a portable bearer secret. Revocation, expiry, exhausted
-budgets, changed repository identity, unsupported driver capability, or an
-ambiguous project/story all stop scheduling before another node starts.
+`dw run plan` is pure and reports `starts_work: false`; `dw run start` accepts
+the complete plan, its exact `start_token`, an explicit approval, and a bounded
+operator identity. It re-plans from current facts before atomically publishing
+an immutable plan/compiled-score/grant plus the initial ledger event. The grant
+lives under `.git/pmo-orchestration/runs/<run-id>/grant.json`. It is local
+authority, not a portable bearer secret. Replay, tamper, expiry, revocation,
+exhausted budgets, changed repository/status/story facts, or ambiguity all
+stop dispatch before another node is claimed.
 
 ## Run state and deterministic scheduling
 
@@ -444,8 +450,9 @@ Runtime state lives under `.git/pmo-orchestration/runs/<run-id>/`:
 
 ```text
 grant.json                 exact local authority
+plan.json                  immutable reviewed start plan
 score.json                 immutable compiled score used by this run
-events.jsonl               append-only authoritative run ledger
+ledger.jsonl               hash-chained append-only authoritative run ledger
 artifacts/<node>/<name>    bounded declared outputs + metadata
 projection.json            disposable derived cache
 ```
@@ -455,7 +462,12 @@ budgets, driver/check outcomes, and artifact metadata—not prompts, model
 transcripts, source content, credentials, or raw check output. Detailed
 streams remain bounded local artifacts and appear only on explicit inspection.
 
-Exclusive run/node claims make dispatch at-most-once. After a crash, restart
+One cross-process ledger lock, stale ledger-head acts, single-use start tokens,
+and unique node-attempt/idempotency claims make dispatch at-most-once. Deleting
+or corrupting `projection.json` changes nothing because every read replays the
+immutable grant and authoritative hash chain; truncated, corrupt, or forked
+ledgers fail closed. Pause, revoke, and cancel stop future dispatch immediately
+while already claimed work can still record a bounded terminal outcome. After a crash, restart
 replays the ledger and polls claimed driver work; it never assumes an absent
 receipt means failure or blindly starts a duplicate. Unknown agent state moves
 to `interrupted` or a human recovery checkpoint. Cancellation revokes future
@@ -467,7 +479,7 @@ and never deletes the audit trail.
 One core owns score compilation, grant planning, run projection, tick, and
 cancellation. Adapters remain thin:
 
-- CLI: `dw orchestration list|show|validate`, `dw run plan|start|show|tick|pause|resume|cancel`;
+- CLI: `dw orchestration list|show|validate|simulate`, `dw run plan|start|list|show|pause|resume|revoke|cancel`;
 - MCP: pure score/run reads plus exact-token run acts, never provider argv;
 - HTTP: versioned envelopes for the visual editor and run monitor;
 - Workbench: Design, Validate, and Run views over those HTTP models; and
