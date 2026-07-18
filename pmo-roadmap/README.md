@@ -365,6 +365,16 @@ consumes its exact token only with `--approve --operator`; `run list`, `show`,
 hash-chained local ledger. A grant authorizes bounded dispatch later—it does
 not itself run an agent or check.
 
+Agent providers stay behind `orchestration_driver`: local untracked
+`drivers.json` maps logical score profiles to adapter capability/workspace
+claims but rejects credential fields. Every adapter accepts the same bounded
+work packet and returns the same content-free receipt. `FixtureDriver` owns
+deterministic tests; the optional `CodexExecDriver` uses non-interactive Codex
+with explicit sandbox, no-approval, ephemeral, bounded-stream controls.
+Artifacts must pass declared format/section/citation/schema/path/diff checks
+before downstream packets can consume their bytes; isolated worktree diffs
+are never merged automatically.
+
 `next` follows a strict exit contract for agents: 0 = story found,
 2 = nothing actionable, 1 = error; `--json` emits the story as one JSON
 object (or `{"next_story": null}`). Story write commands validate the

@@ -403,18 +403,20 @@ decision.
 
 ## Agents, research, and isolated workspaces
 
-The core driver protocol is provider-neutral: `discover`, `start`, `poll`,
-`interrupt`, and `collect`. A structured work packet carries run/node ids,
+The delivered driver protocol is provider-neutral: capability discovery,
+`start`, `poll`, `interrupt`, and `collect`. A hash-bound structured work packet carries run/node ids,
 role, bounded prompt/context, declared inputs/outputs, workspace identity,
 capability request, and deadlines. It carries no provider executable or shell
 argv.
 
-Operator-local configuration maps logical profiles such as
-`research-readonly` or `worker-write` to installed adapters and credentials.
-The adapter reports supported capabilities; a mismatch refuses before an
-agent starts. Network access, model choice, filesystem sandboxing, and tool
-approval remain enforceable by the harness/adapter, not falsely claimed by
-Delivery Workbench.
+Operator-local `.git/pmo-orchestration/drivers.json` configuration maps logical
+profiles such as `research-readonly` or `worker-write` to installed adapters,
+capabilities, workspace modes, and optional local model/executable choices. It
+rejects credential/token/password/secret fields; authentication stays with the
+harness. The adapter reports supported capabilities and its actual sandbox/
+interrupt claims; a mismatch returns a content-free non-started refusal.
+Network access, model choice, filesystem sandboxing, and tool approval remain
+enforceable by the harness/adapter, not falsely claimed by Delivery Workbench.
 
 Read-only research agents can fan out in parallel against one immutable tree
 and write only declared run artifacts. Write-capable agents receive isolated
@@ -422,6 +424,16 @@ Git worktrees and resource locks. A synthesis node consumes research artifacts
 only after their output contracts pass. Concurrent write work never shares a
 working directory, and integrating a worktree diff is a separate reviewed
 transition—not an implicit side effect of agent completion.
+
+`FixtureDriver` is the deterministic test oracle: its sessions and
+idempotency receipts persist across manager restart and can model running,
+succeeded, failed, cancelled, lost, nonzero, timeout, malformed, and oversized
+states without a provider. `CodexExecDriver` is the first real adapter. It uses
+the stable non-interactive `codex exec` surface with an explicit read-only or
+workspace-write sandbox, no interactive approval, ephemeral session rollout,
+a shell environment that inherits no host secrets, bounded stdout/stderr, and
+host-captured final output. The adapter is live-smoked only when authenticated;
+deterministic CI never depends on a model response.
 
 ## Checks, outputs, and failure policy
 
@@ -438,6 +450,13 @@ Output validation is deterministic before downstream scheduling:
 - citation requirement for research outputs;
 - Git diff scope for implementation outputs; and
 - one-producer/type-compatible lineage for every artifact reference.
+
+Validated bytes are copied into
+`.git/pmo-orchestration/runs/<run>/artifacts/<node>/<name>/` beside an exact
+`delivery-workbench-artifact-receipt@1`. Downstream packet construction accepts
+only one unambiguous receipt whose size/hash/format still matches its content.
+Context selectors are contained and explicitly truncated at file/count/packet
+caps; artifact inputs are never truncated.
 
 Failure policy is data, not improvised reasoning: bounded retry, route to a
 named repair node, request approval, pause, or abort. Required checks and

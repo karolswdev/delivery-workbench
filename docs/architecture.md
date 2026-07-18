@@ -215,16 +215,18 @@ installs a built wheel into a fresh consumer, rotates seven separately reviewed
 applies across CLI/MCP/HTTP, and asserts exact event/receipt/manual-commit
 boundaries. Package smoke cannot pass from imports or one happy-path adapter.
 
-Phase 24's contracted next layer is visual orchestration, not an implicit
+Phase 24's active layer is visual orchestration, not an implicit
 `while status: step` loop. A tracked score can describe research/worker roles,
 graph dependencies, context, typed outputs, exact checks, failure routes,
 budgets, concurrency, approvals, and terminal meanings. A pure compiler owns
 those semantics; the rich Workbench editor is a lossless authoring surface.
-The score itself has no authority: a separate expiring/revocable grant over
-its exact compiled hash enables a deterministic conductor, provider-neutral
-work packets, isolated workspaces, checks, receipts, and recovery. Current
-implementation invariants remain unchanged until their Phase-24 stories land;
-the design and threat model are [orchestration.md](./orchestration.md).
+The score itself has no authority: the delivered expiring/revocable grant and
+hash-chained ledger bind its exact compiled hash. The delivered driver seam
+then turns active claims into bounded provider-neutral work packets, validated
+artifacts, and distinct isolated writer worktrees through deterministic
+fixture and live Codex adapters. Deterministic conductor/check/recovery policy
+is the remaining runtime slice; the design and threat model are
+[orchestration.md](./orchestration.md).
 
 Viewport rendering is smoke-tested headlessly at desktop and mobile
 (`tests/workbench-ui-smoke.sh`, CI-run where Firefox exists).

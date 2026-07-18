@@ -90,8 +90,20 @@ ledger event. Ledger replay ignores its disposable projection cache and fails
 closed on truncation, corruption, or forks; cross-process locks, ledger-head
 tokens, node-attempt/idempotency claims, budget counters, and immediate
 pause/resume/revoke/cancel transitions prevent replay or dispatch after
-authority changes. No provider work is dispatched by this slice. The detailed contract and
-eight evidence-gated slices are in
+authority changes. No provider work is dispatched by this authorization slice.
+The provider-neutral driver slice now turns an active node claim into a closed,
+hash-bound work packet with bounded prompt/context, validated artifact inputs,
+exact output conventions, a capability request, workspace identity, deadline,
+and permanent exclusions—never provider argv or credentials. Operator-local
+profiles truthfully advertise adapter-owned sandbox/network/interrupt support;
+unsupported requests refuse before launch. The deterministic fixture driver
+proves concurrent read-only research, schema/citation/section validation,
+synthesis fan-in, restart-safe idempotency, timeout/nonzero/lost/cancel/oversize
+states, separate writer worktrees, resource locks, diff-scope refusal, and no
+implicit integration. An authenticated installed `codex exec` smoke separately
+proves the real read-only adapter with explicit sandbox/no-approval/ephemeral/
+bounded-stream controls and records only a receipt plus artifact hash. The
+detailed contract and eight evidence-gated slices are in
 [Phase 24](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/current-phase-status.md).
 
 This section is release-ready input, not a publication claim: the package

@@ -40,7 +40,7 @@ quietly acquiring certification and commit authority.
   capabilities, budgets, expiry, and revocation; an append-only ledger plus
   exclusive claims makes run/node projection auditable and dispatch at-most-
   once across restart (WLA-24-04).
-- [ ] Provider-neutral drivers receive structured work packets rather than
+- [x] Provider-neutral drivers receive structured work packets rather than
   commands; read-only research can fan out, synthesis consumes validated
   artifacts, writers use isolated worktrees, unsupported capabilities refuse,
   and outputs must meet declared schemas/conventions before fan-in
@@ -67,23 +67,24 @@ quietly acquiring certification and commit authority.
 | WLA-24-02 | Compile and validate exact orchestration rules | done | [story-02-orchestration-manifest-core](./story-02-orchestration-manifest-core.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-24-03 | Build the rich visual orchestration editor | done | [story-03-visual-orchestration-editor](./story-03-visual-orchestration-editor.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-24-04 | Authorize runs with grants and an append-only ledger | done | [story-04-run-grants-ledger](./story-04-run-grants-ledger.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-24-05 | Drive research and worker agents in isolated workspaces | backlog | [story-05-agent-drivers-workspaces](./story-05-agent-drivers-workspaces.md) | - |
+| WLA-24-05 | Drive research and worker agents in isolated workspaces | done | [story-05-agent-drivers-workspaces](./story-05-agent-drivers-workspaces.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-24-06 | Schedule nodes, checks, failure routes, and recovery | backlog | [story-06-conductor-runtime](./story-06-conductor-runtime.md) | - |
 | WLA-24-07 | Expose and monitor runs across every surface | backlog | [story-07-run-control-interop](./story-07-run-control-interop.md) | - |
 | WLA-24-08 | Prove a packaged multi-agent orchestration | backlog | [story-08-packaged-orchestration-exam](./story-08-packaged-orchestration-exam.md) | - |
 
 ## Where we are
 
-Phase OPEN 4/8. WLA-24-04 has delivered the separate execution-authority ring.
-A pure run plan binds the compiled score to local repository/HEAD/status/story
-facts, requested profiles/capabilities/workspaces, every finite budget, expiry,
-and permanent exclusions. Exact-token approval atomically publishes immutable
-plan/score/grant documents and a hash-chained ledger; replay ignores disposable
-cache state and fails closed on tamper, truncation, or forks. Cross-process
-start/node claims, idempotency, freshness, expiry, budgets, and immediate
-pause/resume/revoke/cancel transitions are test-proven on both Python floors
-and in the wheel. WLA-24-05 is next: drive provider-neutral research and
-worker packets through capability-checked, isolated workspaces.
+Phase OPEN 5/8. WLA-24-05 has delivered the provider-neutral agent seam. A
+closed, hash-bound packet carries only the granted node, bounded prompt/context,
+validated artifacts, exact output conventions, capability/workspace request,
+deadline, and permanent exclusions; local logical profiles hold adapter/model/
+sandbox choices but reject credential fields. Deterministic fixture sessions
+prove concurrent research, validation-gated synthesis, persistent idempotency,
+truthful failure/interruption states, and distinct resource-locked writer
+worktrees whose scoped diffs never merge implicitly. An authenticated installed
+`codex exec` run separately proves the real read-only adapter while CI remains
+model-independent. WLA-24-06 is next: reconcile these claims, packets, checks,
+failure routes, budgets, and receipts through one deterministic conductor tick.
 
 ## Active risks
 
@@ -110,6 +111,9 @@ worker packets through capability-checked, isolated workspaces.
 - 2026-07-17 - Make a run plan reviewable but non-authoritative, then consume its complete score/repository/status/story binding only through one explicit local approval - configuration remains distinct from consent - WLA-24-04.
 - 2026-07-17 - Treat the hash-chained ledger as authority and `projection.json` as disposable - crash recovery and audit do not depend on a mutable cache - WLA-24-04.
 - 2026-07-17 - Stop future dispatch immediately on pause, revoke, cancellation, expiry, stale repository facts, or budget exhaustion while still allowing in-flight claims to record bounded terminal outcomes - revocation is operational, not decorative - WLA-24-04.
+- 2026-07-17 - Keep profile-to-provider mapping in untracked local driver config and reject credential-shaped fields - scores remain portable policy and authentication remains harness-owned - WLA-24-05.
+- 2026-07-17 - Make `FixtureDriver` the deterministic oracle and a least-privilege non-interactive `codex exec` adapter the separate live proof - CI must not depend on model output, but the real seam must still be exercised - WLA-24-05.
+- 2026-07-17 - Put writer worktrees outside the operator tree, bind each to the granted HEAD, and produce only a validated scoped diff receipt - concurrent work cannot share a cwd and integration remains reviewed - WLA-24-05.
 
 ## Decisions deferred
 

@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-17 (Phase 24 is open 4/8: explicit run grants and the authoritative ledger are complete).
+**Last updated:** 2026-07-17 (Phase 24 is open 5/8: provider-neutral drivers and isolated workspaces are complete).
 **Current phase:** [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/current-phase-status.md).
-**Status:** active — WLA-24-05 is next: drive structured research/worker packets through capability-checked isolated workspaces.
+**Status:** active — WLA-24-06 is next: reconcile packets, checks, failure routes, and recovery through one deterministic conductor.
 
 ## Vision
 
@@ -126,7 +126,7 @@ behavior is:
 
 ## Active extension
 
-Phase 24 (The conductor's score — visual orchestration) is active at 4/8.
+Phase 24 (The conductor's score — visual orchestration) is active at 5/8.
 Its completed architecture contract and exact score compiler turn the Phase-22 observation and
 Phase-23 one-step lease into a
 configurable coordination framework rather than a hidden loop. A rich
@@ -142,7 +142,12 @@ exact approval boundary binds that score to local repo/status/story facts,
 capabilities, workspaces, finite budgets, expiry, and permanent exclusions;
 an immutable grant plus hash-chained, replayable ledger owns lifecycle,
 exclusive claims, revocation, and budget counters. A deterministic conductor
-can schedule structured work packets, isolated workspaces, checks, rail
+can now schedule through a delivered provider-neutral seam: capability-checked
+logical profiles, bounded hash-bound packets, concurrent read-only research,
+validated synthesis inputs, persistent driver receipts, and distinct isolated
+writer worktrees whose scoped diffs require later review. Deterministic fixture
+and live Codex adapters prove the seam without making model output a CI oracle.
+The remaining conductor can schedule those packets plus checks and rail
 steps, receipts, and recovery. See the
 [Phase 24 plan](./phase-24-bounded-orchestration/current-phase-status.md) and
 [visual orchestration contract](../../../../docs/orchestration.md).

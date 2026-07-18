@@ -36,6 +36,10 @@ is added when an external consumer asks for one.
 | Orchestration run grant | `delivery-workbench-run-grant` v1 | `orchestration_run.start_run` |
 | Orchestration run event | `delivery-workbench-run-event` v1 | `orchestration_run` ledger |
 | Orchestration run projection | `delivery-workbench-run` v1 | `orchestration_run.replay_run` |
+| Driver capability | `delivery-workbench-driver-capability` v1 | `orchestration_driver.driver_capability` |
+| Agent work packet | `delivery-workbench-work-packet` v1 | `orchestration_driver.build_work_packet` |
+| Driver receipt | `delivery-workbench-driver-receipt` v1 | `orchestration_driver.DriverManager` |
+| Validated artifact receipt | `delivery-workbench-artifact-receipt` v1 | `orchestration_driver.validate_and_store_outputs` |
 | Roadmap context | `delivery-workbench-roadmap-context` v1 | `api.build_context_payload` |
 | Workbench envelope | `delivery-workbench-workbench-response` v1 | `workbench.envelope` (wraps every HTTP response) |
 | Board | `delivery-workbench-board` v1 | `board.board_model` |

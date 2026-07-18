@@ -186,6 +186,7 @@ def _store_lock(root: Path) -> Iterator[Path]:
 
 
 def _story_facts(root: Path, project_slug: str, selector: str) -> dict[str, object]:
+    root = root.resolve()
     project = get_project(root, project_slug)
     found: list[tuple[object, object, int, Path]] = []
     for phase in discover_phases(project):
@@ -825,6 +826,7 @@ def _grant_freshness_issues(root: Path, grant: dict[str, object]) -> list[str]:
     the bound repository/status facts.  This check prevents a grant from
     crossing clones, branches, HEADs, workspace states, or story transitions.
     """
+    root = root.resolve()
     expected = grant["repository"]
     observed = {
         "id": _repository_id(root),

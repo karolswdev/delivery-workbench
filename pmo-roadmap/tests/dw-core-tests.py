@@ -5329,6 +5329,462 @@ class OrchestrationRunAuthorityTest(unittest.TestCase):
         self.assertEqual(resumed["state"], "active")
 
 
+class OrchestrationDriverTest(unittest.TestCase):
+    """WLA-24-05: structured packets, provider seams, and isolated outputs."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-orch-driver-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.root.mkdir()
+        self._cmd("git", "init", "-q", "-b", "main")
+        self._cmd("git", "config", "user.name", "Driver Fixture")
+        self._cmd("git", "config", "user.email", "driver@example.test")
+        subprocess.run(
+            [str(TESTS_DIR.parent / "bootstrap" / "new-project.sh"),
+             str(self.root), "sample", "Sample", "SMP"],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        subprocess.run(
+            [str(TESTS_DIR.parent / "install.sh"), str(self.root), "--skip-bootstrap"],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.dw = self.root / ".githooks" / "dw"
+        self._dw("story", "status", "sample", "0", "SMP-0-01", "in-progress")
+        self._dw("rider", "docs")
+        schema = self.root / "schemas" / "risk-register-v1.json"
+        schema.parent.mkdir()
+        schema.write_text(json.dumps({
+            "type": "object",
+            "required": ["risks"],
+            "properties": {
+                "risks": {"type": "array", "items": {"type": "string"}},
+            },
+            "additionalProperties": False,
+        }, indent=2) + "\n")
+        docs = self.root / "docs"
+        docs.mkdir()
+        (docs / "context.md").write_text("# Context\n\n" + "bounded context " * 300)
+        self._commit("driver fixture")
+        self.now = datetime.now(timezone.utc).replace(microsecond=0)
+        self.config = {
+            "kind": "delivery-workbench-driver-config",
+            "schema_version": 1,
+            "workspace_root": None,
+            "profiles": {
+                "research-readonly": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read", "network"],
+                    "workspace_modes": ["read-only"],
+                    "network": True,
+                    "max_context_bytes": 2000,
+                },
+                "reasoning-readonly": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read"],
+                    "workspace_modes": ["read-only"],
+                },
+                "worker-write": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read", "repository-write"],
+                    "workspace_modes": ["isolated-worktree"],
+                },
+            },
+        }
+        import dw_pmo.orchestration_run as runs
+
+        plan = runs.build_run_plan(
+            self.root, "research-build-review", "sample", "SMP-0-01",
+            issued_at=self.now, expires_at=self.now + timedelta(hours=1),
+        )
+        self.projection = runs.start_run(
+            self.root, plan, plan["start_token"], approved=True,
+            approved_by="driver-fixture", now=self.now,
+        )
+
+    def _cmd(self, *argv, check=True):
+        return subprocess.run(
+            list(argv), cwd=self.root, check=check, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+    def _dw(self, *argv, check=True):
+        return self._cmd(str(self.dw), *argv, check=check)
+
+    def _commit(self, message):
+        self._cmd("git", "add", ".")
+        self._cmd("git", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", message)
+
+    def claim_packet(self, node_id, key, projection=None, attempt=1, config=None):
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        before = projection or self.projection
+        claimed = runs.claim_node(
+            self.root, before["run_id"], node_id, attempt, key,
+            before["ledger_head"], now=self.now,
+        )
+        claim = next(
+            item for item in claimed["active_claims"]
+            if item["idempotency_key"] == key
+        )
+        packet = drivers.build_work_packet(
+            self.root, before["run_id"], claim["claim_id"],
+            drivers.load_driver_config(self.root, config or self.config), now=self.now,
+        )
+        return claimed, packet
+
+    def seed_implementation_brief(self):
+        import hashlib
+        import dw_pmo.orchestration_driver as drivers
+
+        content = (
+            b"# Scope\nFixture.\n\n# Decisions\nBounded.\n\n"
+            b"# Acceptance checks\nGreen.\n"
+        )
+        directory = (
+            self.root / ".git" / "pmo-orchestration" / "runs"
+            / self.projection["run_id"] / "artifacts" / "synthesize"
+            / "implementation-brief"
+        )
+        directory.mkdir(parents=True)
+        (directory / "content").write_bytes(content)
+        receipt = {
+            "kind": drivers.ARTIFACT_RECEIPT_KIND,
+            "schema_version": 1,
+            "run_id": self.projection["run_id"],
+            "node_id": "synthesize",
+            "attempt": 1,
+            "name": "implementation-brief",
+            "format": "markdown",
+            "bytes": len(content),
+            "sha256": "sha256:" + hashlib.sha256(content).hexdigest(),
+            "path": "artifacts/synthesize/implementation-brief/content",
+            "valid": True,
+            "checks": ["declared", "contained", "bytes", "markdown-sections", "citations"],
+        }
+        (directory / "metadata.json").write_text(
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+        )
+
+    @staticmethod
+    def responses():
+        return {
+            "research-api": {"outputs": {"api-findings": (
+                "# Findings\nSafe API surface.\n\n# Sources\n"
+                "[Primary documentation](https://example.test/api)\n\n# Risks\nNone.\n"
+            )}},
+            "research-risks": {"outputs": {"risk-register": {"risks": ["bounded"]}}},
+            "synthesize": {"outputs": {"implementation-brief": (
+                "# Scope\nSmall.\n\n# Decisions\nBounded.\n\n"
+                "# Acceptance checks\nGreen.\n"
+            )}},
+        }
+
+    def test_config_and_capability_documents_are_closed_and_credential_free(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        config = drivers.load_driver_config(self.root, self.config)
+        capability = drivers.driver_capability(config, "research-readonly")
+        self.assertEqual(capability["kind"], drivers.DRIVER_CAPABILITY_KIND)
+        self.assertEqual(capability["adapter"], "fixture")
+        self.assertEqual(capability["network"], "operator-enabled")
+        self.assertFalse(capability["stores_credentials"])
+        poisoned = json.loads(json.dumps(self.config))
+        poisoned["profiles"]["research-readonly"]["api_token"] = "secret"
+        with self.assertRaisesRegex(DwError, "credential|token"):
+            drivers.validate_driver_config(poisoned)
+        unknown = json.loads(json.dumps(self.config))
+        unknown["profiles"]["research-readonly"]["adapter"] = "mystery"
+        with self.assertRaisesRegex(DwError, "unsupported adapter"):
+            drivers.validate_driver_config(unknown)
+
+    def test_packet_is_bounded_structured_and_contains_no_provider_command(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        _claimed, packet = self.claim_packet("research-api", "packet-1")
+        self.assertEqual(packet["kind"], drivers.WORK_PACKET_KIND)
+        self.assertEqual(packet, drivers.validate_work_packet(packet))
+        self.assertEqual(packet["workspace"]["mode"], "read-only")
+        self.assertTrue(packet["context"]["truncated"])
+        included = sum(item["included_bytes"] for item in packet["context"]["documents"])
+        self.assertLessEqual(included, 2000)
+        serialized = json.dumps(packet).lower()
+        for forbidden in ("provider_command", "api_key", '"command":', "codex exec"):
+            self.assertNotIn(forbidden, serialized)
+        tampered = json.loads(json.dumps(packet))
+        tampered["prompt"] = "changed"
+        with self.assertRaisesRegex(DwError, "hash check"):
+            drivers.validate_work_packet(tampered)
+
+    def test_unsupported_profile_request_refuses_before_adapter_start(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        _claimed, packet = self.claim_packet("research-api", "unsupported-claim")
+        restricted = json.loads(json.dumps(self.config))
+        restricted["profiles"]["research-readonly"]["capabilities"] = ["repository-read"]
+        restricted["profiles"]["research-readonly"]["network"] = False
+        fixture = drivers.FixtureDriver(self.responses())
+        manager = drivers.DriverManager(
+            self.root, restricted, adapters={"fixture": fixture}
+        )
+        receipt = manager.start(packet, "unsupported-start")
+        self.assertEqual(receipt["state"], "refused")
+        self.assertFalse(receipt["started"])
+        self.assertEqual(receipt["reason"], "unsupported-capability")
+        self.assertEqual(fixture.starts, 0)
+
+    def test_parallel_research_validates_before_synthesis_fan_in(self):
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        first_claimed, first_packet = self.claim_packet(
+            "research-api", "research-a", self.projection
+        )
+        second_claimed, second_packet = self.claim_packet(
+            "research-risks", "research-b", first_claimed
+        )
+        fixture = drivers.FixtureDriver(self.responses())
+        manager = drivers.DriverManager(
+            self.root, self.config, adapters={"fixture": fixture}
+        )
+        first = manager.start(first_packet, "session-a")
+        second = manager.start(second_packet, "session-b")
+        self.assertEqual([first["state"], second["state"]], ["running", "running"])
+        self.assertNotEqual(first["session_id"], second["session_id"])
+        first = manager.poll(self.projection["run_id"], first["session_id"])
+        second = manager.poll(self.projection["run_id"], second["session_id"])
+        self.assertEqual([first["state"], second["state"]], ["succeeded", "succeeded"])
+        first_artifacts = manager.collect(self.projection["run_id"], first["session_id"])
+        second_artifacts = manager.collect(self.projection["run_id"], second["session_id"])
+        self.assertIn("citations", first_artifacts[0]["checks"])
+        self.assertIn("json-schema", second_artifacts[0]["checks"])
+        projection = runs.release_node_claim(
+            self.root, self.projection["run_id"], first_packet["claim_id"],
+            "succeeded", first_artifacts[0]["bytes"], second_claimed["ledger_head"],
+            now=self.now,
+        )
+        projection = runs.release_node_claim(
+            self.root, self.projection["run_id"], second_packet["claim_id"],
+            "succeeded", second_artifacts[0]["bytes"], projection["ledger_head"],
+            now=self.now,
+        )
+        synth_claimed, synth_packet = self.claim_packet(
+            "synthesize", "synthesis", projection
+        )
+        self.assertEqual(
+            [item["artifact"] for item in synth_packet["inputs"]],
+            ["api-findings", "risk-register"],
+        )
+        synth = manager.start(synth_packet, "session-synthesis")
+        synth = manager.poll(self.projection["run_id"], synth["session_id"])
+        artifacts = manager.collect(self.projection["run_id"], synth["session_id"])
+        self.assertEqual(artifacts[0]["name"], "implementation-brief")
+        self.assertEqual(fixture.starts, 3)
+        self.assertEqual(len(synth_claimed["active_claims"]), 1)
+
+    def test_missing_citation_fails_collect_even_after_driver_success(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        node, key, response, message = (
+            "research-api", "missing-citation", {
+                "outputs": {"api-findings": "# Findings\nX\n# Sources\nnone\n# Risks\nX\n"}
+            }, "citation",
+        )
+        _claimed, packet = self.claim_packet(node, key)
+        manager = drivers.DriverManager(
+            self.root, self.config,
+            adapters={"fixture": drivers.FixtureDriver({node: response})},
+        )
+        receipt = manager.start(packet, "bad-output")
+        receipt = manager.poll(self.projection["run_id"], receipt["session_id"])
+        self.assertEqual(receipt["state"], "succeeded", "driver truth differs from artifact validity")
+        with self.assertRaisesRegex(DwError, message):
+            manager.collect(self.projection["run_id"], receipt["session_id"])
+
+    def test_malformed_json_and_oversized_artifact_fail_deterministically(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        first_claimed, json_packet = self.claim_packet(
+            "research-risks", "bad-json", self.projection
+        )
+        _second_claimed, markdown_packet = self.claim_packet(
+            "research-api", "oversized-artifact", first_claimed
+        )
+        fixture = drivers.FixtureDriver({
+            "research-risks": {"outputs": {"risk-register": "not-json"}},
+            "research-api": {"outputs": {"api-findings": (
+                "# Findings\n" + "x" * 40000
+                + "\n# Sources\nhttps://example.test\n# Risks\nX\n"
+            )}},
+        })
+        manager = drivers.DriverManager(self.root, self.config, adapters={"fixture": fixture})
+        bad_json = manager.start(json_packet, "bad-json-session")
+        too_large = manager.start(markdown_packet, "large-session")
+        bad_json = manager.poll(self.projection["run_id"], bad_json["session_id"])
+        too_large = manager.poll(self.projection["run_id"], too_large["session_id"])
+        with self.assertRaisesRegex(DwError, "malformed"):
+            manager.collect(self.projection["run_id"], bad_json["session_id"])
+        with self.assertRaisesRegex(DwError, "byte bound"):
+            manager.collect(self.projection["run_id"], too_large["session_id"])
+
+    def test_timeout_nonzero_lost_stream_and_interrupt_states_are_truthful(self):
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        first, timeout_packet = self.claim_packet("research-api", "timeout-node")
+        second, nonzero_packet = self.claim_packet("research-risks", "nonzero-node", first)
+        self.seed_implementation_brief()
+        third, interrupt_packet = self.claim_packet("repair", "interrupt-node", second)
+        fixture = drivers.FixtureDriver({
+            "research-api": {"state": "failed", "reason": "timeout",
+                             "exit_code": None, "polls": 0},
+            "research-risks": {"state": "succeeded", "exit_code": 7, "polls": 0},
+            "repair": {"polls": 5},
+        })
+        manager = drivers.DriverManager(self.root, self.config, adapters={"fixture": fixture})
+        timed_out = manager.start(timeout_packet, "timeout-session")
+        nonzero = manager.start(nonzero_packet, "nonzero-session")
+        running = manager.start(interrupt_packet, "interrupt-session")
+        self.assertEqual((timed_out["state"], timed_out["reason"]), ("failed", "timeout"))
+        self.assertEqual((nonzero["state"], nonzero["reason"], nonzero["exit_code"]),
+                         ("failed", "nonzero-exit", 7))
+        cancelled = manager.interrupt(self.projection["run_id"], running["session_id"])
+        self.assertEqual((cancelled["state"], cancelled["reason"]),
+                         ("cancelled", "interrupted"))
+
+        # Release one terminal claim, then prove an oversized stream and a
+        # lost session map to distinct bounded states without a duplicate start.
+        projection = runs.release_node_claim(
+            self.root, self.projection["run_id"], timeout_packet["claim_id"],
+            "failed", 0, third["ledger_head"], now=self.now,
+        )
+        # The existing nonzero claim remains active; release it as well so the
+        # reference grant's concurrency budget admits one more attempt.
+        projection = runs.release_node_claim(
+            self.root, self.projection["run_id"], nonzero_packet["claim_id"],
+            "failed", 0, projection["ledger_head"], now=self.now,
+        )
+        projection = runs.release_node_claim(
+            self.root, self.projection["run_id"], interrupt_packet["claim_id"],
+            "cancelled", 0, projection["ledger_head"], now=self.now,
+        )
+        fourth, stream_packet = self.claim_packet(
+            "research-api", "stream-node", projection, attempt=2
+        )
+        stream_fixture = drivers.FixtureDriver({
+            "research-api": {"state": "succeeded", "polls": 0,
+                             "stdout_bytes": stream_packet["max_stream_bytes"] + 1},
+        })
+        stream_manager = drivers.DriverManager(
+            self.root, self.config, adapters={"fixture": stream_fixture}
+        )
+        oversized = stream_manager.start(stream_packet, "stream-session")
+        self.assertEqual((oversized["state"], oversized["reason"]),
+                         ("failed", "oversized-stream"))
+        self.assertEqual(len(fourth["active_claims"]), 1)
+        projection = runs.release_node_claim(
+            self.root, self.projection["run_id"], stream_packet["claim_id"],
+            "failed", 0, fourth["ledger_head"], now=self.now,
+        )
+        _fifth, lost_packet = self.claim_packet(
+            "research-risks", "lost-node", projection, attempt=2
+        )
+        lost_manager = drivers.DriverManager(
+            self.root, self.config,
+            adapters={"fixture": drivers.FixtureDriver({
+                "research-risks": {"state": "lost", "exit_code": None, "polls": 1},
+            })},
+        )
+        lost = lost_manager.start(lost_packet, "lost-session")
+        lost = lost_manager.poll(self.projection["run_id"], lost["session_id"])
+        self.assertEqual((lost["state"], lost["reason"]), ("lost", "lost"))
+
+    def test_writers_get_distinct_worktrees_diff_scope_and_no_implicit_integration(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        self.seed_implementation_brief()
+        first_claimed, implement = self.claim_packet("implement", "writer-a")
+        _second_claimed, repair = self.claim_packet("repair", "writer-b", first_claimed)
+        self.assertNotEqual(implement["workspace"]["path"], repair["workspace"]["path"])
+        self.assertEqual(implement["workspace"]["integration"], "review-required")
+        fixture = drivers.FixtureDriver({
+            "implement": {"workspace_files": {"src/one.py": "print('one')"}},
+            "repair": {"workspace_files": {"tests/two.py": "def test_two(): pass"}},
+        })
+        manager = drivers.DriverManager(self.root, self.config, adapters={"fixture": fixture})
+        receipts = [manager.start(implement, "write-a"), manager.start(repair, "write-b")]
+        receipts = [manager.poll(self.projection["run_id"], item["session_id"]) for item in receipts]
+        artifacts = [manager.collect(self.projection["run_id"], item["session_id"])[0] for item in receipts]
+        self.assertTrue(all("git-diff" in item["checks"] for item in artifacts))
+        self.assertFalse((self.root / "src" / "one.py").exists())
+        self.assertFalse((self.root / "tests" / "two.py").exists())
+        with drivers.acquire_resource_groups(
+            self.root, self.projection["run_id"], ["working-tree"]
+        ):
+            with self.assertRaisesRegex(DwError, "already claimed"):
+                with drivers.acquire_resource_groups(
+                    self.root, self.projection["run_id"], ["working-tree"]
+                ):
+                    pass
+
+    def test_undeclared_diff_path_and_output_are_refused(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        self.seed_implementation_brief()
+        _claimed, packet = self.claim_packet("implement", "escaped-writer")
+        fixture = drivers.FixtureDriver({
+            "implement": {"workspace_files": {"secrets.txt": "outside scope"},
+                              "outputs": {"rogue": "undeclared"}},
+        })
+        manager = drivers.DriverManager(self.root, self.config, adapters={"fixture": fixture})
+        receipt = manager.start(packet, "escaped-start")
+        receipt = manager.poll(self.projection["run_id"], receipt["session_id"])
+        with self.assertRaisesRegex(DwError, "undeclared output|escapes declared"):
+            manager.collect(self.projection["run_id"], receipt["session_id"])
+
+    def test_start_poll_interrupt_collect_idempotency_and_recovery_states(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        _claimed, packet = self.claim_packet("research-api", "recoverable")
+        fixture = drivers.FixtureDriver(self.responses())
+        manager = drivers.DriverManager(self.root, self.config, adapters={"fixture": fixture})
+        first = manager.start(packet, "same-session")
+        again = manager.start(packet, "same-session")
+        self.assertEqual(first, again)
+        self.assertEqual(fixture.starts, 1)
+        recovered = drivers.DriverManager(
+            self.root, self.config, adapters={"fixture": drivers.FixtureDriver()}
+        )
+        polled = recovered.poll(self.projection["run_id"], first["session_id"])
+        self.assertEqual(polled["state"], "succeeded")
+        self.assertEqual(recovered.collect(
+            self.projection["run_id"], first["session_id"]
+        )[0]["valid"], True)
+
+        # A separate run would be required to launch the same node attempt
+        # again; interrupt the already-terminal session is an idempotent no-op.
+        interrupted = recovered.interrupt(self.projection["run_id"], first["session_id"])
+        self.assertEqual(interrupted["state"], "succeeded")
+
+    def test_pause_between_packet_and_start_refuses_without_adapter_launch(self):
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        claimed, packet = self.claim_packet("research-api", "pause-race")
+        paused = runs.transition_run(
+            self.root, self.projection["run_id"], "pause", claimed["ledger_head"],
+            reason="operator pause", now=self.now,
+        )
+        fixture = drivers.FixtureDriver(self.responses())
+        manager = drivers.DriverManager(self.root, self.config, adapters={"fixture": fixture})
+        receipt = manager.start(packet, "after-pause")
+        self.assertEqual(receipt["state"], "refused")
+        self.assertEqual(receipt["reason"], "dispatch-refused")
+        self.assertEqual(fixture.starts, 0)
+        self.assertEqual(paused["state"], "paused")
+
+
 class AgentHooksTest(unittest.TestCase):
     """The agent hook seam (WLA-14-02): installer discipline, the
     emit whitelist, and the guards — docs/absorption-ccgram.md §1."""

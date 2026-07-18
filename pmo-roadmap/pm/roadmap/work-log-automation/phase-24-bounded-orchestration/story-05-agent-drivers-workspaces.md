@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 24
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-24-02, WLA-24-04
 - **Unblocks:** WLA-24-06, WLA-24-08
 - **Owner:** unassigned
@@ -30,19 +30,19 @@ harness sandbox it does not own.
 
 ## Acceptance criteria
 
-- [ ] Drivers expose a provider-neutral capability document and accept only a
+- [x] Drivers expose a provider-neutral capability document and accept only a
   bounded structured work packet; unsupported capability/profile/workspace
   requests refuse before agent start with no claim marked successful.
-- [ ] Two research nodes can run concurrently read-only, emit separate declared
+- [x] Two research nodes can run concurrently read-only, emit separate declared
   artifacts with required citations/schema/sections, and a synthesis packet
   receives only outputs whose deterministic conventions passed.
-- [ ] Write agents receive distinct contained worktrees and resource locks;
+- [x] Write agents receive distinct contained worktrees and resource locks;
   concurrent writers never share a cwd, undeclared paths/diff scope fail, and
   integration into the operator tree remains a separate reviewed act.
-- [ ] Start/poll/collect/interrupt is receipt- and idempotency-keyed; lost,
+- [x] Start/poll/collect/interrupt is receipt- and idempotency-keyed; lost,
   malformed, oversized, stale, nonzero, timeout, and cancellation cases are
   truthful and recoverable without duplicate launch.
-- [ ] Fixture driver gives reproducible CI proof; one installed live harness
+- [x] Fixture driver gives reproducible CI proof; one installed live harness
   run proves the real adapter without making it the deterministic test oracle;
   Python floors/package/privacy/credential checks stay green.
 
