@@ -81,6 +81,37 @@ _EVENT_DETAIL_KEYS = {
     "node_released": {
         "node_id", "attempt", "claim_id", "outcome", "artifact_bytes",
     },
+    "node_receipt": {
+        "node_id", "attempt", "claim_id", "executor", "execution_id",
+        "state", "reason", "receipt_hash",
+    },
+    "failure_routed": {
+        "node_id", "attempt", "action", "target", "visit",
+        "target_attempt",
+    },
+    "route_resolved": {
+        "node_id", "attempt", "target", "target_attempt", "visit",
+        "outcome",
+    },
+    "checkpoint_reached": {
+        "node_id", "checkpoint", "mode", "terminal", "reason",
+    },
+    "checkpoint_decided": {
+        "node_id", "checkpoint", "mode", "decision",
+    },
+    "run_aborted": {"node_id", "reason", "generation"},
+    "run_terminal": {"node_id", "meaning"},
+    "rail_advanced": {
+        "node_id", "action", "repository_id", "branch", "head",
+        "index_tree", "operation", "status_hash", "story_hash",
+    },
+    "external_commit_observed": {"previous_head", "head", "relation"},
+}
+
+_RUNTIME_EVENTS = {
+    "node_receipt", "failure_routed", "route_resolved",
+    "checkpoint_reached", "checkpoint_decided", "run_aborted",
+    "run_terminal", "rail_advanced", "external_commit_observed",
 }
 
 
@@ -669,6 +700,12 @@ def replay_run(
     generation = int(grant.get("revocation_generation", 0))
     active: dict[str, dict[str, object]] = {}
     completed: dict[str, dict[str, object]] = {}
+    receipts: dict[str, list[dict[str, object]]] = {}
+    routes: list[dict[str, object]] = []
+    checkpoints: list[dict[str, object]] = []
+    pending_checkpoint: dict[str, object] | None = None
+    fact_binding: dict[str, object] | None = None
+    external_commits: list[dict[str, object]] = []
     claimed_attempts: set[tuple[str, int]] = set()
     idempotency_keys: set[str] = set()
     counters = {"agent_starts": 0, "check_starts": 0, "artifact_bytes": 0}
@@ -698,14 +735,14 @@ def replay_run(
                 raise DwError("run_resumed generation is not monotonic")
             state = "active"
         elif kind == "run_revoked":
-            if state not in {"active", "paused"}:
+            if state not in {"active", "paused", "awaiting-approval"}:
                 raise DwError("invalid run_revoked transition")
             generation += 1
             if detail["generation"] != generation:
                 raise DwError("run_revoked generation is not monotonic")
             state = "revoked"
         elif kind == "run_cancelled":
-            if state not in {"active", "paused"}:
+            if state not in {"active", "paused", "awaiting-approval"}:
                 raise DwError("invalid run_cancelled transition")
             generation += 1
             if detail["generation"] != generation:
@@ -725,6 +762,7 @@ def replay_run(
             claimed_attempts.add((node_id, attempt))
             idempotency_keys.add(idem)
             active[claim_id] = dict(detail)
+            receipts[claim_id] = []
             if detail["node_type"] == "agent":
                 counters["agent_starts"] += 1
             elif detail["node_type"] == "check":
@@ -736,8 +774,105 @@ def replay_run(
                 raise DwError("node release has no active claim")
             if claim["node_id"] != detail["node_id"] or claim["attempt"] != detail["attempt"]:
                 raise DwError("node release does not match its claim")
-            completed[claim_id] = dict(detail)
+            completed[claim_id] = {
+                **claim,
+                **dict(detail),
+                "release_seq": offset,
+                "receipts": list(receipts.get(claim_id, [])),
+            }
             counters["artifact_bytes"] += int(detail["artifact_bytes"])
+        elif kind == "node_receipt":
+            claim_id = str(detail["claim_id"])
+            claim = active.get(claim_id)
+            if claim is None:
+                raise DwError("node receipt has no active claim")
+            if claim["node_id"] != detail["node_id"] or claim["attempt"] != detail["attempt"]:
+                raise DwError("node receipt does not match its claim")
+            receipts.setdefault(claim_id, []).append({"seq": offset, **dict(detail)})
+            claim["last_receipt"] = dict(detail)
+        elif kind == "failure_routed":
+            source = next(
+                (
+                    item for item in completed.values()
+                    if item["node_id"] == detail["node_id"]
+                    and item["attempt"] == detail["attempt"]
+                ),
+                None,
+            )
+            if source is None or source["outcome"] == "succeeded":
+                raise DwError("failure route has no matching failed node attempt")
+            if any(
+                item["node_id"] == detail["node_id"]
+                and item["attempt"] == detail["attempt"]
+                for item in routes
+            ):
+                raise DwError("node failure already has a recorded route")
+            routes.append({"seq": offset, "resolved": False, **dict(detail)})
+        elif kind == "route_resolved":
+            route = next(
+                (
+                    item for item in reversed(routes)
+                    if item["node_id"] == detail["node_id"]
+                    and item["attempt"] == detail["attempt"]
+                    and item["target"] == detail["target"]
+                    and item["target_attempt"] == detail["target_attempt"]
+                    and item["visit"] == detail["visit"]
+                ),
+                None,
+            )
+            if route is None or route["resolved"]:
+                raise DwError("route resolution has no matching open route")
+            target = next(
+                (
+                    item for item in completed.values()
+                    if item["node_id"] == detail["target"]
+                    and item["attempt"] == detail["target_attempt"]
+                ),
+                None,
+            )
+            if target is None or target["outcome"] != detail["outcome"]:
+                raise DwError("route resolution does not match its target outcome")
+            route["resolved"] = True
+            route["resolution_seq"] = offset
+            route["outcome"] = detail["outcome"]
+        elif kind == "checkpoint_reached":
+            if state != "active" or pending_checkpoint is not None:
+                raise DwError("checkpoint reached while the run cannot accept one")
+            pending_checkpoint = {"seq": offset, **dict(detail)}
+            checkpoints.append(pending_checkpoint)
+            terminal = str(detail["terminal"])
+            state = terminal if terminal != "none" else "awaiting-approval"
+        elif kind == "checkpoint_decided":
+            if state != "awaiting-approval" or pending_checkpoint is None:
+                raise DwError("checkpoint decision has no pending checkpoint")
+            for key in ("node_id", "checkpoint", "mode"):
+                if pending_checkpoint[key] != detail[key]:
+                    raise DwError("checkpoint decision does not match the pending checkpoint")
+            pending_checkpoint["decision"] = detail["decision"]
+            pending_checkpoint["decision_seq"] = offset
+            state = "active" if detail["decision"] == "approve" else "blocked"
+            pending_checkpoint = None
+        elif kind == "run_aborted":
+            if state not in {"active", "paused", "awaiting-approval"}:
+                raise DwError("invalid run_aborted transition")
+            generation += 1
+            if detail["generation"] != generation:
+                raise DwError("run_aborted generation is not monotonic")
+            state = "blocked"
+        elif kind == "run_terminal":
+            if state != "active":
+                raise DwError("run terminal handoff requires an active run")
+            state = str(detail["meaning"])
+        elif kind == "rail_advanced":
+            if state != "active":
+                raise DwError("rail fact advance requires an active run")
+            if not any(item["node_id"] == detail["node_id"] for item in active.values()):
+                raise DwError("rail fact advance has no active node claim")
+            fact_binding = dict(detail)
+        elif kind == "external_commit_observed":
+            if state not in {"awaiting-certification", "complete", "blocked"}:
+                raise DwError("external commit observation requires a terminal handoff")
+            external_commits.append({"seq": offset, **dict(detail)})
         else:
             raise DwError(f"unsupported event transition: {kind}")
 
@@ -763,6 +898,10 @@ def replay_run(
         },
     }
     wall_exhausted = budget_state["max_wall_seconds"]["used"] >= budget_state["max_wall_seconds"]["limit"]
+    node_order = {
+        str(node["id"]): index
+        for index, node in enumerate(compiled["score"]["nodes"])
+    }
     return {
         "kind": RUN_KIND,
         "schema_version": RUN_SCHEMA_VERSION,
@@ -779,8 +918,23 @@ def replay_run(
         "profiles": grant["profiles"],
         "workspace_modes": grant["workspace_modes"],
         "budgets": budget_state,
-        "active_claims": sorted(active.values(), key=lambda item: str(item["claim_id"])),
-        "completed_claims": sorted(completed.values(), key=lambda item: str(item["claim_id"])),
+        "active_claims": sorted(
+            active.values(),
+            key=lambda item: (node_order[str(item["node_id"])], int(item["attempt"])),
+        ),
+        "completed_claims": sorted(
+            completed.values(),
+            key=lambda item: (node_order[str(item["node_id"])], int(item["attempt"])),
+        ),
+        "node_receipts": sorted(
+            [item for values in receipts.values() for item in values],
+            key=lambda item: int(item["seq"]),
+        ),
+        "routes": routes,
+        "checkpoints": checkpoints,
+        "pending_checkpoint": pending_checkpoint,
+        "fact_binding": fact_binding,
+        "external_commits": external_commits,
         "ledger_events": len(events),
         "ledger_head": events[-1]["event_hash"],
         "expires_at": grant["expires_at"],
@@ -818,7 +972,191 @@ def _append_event_locked(
     return updated
 
 
-def _grant_freshness_issues(root: Path, grant: dict[str, object]) -> list[str]:
+def _validate_runtime_transition(
+    projection: dict[str, object],
+    compiled: dict[str, object],
+    event: str,
+    detail: dict[str, object],
+) -> None:
+    """Refuse a bad runtime event before any authoritative bytes are written."""
+    _event_document(
+        str(projection["run_id"]), int(projection["ledger_events"]), event,
+        detail, str(projection["ledger_head"]), _utc_now(),
+    )
+    nodes = {
+        str(node["id"]): node
+        for node in compiled["score"]["nodes"]  # type: ignore[index]
+    }
+    state = str(projection["state"])
+    active = {
+        str(item["claim_id"]): item for item in projection["active_claims"]
+    }
+    completed = list(projection["completed_claims"])
+    if event == "node_receipt":
+        claim = active.get(str(detail["claim_id"]))
+        if claim is None or any(
+            claim[key] != detail[key] for key in ("node_id", "attempt")
+        ):
+            raise DwError("node receipt does not match an active claim")
+        if detail["executor"] not in {"driver", "check", "rail", "collect"}:
+            raise DwError("node receipt names an unsupported executor")
+        if detail["state"] not in {
+            "running", "succeeded", "failed", "cancelled", "lost", "refused"
+        }:
+            raise DwError("node receipt has an unsupported state")
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(detail["receipt_hash"])):
+            raise DwError("node receipt hash is malformed")
+    elif event == "failure_routed":
+        source = next(
+            (
+                item for item in completed
+                if item["node_id"] == detail["node_id"]
+                and item["attempt"] == detail["attempt"]
+            ),
+            None,
+        )
+        if source is None or source["outcome"] == "succeeded":
+            raise DwError("failure route has no matching failed attempt")
+        if any(
+            item["node_id"] == detail["node_id"]
+            and item["attempt"] == detail["attempt"]
+            for item in projection["routes"]
+        ):
+            raise DwError("node failure already has a route receipt")
+        if detail["action"] not in {
+            "retry", "route", "approval", "pause", "abort", "exhausted"
+        }:
+            raise DwError("failure route has an unsupported action")
+        for key in ("attempt", "visit", "target_attempt"):
+            value = detail[key]
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 20:
+                raise DwError(f"failure route {key} is outside its finite bound")
+    elif event == "route_resolved":
+        route = next(
+            (
+                item for item in reversed(projection["routes"])
+                if item["node_id"] == detail["node_id"]
+                and item["attempt"] == detail["attempt"]
+                and item["target"] == detail["target"]
+                and item["target_attempt"] == detail["target_attempt"]
+                and item["visit"] == detail["visit"]
+            ),
+            None,
+        )
+        target = next(
+            (
+                item for item in completed
+                if item["node_id"] == detail["target"]
+                and item["attempt"] == detail["target_attempt"]
+            ),
+            None,
+        )
+        if route is None or route.get("resolved") or target is None:
+            raise DwError("route resolution does not match an open completed route")
+        if target["outcome"] != detail["outcome"]:
+            raise DwError("route resolution outcome does not match the target")
+    elif event == "checkpoint_reached":
+        if state != "active" or projection["pending_checkpoint"] is not None:
+            raise DwError("run cannot accept another checkpoint")
+        if detail["node_id"] not in nodes:
+            raise DwError("checkpoint source is absent from the immutable score")
+        if detail["mode"] not in {"normal", "failure"}:
+            raise DwError("checkpoint mode is unsupported")
+        if detail["terminal"] not in {
+            "none", "complete", "blocked", "cancelled", "awaiting-certification"
+        }:
+            raise DwError("checkpoint terminal meaning is unsupported")
+    elif event == "checkpoint_decided":
+        pending = projection["pending_checkpoint"]
+        if state != "awaiting-approval" or not isinstance(pending, dict):
+            raise DwError("checkpoint decision has no pending checkpoint")
+        if any(pending[key] != detail[key] for key in ("node_id", "checkpoint", "mode")):
+            raise DwError("checkpoint decision does not match the pending checkpoint")
+        if detail["decision"] not in {"approve", "reject"}:
+            raise DwError("checkpoint decision must be approve or reject")
+    elif event == "run_aborted":
+        if state not in {"active", "paused", "awaiting-approval"}:
+            raise DwError("run cannot be aborted from its current state")
+        if detail["generation"] != int(projection["control_generation"]) + 1:
+            raise DwError("run abort uses a stale control generation")
+    elif event == "run_terminal":
+        if state != "active":
+            raise DwError("terminal handoff requires an active run")
+        if detail["meaning"] not in {
+            "complete", "blocked", "cancelled", "awaiting-certification"
+        }:
+            raise DwError("terminal meaning is unsupported")
+    elif event == "rail_advanced":
+        claim = next(
+            (item for item in active.values() if item["node_id"] == detail["node_id"]),
+            None,
+        )
+        node = nodes.get(str(detail["node_id"]))
+        if state != "active" or claim is None or node is None or node["type"] != "rail":
+            raise DwError("rail fact advance has no matching active rail claim")
+        if detail["action"] != node["action"]:
+            raise DwError("rail fact advance action differs from the immutable score")
+    elif event == "external_commit_observed":
+        if state not in {"awaiting-certification", "complete", "blocked"}:
+            raise DwError("external commit observation requires terminal handoff")
+        if detail["relation"] not in {"fast-forward", "diverged", "rewritten"}:
+            raise DwError("external commit relation is unsupported")
+
+
+def record_runtime_event(
+    root: Path,
+    run_id: str,
+    event: str,
+    detail: dict[str, object],
+    expect: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Append one exact conductor/checkpoint receipt under the ledger lock."""
+    if event not in _RUNTIME_EVENTS:
+        raise DwError(f"unsupported conductor runtime event: {event}")
+    current = (now or _utc_now()).astimezone(timezone.utc).replace(microsecond=0)
+    with _store_lock(root):
+        projection = replay_run(root, run_id, now=current)
+        if str(expect or "") != projection["ledger_head"]:
+            raise DwError("stale conductor event token refused; no event was appended")
+        _run_path, _grant, compiled = _load_run_documents(root, run_id)
+        _validate_runtime_transition(projection, compiled, event, detail)
+        return _append_event_locked(root, run_id, projection, event, detail, current)
+
+
+def decide_checkpoint(
+    root: Path,
+    run_id: str,
+    decision: str,
+    expect: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    projection = replay_run(root, run_id, now=now)
+    pending = projection.get("pending_checkpoint")
+    if not isinstance(pending, dict):
+        raise DwError("run has no pending checkpoint")
+    return record_runtime_event(
+        root,
+        run_id,
+        "checkpoint_decided",
+        {
+            "node_id": pending["node_id"],
+            "checkpoint": pending["checkpoint"],
+            "mode": pending["mode"],
+            "decision": decision,
+        },
+        expect,
+        now=now,
+    )
+
+
+def _grant_freshness_issues(
+    root: Path,
+    grant: dict[str, object],
+    projection: dict[str, object] | None = None,
+) -> list[str]:
     """Re-observe local facts before dispatch/resume; never consult source score.
 
     The immutable compiled score remains authoritative for an active run, so a
@@ -827,7 +1165,14 @@ def _grant_freshness_issues(root: Path, grant: dict[str, object]) -> list[str]:
     crossing clones, branches, HEADs, workspace states, or story transitions.
     """
     root = root.resolve()
-    expected = grant["repository"]
+    checkpoint = projection.get("fact_binding") if projection else None
+    expected = grant["repository"] if not checkpoint else {
+        "id": checkpoint["repository_id"],
+        "branch": checkpoint["branch"],
+        "head": checkpoint["head"],
+        "index_tree": checkpoint["index_tree"],
+        "operation": checkpoint["operation"],
+    }
     observed = {
         "id": _repository_id(root),
         "branch": current_branch(root),
@@ -842,14 +1187,41 @@ def _grant_freshness_issues(root: Path, grant: dict[str, object]) -> list[str]:
     ]
     try:
         status_hash = _sha(_status_binding(build_status(root, str(grant["project"]))))
-        if status_hash != grant["status_hash"]:
+        expected_status = checkpoint["status_hash"] if checkpoint else grant["status_hash"]
+        if status_hash != expected_status:
             issues.append("Delivery Workbench status binding changed")
         story = _story_facts(root, str(grant["project"]), str(grant["story"]["id"]))  # type: ignore[index]
-        if canonical_json(story) != canonical_json(grant["story"]):
+        story_matches = (
+            _sha(story) == checkpoint["story_hash"]
+            if checkpoint else canonical_json(story) == canonical_json(grant["story"])
+        )
+        if not story_matches:
             issues.append("roadmap story facts changed")
     except DwError as exc:
         issues.append(f"bound project/story cannot be re-observed: {exc.message}")
     return issues
+
+
+def observed_fact_binding(
+    root: Path,
+    grant: dict[str, object],
+    node_id: str,
+    action: str,
+) -> dict[str, object]:
+    """Return the closed post-rail fact checkpoint stored in the ledger."""
+    root = root.resolve()
+    story = _story_facts(root, str(grant["project"]), str(grant["story"]["id"]))  # type: ignore[index]
+    return {
+        "node_id": node_id,
+        "action": action,
+        "repository_id": _repository_id(root),
+        "branch": current_branch(root),
+        "head": head_sha(root) or "none",
+        "index_tree": write_tree(root) or "unknown",
+        "operation": "rewrite" if in_rewrite_state(root) else "normal",
+        "status_hash": _sha(_status_binding(build_status(root, str(grant["project"])))),
+        "story_hash": _sha(story),
+    }
 
 
 def transition_run(
@@ -883,14 +1255,14 @@ def transition_run(
         valid = {
             "pause": state == "active" and projection["dispatch_allowed"],
             "resume": state == "paused" and not projection["expired"],
-            "revoke": state in {"active", "paused"},
-            "cancel": state in {"active", "paused"},
+            "revoke": state in {"active", "paused", "awaiting-approval"},
+            "cancel": state in {"active", "paused", "awaiting-approval"},
         }[action]
         if not valid:
             raise DwError(f"cannot {action} a run in state {state}")
         if action == "resume":
             _run_path, grant, _compiled = _load_run_documents(root, run_id)
-            freshness = _grant_freshness_issues(root, grant)
+            freshness = _grant_freshness_issues(root, grant, projection)
             if freshness:
                 raise DwError("run grant facts are stale: " + "; ".join(freshness))
         generation = int(projection["control_generation"]) + 1
@@ -926,7 +1298,7 @@ def claim_node(
         if not projection["dispatch_allowed"]:
             raise DwError("run grant does not currently permit dispatch")
         _run_path, grant, compiled = _load_run_documents(root, run_id)
-        freshness = _grant_freshness_issues(root, grant)
+        freshness = _grant_freshness_issues(root, grant, projection)
         if freshness:
             raise DwError("run grant facts are stale: " + "; ".join(freshness))
         node = next(

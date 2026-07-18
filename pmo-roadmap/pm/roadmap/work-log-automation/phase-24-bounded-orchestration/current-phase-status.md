@@ -45,7 +45,7 @@ quietly acquiring certification and commit authority.
   artifacts, writers use isolated worktrees, unsupported capabilities refuse,
   and outputs must meet declared schemas/conventions before fan-in
   (WLA-24-05).
-- [ ] A deterministic conductor schedules eligible nodes, consumes fresh
+- [x] A deterministic conductor schedules eligible nodes, consumes fresh
   `dw step` leases only for declared rail nodes, enforces exact check/failure/
   retry/cancellation policy and all budgets, recovers without duplicate work,
   and stops at named human checkpoints (WLA-24-06).
@@ -68,23 +68,26 @@ quietly acquiring certification and commit authority.
 | WLA-24-03 | Build the rich visual orchestration editor | done | [story-03-visual-orchestration-editor](./story-03-visual-orchestration-editor.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-24-04 | Authorize runs with grants and an append-only ledger | done | [story-04-run-grants-ledger](./story-04-run-grants-ledger.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-24-05 | Drive research and worker agents in isolated workspaces | done | [story-05-agent-drivers-workspaces](./story-05-agent-drivers-workspaces.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-24-06 | Schedule nodes, checks, failure routes, and recovery | backlog | [story-06-conductor-runtime](./story-06-conductor-runtime.md) | - |
+| WLA-24-06 | Schedule nodes, checks, failure routes, and recovery | done | [story-06-conductor-runtime](./story-06-conductor-runtime.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-24-07 | Expose and monitor runs across every surface | backlog | [story-07-run-control-interop](./story-07-run-control-interop.md) | - |
 | WLA-24-08 | Prove a packaged multi-agent orchestration | backlog | [story-08-packaged-orchestration-exam](./story-08-packaged-orchestration-exam.md) | - |
 
 ## Where we are
 
-Phase OPEN 5/8. WLA-24-05 has delivered the provider-neutral agent seam. A
-closed, hash-bound packet carries only the granted node, bounded prompt/context,
-validated artifacts, exact output conventions, capability/workspace request,
-deadline, and permanent exclusions; local logical profiles hold adapter/model/
-sandbox choices but reject credential fields. Deterministic fixture sessions
-prove concurrent research, validation-gated synthesis, persistent idempotency,
-truthful failure/interruption states, and distinct resource-locked writer
-worktrees whose scoped diffs never merge implicitly. An authenticated installed
-`codex exec` run separately proves the real read-only adapter while CI remains
-model-independent. WLA-24-06 is next: reconcile these claims, packets, checks,
-failure routes, budgets, and receipts through one deterministic conductor tick.
+Phase OPEN 6/8. WLA-24-06 has delivered the conductor that turns the score,
+grant, ledger, drivers, artifacts, and rails into coordination. One pure
+decision and one idempotent tick reconcile existing claims before work,
+schedule stable eligible sets under concurrency/resource/start/time/artifact
+budgets, validate fan-in, and persist exact driver/check/rail receipts. Command
+and built-in checks run in contained workspaces; finite retry→repair→source
+routes, approval, pause, abort, exhaustion, expiry, unsupported authority, and
+cancellation all become ledger facts. Crash recovery after claim, driver
+start, artifact collection, or check completion polls persisted execution
+instead of duplicating it. Bounded supervision calls only that tick, fresh
+`dw step` leases power declared rail nodes, and every green graph stops at
+`awaiting-certification`; an external commit is observed but never claimed as
+shipped. WLA-24-07 is next: expose these byte-equivalent score/run/control
+models and a legible visual Run view across CLI, MCP, HTTP, and Workbench.
 
 ## Active risks
 
@@ -114,6 +117,10 @@ failure routes, budgets, and receipts through one deterministic conductor tick.
 - 2026-07-17 - Keep profile-to-provider mapping in untracked local driver config and reject credential-shaped fields - scores remain portable policy and authentication remains harness-owned - WLA-24-05.
 - 2026-07-17 - Make `FixtureDriver` the deterministic oracle and a least-privilege non-interactive `codex exec` adapter the separate live proof - CI must not depend on model output, but the real seam must still be exercised - WLA-24-05.
 - 2026-07-17 - Put writer worktrees outside the operator tree, bind each to the granted HEAD, and produce only a validated scoped diff receipt - concurrent work cannot share a cwd and integration remains reviewed - WLA-24-05.
+- 2026-07-17 - Make one replayable `tick_run` the scheduler and recovery primitive, with bounded supervision only repeating it - every dispatch, refusal, route, checkpoint, and stop stays explainable from one algorithm - WLA-24-06.
+- 2026-07-17 - Bind repair routing to source attempt, visit, target, and target attempt, then retry the exact source only after a successful repair - red paths remain finite and cannot silently skip required work - WLA-24-06.
+- 2026-07-17 - Run exact command checks in external grant-HEAD or predecessor worktrees with a minimal environment and bounded filesystem snapshots - a failing check cannot dirty the operator tree or inherit agent/provider authority - WLA-24-06.
+- 2026-07-17 - Observe external commits without advancing `awaiting-certification` to a shipped state - orchestration can explain operator integration but cannot certify it - WLA-24-06.
 
 ## Decisions deferred
 

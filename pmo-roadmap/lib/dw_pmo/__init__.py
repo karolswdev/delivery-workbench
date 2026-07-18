@@ -210,6 +210,9 @@ from .orchestration_run import (
     RUN_SCHEMA_VERSION,
     build_run_plan,
     claim_node,
+    decide_checkpoint,
+    observed_fact_binding,
+    record_runtime_event,
     release_node_claim,
     replay_run,
     run_inventory,
@@ -228,6 +231,7 @@ from .orchestration_driver import (
     DriverManager,
     FixtureDriver,
     acquire_resource_groups,
+    artifact_inventory,
     build_work_packet,
     driver_capability,
     driver_config_path,
@@ -239,6 +243,19 @@ from .orchestration_driver import (
     validate_driver_config,
     validate_work_packet,
     write_driver_config,
+)
+from .orchestration_conductor import (
+    CHECK_RECEIPT_KIND,
+    CONDUCTOR_DECISION_KIND,
+    CONDUCTOR_SCHEMA_VERSION,
+    CONDUCTOR_SUPERVISION_KIND,
+    CONDUCTOR_TICK_KIND,
+    RAIL_RECEIPT_KIND,
+    CheckManager,
+    RailManager,
+    schedule_decision,
+    supervise_run,
+    tick_run,
 )
 
 __version__ = "1.14.0"

@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-17 (Phase 24 is open 5/8: provider-neutral drivers and isolated workspaces are complete).
+**Last updated:** 2026-07-17 (Phase 24 is open 6/8: the deterministic conductor and bounded checks/recovery are complete).
 **Current phase:** [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/current-phase-status.md).
-**Status:** active — WLA-24-06 is next: reconcile packets, checks, failure routes, and recovery through one deterministic conductor.
+**Status:** active — WLA-24-07 is next: byte-equivalent run control plus the visual live Run view across every surface.
 
 ## Vision
 
@@ -126,7 +126,7 @@ behavior is:
 
 ## Active extension
 
-Phase 24 (The conductor's score — visual orchestration) is active at 5/8.
+Phase 24 (The conductor's score — visual orchestration) is active at 6/8.
 Its completed architecture contract and exact score compiler turn the Phase-22 observation and
 Phase-23 one-step lease into a
 configurable coordination framework rather than a hidden loop. A rich
@@ -142,13 +142,18 @@ exact approval boundary binds that score to local repo/status/story facts,
 capabilities, workspaces, finite budgets, expiry, and permanent exclusions;
 an immutable grant plus hash-chained, replayable ledger owns lifecycle,
 exclusive claims, revocation, and budget counters. A deterministic conductor
-can now schedule through a delivered provider-neutral seam: capability-checked
+now schedules through the delivered provider-neutral seam: capability-checked
 logical profiles, bounded hash-bound packets, concurrent read-only research,
 validated synthesis inputs, persistent driver receipts, and distinct isolated
 writer worktrees whose scoped diffs require later review. Deterministic fixture
 and live Codex adapters prove the seam without making model output a CI oracle.
-The remaining conductor can schedule those packets plus checks and rail
-steps, receipts, and recovery. See the
+One replayable tick polls before retry, schedules stable eligible sets within
+grant concurrency/resource/budget limits, runs exact contained command and
+built-in checks, validates artifact fan-in, consumes fresh declared `dw step`
+leases, and records bounded retry/repair/approval/pause/abort/cancel routes.
+Crash boundaries recover without duplicate starts, and terminal handoff stays
+`awaiting-certification`. The remaining work is interoperable live run control
+and the visual Run view. See the
 [Phase 24 plan](./phase-24-bounded-orchestration/current-phase-status.md) and
 [visual orchestration contract](../../../../docs/orchestration.md).
 

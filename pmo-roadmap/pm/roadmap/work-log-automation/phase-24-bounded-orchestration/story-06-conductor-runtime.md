@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 24
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-24-04, WLA-24-05
 - **Unblocks:** WLA-24-07, WLA-24-08
 - **Owner:** unassigned
@@ -30,22 +30,22 @@ failure route, retry, pause, approval, cancellation, and recovery observable.
 
 ## Acceptance criteria
 
-- [ ] Replaying the same facts yields the same eligible set/order; a tick
+- [x] Replaying the same facts yields the same eligible set/order; a tick
   claims before dispatch, starts no more than granted concurrency, appends
   exact receipts, and returns without an unrecorded decision.
-- [ ] Research fan-out waits for validated outputs before synthesis fan-in;
+- [x] Research fan-out waits for validated outputs before synthesis fan-in;
   implementation waits for synthesis; required checks gate downstream nodes;
   missing/malformed/oversized outputs cannot be waved through.
-- [ ] Command checks run only exact score argv—never shell or agent output—in
+- [x] Command checks run only exact score argv—never shell or agent output—in
   contained workspaces with timeout/output/write snapshots; built-in
   file/schema/diff/rail checks share the same bounded receipt contract.
-- [ ] Every failure follows only its configured bounded retry, repair node,
+- [x] Every failure follows only its configured bounded retry, repair node,
   approval, pause, or abort route; planted retry/repair exhaustion, failed
   required check, unsupported elevation, expiry and budget exhaustion stop.
-- [ ] Restart after each dispatch/completion boundary replays and polls before
+- [x] Restart after each dispatch/completion boundary replays and polls before
   retry, never duplicates a claimed node, and cancellation revokes future
   scheduling before interrupting active drivers/checks.
-- [ ] Declared rail nodes consume a fresh exact `dw step` lease; stale action,
+- [x] Declared rail nodes consume a fresh exact `dw step` lease; stale action,
   certification, and commit remain non-started. Terminal handoff is
   `awaiting-certification`, not a shipped claim.
 
@@ -66,3 +66,12 @@ The directly callable tick is the test and recovery primitive. A supervised
 long-running conductor is repetition around that primitive, not a second
 scheduler. Success-graph cycles remain illegal; retries and repair visits are
 finite counters owned by policy.
+
+Delivered behavior keeps content out of the authoritative ledger: node
+receipts carry executor/session/check hashes and bounded outcomes, while
+packets, streams, artifacts, changed-path snapshots, and exact runner details
+remain in protected per-run files. Command checks execute in external
+grant-HEAD worktrees or the successful isolated writer workspace, so even a
+declared-but-failing write cannot dirty the operator tree. An external commit
+after handoff is observed as fast-forward/diverged/rewritten metadata and does
+not turn `awaiting-certification` into a shipped claim.

@@ -40,6 +40,11 @@ is added when an external consumer asks for one.
 | Agent work packet | `delivery-workbench-work-packet` v1 | `orchestration_driver.build_work_packet` |
 | Driver receipt | `delivery-workbench-driver-receipt` v1 | `orchestration_driver.DriverManager` |
 | Validated artifact receipt | `delivery-workbench-artifact-receipt` v1 | `orchestration_driver.validate_and_store_outputs` |
+| Conductor decision | `delivery-workbench-conductor-decision` v1 | `orchestration_conductor.schedule_decision` |
+| Conductor tick | `delivery-workbench-conductor-tick` v1 | `orchestration_conductor.tick_run` |
+| Conductor supervision | `delivery-workbench-conductor-supervision` v1 | `orchestration_conductor.supervise_run` |
+| Exact check receipt | `delivery-workbench-check-receipt` v1 | `orchestration_conductor.CheckManager` |
+| Rail-step receipt | `delivery-workbench-rail-receipt` v1 | `orchestration_conductor.RailManager` |
 | Roadmap context | `delivery-workbench-roadmap-context` v1 | `api.build_context_payload` |
 | Workbench envelope | `delivery-workbench-workbench-response` v1 | `workbench.envelope` (wraps every HTTP response) |
 | Board | `delivery-workbench-board` v1 | `board.board_model` |
@@ -60,6 +65,9 @@ is added when an external consumer asks for one.
 | `dw run start --plan <file> --expect <token> --approve --operator <id> --json` | `orchestration_run.start_run` | immutable local grant and initial hash-chained projection; no node dispatch |
 | `dw run list|show [<run>] --json` | `orchestration_run.run_inventory/replay_run` | authoritative ledger-derived projections; disposable cache is ignored |
 | `dw run pause|resume|revoke|cancel <run> --expect <ledger-head> --json` | `orchestration_run.transition_run` | one exact append-only lifecycle transition that immediately gates future dispatch |
+| `dw run tick <run> --json` | `orchestration_conductor.tick_run` | one replay/reconcile/route/schedule boundary with exact receipts and no hidden continuation |
+| `dw run supervise <run> --max-ticks <n> --interval <s> --json` | `orchestration_conductor.supervise_run` | bounded repetition over `tick_run`, stopping at terminal/pause/approval/no-progress |
+| `dw run checkpoint <run> approve|reject --expect <ledger-head> --json` | `orchestration_run.decide_checkpoint` | one fresh decision over the exact pending named checkpoint |
 | `dw context [project] [--compact] [--trace]` | `api.build_context_payload` | the stamped roadmap context |
 | `dw state --json` | `statefeed.build_state_feed` | the mission-control feed (`feed_schema` 1) |
 | `dw next [project] --json` | `api.next_story` | the next actionable story or `{next_story: null, parked}` |

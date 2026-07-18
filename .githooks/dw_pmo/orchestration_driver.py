@@ -1017,6 +1017,31 @@ def validate_and_store_outputs(
     return receipts
 
 
+def artifact_inventory(root: Path, run_id: str) -> list[dict[str, object]]:
+    """Re-verify every validated artifact receipt without returning content."""
+    artifacts = _run_dir(root, run_id) / "artifacts"
+    receipts: list[dict[str, object]] = []
+    if not artifacts.is_dir():
+        return receipts
+    for metadata in sorted(artifacts.glob("*/*/metadata.json"), key=lambda item: str(item)):
+        receipt = _exact_keys(
+            json.loads(metadata.read_text(encoding="utf-8")),
+            _ARTIFACT_KEYS,
+            "artifact receipt",
+        )
+        if receipt["run_id"] != run_id or not receipt["valid"]:
+            raise DwError("artifact inventory contains an invalid or cross-run receipt")
+        content = metadata.parent / "content"
+        if not content.is_file() or content.is_symlink():
+            raise DwError(f"artifact content is absent or unsafe: {receipt['name']}")
+        data = content.read_bytes()
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        if len(data) != receipt["bytes"] or digest != receipt["sha256"]:
+            raise DwError(f"artifact content does not match its receipt: {receipt['name']}")
+        receipts.append(receipt)
+    return receipts
+
+
 class DriverManager:
     """Receipt/idempotency wrapper around configured provider adapters."""
 
@@ -1108,7 +1133,7 @@ class DriverManager:
             if claim is None or not projection["dispatch_allowed"]:
                 return self._refusal(packet, profile, idempotency_key, "dispatch-refused")
             _run_path, grant, _compiled = _load_run_documents(self.root, run_id)
-            if _grant_freshness_issues(self.root, grant):
+            if _grant_freshness_issues(self.root, grant, projection):
                 return self._refusal(packet, profile, idempotency_key, "grant-stale")
             if datetime.now(timezone.utc) >= _parse_time(packet["deadline"], "packet deadline"):
                 return self._refusal(packet, profile, idempotency_key, "packet-expired")
@@ -1165,6 +1190,22 @@ class DriverManager:
         if not path.is_file():
             raise DwError(f"driver session not found: {session_id}")
         return path, json.loads(path.read_text(encoding="utf-8"))
+
+    def receipt_for_claim(
+        self, run_id: str, claim_id: str
+    ) -> dict[str, object] | None:
+        """Return the one persisted session receipt bound to a ledger claim."""
+        with self._lock(run_id):
+            matches = [
+                record["receipt"]
+                for _path, record in self._records(run_id)
+                if record.get("receipt", {}).get("claim_id") == claim_id
+            ]
+            if len(matches) > 1:
+                raise DwError("multiple driver sessions are bound to one node claim")
+            if not matches:
+                return None
+            return _exact_keys(matches[0], _RECEIPT_KEYS, "driver receipt")
 
     def poll(self, run_id: str, session_id: str) -> dict[str, object]:
         with self._lock(run_id):

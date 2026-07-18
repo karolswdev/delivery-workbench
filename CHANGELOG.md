@@ -103,6 +103,20 @@ states, separate writer worktrees, resource locks, diff-scope refusal, and no
 implicit integration. An authenticated installed `codex exec` smoke separately
 proves the real read-only adapter with explicit sandbox/no-approval/ephemeral/
 bounded-stream controls and records only a receipt plus artifact hash. The
+deterministic conductor now makes those components an orchestration runtime.
+One pure scheduling decision and one idempotent `dw run tick` reconcile
+existing claims before dispatch, order eligible nodes by the immutable score,
+enforce concurrency/resource/start/time/artifact budgets, and record every
+receipt and finite retry/repair/approval/pause/abort route. Exact command
+checks run without a shell or host-secret environment in contained check or
+writer worktrees with timeout, stream and write-snapshot bounds; file/schema/
+diff/rail built-ins use the same persistent receipt seam. Restart after claim,
+driver start, artifact collection, or check completion polls persisted work
+instead of duplicating it. Cancellation lands before interruption, stale rail
+leases never start, external commits are observed without a shipped claim,
+and all green paths stop at `awaiting-certification`. Bounded `run supervise`
+is only repetition over the same tick, while exact checkpoint decisions remain
+fresh-ledger-head acts. The
 detailed contract and eight evidence-gated slices are in
 [Phase 24](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/current-phase-status.md).
 

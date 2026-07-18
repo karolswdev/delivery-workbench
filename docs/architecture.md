@@ -224,8 +224,14 @@ The score itself has no authority: the delivered expiring/revocable grant and
 hash-chained ledger bind its exact compiled hash. The delivered driver seam
 then turns active claims into bounded provider-neutral work packets, validated
 artifacts, and distinct isolated writer worktrees through deterministic
-fixture and live Codex adapters. Deterministic conductor/check/recovery policy
-is the remaining runtime slice; the design and threat model are
+fixture and live Codex adapters. The delivered conductor replays those facts
+through one idempotent tick: poll-before-retry recovery, stable eligibility,
+concurrency/resource exclusion, exact contained command and built-in checks,
+validation-gated fan-in, finite retry/repair/approval/pause/abort routes, fresh
+`dw step` rail leases, cancellation-first interruption, budget/expiry stops,
+and an `awaiting-certification` terminal. `run supervise` is bounded repetition
+over the same tick, not a second scheduler. The visual/transport run monitor is
+the remaining interoperability slice; the design and threat model are
 [orchestration.md](./orchestration.md).
 
 Viewport rendering is smoke-tested headlessly at desktop and mobile

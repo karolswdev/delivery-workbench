@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -5783,6 +5784,774 @@ class OrchestrationDriverTest(unittest.TestCase):
         self.assertEqual(receipt["reason"], "dispatch-refused")
         self.assertEqual(fixture.starts, 0)
         self.assertEqual(paused["state"], "paused")
+
+
+class OrchestrationConductorTest(unittest.TestCase):
+    """WLA-24-06: deterministic ticks, checks, routes, and recovery."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-orch-conductor-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.root.mkdir()
+        self._cmd("git", "init", "-q", "-b", "main")
+        self._cmd("git", "config", "user.name", "Conductor Fixture")
+        self._cmd("git", "config", "user.email", "conductor@example.test")
+        subprocess.run(
+            [str(TESTS_DIR.parent / "bootstrap" / "new-project.sh"),
+             str(self.root), "sample", "Sample", "SMP"],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        subprocess.run(
+            [str(TESTS_DIR.parent / "install.sh"), str(self.root), "--skip-bootstrap"],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.dw = self.root / ".githooks" / "dw"
+        self._dw("story", "status", "sample", "0", "SMP-0-01", "in-progress")
+        self._dw("rider", "docs")
+        schema = self.root / "schemas" / "risk-register-v1.json"
+        schema.parent.mkdir()
+        schema.write_text(json.dumps({
+            "type": "object",
+            "required": ["risks"],
+            "properties": {"risks": {"type": "array", "items": {"type": "string"}}},
+            "additionalProperties": False,
+        }, indent=2) + "\n")
+        docs = self.root / "docs"
+        docs.mkdir(exist_ok=True)
+        (docs / "context.md").write_text("# Context\n\nBounded.\n")
+        self._commit("conductor fixture")
+        self.now = datetime.now(timezone.utc).replace(microsecond=0)
+        self.config = {
+            "kind": "delivery-workbench-driver-config",
+            "schema_version": 1,
+            "workspace_root": None,
+            "profiles": {
+                "research-readonly": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read", "network"],
+                    "workspace_modes": ["read-only"],
+                    "network": True,
+                },
+                "reasoning-readonly": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read"],
+                    "workspace_modes": ["read-only"],
+                },
+                "worker-write": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read", "repository-write"],
+                    "workspace_modes": ["isolated-worktree"],
+                },
+            },
+        }
+
+    def _cmd(self, *argv, check=True):
+        return subprocess.run(
+            list(argv), cwd=self.root, check=check, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+    def _dw(self, *argv, check=True):
+        return self._cmd(str(self.dw), *argv, check=check)
+
+    def _commit(self, message):
+        self._cmd("git", "add", ".")
+        self._cmd("git", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", message)
+
+    def _write_score(self, name, nodes, defaults=None):
+        score = {
+            "kind": "delivery-workbench-orchestration",
+            "schema_version": 1,
+            "slug": name,
+            "title": name.replace("-", " ").title(),
+            "project": "sample",
+            "defaults": defaults or {
+                "max_concurrency": 3,
+                "max_wall_seconds": 3600,
+                "max_agent_starts": 20,
+                "max_check_starts": 20,
+                "default_timeout_seconds": 60,
+                "max_artifact_bytes": 1000000,
+            },
+            "nodes": nodes,
+        }
+        path = self.root / "pm" / "orchestration" / f"{name}.json"
+        path.write_text(json.dumps(score, indent=2) + "\n", encoding="utf-8")
+        self._commit(f"score {name}")
+        return score
+
+    def _start(self, score="research-build-review", offset=3600):
+        import dw_pmo.orchestration_run as runs
+
+        plan = runs.build_run_plan(
+            self.root, score, "sample", "SMP-0-01",
+            issued_at=self.now, expires_at=self.now + timedelta(seconds=offset),
+        )
+        return runs.start_run(
+            self.root, plan, plan["start_token"], approved=True,
+            approved_by="conductor-fixture", now=self.now,
+        )
+
+    @staticmethod
+    def _responses(polls=2):
+        return {
+            "research-api": {
+                "polls": polls,
+                "outputs": {"api-findings": (
+                    "# Findings\nBounded.\n\n# Sources\n"
+                    "[Primary](https://example.test/api)\n\n# Risks\nNone.\n"
+                )},
+            },
+            "research-risks": {
+                "polls": polls,
+                "outputs": {"risk-register": {"risks": ["bounded"]}},
+            },
+            "synthesize": {
+                "polls": 1,
+                "outputs": {"implementation-brief": (
+                    "# Scope\nSmall.\n\n# Decisions\nExact.\n\n"
+                    "# Acceptance checks\nGreen.\n"
+                )},
+            },
+            "implement": {
+                "polls": 1,
+                "workspace_files": {"src/feature.py": "VALUE = 1"},
+            },
+            "repair": {
+                "polls": 1,
+                "workspace_files": {"tests/test_repair.py": "def test_repair(): assert True"},
+            },
+        }
+
+    def test_pure_schedule_is_stable_and_respects_resource_groups(self):
+        import dw_pmo.orchestration as orch
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+
+        projection = self._start()
+        compiled = orch.compile_score_path(
+            self.root / "pm" / "orchestration" / "research-build-review.json"
+        )
+        artifacts = drivers.artifact_inventory(self.root, projection["run_id"])
+        first = conductor.schedule_decision(compiled, projection, artifacts)
+        second = conductor.schedule_decision(compiled, projection, artifacts)
+        self.assertEqual(first, second)
+        self.assertEqual(
+            [item["node_id"] for item in first["scheduled"]],
+            ["research-api", "research-risks"],
+        )
+        self.assertFalse(first["starts_work"])
+        self.assertFalse(first["writes_events"])
+
+        self._write_score("locked-roots", [
+            {"id": "one", "type": "check", "resource_groups": ["repo"],
+             "runner": {"kind": "builtin", "name": "rail-status"}},
+            {"id": "two", "type": "check", "resource_groups": ["repo"],
+             "runner": {"kind": "builtin", "name": "rail-status"}},
+            {"id": "handoff", "type": "approval", "needs": ["one", "two"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ])
+        locked = self._start("locked-roots")
+        compiled = orch.compile_score_path(
+            self.root / "pm" / "orchestration" / "locked-roots.json"
+        )
+        decision = conductor.schedule_decision(compiled, locked, [])
+        self.assertEqual([item["node_id"] for item in decision["scheduled"]], ["one"])
+
+    def test_full_fanout_check_repair_retry_and_terminal_handoff(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        projection = self._start()
+        fixture = drivers.FixtureDriver(self._responses(polls=3))
+        checks = {"starts": 0}
+
+        def check_runner(_argv, _cwd, _timeout, _stdout, _stderr, _env):
+            checks["starts"] += 1
+            return 1 if checks["starts"] == 1 else 0
+
+        first = conductor.tick_run(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, check_runner=check_runner, now=self.now,
+        )
+        active = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(
+            [item["node_id"] for item in active["active_claims"]],
+            ["research-api", "research-risks"],
+        )
+        self.assertEqual(first["active_claims"], 2)
+        for _ in range(20):
+            result = conductor.tick_run(
+                self.root, projection["run_id"], driver_config=self.config,
+                adapters={"fixture": fixture}, check_runner=check_runner, now=self.now,
+            )
+            if result["terminal"]:
+                break
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(final["state"], "awaiting-certification")
+        self.assertEqual(checks["starts"], 2)
+        self.assertEqual(
+            [item["action"] for item in final["routes"] if item["node_id"] == "tests"],
+            ["route"],
+        )
+        self.assertTrue(final["routes"][0]["resolved"])
+        self.assertEqual(final["routes"][0]["outcome"], "succeeded")
+        self.assertEqual(final["checkpoints"][-1]["node_id"], "human-handoff")
+        ledger = (
+            self.root / ".git" / "pmo-orchestration" / "runs"
+            / projection["run_id"] / "ledger.jsonl"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("pytest", ledger)
+        self.assertNotIn("Bounded.", ledger)
+        self.assertNotIn('"argv"', ledger)
+
+    def test_invalid_artifact_retries_then_exhausts_without_fan_in(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        projection = self._start()
+        responses = self._responses(polls=0)
+        responses["research-risks"] = {
+            "polls": 0, "outputs": {"risk-register": "not-json"},
+        }
+        fixture = drivers.FixtureDriver(responses)
+        for _ in range(6):
+            result = conductor.tick_run(
+                self.root, projection["run_id"], driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+            if result["state"] == "blocked":
+                break
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(final["state"], "blocked")
+        risk_attempts = [
+            item for item in final["completed_claims"]
+            if item["node_id"] == "research-risks"
+        ]
+        self.assertEqual([item["attempt"] for item in risk_attempts], [1, 2])
+        self.assertEqual(
+            [item["action"] for item in final["routes"] if item["node_id"] == "research-risks"],
+            ["retry", "exhausted"],
+        )
+        self.assertFalse(any(
+            item["node_id"] == "synthesize" for item in final["active_claims"] + final["completed_claims"]
+        ))
+
+    def test_failed_repair_follows_its_abort_policy(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        projection = self._start()
+        responses = self._responses(polls=0)
+        responses["repair"] = {"polls": 0, "state": "failed", "reason": "failed"}
+        fixture = drivers.FixtureDriver(responses)
+
+        def failing_check(_argv, _cwd, _timeout, _stdout, _stderr, _env):
+            return 1
+
+        for _ in range(10):
+            result = conductor.tick_run(
+                self.root, projection["run_id"], driver_config=self.config,
+                adapters={"fixture": fixture}, check_runner=failing_check,
+                now=self.now,
+            )
+            if result["state"] == "blocked":
+                break
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(final["state"], "blocked")
+        self.assertEqual(
+            [(item["node_id"], item["action"]) for item in final["routes"]],
+            [("tests", "route"), ("repair", "abort")],
+        )
+
+    def test_exact_command_check_is_contained_and_write_scope_fails(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+
+        self._write_score("contained-check", [
+            {
+                "id": "exact", "type": "check",
+                "runner": {
+                    "kind": "command",
+                    "argv": ["python3", "-c", "open('rogue.txt','w').write('x')"],
+                    "cwd": ".", "timeout_seconds": 30,
+                    "output_bytes": 1000, "writes": [],
+                },
+                "expect": {"exit_code": 0},
+                "on_failure": {"action": "abort"},
+            },
+            {"id": "handoff", "type": "approval", "needs": ["exact"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ])
+        projection = self._start("contained-check")
+        first = conductor.tick_run(self.root, projection["run_id"], now=self.now)
+        self.assertFalse((self.root / "rogue.txt").exists())
+        self.assertTrue(first["progressed"])
+        second = conductor.tick_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(second["state"], "blocked")
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        receipt = next(
+            item for item in final["node_receipts"] if item["node_id"] == "exact"
+        )
+        self.assertEqual(receipt["reason"], "write-scope")
+        check_root = self.root.parent / ".delivery-workbench-checks"
+        self.assertTrue(any(path.name == "rogue.txt" for path in check_root.rglob("rogue.txt")))
+
+    def test_builtin_file_schema_diff_and_rail_checks_share_receipts(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        (self.root / "risk.json").write_text('{"risks": []}\n')
+        self._write_score("builtin-checks", [
+            {"id": "file", "type": "check",
+             "runner": {"kind": "builtin", "name": "file-exists", "path": "risk.json"}},
+            {"id": "schema", "type": "check",
+             "runner": {"kind": "builtin", "name": "json-schema", "path": "risk.json",
+                        "schema": "schemas/risk-register-v1.json"}},
+            {"id": "rails", "type": "check",
+             "runner": {"kind": "builtin", "name": "rail-status"}},
+            {"id": "handoff", "type": "approval", "needs": ["file", "schema", "rails"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ])
+        projection = self._start("builtin-checks")
+        for _ in range(3):
+            result = conductor.tick_run(self.root, projection["run_id"], now=self.now)
+            if result["terminal"]:
+                break
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(final["state"], "awaiting-certification")
+        self.assertTrue(all(item["outcome"] == "succeeded" for item in final["completed_claims"]))
+
+        self._write_score("builtin-diff", [
+            {"id": "implement", "type": "agent", "role": "implementation",
+             "profile": "worker-write", "capabilities": ["repository-read", "repository-write"],
+             "workspace": "isolated-worktree", "outputs": [{
+                 "name": "implementation-diff", "format": "git-diff", "path": "workspace",
+                 "allowed_paths": ["src/**"],
+             }]},
+            {"id": "scope", "type": "check", "needs": ["implement"],
+             "runner": {"kind": "builtin", "name": "diff-scope", "path": "workspace",
+                        "allowed_paths": ["src/**"]}},
+            {"id": "handoff", "type": "approval", "needs": ["scope"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ])
+        diff_run = self._start("builtin-diff")
+        fixture = drivers.FixtureDriver({
+            "implement": {"polls": 0, "workspace_files": {"src/feature.py": "VALUE = 1"}},
+        })
+        for _ in range(4):
+            result = conductor.tick_run(
+                self.root, diff_run["run_id"], driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+            if result["terminal"]:
+                break
+        diff_final = runs.replay_run(self.root, diff_run["run_id"], now=self.now)
+        self.assertEqual(diff_final["state"], "awaiting-certification")
+        scope = next(item for item in diff_final["completed_claims"] if item["node_id"] == "scope")
+        self.assertEqual(scope["outcome"], "succeeded")
+
+    def test_crash_after_driver_start_recovers_without_duplicate_launch(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        self._write_score("crash-agent", [
+            {
+                "id": "research-api", "type": "agent", "role": "research",
+                "profile": "research-readonly", "capabilities": ["repository-read", "network"],
+                "workspace": "read-only", "outputs": [{
+                    "name": "api-findings", "format": "markdown",
+                    "path": "artifacts/api.md",
+                    "required_sections": ["Findings", "Sources", "Risks"],
+                    "citations": "required",
+                }],
+            },
+            {"id": "handoff", "type": "approval", "needs": ["research-api"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ])
+        projection = self._start("crash-agent")
+        first_fixture = drivers.FixtureDriver(self._responses(polls=2))
+
+        def crash(name, _detail):
+            if name == "after-driver-start":
+                raise RuntimeError("planted crash")
+
+        with self.assertRaisesRegex(RuntimeError, "planted"):
+            conductor.tick_run(
+                self.root, projection["run_id"], driver_config=self.config,
+                adapters={"fixture": first_fixture}, now=self.now,
+                boundary_hook=crash,
+            )
+        crashed = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(len(crashed["active_claims"]), 1)
+        self.assertEqual(first_fixture.starts, 1)
+        recovered_fixture = drivers.FixtureDriver()
+        for _ in range(5):
+            result = conductor.tick_run(
+                self.root, projection["run_id"], driver_config=self.config,
+                adapters={"fixture": recovered_fixture}, now=self.now,
+            )
+            if result["terminal"]:
+                break
+        self.assertEqual(recovered_fixture.starts, 0)
+        self.assertEqual(result["state"], "awaiting-certification")
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(len([
+            item for item in final["completed_claims"] if item["node_id"] == "research-api"
+        ]), 1)
+
+        collected_run = self._start("crash-agent", offset=3601)
+        collected_fixture = drivers.FixtureDriver(self._responses(polls=0))
+
+        def crash_after_collect(name, _detail):
+            if name == "after-collect":
+                raise RuntimeError("collect boundary")
+
+        with self.assertRaisesRegex(RuntimeError, "collect boundary"):
+            conductor.tick_run(
+                self.root, collected_run["run_id"], driver_config=self.config,
+                adapters={"fixture": collected_fixture}, now=self.now,
+                boundary_hook=crash_after_collect,
+            )
+        self.assertEqual(collected_fixture.starts, 1)
+        recovered_after_collect = drivers.FixtureDriver()
+        conductor.tick_run(
+            self.root, collected_run["run_id"], driver_config=self.config,
+            adapters={"fixture": recovered_after_collect}, now=self.now,
+        )
+        self.assertEqual(recovered_after_collect.starts, 0)
+        collected_projection = runs.replay_run(
+            self.root, collected_run["run_id"], now=self.now
+        )
+        self.assertEqual(len(collected_projection["completed_claims"]), 1)
+
+    def test_crash_after_check_recovers_without_rerunning_command(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+
+        self._write_score("crash-check", [
+            {"id": "exact", "type": "check",
+             "runner": {"kind": "command", "argv": ["python3", "-m", "compileall", "-q", "."],
+                        "cwd": ".", "timeout_seconds": 30, "output_bytes": 1000, "writes": []}},
+            {"id": "handoff", "type": "approval", "needs": ["exact"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ])
+        projection = self._start("crash-check")
+        counter = {"starts": 0}
+
+        def runner(_argv, _cwd, _timeout, _stdout, _stderr, _env):
+            counter["starts"] += 1
+            return 0
+
+        def crash(name, _detail):
+            if name == "after-check":
+                raise RuntimeError("check boundary")
+
+        with self.assertRaisesRegex(RuntimeError, "check boundary"):
+            conductor.tick_run(
+                self.root, projection["run_id"], check_runner=runner,
+                now=self.now, boundary_hook=crash,
+            )
+        self.assertEqual(counter["starts"], 1)
+        result = conductor.tick_run(
+            self.root, projection["run_id"], check_runner=runner, now=self.now,
+        )
+        self.assertEqual(counter["starts"], 1)
+        self.assertEqual(result["state"], "awaiting-certification")
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(len(final["completed_claims"]), 1)
+
+    def test_cancellation_precedes_interrupt_and_expiry_starts_nothing(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        projection = self._start()
+        fixture = drivers.FixtureDriver(self._responses(polls=5))
+        conductor.tick_run(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        active = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        cancelled = runs.transition_run(
+            self.root, projection["run_id"], "cancel", active["ledger_head"],
+            reason="operator cancel", now=self.now,
+        )
+        conductor.tick_run(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(final["state"], "cancelled")
+        self.assertEqual(final["active_claims"], [])
+        self.assertTrue(all(
+            item["outcome"] == "cancelled" for item in final["completed_claims"]
+        ))
+        ledger = json.loads((
+            self.root / ".git" / "pmo-orchestration" / "runs"
+            / projection["run_id"] / "ledger.jsonl"
+        ).read_text().splitlines()[cancelled["ledger_events"] - 1])
+        self.assertEqual(ledger["event"], "run_cancelled")
+
+        self._write_score("expiry", [
+            {"id": "handoff", "type": "approval", "prompt": "Review",
+             "terminal": "awaiting-certification"},
+        ])
+        expired = self._start("expiry", offset=1)
+        result = conductor.tick_run(
+            self.root, expired["run_id"], now=self.now + timedelta(seconds=2)
+        )
+        self.assertEqual(result["state"], "blocked")
+        self.assertEqual(runs.replay_run(
+            self.root, expired["run_id"], now=self.now + timedelta(seconds=2)
+        )["completed_claims"], [])
+
+    def test_cancellation_interrupts_a_live_contained_check(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+
+        self._write_score("cancel-check", [
+            {"id": "slow", "type": "check",
+             "runner": {"kind": "command",
+                        "argv": ["python3", "-c", "import time; time.sleep(30)"],
+                        "cwd": ".", "timeout_seconds": 60,
+                        "output_bytes": 1000, "writes": []}},
+        ])
+        projection = self._start("cancel-check")
+        child = subprocess.Popen(
+            [sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+             "--root", str(self.root), "run", "tick", projection["run_id"], "--json"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.addCleanup(lambda: child.kill() if child.poll() is None else None)
+        record = None
+        sessions = (
+            self.root / ".git" / "pmo-orchestration" / "runs"
+            / projection["run_id"] / "check-sessions"
+        )
+        for _ in range(100):
+            paths = list(sessions.glob("*.json")) if sessions.is_dir() else []
+            if paths:
+                candidate = json.loads(paths[0].read_text())
+                if candidate.get("pid"):
+                    record = candidate
+                    break
+            time.sleep(0.02)
+        self.assertIsNotNone(record, "check process did not publish its interrupt receipt")
+        active = runs.replay_run(self.root, projection["run_id"])
+        cancelled = runs.transition_run(
+            self.root, projection["run_id"], "cancel", active["ledger_head"],
+            reason="stop live check",
+        )
+        result = conductor.tick_run(self.root, projection["run_id"])
+        self.assertEqual(result["state"], "cancelled")
+        self.assertEqual(result["active_claims"], 0)
+        _stdout, _stderr = child.communicate(timeout=5)
+        final = runs.replay_run(self.root, projection["run_id"])
+        self.assertEqual(final["completed_claims"][0]["outcome"], "cancelled")
+        updated = json.loads(next(sessions.glob("*.json")).read_text())
+        self.assertEqual(updated["state"], "cancelled")
+        cancel_event = next(
+            index for index, line in enumerate((
+                self.root / ".git" / "pmo-orchestration" / "runs"
+                / projection["run_id"] / "ledger.jsonl"
+            ).read_text().splitlines())
+            if json.loads(line)["event"] == "run_cancelled"
+        )
+        receipt_event = next(
+            index for index, line in enumerate((
+                self.root / ".git" / "pmo-orchestration" / "runs"
+                / projection["run_id"] / "ledger.jsonl"
+            ).read_text().splitlines())
+            if json.loads(line)["event"] == "node_receipt"
+            and json.loads(line)["detail"]["state"] == "cancelled"
+        )
+        self.assertLess(cancel_event, receipt_event)
+        self.assertGreater(cancelled["ledger_events"], active["ledger_events"])
+
+    def test_unsupported_authority_and_start_budget_stop(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        projection = self._start()
+        restricted = json.loads(json.dumps(self.config))
+        restricted["profiles"]["research-readonly"]["capabilities"] = ["repository-read"]
+        restricted["profiles"]["research-readonly"]["network"] = False
+        fixture = drivers.FixtureDriver(self._responses(polls=0))
+        conductor.tick_run(
+            self.root, projection["run_id"], driver_config=restricted,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        stopped = conductor.tick_run(
+            self.root, projection["run_id"], driver_config=restricted,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        self.assertEqual(stopped["state"], "blocked")
+        replayed = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        api = next(item for item in replayed["completed_claims"] if item["node_id"] == "research-api")
+        self.assertEqual(api["receipts"][-1]["reason"], "unsupported-authority")
+        self.assertEqual(fixture.starts, 1, "only the capability-compatible risk agent may start")
+
+        defaults = {
+            "max_concurrency": 2,
+            "max_wall_seconds": 3600,
+            "max_agent_starts": 1,
+            "max_check_starts": 5,
+            "default_timeout_seconds": 60,
+            "max_artifact_bytes": 100000,
+        }
+        self._write_score("agent-budget", [
+            {"id": "first", "type": "agent", "role": "research",
+             "profile": "reasoning-readonly", "capabilities": ["repository-read"],
+             "workspace": "read-only", "outputs": []},
+            {"id": "second", "type": "agent", "role": "research",
+             "profile": "reasoning-readonly", "capabilities": ["repository-read"],
+             "workspace": "read-only", "outputs": []},
+            {"id": "handoff", "type": "approval", "needs": ["first", "second"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ], defaults=defaults)
+        budget_run = self._start("agent-budget")
+        budget_fixture = drivers.FixtureDriver({"first": {"polls": 0}, "second": {"polls": 0}})
+        conductor.tick_run(
+            self.root, budget_run["run_id"], driver_config=self.config,
+            adapters={"fixture": budget_fixture}, now=self.now,
+        )
+        exhausted = conductor.tick_run(
+            self.root, budget_run["run_id"], driver_config=self.config,
+            adapters={"fixture": budget_fixture}, now=self.now,
+        )
+        self.assertEqual(exhausted["state"], "blocked")
+        self.assertEqual(budget_fixture.starts, 1)
+
+    def test_failure_pause_and_named_approval_are_ledger_states(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+
+        def failing(_argv, _cwd, _timeout, _stdout, _stderr, _env):
+            return 1
+
+        self._write_score("pause-check", [
+            {"id": "exact", "type": "check",
+             "runner": {"kind": "command", "argv": ["python3", "--version"],
+                        "cwd": ".", "timeout_seconds": 30, "output_bytes": 1000,
+                        "writes": []},
+             "on_failure": {"action": "pause"}},
+        ])
+        paused_run = self._start("pause-check")
+        conductor.tick_run(
+            self.root, paused_run["run_id"], check_runner=failing, now=self.now
+        )
+        paused = conductor.tick_run(
+            self.root, paused_run["run_id"], check_runner=failing, now=self.now
+        )
+        self.assertEqual(paused["state"], "paused")
+        self.assertEqual(
+            runs.replay_run(self.root, paused_run["run_id"], now=self.now)["routes"][0]["action"],
+            "pause",
+        )
+
+        self._write_score("approval-check", [
+            {"id": "exact", "type": "check",
+             "runner": {"kind": "command", "argv": ["python3", "--version"],
+                        "cwd": ".", "timeout_seconds": 30, "output_bytes": 1000,
+                        "writes": []},
+             "on_failure": {"action": "approval", "checkpoint": "check-review"}},
+        ])
+        approval_run = self._start("approval-check")
+        conductor.tick_run(
+            self.root, approval_run["run_id"], check_runner=failing, now=self.now
+        )
+        waiting = conductor.tick_run(
+            self.root, approval_run["run_id"], check_runner=failing, now=self.now
+        )
+        self.assertEqual(waiting["state"], "awaiting-approval")
+        projection = runs.replay_run(self.root, approval_run["run_id"], now=self.now)
+        self.assertEqual(projection["pending_checkpoint"]["checkpoint"], "check-review")
+        rejected = runs.decide_checkpoint(
+            self.root, approval_run["run_id"], "reject", projection["ledger_head"],
+            now=self.now,
+        )
+        self.assertEqual(rejected["state"], "blocked")
+
+    def test_rail_uses_fresh_step_lease_and_stale_action_never_starts(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+        from dw_pmo.step import build_step
+
+        current = build_step(self.root, "sample")
+        self.assertTrue(current["applicable"])
+        action = current["action"]["id"]
+        self._write_score("rail-step", [
+            {"id": "advance", "type": "rail", "action": action,
+             "on_failure": {"action": "abort"}},
+            {"id": "handoff", "type": "approval", "needs": ["advance"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ])
+        projection = self._start("rail-step")
+        for _ in range(3):
+            result = conductor.tick_run(self.root, projection["run_id"], now=self.now)
+            if result["terminal"]:
+                break
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        self.assertEqual(final["state"], "awaiting-certification")
+        self.assertIsNotNone(final["fact_binding"])
+        self.assertEqual(final["fact_binding"]["action"], action)
+
+        # New committed facts get a new grant; the old action is now stale.
+        next_action = build_step(self.root, "sample")["action"]["id"]
+        stale = "start-story" if next_action != "start-story" else "continue-story"
+        self._write_score("stale-rail", [
+            {"id": "advance", "type": "rail", "action": stale,
+             "on_failure": {"action": "abort"}},
+        ])
+        stale_run = self._start("stale-rail")
+        conductor.tick_run(self.root, stale_run["run_id"], now=self.now)
+        stopped = conductor.tick_run(self.root, stale_run["run_id"], now=self.now)
+        self.assertEqual(stopped["state"], "blocked")
+        replayed = runs.replay_run(self.root, stale_run["run_id"], now=self.now)
+        receipt = next(item for item in replayed["node_receipts"] if item["node_id"] == "advance")
+        self.assertEqual(receipt["reason"], "stale-action")
+
+    def test_installed_cli_tick_and_bounded_supervision_share_the_core(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+
+        self._write_score("cli-conductor", [
+            {"id": "health", "type": "check",
+             "runner": {"kind": "builtin", "name": "rail-status"}},
+            {"id": "handoff", "type": "approval", "needs": ["health"],
+             "prompt": "Review", "terminal": "awaiting-certification"},
+        ])
+        projection = self._start("cli-conductor")
+        supervised = self._dw(
+            "run", "supervise", projection["run_id"], "--max-ticks", "5",
+            "--interval", "0", "--json",
+        )
+        document = json.loads(supervised.stdout)
+        self.assertEqual(document["kind"], "delivery-workbench-conductor-supervision")
+        self.assertEqual(document["state"], "awaiting-certification")
+        self.assertLessEqual(document["ticks"], 5)
+        shown = json.loads(self._dw(
+            "run", "show", projection["run_id"], "--json"
+        ).stdout)
+        self.assertEqual(shown["ledger_head"], document["after_head"])
+        (self.root / "operator-note.txt").write_text("operator-owned commit\n")
+        self._commit("external operator commit")
+        observed = conductor.tick_run(self.root, projection["run_id"])
+        self.assertEqual(observed["state"], "awaiting-certification")
+        replayed = runs.replay_run(self.root, projection["run_id"])
+        self.assertEqual(replayed["external_commits"][-1]["relation"], "fast-forward")
+        self.assertNotEqual(
+            replayed["external_commits"][-1]["previous_head"],
+            replayed["external_commits"][-1]["head"],
+        )
 
 
 class AgentHooksTest(unittest.TestCase):

@@ -7,7 +7,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 ### work-log-automation
 
 - Current phase: 24 (phase-24-bounded-orchestration)
-- Next story: WLA-24-06 — Schedule nodes, checks, failure routes, and recovery [backlog]
+- Next story: WLA-24-07 — Expose and monitor runs across every surface [backlog]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

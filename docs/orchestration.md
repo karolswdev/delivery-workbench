@@ -313,8 +313,9 @@ The inspector configures the complete rule surface:
   `awaiting-certification`.
 
 The first three views and their shared score-save boundary are delivered. The
-Run view remains an explicit runtime placeholder until the grant and conductor
-slices supply authoritative state. Graph and JSON round-trip losslessly.
+grant, driver, and deterministic conductor cores now supply authoritative run
+state; the visual Run view remains the WLA-24-07 interoperability slice rather
+than reconstructing policy in the browser. Graph and JSON round-trip losslessly.
 Saving uses preview→diff→apply through a dedicated contained score mutation;
 the browser never owns validation policy. A score with compiler errors cannot
 be saved or authorized. Presets are ordinary scores copied into the editor,
@@ -382,7 +383,7 @@ stateDiagram-v2
   running --> cancelled: revoke / cancel
   running --> expired: time or budget exhausted
   waiting_agent --> interrupted: driver lost / cancellation timeout
-  awaiting_certification --> complete: external gated commit observed
+  awaiting_certification --> awaiting_certification: external commit observed (no shipped claim)
 ```
 
 The conductor derives the current projection from an append-only ledger. One
@@ -400,6 +401,16 @@ The long-running conductor is only repeated ticks with a stop signal and
 backoff. The tick remains directly callable and idempotent for tests,
 recovery, CLI operation, and hosted schedulers. It never follows an unrecorded
 decision.
+
+This runtime is delivered as one shared core: `schedule_decision` is pure;
+`dw run tick <run>` performs one reconciliation/dispatch boundary; and
+`dw run supervise <run> --max-ticks N --interval S` is finite repetition over
+that same tick. `dw run checkpoint <run> approve|reject --expect <ledger-head>`
+is the exact-token human decision. A tick first polls or recovers existing
+claims, then records configured failure routes, then schedules in immutable
+score order. A repair receipt binds source attempt, visit, repair node and
+repair attempt; successful repair re-enables exactly the failed source, while
+retry/visit/start budgets turn exhaustion into a recorded `blocked` stop.
 
 ## Agents, research, and isolated workspaces
 
@@ -440,8 +451,11 @@ deterministic CI never depends on a model response.
 Check nodes are either built-in predicates or exact tokenized argv from the
 reviewed score. There is no shell-string mode, interpolation, command emitted
 by an agent, unbounded cwd, or inherited secret environment. Command checks
-run inside the declared workspace with timeout, output cap, cancellation, and
-before/after Git snapshots. Any writes outside declared paths fail the check.
+run in either the successful isolated predecessor workspace or a separate
+grant-HEAD check worktree—never the operator tree—with timeout, stream caps,
+a minimal environment, and bounded before/after filesystem snapshots. Any
+writes outside declared paths fail the check. Built-in file, JSON-schema,
+diff-scope, and rail-status checks use the same persistent receipt contract.
 
 Output validation is deterministic before downstream scheduling:
 
@@ -473,6 +487,10 @@ plan.json                  immutable reviewed start plan
 score.json                 immutable compiled score used by this run
 ledger.jsonl               hash-chained append-only authoritative run ledger
 artifacts/<node>/<name>    bounded declared outputs + metadata
+driver-sessions/            persistent provider-neutral session receipts
+check-sessions/             exact runner hashes, bounds, outcomes, snapshots
+rail-sessions/              fresh dw-step lease/result receipts
+workspaces/<node>/           isolated writer workspace identities
 projection.json            disposable derived cache
 ```
 
@@ -482,7 +500,9 @@ transcripts, source content, credentials, or raw check output. Detailed
 streams remain bounded local artifacts and appear only on explicit inspection.
 
 One cross-process ledger lock, stale ledger-head acts, single-use start tokens,
-and unique node-attempt/idempotency claims make dispatch at-most-once. Deleting
+and unique node-attempt/idempotency claims make dispatch at-most-once. Driver,
+check, and rail executors persist an idempotent local receipt before a retry;
+an uncertain started check/rail becomes `lost` rather than running twice. Deleting
 or corrupting `projection.json` changes nothing because every read replays the
 immutable grant and authoritative hash chain; truncated, corrupt, or forked
 ledgers fail closed. Pause, revoke, and cancel stop future dispatch immediately
@@ -498,7 +518,7 @@ and never deletes the audit trail.
 One core owns score compilation, grant planning, run projection, tick, and
 cancellation. Adapters remain thin:
 
-- CLI: `dw orchestration list|show|validate|simulate`, `dw run plan|start|list|show|pause|resume|revoke|cancel`;
+- CLI: `dw orchestration list|show|validate|simulate`, `dw run plan|start|list|show|pause|resume|revoke|cancel|tick|supervise|checkpoint`;
 - MCP: pure score/run reads plus exact-token run acts, never provider argv;
 - HTTP: versioned envelopes for the visual editor and run monitor;
 - Workbench: Design, Validate, and Run views over those HTTP models; and

@@ -44,6 +44,7 @@ try:
         build_status,
         build_step,
         build_run_plan,
+        decide_checkpoint,
         contract_digest,
         compile_score_path,
         discover_phases,
@@ -85,6 +86,8 @@ try:
         score_inventory,
         simulate_score,
         start_run,
+        supervise_run,
+        tick_run,
         transition_run,
         run_inventory,
         validate_score,
@@ -303,6 +306,54 @@ def command_run_transition(args: argparse.Namespace) -> int:
         args.run_command,
         args.expect or "",
         reason=getattr(args, "reason", "") or "",
+    )
+    if args.json:
+        print(json.dumps(projection, sort_keys=True))
+    else:
+        print(_render_run(projection), end="")
+    return 0
+
+
+def command_run_tick(args: argparse.Namespace) -> int:
+    result = tick_run(args.root, args.run_id)
+    if args.json:
+        print(json.dumps(result, sort_keys=True))
+    else:
+        print(
+            f"{result['run_id']}\t{result['state']}\t"
+            f"progressed={str(result['progressed']).lower()}\t"
+            f"active={result['active_claims']}"
+        )
+        for action in result["actions"]:
+            detail = action.get("node_id") or action.get("reason") or "-"
+            outcome = action.get("outcome") or action.get("state") or action.get("route") or "-"
+            print(f"{action['action']}\t{detail}\t{outcome}")
+    return 0
+
+
+def command_run_supervise(args: argparse.Namespace) -> int:
+    result = supervise_run(
+        args.root,
+        args.run_id,
+        max_ticks=args.max_ticks,
+        interval_seconds=args.interval,
+    )
+    if args.json:
+        print(json.dumps(result, sort_keys=True))
+    else:
+        print(
+            f"{result['run_id']}\t{result['state']}\t"
+            f"ticks={result['ticks']}\tprogressed={result['progressed_ticks']}"
+        )
+    return 0
+
+
+def command_run_checkpoint(args: argparse.Namespace) -> int:
+    projection = decide_checkpoint(
+        args.root,
+        args.run_id,
+        args.decision,
+        args.expect,
     )
     if args.json:
         print(json.dumps(projection, sort_keys=True))
@@ -986,6 +1037,34 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument("--reason", required=True, help="bounded content-safe reason")
         command.add_argument("--json", action="store_true")
         command.set_defaults(func=command_run_transition)
+
+    run_tick = run_sub.add_parser(
+        "tick",
+        help="replay, reconcile, and dispatch one deterministic conductor tick",
+    )
+    run_tick.add_argument("run_id")
+    run_tick.add_argument("--json", action="store_true")
+    run_tick.set_defaults(func=command_run_tick)
+
+    run_supervise = run_sub.add_parser(
+        "supervise",
+        help="bounded repetition around the same idempotent conductor tick",
+    )
+    run_supervise.add_argument("run_id")
+    run_supervise.add_argument("--max-ticks", type=int, default=100)
+    run_supervise.add_argument("--interval", type=float, default=1.0)
+    run_supervise.add_argument("--json", action="store_true")
+    run_supervise.set_defaults(func=command_run_supervise)
+
+    run_checkpoint = run_sub.add_parser(
+        "checkpoint",
+        help="apply one exact approve/reject decision to the pending checkpoint",
+    )
+    run_checkpoint.add_argument("run_id")
+    run_checkpoint.add_argument("decision", choices=("approve", "reject"))
+    run_checkpoint.add_argument("--expect", required=True, help="fresh ledger_head from run show")
+    run_checkpoint.add_argument("--json", action="store_true")
+    run_checkpoint.set_defaults(func=command_run_checkpoint)
 
     projects = sub.add_parser("projects", help="list roadmap projects")
     projects.set_defaults(func=command_projects)
