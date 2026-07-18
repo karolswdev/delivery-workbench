@@ -1,6 +1,6 @@
 # Delivery Workbench — solution overview
 
-**Assessment date:** 2026-07-17. **Product version assessed:** v1.14.0.
+**Assessment date:** 2026-07-18. **Product version assessed:** v1.14.0.
 This is the map of the whole solution. Exact subsystem protocols remain
 owned by the linked specialist documents.
 
@@ -32,7 +32,7 @@ while preserving manual certification and commit. Its contracts are
 [status-briefing.md](./status-briefing.md) and
 [deliberate-step.md](./deliberate-step.md).
 
-Phase 24 now addresses the next connective layer: Delivery Workbench **can
+Phase 24 closes the next connective layer: Delivery Workbench **can
 coordinate** a configured multi-agent run. The product center is a rich visual
 editor for an exact score—research agents, dependencies, context, typed output
 conventions, checks, fail routes, budgets, concurrency, approvals, and
@@ -242,15 +242,15 @@ have dedicated smoke tests described in [distribution.md](./distribution.md).
 ## Current evidence snapshot
 
 The following is a dated verification snapshot, not an evergreen claim.
-On 2026-07-16 in this checkout:
+On 2026-07-18 in this checkout:
 
 - version v1.14.0 is single-sourced across Python, CLI, plugin manifest,
   formula, and the latest published changelog heading; Phases 22 and 23 are
   recorded under an explicitly unpublished changelog section;
-- phases 0–23 are closed; Phase 24 is active at its architecture-contract
-  story; the orientation and deliberate-step advances are evidence-backed but
-  not published as a new release;
-- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 230 tests on the local
+- phases 0–24 are closed; the orientation, deliberate-step, and visual
+  orchestration advances are evidence-backed but not published as a new
+  release;
+- `python3 pmo-roadmap/tests/dw-core-tests.py` passed 297 tests on the local
   interpreter and on the declared Python 3.9 floor;
 - every shipped shell parsed and passed ShellCheck; every locally runnable
   non-Homebrew CI integration passed, including gate parity, contribution,
@@ -258,19 +258,27 @@ On 2026-07-16 in this checkout:
   workbench explorer, upgrade-from-v1.5.0, history-range fixtures, demo assets,
   credentials, and work-log lifecycle;
 - the package smoke built sdist and wheel on Python 3.9, installed the wheel,
-  then completed both the guided-status and deliberate-step fresh-consumer
-  loops through verified gated commits; the second used seven separately
-  authorized CLI/MCP/HTTP leases and proved same-action stale refusal with no
-  child or event;
-- the workbench viewport smoke rendered eight views at desktop and mobile
-  sizes plus attention and ambiguous-project states (20 renders);
+  completed the guided-status and deliberate-step loops, and then passed the
+  packaged multi-agent orchestration exam through an operator-certified,
+  history-verified fixture commit;
+- that exam started two research agents concurrently, recovered a planted
+  crash with zero duplicate starts, validated typed and citation-bound fan-in,
+  ran implementation in an isolated worktree, followed one configured
+  fail→repair→recheck route, exercised six compiler and five runtime red cases,
+  proved CLI/MCP/HTTP/Run-view parity, and stopped at
+  `awaiting-certification`;
+- a provisioned authenticated live Codex specimen separately passed the real
+  read-only driver seam while keeping the operator tree clean;
+- the workbench viewport smoke rendered 14 views at desktop and mobile sizes
+  plus attention and ambiguous-project states (32 renders), including active,
+  repair, and terminal orchestration views;
 - Telegram architecture fitness passed 10 tests and its interface suite
   passed 147 tests in a Python 3.9 + Pillow environment (one Python-3.11-only
   `tomllib` lock test abstained on the declared floor);
 - all 23 HoldSpeak pack tests passed in the same pinned v0.4.0/no-runtime-
   dependencies plus NumPy environment provisioned by CI;
 - `dw check work-log-automation` passed; and
-- the captured pre-close `dw verify --all` sweep verified 128 gated commits
+- the pre-close `dw verify --all` sweep verified 136 gated commits
   and skipped 17 pre-epoch commits under the documented epoch policy.
 
 The Homebrew smoke deliberately refused to disturb the already installed
@@ -380,7 +388,7 @@ before process start. CLI, MCP, HTTP, the browser, and generated riders share
 that boundary, and the wheel-installed exit exam proves it through a real
 story.
 
-### 10. Multi-agent coordination had no exact, inspectable score — addressed through WLA-24-07
+### 10. Multi-agent coordination had no exact, inspectable score — addressed through Phase 24
 
 The system could expose state, correlate sessions, steer an armed agent, and
 apply one fresh rail step, but it could not describe a whole coordinated run:
@@ -393,15 +401,17 @@ run grant. The conductor can interpret only compiled rules and structured
 driver/check receipts; agent harnesses retain model/sandbox authority, and
 certification/commit remain explicit.
 
-Seven delivered slices now cover that complete local product loop: the exact
+Eight delivered slices now cover that complete local product loop: the exact
 score/compiler, rich Design/Validate/JSON editor, hash-bound grants and
 ledger, provider-neutral drivers and isolated worktrees, deterministic
 conductor/check/repair runtime, and byte-equivalent CLI/MCP/HTTP/Workbench Run
 surfaces. The Run tab is the explanation and consent center: it shows live
 node attempts, research/work sessions, fail checks, typed artifact lineage,
 budgets, routes, checkpoints, and hash-chained receipts, but refreshes and
-opens streams only when explicitly requested. The remaining Phase 24 work is
-the packaged whole-score exit exam, not another capability layer.
+opens streams only when explicitly requested. The final wheel-installed exam
+proved the whole score—including parallel research, isolated implementation,
+fail/repair, restart, red paths, live-driver seam, and human terminal handoff—
+as one coherent capability.
 
 ## Phase 22: delivered product step
 
@@ -460,7 +470,7 @@ work. All five slices are implemented, evidence-backed, and closed. The
 [Phase 23 final summary](../pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/final-summary.md)
 holds the measured matrix and decision record.
 
-## Phase 24: active product step
+## Phase 24: delivered product step
 
 Phase 24 is **The conductor's score — visual orchestration**. Its eight slices
 are:
@@ -481,8 +491,10 @@ are:
    `awaiting-certification` handoff and gated commit.
 
 The phase does not make a score executable by existence. Saving and validating
-remain pure; starting needs a separate exact grant. The active plan is
-[Phase 24](../pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/current-phase-status.md).
+remain pure; starting needs a separate exact grant. All eight slices are
+implemented, evidence-backed, and closed. The measured outcome and audit trail
+are in the
+[Phase 24 final summary](../pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/final-summary.md).
 
 ## Where to go deeper
 

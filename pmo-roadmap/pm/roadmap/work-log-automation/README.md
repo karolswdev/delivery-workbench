@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-17 (Phase 24 is open 7/8: exact run interop and the rich live Run view are complete).
-**Current phase:** [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/current-phase-status.md).
-**Status:** active — WLA-24-08 is next: the wheel-installed multi-agent orchestration exit exam and phase close.
+**Last updated:** 2026-07-18 (Phase 24 closed 8/8 with the packaged multi-agent orchestration exam green).
+**Current phase:** none.
+**Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed.
 
 ## Vision
 
@@ -93,7 +93,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 21 | Phase 20's interactive surface — screenshots, buttons, per-person consent — reaches every channel as v1.14.0, with the same machinery as the last six releases. | done | [phase-21-landing-v1-14-0](./phase-21-landing-v1-14-0/) |
 | 22 | Give every human and agent one deterministic, versioned answer for repository readiness, current work, and the next safe action, shared across every supported surface. | done | [phase-22-agent-briefing](./phase-22-agent-briefing/) |
 | 23 | Let a human or agent deliberately apply exactly one current, allowlisted recommendation without copy/paste, stale intent, arbitrary execution, certification, or commit automation. | done | [phase-23-deliberate-step](./phase-23-deliberate-step/) |
-| 24 | Delivery Workbench can coordinate a bounded multi-agent run from an exact visually authored score and revocable grant: research, dependencies, context, outputs, checks, failures, budgets, recovery, and human checkpoints. | in-progress | [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/) |
+| 24 | Delivery Workbench can coordinate a bounded multi-agent run from an exact visually authored score and revocable grant: research, dependencies, context, outputs, checks, failures, budgets, recovery, and human checkpoints. | done | [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/) |
 
 ## Operating cadence
 
@@ -124,9 +124,9 @@ behavior is:
 - `dw` performs routine roadmap inspection, scaffolding, evidence-backed status
   updates, phase closing, drift reporting, and checks.
 
-## Active extension
+## Latest extension
 
-Phase 24 (The conductor's score — visual orchestration) is active at 7/8.
+Phase 24 (The conductor's score — visual orchestration) is closed at 8/8.
 Its completed architecture contract and exact score compiler turn the Phase-22 observation and
 Phase-23 one-step lease into a
 configurable coordination framework rather than a hidden loop. A rich
@@ -158,9 +158,14 @@ the live graph, attempts, agent/check sessions, explicit bounded streams,
 artifact lineage, budgets, failure routes, checkpoints, controls, and ledger
 without polling or acquiring shell/certification/commit authority. A
 real-process fixture crosses each applying adapter, and 32 desktop/mobile
-renders cover active, repair, and terminal states. The remaining work is the
-wheel-installed whole-score exit exam and phase close. See the
-[Phase 24 plan](./phase-24-bounded-orchestration/current-phase-status.md) and
+renders cover active, repair, and terminal states. The Python-3.9-built wheel
+exam then proved the entire configured score: two concurrent research agents,
+typed/cited fan-in, synthesis, isolated implementation, planted crash recovery
+with zero duplicate starts, one exact fail→repair→recheck route, six compiler
+and five runtime red cases, operator-only certification/commit, and terminal
+`awaiting-certification`. A separate authenticated live Codex specimen proved
+the real driver seam. See the
+[Phase 24 final summary](./phase-24-bounded-orchestration/final-summary.md) and
 [visual orchestration contract](../../../../docs/orchestration.md).
 
 Phase 23 (The handrail — one deliberate step) is closed at 5/5. It keeps

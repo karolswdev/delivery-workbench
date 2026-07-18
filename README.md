@@ -23,6 +23,13 @@ server.
 Humans and agents use the same commands. Agents can also use the
 included MCP server.
 
+Delivery Workbench can also coordinate a bounded multi-agent delivery run.
+Its visual orchestration editor configures the exact graph—research and worker
+agents, dependencies, context, typed output conventions, checks, failure and
+repair routes, budgets, approvals, and terminal handoff. A separate revocable
+grant authorizes the compiled score; the conductor executes only those rules
+and leaves certification and commit with the operator.
+
 ## Install
 
 ```bash
@@ -138,7 +145,7 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 | `dw status [project] [--json]` | One read-only readiness verdict and the next safe action across rails, workspace, and roadmap. |
 | `dw step [project] [--json]` | Preview one state-bound action; `--json --apply --expect <token>` returns its bounded result after at most one allowlisted argv, never certification or commit. |
 | `dw orchestration list\|show\|validate\|simulate` | Compile and explain exact `pm/orchestration/*.json` scores without starting agents or writing run state. |
-| `dw run plan\|start\|list\|show\|pause\|resume\|revoke\|cancel` | Preview a score/status/story-bound local grant, explicitly authorize it once, and replay/control its hash-chained ledger without dispatching provider work. |
+| `dw run plan\|start\|list\|show\|view\|preview\|tick\|supervise\|pause\|resume\|revoke\|cancel\|checkpoint\|stream` | Preview and authorize an exact score-bound grant, conduct its bounded agent/check work, inspect its hash-chained run, and apply only fresh-token controls. |
 | `dw next` | The next actionable story. Exit 0 found, 2 nothing to do. |
 | `dw context --compact` | JSON snapshot of the roadmap: issues, warnings, next story, trace paths. |
 | `dw check` | Lints roadmap structure and evidence content. Greppable errors, exit 1 on issues. |
@@ -176,11 +183,12 @@ every supported CLI, HTTP, and MCP surface is
 
 `dw install` also vendors `.githooks/dw-mcp` and writes an entry into
 the repo's `.mcp.json`, which Claude Code and other MCP clients pick
-up automatically. The server exposes fifteen tools backed by the same
-code as the CLI: orientation (`dw_status`, `dw_step`, `dw_context`, `dw_next`, `dw_check`,
-`dw_doctor`), browse (`dw_board`, `dw_holds`, `dw_story_show`),
-verification (`dw_verify`, `dw_gate`), and guarded mutations
-(`dw_step_apply`, `dw_story_status`, `dw_evidence_capture`, `dw_contract_new`).
+up automatically. The server exposes 31 tools backed by the same
+code as the CLI: orientation, browse, verification, guarded roadmap
+mutations, pure orchestration reads/previews, and exact-token run acts. Run
+tools accept selectors, run ids, bounded parameters, and fresh intent tokens;
+they never accept score bodies, provider configuration, prompts, or check
+commands from the caller.
 
 An agent can take a story from backlog to done through tool calls
 alone, with the same refusals the CLI gives. Two operations are
@@ -218,7 +226,12 @@ coordination scores: typed agent/check/rail/approval/collect nodes, parallel
 research and fan-in, prompts and context, output conventions, checks and red
 failure routes, finite budgets, and terminal handoffs. Design, Validate, and
 canonical JSON share one compiler; save/delete is a stale-safe
-preview→diff→apply act and never grants or starts a run.
+preview→diff→apply act and never grants or starts a run. The Run tab replays an
+authorized execution on the same graph: attempts, agent/check sessions, typed
+artifact lineage, budgets, repair routes, checkpoints, ledger receipts, and
+explicit pause/resume/revoke/cancel decisions. Refresh and stream opens are
+deliberate; there is no hidden poller, generic terminal, certification button,
+or commit shortcut.
 
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 

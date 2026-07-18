@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 24
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-24-01 through WLA-24-07
 - **Unblocks:** phase close and release decision
 - **Owner:** unassigned
@@ -30,20 +30,20 @@ consumer repository.
 
 ## Acceptance criteria
 
-- [ ] A fresh installed Workbench authors/loads the complete score and proves
+- [x] A fresh installed Workbench authors/loads the complete score and proves
   visual graph↔canonical JSON/hash parity; malformed cycle, dangling output,
   shell check, path escape, unbounded retry, and unsupported capability refuse.
-- [ ] One exact grant runs two research agents concurrently, validates their
+- [x] One exact grant runs two research agents concurrently, validates their
   differently typed/citation-bound outputs, synthesizes them, and gives a
   write agent an isolated worktree and exact implementation brief.
-- [ ] A planted check failure follows only the configured repair route once,
+- [x] A planted check failure follows only the configured repair route once,
   then passes; restart during a claimed node produces zero duplicate starts;
   expiry, budget exhaustion, stale rail action, and cancel stop truthfully.
-- [ ] Every preview/projection/receipt is equal over CLI/MCP/HTTP; Workbench
+- [x] Every preview/projection/receipt is equal over CLI/MCP/HTTP; Workbench
   desktop/mobile views expose all rules and state without a generic shell or
   hidden loop; one provisioned live supported agent validates the real driver
   seam separately from deterministic fixture proof.
-- [ ] The run stops at `awaiting-certification`. Only the fixture operator
+- [x] The run stops at `awaiting-certification`. Only the fixture operator
   reviews evidence, certifies the contract, and commits; trailers/archive/
   `dw verify --all`, full matrix, Phase-24 final summary, and clean next-run
   handoff are green.
@@ -62,3 +62,10 @@ The deterministic fixture driver is the CI oracle because it can prove exact
 scheduling, failure, recovery, and receipt behavior. A real supported agent
 run proves the integration seam and usability, but variable model output must
 not be translated into a flaky or unverifiable release gate.
+
+The closeout retained two failed full-matrix receipts before the green package
+receipt: first the final summary linked to evidence before capture created it;
+then Python 3.9 exposed a one-second clock race in the adapter-parity test. The
+test now holds one explicit observation instant across direct, MCP, and HTTP
+reads and passed 5/5 repetitions on each interpreter before the complete
+dual-floor/product/integration matrix advanced to its final lifecycle check.

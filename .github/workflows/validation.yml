@@ -109,6 +109,7 @@ jobs:
         run: |
           python3 --version
           python3 -m py_compile pmo-roadmap/bin/dw pmo-roadmap/bin/dw-workbench pmo-roadmap/bin/dw-mcp
+          python3 -m py_compile pmo-roadmap/tests/orchestration-packaged-exam.py
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
           python3 pmo-roadmap/tests/dw-core-tests.py
 
@@ -237,6 +238,7 @@ jobs:
       - name: Python syntax check
         run: |
           python3 -m py_compile pmo-roadmap/bin/dw pmo-roadmap/bin/dw-workbench pmo-roadmap/bin/dw-mcp
+          python3 -m py_compile pmo-roadmap/tests/orchestration-packaged-exam.py
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
 
       - name: dw core unit tests

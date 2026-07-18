@@ -152,6 +152,13 @@ DW_GUIDED_CLI="$DW" "$SCRIPT_DIR/guided-status-loop.sh" \
 DW_STEP_CLI="$DW" "$SCRIPT_DIR/deliberate-step-loop.sh" \
   || fail "packaged deliberate-step loop failed"
 
+# Phase-24 exit exam: the same wheel installs a second fresh consumer and
+# proves visual-score parity, crash-safe parallel research, typed fan-in,
+# isolated implementation, check→repair→recheck, runtime red paths, all four
+# interop surfaces, terminal human handoff, and an operator-only gated commit.
+"$PY" "$SCRIPT_DIR/orchestration-packaged-exam.py" --dw "$DW" \
+  || fail "packaged multi-agent orchestration exam failed"
+
 # ── defer-to-repo rule ─────────────────────────────────────────────
 # Replace the vendored CLI with a marker; the global dw run inside the
 # repo must produce the marker (i.e. it exec'd the vendored copy).

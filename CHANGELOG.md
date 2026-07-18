@@ -116,9 +116,32 @@ instead of duplicating it. Cancellation lands before interruption, stale rail
 leases never start, external commits are observed without a shipped claim,
 and all green paths stop at `awaiting-certification`. Bounded `run supervise`
 is only repetition over the same tick, while exact checkpoint decisions remain
-fresh-ledger-head acts. The
-detailed contract and eight evidence-gated slices are in
-[Phase 24](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/current-phase-status.md).
+fresh-ledger-head acts.
+
+The run is now a first-class interoperable product surface. CLI JSON, MCP
+`structuredContent`, and HTTP `data` carry byte-equivalent plans, projections,
+views, previews, receipts, and bounded streams. Applying adapters accept only
+identifiers, bounded decisions/reasons, and fresh tokens—not prompts, score
+semantics, provider configuration, or check argv. The Workbench Run tab
+replays the authoritative graph with attempts, parallel agent/check sessions,
+typed artifact lineage, budgets, fail/repair routes, checkpoints, hash-chain
+timeline, and explicit pause/resume/revoke/cancel controls. It refreshes and
+opens streams only on request and exposes no generic terminal, retry override,
+elevation, certification, or commit shortcut.
+
+The packaged closeout proves the entire framework from a Python-3.9-built
+wheel in a fresh consumer. Two research agents start concurrently; a planted
+crash recovers with zero duplicate dispatch; typed and citation-bound outputs
+fan into synthesis; implementation runs in its own worktree; a planted check
+failure follows exactly one configured repair route and passes recheck; six
+compiler and five runtime red cases refuse; CLI/MCP/HTTP/Run-view documents
+stay equal; and the conductor stops at `awaiting-certification`. Only the
+fixture operator reviews, certifies, and commits, after which `dw verify --all`
+and `dw check` pass. A separately provisioned authenticated Codex specimen
+proves the real driver seam without turning model output into the CI oracle.
+The full 297-test dual-Python, 32-render browser, distribution, optional-host,
+agent, docs, and history matrix is recorded in the
+[Phase 24 final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/final-summary.md).
 
 This section is release-ready input, not a publication claim: the package
 remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula

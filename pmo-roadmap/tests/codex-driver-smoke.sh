@@ -84,7 +84,7 @@ JSON
 git -C "$REPO" add .
 git -C "$REPO" -c core.hooksPath=/dev/null commit -q -m "live driver fixture"
 
-PYTHONPATH="$REPO/.githooks" CODEX_BIN="$CODEX_BIN" REPO="$REPO" \
+env PYTHONPATH="$REPO/.githooks" CODEX_BIN="$CODEX_BIN" REPO="$REPO" \
   python3 - <<'PY'
 import json
 import os

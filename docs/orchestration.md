@@ -1,7 +1,7 @@
 # Visual orchestration contract
 
-**Status:** Phase 24 score contract and compiler delivered; editor and runtime
-implementation continue through WLA-24-03 to WLA-24-08.
+**Status:** Phase 24 delivered and evidence-backed: visual editor, compiler,
+grant, ledger, drivers, conductor, interoperable Run view, and packaged exam.
 **Product claim:** Delivery Workbench **can coordinate** a bounded multi-agent
 delivery run when an operator has configured an exact orchestration score and
 authorized a grant over that score. It does not claim that every repository
@@ -550,9 +550,9 @@ cross-machine bearer capability.
 | Remote caller expands capability | Grant is local/non-portable; adapters accept ids/tokens, never driver or shell argv |
 | “Run complete” becomes “safe to commit” | Terminal is `awaiting-certification`; gate certification and commit remain explicit |
 
-## Phase 24 proof standard
+## Phase 24 proof standard — fulfilled
 
-The phase is complete only when a wheel-installed fresh consumer can:
+The wheel-installed fresh-consumer exam proves that Delivery Workbench can:
 
 1. use the visual editor to configure a score with parallel research agents,
    synthesis, implementation, exact output conventions, deterministic checks,
@@ -569,11 +569,20 @@ The phase is complete only when a wheel-installed fresh consumer can:
    automatic checkbox edit or commit, then pass the existing gated history
    chain after the fixture operator completes those acts.
 
-The deterministic fixture-driver exam is mandatory CI proof. A live supported
-agent-harness run is complementary product evidence, not a substitute for the
-reproducible contract suite.
+The deterministic fixture-driver exam is the mandatory CI proof. It passed
+with two parallel research agents, validated fan-in, isolated implementation,
+one fail→repair→recheck route, crash recovery with zero duplicate starts, and
+an `awaiting-certification` terminal. A separately provisioned live Codex run
+passed the real driver seam without making variable model output the oracle.
+The complete record is in the
+[Phase 24 final summary](../pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/final-summary.md).
 
-## Deliberately deferred from v1
+## Deliberate authority boundaries and possible later extensions
+
+These are not missing prerequisites for orchestration. The local visual
+coordination framework is complete. They are either intentionally excluded
+authority or materially different deployment models that need their own
+operator decision:
 
 - Arbitrary cyclic graphs; bounded retry/repair policy covers the recoverable
   cases without turning scheduling into an undecidable workflow language.
@@ -582,5 +591,7 @@ reproducible contract suite.
 - Cross-repository write transactions and automatic merge/conflict resolution.
 - Automatic evidence adequacy judgment, contract certification, commit,
   push, release, or deployment.
-- A central hosted control plane holding repository authority. The local core
-  is designed so one can coordinate it later without moving the consent root.
+- A central hosted control plane holding repository authority. The delivered
+  CLI/MCP/HTTP contracts already permit remote clients to coordinate a local
+  runner; moving the repository consent root to a service would be a separate
+  security and operations product decision.

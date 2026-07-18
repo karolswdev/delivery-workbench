@@ -1,6 +1,6 @@
 # Phase 24 - The conductor's score — visual orchestration
 
-**Last updated:** 2026-07-17.
+**Last updated:** 2026-07-18.
 
 ## Goal
 
@@ -53,7 +53,7 @@ quietly acquiring certification and commit authority.
   exact-token acts; the visual Run view makes agents, checks, artifacts,
   attempts, failures, budgets, approvals, cancellation, and terminal handoff
   legible without accepting provider or shell argv (WLA-24-07).
-- [ ] A wheel-installed fresh consumer visually configures and executes a
+- [x] A wheel-installed fresh consumer visually configures and executes a
   parallel-research→synthesis→implementation→check/repair score through
   restart and red paths, then stops at `awaiting-certification`; the fixture
   operator alone certifies/commits and the full matrix/history stays green
@@ -70,27 +70,28 @@ quietly acquiring certification and commit authority.
 | WLA-24-05 | Drive research and worker agents in isolated workspaces | done | [story-05-agent-drivers-workspaces](./story-05-agent-drivers-workspaces.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-24-06 | Schedule nodes, checks, failure routes, and recovery | done | [story-06-conductor-runtime](./story-06-conductor-runtime.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-24-07 | Expose and monitor runs across every surface | done | [story-07-run-control-interop](./story-07-run-control-interop.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-24-08 | Prove a packaged multi-agent orchestration | backlog | [story-08-packaged-orchestration-exam](./story-08-packaged-orchestration-exam.md) | - |
+| WLA-24-08 | Prove a packaged multi-agent orchestration | done | [story-08-packaged-orchestration-exam](./story-08-packaged-orchestration-exam.md) | [evidence-story-08](./evidence-story-08.md) |
 
 ## Where we are
 
-Phase OPEN 7/8. WLA-24-07 has made coordination a coherent product surface,
-not a Python-only runtime. CLI JSON, MCP `structuredContent`, and HTTP `data`
-now carry the same compiler, plan, projection, tick, act-preview, Run-view,
-and explicit stream documents. Applying adapters accept identifiers and fresh
-intent-bound tokens—not score semantics, prompts, driver config, or check
-argv—and stale or altered acts refuse before dispatch or ledger mutation. The
-Workbench Run tab replays the authoritative graph with attempts, research and
-worker sessions, fail-check receipts and bounded streams, typed artifact
-lineage, budgets, failure/repair routes, checkpoints, hash-chain timeline,
-and exact preview→confirm controls. It refreshes only on request, exposes no
-generic terminal, and offers no manual retry, elevation, certification, or
-commit shortcut. Mission control receives content-safe summaries only. A
-real-process installed-fixture walk crossed start/tick/pause/resume/checkpoint
-over HTTP, MCP, and CLI, deliberate cross-adapter stale replay, and terminal
-handoff; 32 Firefox renders cover active, repair, and terminal Run states at
-desktop and mobile sizes. WLA-24-08 is the remaining exit exam: prove the
-whole packaged multi-agent score and close the phase.
+Phase CLOSED 8/8. Delivery Workbench can coordinate a configured bounded
+multi-agent run as one coherent product: rich visual score authoring, pure
+compile/simulation, exact grant, append-only ledger, provider-neutral agents,
+isolated workspaces, typed/cited artifacts, deterministic scheduling, exact
+checks and repair routes, crash recovery, budgets, controls, and human
+terminal handoff. CLI JSON, MCP `structuredContent`, HTTP `data`, and the
+Workbench Run view expose the same authoritative models and fresh-token acts.
+The Python-3.9-built wheel exam ran two research agents concurrently, recovered
+a planted crash with zero duplicate starts, synthesized five validated
+artifacts, implemented in an isolated worktree, followed one fail→repair→
+recheck route, refused six compiler and five runtime red cases, and stopped at
+`awaiting-certification`; only the fixture operator certified and committed.
+An authenticated live Codex specimen separately passed the real driver seam.
+Both 297-test Python floors, 32 Firefox desktop/mobile renders, the complete
+repository/distribution/optional-host matrix, and pre-close history are green.
+The [final summary](./final-summary.md) holds the measured outcome and audit
+trail. No next phase, release, or hosted authority expansion is implied by
+closure; each requires explicit owner direction.
 
 ## Active risks
 
@@ -127,12 +128,16 @@ whole packaged multi-agent score and close the phase.
 - 2026-07-17 - Bind every run control token to action, reason/decision, ledger head, state, and generation, then re-preview inside one serialized conductor boundary - two clients cannot turn one observation into two dispatches - WLA-24-07.
 - 2026-07-17 - Make Run an explanation and consent view with explicit refresh and explicit bounded stream opens - visibility must not become an authorization poller or content leak - WLA-24-07.
 - 2026-07-17 - Keep retry policy immutable in the score and require a new grant for capability elevation - operators may pause, resume, decide checkpoints, revoke, or cancel, but cannot invent runtime policy - WLA-24-07.
+- 2026-07-18 - Compare transport projections at one explicit observation instant - live wall-budget time remains authoritative, while adapter parity cannot depend on whether sequential test reads cross a clock second - WLA-24-08 red-to-green finding.
+- 2026-07-18 - Close only on a fresh-wheel whole-score exam plus a separate authenticated driver specimen - deterministic fixtures own scheduling truth and the real harness proves the integration seam without making model output the oracle - WLA-24-08.
 
-## Decisions deferred
+## Deliberate boundaries and later options
 
-- Cross-machine hosted control plane - trigger after the local score/grant/run
-  contract survives the packaged exit exam - default is local execution
-  authority with remote-friendly thin adapters.
+- Cross-machine or hosted control service - the packaged score/grant/run
+  contract has now survived its exit exam and the delivered adapters can
+  coordinate a local runner remotely; moving repository authority into a
+  service would require an explicit new trust, identity, persistence, and
+  operations decision.
 - Automatic certification, commit, push, release, or deployment - trigger only
   under a separately designed approval authority - default is a terminal
   `awaiting-certification` handoff.

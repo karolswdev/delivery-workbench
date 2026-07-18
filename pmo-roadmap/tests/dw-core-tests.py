@@ -6644,25 +6644,35 @@ class OrchestrationConductorTest(unittest.TestCase):
         })
         self.assertEqual(status, 200, started)
         run_id = started["data"]["run_id"]
-        projection = runs.replay_run(self.root, run_id)
-        self.assertEqual(
-            mcp.call_tool(self.root, "dw_run_show", {"run_id": run_id})["structuredContent"],
-            projection,
-        )
-        status, shown = wb.handle_api(self.root, f"/api/runs/{run_id}", {})
-        self.assertEqual(status, 200)
-        self.assertEqual(shown["data"], projection)
+        # Projection includes the live wall-budget observation. Hold the
+        # observation instant constant while comparing adapters so a
+        # second-boundary crossing on the slower Python floor cannot turn
+        # transport parity into a clock-race assertion.
+        observed_at = self.now + timedelta(seconds=30)
+        with mock.patch(
+            "dw_pmo.orchestration_run._utc_now", return_value=observed_at
+        ):
+            projection = runs.replay_run(self.root, run_id)
+            self.assertEqual(
+                mcp.call_tool(
+                    self.root, "dw_run_show", {"run_id": run_id}
+                )["structuredContent"],
+                projection,
+            )
+            status, shown = wb.handle_api(self.root, f"/api/runs/{run_id}", {})
+            self.assertEqual(status, 200)
+            self.assertEqual(shown["data"], projection)
 
-        preview = surface.build_run_act_preview(
-            self.root, run_id, "pause", reason="inspect exact state"
-        )
-        mcp_preview = mcp.call_tool(self.root, "dw_run_preview", {
-            "run_id": run_id, "action": "pause", "reason": "inspect exact state",
-        })["structuredContent"]
-        status, http_preview = wb.handle_api(
-            self.root, f"/api/runs/{run_id}/act/pause",
-            {"reason": ["inspect exact state"]},
-        )
+            preview = surface.build_run_act_preview(
+                self.root, run_id, "pause", reason="inspect exact state"
+            )
+            mcp_preview = mcp.call_tool(self.root, "dw_run_preview", {
+                "run_id": run_id, "action": "pause", "reason": "inspect exact state",
+            })["structuredContent"]
+            status, http_preview = wb.handle_api(
+                self.root, f"/api/runs/{run_id}/act/pause",
+                {"reason": ["inspect exact state"]},
+            )
         self.assertEqual(preview, mcp_preview)
         self.assertEqual(preview, http_preview["data"])
         self.assertEqual(surface.document_bytes(preview), surface.document_bytes(mcp_preview))

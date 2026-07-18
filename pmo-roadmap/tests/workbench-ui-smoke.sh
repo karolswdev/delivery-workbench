@@ -232,6 +232,9 @@ shot() { # name geometry url
   size=$(wc -c < "$out" | tr -d ' ')
   [ "$size" -gt 20000 ] || fail "$1 appears unrendered (only $size bytes)"
   if [ -n "$CAPTURE_DIR" ] && [ -n "$CAPTURE_PATTERN" ]; then
+    # CAPTURE_PATTERN is deliberately an operator-supplied glob such as
+    # orchestration-run-*; quoting it would turn the capture filter literal.
+    # shellcheck disable=SC2254
     case "$1" in
       $CAPTURE_PATTERN)
         mkdir -p "$CAPTURE_DIR"
