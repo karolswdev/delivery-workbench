@@ -277,6 +277,7 @@ trailers and an archived contract, the full history passing
 - [Comprehensive solution overview](./docs/solution-overview.md): current architecture, workflows, trust model, proof snapshot, strengths, gaps, and delivered response
 - [Status briefing contract](./docs/status-briefing.md): the Phase 22 one-answer model, readiness semantics, and guided action order
 - [Deliberate step contract](./docs/deliberate-step.md): the Phase 23 state-bound preview/apply seam and closed executable action table
+- [Visual orchestration contract](./docs/orchestration.md): the Phase 24 score editor, roles/research, outputs, checks/failures, grants, scheduling, drivers, recovery, and authority model
 - [Architecture](./docs/architecture.md), with the test that proves each claim
 - [Framework README](./pmo-roadmap/README.md): install, update, adopt, operate
 - [The contract rules](./pmo-roadmap/templates/PMO-CONTRACT.md)

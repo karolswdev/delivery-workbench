@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-16 (Phase 23 closed 5/5: the deliberate-step handrail is proven across every surface and a wheel-installed consumer).
-**Current phase:** [phase-23-deliberate-step](./phase-23-deliberate-step/current-phase-status.md).
-**Status:** complete through Phase 23; versioning and publication remain a separate owner decision.
+**Last updated:** 2026-07-17 (Phase 24 is open 1/8: the visual orchestration contract is complete).
+**Current phase:** [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/current-phase-status.md).
+**Status:** active — WLA-24-02 is next: compile, validate, canonicalize, and simulate the exact orchestration score before runtime execution.
 
 ## Vision
 
@@ -56,6 +56,11 @@ summarization can improve those entries after the lifecycle is proven.
 - User follow-up, 2026-07-15: move beyond summarizing the briefing and push
   it into something operational; Phase 23 turns one observed recommendation
   into one explicit, stale-safe, allowlisted step.
+- User requirement and correction, 2026-07-17: Delivery Workbench **can
+  coordinate** agent work and comes with a rich visual editor for exact
+  orchestration rules—research agents, dependencies, checks/failures, output
+  conventions, budgets, approvals, and the rest of the run contract. A score
+  is configuration; a separate grant is authority.
 - [Solution overview](../../../../docs/solution-overview.md), 2026-07-15:
   the whole-system map, evidence snapshot, strengths, gaps, and rationale for
   Phase 22.
@@ -88,6 +93,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 21 | Phase 20's interactive surface — screenshots, buttons, per-person consent — reaches every channel as v1.14.0, with the same machinery as the last six releases. | done | [phase-21-landing-v1-14-0](./phase-21-landing-v1-14-0/) |
 | 22 | Give every human and agent one deterministic, versioned answer for repository readiness, current work, and the next safe action, shared across every supported surface. | done | [phase-22-agent-briefing](./phase-22-agent-briefing/) |
 | 23 | Let a human or agent deliberately apply exactly one current, allowlisted recommendation without copy/paste, stale intent, arbitrary execution, certification, or commit automation. | done | [phase-23-deliberate-step](./phase-23-deliberate-step/) |
+| 24 | Delivery Workbench can coordinate a bounded multi-agent run from an exact visually authored score and revocable grant: research, dependencies, context, outputs, checks, failures, budgets, recovery, and human checkpoints. | in-progress | [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/) |
 
 ## Operating cadence
 
@@ -119,6 +125,21 @@ behavior is:
   updates, phase closing, drift reporting, and checks.
 
 ## Active extension
+
+Phase 24 (The conductor's score — visual orchestration) is active at 1/8.
+Its completed architecture contract turns the Phase-22 observation and
+Phase-23 one-step lease into a
+configurable coordination framework rather than a hidden loop. A rich
+Workbench editor authors a tracked, versioned score: research/synthesis/
+implementation/review/repair agents, dependencies and concurrency, bounded
+context, typed output conventions, exact checks, fail routes, retries,
+budgets, approvals, and terminal meanings. One pure compiler owns semantics
+and simulation. Saving a score starts nothing; a separate expiring, revocable
+grant binds its exact hash and capabilities before a deterministic conductor
+can schedule structured work packets, isolated workspaces, checks, rail
+steps, receipts, and recovery. See the
+[Phase 24 plan](./phase-24-bounded-orchestration/current-phase-status.md) and
+[visual orchestration contract](../../../../docs/orchestration.md).
 
 Phase 23 (The handrail — one deliberate step) is closed at 5/5. It keeps
 Phase 22's status model pure while binding its one recommendation to a

@@ -64,6 +64,17 @@ the provisioned Telegram and pinned HoldSpeak hosts. Homebrew remains an
 explicit local abstention because its smoke will not uninstall the operator's
 existing formula; clean-machine macOS CI owns that proof.
 
+Phase 24 opens the orchestration architecture without claiming runtime work
+that is not implemented yet. Delivery Workbench **can coordinate** from an
+exact, visually authored score: research/synthesis/implementation/review/
+repair agents, dependencies and concurrency, prompts/context, typed output
+conventions, deterministic checks, fail routes, retries, budgets, approvals,
+and terminal meanings. The rich Workbench editor is the authoring center; one
+pure compiler owns meaning. A tracked score starts nothing—a separate,
+expiring and revocable grant over its compiled hash is the authority boundary.
+The detailed contract and eight evidence-gated slices are in
+[Phase 24](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/current-phase-status.md).
+
 This section is release-ready input, not a publication claim: the package
 remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula
 change has been performed.

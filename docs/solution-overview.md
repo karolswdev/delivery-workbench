@@ -1,6 +1,6 @@
 # Delivery Workbench — solution overview
 
-**Assessment date:** 2026-07-16. **Product version assessed:** v1.14.0.
+**Assessment date:** 2026-07-17. **Product version assessed:** v1.14.0.
 This is the map of the whole solution. Exact subsystem protocols remain
 owned by the linked specialist documents.
 
@@ -31,6 +31,15 @@ Phase 23 now closes that gap with a separate, state-bound one-step handrail
 while preserving manual certification and commit. Its contracts are
 [status-briefing.md](./status-briefing.md) and
 [deliberate-step.md](./deliberate-step.md).
+
+Phase 24 now addresses the next connective layer: Delivery Workbench **can
+coordinate** a configured multi-agent run. The product center is a rich visual
+editor for an exact score—research agents, dependencies, context, typed output
+conventions, checks, fail routes, budgets, concurrency, approvals, and
+terminal conditions. A score is tracked configuration, not consent; a
+separate revocable grant over its compiled hash authorizes a deterministic
+conductor. The architecture contract is
+[orchestration.md](./orchestration.md).
 
 ## What problem it solves
 
@@ -238,8 +247,9 @@ On 2026-07-16 in this checkout:
 - version v1.14.0 is single-sourced across Python, CLI, plugin manifest,
   formula, and the latest published changelog heading; Phases 22 and 23 are
   recorded under an explicitly unpublished changelog section;
-- phases 0–23 are closed; the orientation and deliberate-step advances are
-  evidence-backed but not published as a new release;
+- phases 0–23 are closed; Phase 24 is active at its architecture-contract
+  story; the orientation and deliberate-step advances are evidence-backed but
+  not published as a new release;
 - `python3 pmo-roadmap/tests/dw-core-tests.py` passed 230 tests on the local
   interpreter and on the declared Python 3.9 floor;
 - every shipped shell parsed and passed ShellCheck; every locally runnable
@@ -370,6 +380,19 @@ before process start. CLI, MCP, HTTP, the browser, and generated riders share
 that boundary, and the wheel-installed exit exam proves it through a real
 story.
 
+### 10. Multi-agent coordination had no exact, inspectable score — active Phase 24
+
+The system could expose state, correlate sessions, steer an armed agent, and
+apply one fresh rail step, but it could not describe a whole coordinated run:
+which research/worker/review agents participate, what context and outputs they
+use, which checks must pass, how failures route, what may run concurrently,
+which budgets apply, or where humans approve. A hard-coded loop would merely
+hide those decisions. Phase 24 makes them a versioned score with a rich visual
+editor and pure compiler, then separates that configuration from a revocable
+run grant. The conductor can interpret only compiled rules and structured
+driver/check receipts; agent harnesses retain model/sandbox authority, and
+certification/commit remain explicit.
+
 ## Phase 22: delivered product step
 
 Phase 22 is **The briefing — one answer before agents act**. It is a
@@ -427,11 +450,36 @@ work. All five slices are implemented, evidence-backed, and closed. The
 [Phase 23 final summary](../pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/final-summary.md)
 holds the measured matrix and decision record.
 
+## Phase 24: active product step
+
+Phase 24 is **The conductor's score — visual orchestration**. Its eight slices
+are:
+
+1. contract the score, editor, authority rings, runtime, threat model, and exit
+   proof;
+2. compile and validate exact orchestration rules and simulate scheduling;
+3. build the rich Design/Validate visual editor with lossless JSON and guarded
+   save;
+4. bind an exact score to an expiring/revocable run grant and append-only
+   ledger;
+5. drive parallel research and isolated writer agents through structured,
+   provider-neutral work packets and typed outputs;
+6. schedule checks, failure/repair routes, budgets, recovery, and cancellation
+   deterministically;
+7. expose and monitor the same run over CLI, MCP, HTTP, and the Workbench; and
+8. prove the whole score in a wheel-installed consumer through a human
+   `awaiting-certification` handoff and gated commit.
+
+The phase does not make a score executable by existence. Saving and validating
+remain pure; starting needs a separate exact grant. The active plan is
+[Phase 24](../pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/current-phase-status.md).
+
 ## Where to go deeper
 
 - [Architecture and executable claims](./architecture.md)
 - [Status briefing contract](./status-briefing.md)
 - [Deliberate step contract](./deliberate-step.md)
+- [Visual orchestration contract](./orchestration.md)
 - [Interop inventory and schema policy](./interop.md)
 - [MCP tool contract and exclusions](./mcp.md)
 - [Mission-control substrate and consent rings](./mission-control.md)

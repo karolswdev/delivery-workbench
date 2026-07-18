@@ -6,7 +6,8 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Next story: nothing actionable
+- Current phase: 24 (phase-24-bounded-orchestration)
+- Next story: WLA-24-02 — Compile and validate exact orchestration rules [backlog]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->
