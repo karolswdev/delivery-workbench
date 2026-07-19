@@ -6,10 +6,12 @@ driver activity states with the receptivity table (WLA-25-03), the
 bounded nudge engine (WLA-25-04: score `nudges` rules, grant standing
 rules + `max_nudges` budget, `nudge_delivered`/`nudge_refused` ledger
 events, the awaiting-certification wake, and driver-seam session
-delivery), and the live stream (WLA-25-05: SSE `GET
+delivery), the live stream (WLA-25-05: SSE `GET
 /api/runs/<run>/events` and `GET /api/signals/events` with exact
-cursor replay, `dw run tail`, and the live Run view); notification
-components remain contract-only until their stories land.
+cursor replay, `dw run tail`, and the live Run view), and durable
+operator notifications (WLA-25-06: derived facts with receipted ack,
+`dw notifications` across CLI/MCP/HTTP, the Run view card, the
+Telegram push pass, and the `/decision` typed checkpoint response).
 **Product claim:** Delivery Workbench **can observe** facts from outside a
 run — CI verdicts, review state, mergeability, agent activity — and, under an
 explicit grant, **can nudge** the right agent back to work. It does not claim

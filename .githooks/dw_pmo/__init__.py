@@ -288,6 +288,15 @@ from .signals import (
     replay_channel,
     resolve_signal_channel,
 )
+from .notifications import (
+    NOTIFICATIONS_KIND,
+    NOTIFICATION_KINDS,
+    acknowledge_notification,
+    build_notifications,
+    pending_deliveries,
+    record_delivery,
+    resolve_correlation,
+)
 from .orchestration_run import ACTIVITY_STATES
 
 __version__ = "1.14.0"

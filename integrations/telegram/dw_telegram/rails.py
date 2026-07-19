@@ -83,6 +83,40 @@ class RailsClient:
         except (json.JSONDecodeError, ValueError):
             return None, "dw did not return JSON"
 
+    def notifications(self, repo: Path) -> tuple[dict | None, str]:
+        """The derived operator-notification inventory (pure read)."""
+        return self._json_doc(repo, ["notifications", "list", "--json"])
+
+    def notification_delivered(
+        self, repo: Path, notification_id: str, failed: str | None = None
+    ) -> tuple[dict | None, str]:
+        tail = ["notifications", "delivered", notification_id]
+        if failed:
+            tail += ["--failed", failed]
+        return self._json_doc(repo, tail)
+
+    def checkpoint_decide(
+        self, repo: Path, run_id: str, decision: str
+    ) -> tuple[dict | None, str]:
+        """Preview then apply one checkpoint decision through the
+        exact-token boundary. The phone supplies the decision content;
+        the rails supply the authority."""
+        preview, why = self._json_doc(
+            repo,
+            ["run", "preview", run_id, "checkpoint",
+             "--decision", decision, "--json"],
+        )
+        if preview is None:
+            return None, why
+        if not preview.get("applicable"):
+            issues = "; ".join(preview.get("issues", [])) or "not applicable"
+            return None, f"checkpoint preview refused: {issues}"
+        return self._json_doc(
+            repo,
+            ["run", "checkpoint", run_id, decision,
+             "--expect", str(preview.get("act_token", "")), "--json"],
+        )
+
     def read_feed(self, repo: Path) -> tuple[dict | None, str]:
         doc, reason = self._json_doc(repo, ["state", "--json"])
         if doc is None:

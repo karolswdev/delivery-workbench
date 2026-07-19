@@ -53,7 +53,7 @@ discipline, re-interpreted under the consent spine.
 - [x] The SSE tail replays the ledger exactly from any cursor, carries
   no authority and no excluded content, and drives the live Run view
   without polling (WLA-25-05).
-- [ ] Notification facts persist append-only with unread/ack, deliver
+- [x] Notification facts persist append-only with unread/ack, deliver
   over per-person-consented Telegram carrying previews and typed-port
   correlation only — never tokens or apply commands — and fail safe
   when the channel is down (WLA-25-06).
@@ -79,14 +79,14 @@ discipline, re-interpreted under the consent spine.
 | WLA-25-03 | Teach drivers to report activity states | done | [story-03-driver-activity-states](./story-03-driver-activity-states.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-25-04 | Nudge agents under grant authority | done | [story-04-bounded-nudge-engine](./story-04-bounded-nudge-engine.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-25-05 | Stream the ledger live | done | [story-05-ledger-live-stream](./story-05-ledger-live-stream.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-25-06 | Notify the operator durably | backlog | [story-06-operator-notifications](./story-06-operator-notifications.md) | - |
+| WLA-25-06 | Notify the operator durably | done | [story-06-operator-notifications](./story-06-operator-notifications.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-25-07 | Drive Claude Code through the neutral seam | backlog | [story-07-claude-code-driver](./story-07-claude-code-driver.md) | - |
 | WLA-25-08 | Keep pending decisions alive across the pause | backlog | [story-08-typed-checkpoint-resume](./story-08-typed-checkpoint-resume.md) | - |
 | WLA-25-09 | Prove the outward loop end to end | backlog | [story-09-packaged-outward-exam](./story-09-packaged-outward-exam.md) | - |
 
 ## Where we are
 
-Phase open 5/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
+Phase open 6/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
 outward layer — the `delivery-workbench-signal@1` fact model, read-time
 derived-status precedence, the six-state activity vocabulary with its
 receptivity table, the four-layer nudge model (score rule → grant
@@ -163,7 +163,22 @@ The stream carries no authority and no content bodies — proven by a
 live subscriber demo that watched a real run execute, resumed
 mid-ledger, and matched the ledger byte for byte (a planted secret
 prompt never crossed). Suite 323 on both floors; 32 UI renders green.
-Next: WLA-25-06, operator notifications.
+
+WLA-25-06 is done: notifications are pure derivations over the ledgers
+and signal chains (checkpoint-pending with typed request ports,
+awaiting-certification, run-blocked, nudge-budget-exhausted, and the
+opt-in branch-signal kind), with only two append-only local stores
+(acks, delivery attempts with a 3-try ceiling). One model serves
+`dw notifications`, MCP read + guarded ack, HTTP read + the eighth
+deliberate POST route, and a live Run view card. The Telegram side
+gains the owner-gated `/decision <correlation> approve|reject` typed
+response (stale refuses; authority stays at the local exact-token
+checkpoint boundary) and the bounded `run.py notify` push pass to the
+paired chat, send-only and fail-safe. The herdr-remote counterexample
+held: no token or apply command ever leaves the machine. Suites: core
+325, Telegram 152, both floors green. OWED: the live phone leg
+screenshots, recorded in evidence-story-06. Next: WLA-25-07, the
+Claude Code driver.
 
 ## Active risks
 
@@ -191,6 +206,8 @@ Next: WLA-25-06, operator notifications.
 - 2026-07-19 - `nudge_delivered` is the only event that reverses a terminal state (`awaiting-certification` → `active`) - the wake is granted, budgeted, at-most-once, and receipted, and certification/commit authority is untouched - WLA-25-04.
 - 2026-07-19 - Naming a failure-activated node in a nudge rule makes it reachable exactly like a failure route - explicit nudge routing is declared routing, so `orchestration simulate` still shows every way a run can unfold - WLA-25-04.
 - 2026-07-19 - The undelivered nudge is never queued: the ledger event is the delivery marker (at-most-once), and a crash between seam call and injection under-delivers rather than double-delivers - WLA-25-04.
+- 2026-07-19 - Phone decisions are documents, not buttons: `/decision` carries a correlation id and a closed vocabulary, and the approve/reject still crosses the local exact-token boundary - the herdr-remote study's transport-equals-authority model is the recorded counterexample - WLA-25-06.
+- 2026-07-19 - Branch signals notify behind the operator-local `branch_signals` opt-in, and never for a channel a grant already owns - the run-bound channel already nudges; notifying it twice would be noise - WLA-25-06.
 
 ## Decisions deferred
 
@@ -198,3 +215,14 @@ Next: WLA-25-06, operator notifications.
   WLA-25-09 exam findings - default is no export.
 - Non-GitHub forge adapters and interactive (PTY) agent harnesses -
   trigger on demand after the seam holds - default is out.
+- Declarative screen-state manifests for interactive drivers (herdr
+  study, 2026-07-19): data-file rules classifying `waiting_input`/
+  `blocked` from terminal state, with which-rule/what-evidence audit
+  payloads in the ledger and strict unknown-degrades-to-idle
+  conservatism - trigger with the first interactive driver - default is
+  the honest `unknown` from WLA-25-03.
+- An extension seam (herdr study, 2026-07-19): declare the dw CLI/MCP
+  surface as the plugin API with injected run/story env context, publish
+  a JSON Schema for the stamped models, adopt a `dw-plugin` topic
+  convention, and gate plugin capabilities behind the grant system -
+  candidate phase 26 - default is no new seam this phase.

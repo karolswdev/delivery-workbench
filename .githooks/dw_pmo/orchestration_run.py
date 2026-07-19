@@ -1038,6 +1038,7 @@ def replay_run(
         "capabilities": grant["capabilities"],
         "profiles": grant["profiles"],
         "workspace_modes": grant["workspace_modes"],
+        "signal_channel": str(grant.get("signal_channel") or ""),
         "budgets": budget_state,
         "nudges": nudges,
         "active_claims": sorted(

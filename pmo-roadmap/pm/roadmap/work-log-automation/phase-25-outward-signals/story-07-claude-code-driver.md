@@ -73,3 +73,13 @@ implementation, keeping the seam honest about what is fixture-only.
 Version skew is the real maintenance cost AO absorbs across 23 adapters;
 capability discovery must pin the tested `claude` version range and
 refuse outside it rather than degrade silently.
+
+herdr study, 2026-07-19: when this driver (or a successor) grows an
+interactive mode, herdr's declarative screen-state manifests are the
+model for honest `waiting_input`/`blocked` detection — prioritized
+data-file rules over named screen regions, strict blocked-detection
+with unknown degrading to idle, an `explain` command naming which rule
+fired, and detection firewalled from ever sending input. herdr also
+deliberately distrusts Claude Code's own lifecycle hooks for
+permission-approval results — worth re-verifying when this driver
+lands.

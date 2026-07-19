@@ -320,6 +320,23 @@ def _json_tool(payload: dict) -> tuple[str, dict]:
     return json.dumps(payload, sort_keys=True), payload
 
 
+def _tool_notifications(root: Path, _args: dict) -> tuple[str, dict]:
+    from .notifications import build_notifications
+
+    return _json_tool(build_notifications(root))
+
+
+def _tool_notifications_ack(root: Path, args: dict) -> tuple[str, dict]:
+    from datetime import datetime, timezone
+
+    from .notifications import acknowledge_notification
+
+    now_ts = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return _json_tool(
+        acknowledge_notification(root, str(args["notification_id"]), now_ts)
+    )
+
+
 def _tool_orchestration_list(root: Path, _args: dict) -> tuple[str, dict]:
     from .orchestration import score_inventory
 
@@ -714,6 +731,21 @@ TOOLS: dict[str, dict] = {
         "description": "Pure score inventory. Adapter over orchestration.score_inventory.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "handler": _tool_orchestration_list,
+    },
+    "dw_notifications": {
+        "description": "Pure derived operator notifications with unread and delivery state. Adapter over notifications.build_notifications.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        "handler": _tool_notifications,
+    },
+    "dw_notifications_ack": {
+        "description": "Acknowledge one derived notification; idempotent and receipted in the local ack log.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"notification_id": {"type": "string"}},
+            "required": ["notification_id"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_notifications_ack,
     },
     "dw_signals": {
         "description": "Pure outward-signal inventory with derived status; observation stays a CLI act. Adapter over signals.build_signals_inventory.",

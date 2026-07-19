@@ -106,7 +106,7 @@ MCP-capable agents: prefer the MCP tools over shelling out —
 `.githooks/dw-mcp` (wired via `.mcp.json`) serves the same core as
 structured tools with identical refusals: orientation (`dw_status`, `dw_context`,
 `dw_step`, `dw_next`, `dw_check`, `dw_doctor`), browse (`dw_board`, `dw_holds`,
-`dw_story_show`, `dw_signals`), verification (`dw_verify`, `dw_gate`), guarded
+`dw_story_show`, `dw_signals`, `dw_notifications`), verification (`dw_verify`, `dw_gate`), guarded
 mutations (`dw_step_apply`, `dw_story_status`, `dw_evidence_capture`,
 `dw_contract_new`). Certification is never a tool call: flipping
 contract boxes stays a manual, deliberate edit (see `docs/mcp.md`

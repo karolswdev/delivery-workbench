@@ -227,6 +227,11 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
             return 200, envelope(score_inventory(root))
 
+        if parts == ["api", "notifications"]:
+            from .notifications import build_notifications
+
+            return 200, envelope(build_notifications(root))
+
         if parts == ["api", "signals"]:
             from .signals import build_signals_inventory
 
@@ -584,6 +589,22 @@ def _issues_guard(root: Path, body: dict[str, object], plan) -> tuple[int, dict[
 def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
     """POST routes: deliberate step, roadmap edits, and score content edits."""
     route = path.rstrip("/")
+    if route == "/api/notifications/ack":
+        from datetime import datetime, timezone as _tz
+
+        from .notifications import acknowledge_notification
+
+        try:
+            notification_id = str(body.get("id", "") or "")
+            if not notification_id:
+                raise DwError("notification ack requires an id")
+            now_ts = datetime.now(_tz.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return 200, envelope(
+                acknowledge_notification(root, notification_id, now_ts)
+            )
+        except DwError as err:
+            return _run_error(err)
+
     if route == "/api/runs/preview":
         unknown = sorted(set(body) - {"run_id", "action", "reason", "decision"})
         if unknown:

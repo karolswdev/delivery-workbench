@@ -117,8 +117,9 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 7,
-            "only deliberate-step, guarded roadmap/score edits, and run preview/start use direct POST equality routes; "
+            len(post_routes), 8,
+            "only deliberate-step, guarded roadmap/score edits, run preview/start, "
+            "and the receipted notification ack use direct POST equality routes; "
             f"found: {post_routes}",
         )
         self.assertTrue(any('/api/step/apply' in line for line in post_routes))
@@ -128,6 +129,7 @@ class DwCoreTest(unittest.TestCase):
         self.assertTrue(any('/api/orchestration/apply' in line for line in post_routes))
         self.assertTrue(any('/api/runs/preview' in line for line in post_routes))
         self.assertTrue(any('/api/runs/start' in line for line in post_routes))
+        self.assertTrue(any('/api/notifications/ack' in line for line in post_routes))
 
     def test_missioncontrol_readonly_guard_catches_a_planted_write(self):
         # The guard must FAIL on a violation or it guards nothing:
@@ -1535,6 +1537,7 @@ class DwCoreTest(unittest.TestCase):
                 "/api/runs/preview", "/api/runs/start", "/api/runs/tick",
                 "/api/runs/pause", "/api/runs/resume", "/api/runs/revoke",
                 "/api/runs/cancel", "/api/runs/checkpoint",
+                "/api/notifications/ack",
             },
         )
         self.assertEqual(self._interop_missing(post_routes, doc), [])
@@ -1545,6 +1548,8 @@ class DwCoreTest(unittest.TestCase):
             "dw check", "dw gate --porcelain", "dw verify",
             "dw orchestration list", "dw orchestration show", "dw orchestration simulate",
             "dw signals list", "dw signals observe",
+            "dw notifications list", "dw notifications ack",
+            "dw notifications delivered",
             "dw run plan", "dw run start", "dw run list", "dw run show", "dw run view",
             "dw run preview", "dw run tick", "dw run pause", "dw run resume",
             "dw run revoke", "dw run cancel", "dw run checkpoint", "dw run stream",
@@ -2694,7 +2699,8 @@ class MCPServerTest(unittest.TestCase):
             "dw_check", "dw_doctor",
             "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",
-            "dw_orchestration_list", "dw_signals", "dw_orchestration_show",
+            "dw_orchestration_list", "dw_notifications", "dw_notifications_ack",
+            "dw_signals", "dw_orchestration_show",
             "dw_orchestration_simulate", "dw_run_plan", "dw_run_list",
             "dw_run_show", "dw_run_view", "dw_run_preview", "dw_run_start",
             "dw_run_tick", "dw_run_pause", "dw_run_resume", "dw_run_revoke",
@@ -6812,6 +6818,178 @@ class OrchestrationConductorTest(unittest.TestCase):
             [json.loads(line) for line in suffix.stdout.splitlines()],
             lines[3:],
         )
+
+    def test_notifications_derive_ack_and_correlate(self):
+        import dw_pmo.notifications as ntf
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        nodes, responses = self._nudge_nodes()
+        approval = {
+            "id": "human-gate", "type": "approval", "needs": ["worker"],
+            "prompt": "Review the worker result before continuing.",
+        }
+        self._write_score("notify-loop", [nodes[0], approval])
+        projection = self._start("notify-loop")
+        run_id = projection["run_id"]
+        fixture = drivers.FixtureDriver(responses)
+        for _ in range(10):
+            result = conductor.tick_run(
+                self.root, run_id, driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+            if result["state"] == "awaiting-approval":
+                break
+        inventory = ntf.build_notifications(self.root, now=self.now)
+        self.assertIs(inventory["starts_work"], False)
+        pending = [
+            item for item in inventory["notifications"]
+            if item["kind"] == "checkpoint-pending" and item["run_id"] == run_id
+        ]
+        self.assertEqual(len(pending), 1)
+        entry = pending[0]
+        self.assertTrue(entry["unread"])
+        self.assertEqual(
+            entry["request"]["correlation_id"], entry["id"]
+        )
+        for excluded in ("sha256:", "--expect", "apply_command"):
+            self.assertNotIn(excluded, entry["outbound"])
+        self.assertIn("ack: " + entry["id"], entry["outbound"])
+
+        # The correlation resolves while pending and refuses once decided.
+        match = ntf.resolve_correlation(self.root, entry["id"])
+        self.assertEqual(match["run_id"], run_id)
+        import dw_pmo.orchestration_surface as surface
+
+        preview = surface.build_run_act_preview(
+            self.root, run_id, "checkpoint", decision="approve", now=self.now,
+        )
+        surface.apply_run_act(
+            self.root, run_id, "checkpoint", preview["act_token"],
+            decision="approve", now=self.now,
+        )
+        with self.assertRaises(DwError):
+            ntf.resolve_correlation(self.root, entry["id"])
+
+        # Acknowledgement is idempotent and receipted; derivation is
+        # stable across repeated builds (no hidden cache).
+        for _ in range(10):
+            result = conductor.tick_run(
+                self.root, run_id, driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+            if result["terminal"]:
+                break
+        inventory = ntf.build_notifications(self.root, now=self.now)
+        awaiting = [
+            item for item in inventory["notifications"]
+            if item["kind"] == "awaiting-certification"
+            and item["run_id"] == run_id
+        ]
+        self.assertEqual(len(awaiting), 1)
+        first = ntf.acknowledge_notification(
+            self.root, awaiting[0]["id"], "2026-07-19T00:00:00Z"
+        )
+        self.assertTrue(first["changed"])
+        second = ntf.acknowledge_notification(
+            self.root, awaiting[0]["id"], "2026-07-19T00:00:01Z"
+        )
+        self.assertFalse(second["changed"])
+        again = ntf.build_notifications(self.root, now=self.now)
+        acked = next(
+            item for item in again["notifications"]
+            if item["id"] == awaiting[0]["id"]
+        )
+        self.assertFalse(acked["unread"])
+        with self.assertRaises(DwError):
+            ntf.acknowledge_notification(
+                self.root, "ntf-000000000000000000000000", "2026-07-19T00:00:02Z"
+            )
+
+    def test_notifications_delivery_ceiling_parity_and_branch_opt_in(self):
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.notifications as ntf
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.workbench as wb
+
+        nodes, responses = self._nudge_nodes()
+        self._write_score("notify-parity", [nodes[0]])
+        projection = self._start("notify-parity")
+        run_id = projection["run_id"]
+        self._run_to_terminal(run_id, drivers.FixtureDriver(responses))
+
+        inventory = ntf.build_notifications(self.root, now=self.now)
+        cli = subprocess.run(
+            [sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+             "--root", str(self.root), "notifications", "list", "--json"],
+            check=True, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.assertEqual(json.loads(cli.stdout), inventory)
+        tool = mcp.call_tool(self.root, "dw_notifications", {})
+        self.assertEqual(tool["structuredContent"], inventory)
+        status, http_doc = wb.handle_api(self.root, "/api/notifications", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(http_doc["data"], inventory)
+
+        target = next(
+            item for item in inventory["notifications"]
+            if item["run_id"] == run_id
+        )
+        # Failed deliveries retry up to the ceiling, then stop pending.
+        for attempt in range(3):
+            self.assertIn(
+                target["id"],
+                [item["id"] for item in ntf.pending_deliveries(self.root)],
+            )
+            ntf.record_delivery(
+                self.root, target["id"], "telegram", False,
+                "transport-error", f"2026-07-19T00:00:0{attempt}Z",
+            )
+        self.assertNotIn(
+            target["id"],
+            [item["id"] for item in ntf.pending_deliveries(self.root)],
+        )
+        refreshed = next(
+            item for item in ntf.build_notifications(self.root)["notifications"]
+            if item["id"] == target["id"]
+        )
+        self.assertEqual(refreshed["delivery_attempts"], 3)
+        self.assertFalse(refreshed["delivered"])
+
+        # HTTP ack is the receipted POST boundary.
+        status, ack_doc = wb.handle_mutation(
+            self.root, "/api/notifications/ack", {"id": target["id"]}
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(ack_doc["data"]["acknowledged"])
+        status, refused = wb.handle_mutation(
+            self.root, "/api/notifications/ack", {"id": "ntf-ffffffffffffffffffffffff"}
+        )
+        self.assertGreaterEqual(status, 400)
+
+        # Branch signals notify only under explicit opt-in, and never
+        # for a channel a run already owns.
+        self._seed_signal(branch="loose-branch", name="ci-loose")
+        before = ntf.build_notifications(self.root)
+        self.assertEqual(
+            [item for item in before["notifications"] if item["kind"] == "branch-signal"],
+            [],
+        )
+        store = self.root / ".git" / "pmo-notifications"
+        store.mkdir(exist_ok=True)
+        (store / "config.json").write_text(
+            json.dumps({"branch_signals": True}) + "\n"
+        )
+        after = ntf.build_notifications(self.root)
+        loose = [
+            item for item in after["notifications"]
+            if item["kind"] == "branch-signal"
+        ]
+        self.assertEqual(len(loose), 1)
+        self.assertIn("origin/loose-branch", loose[0]["node"])
 
     def test_nudge_authority_rides_the_plan_and_grant(self):
         import dw_pmo.orchestration_run as runs

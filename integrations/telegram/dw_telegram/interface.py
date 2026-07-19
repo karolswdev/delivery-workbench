@@ -135,7 +135,7 @@ class TelegramInterface:
     CONSENT_COMMANDS = frozenset({
         "/steer", "/unsteer", "/reply", "/flip", "/newstory", "/launch",
         "/install", "/newproject", "/arm", "/disarm", "/open", "/send",
-        "/bind", "/unbind",
+        "/bind", "/unbind", "/decision",
     })
     OWNER_REFUSAL = "✕ refused: consent belongs to the paired owner"
 
@@ -422,6 +422,7 @@ class TelegramInterface:
             "/newproject": self._cmd_newproject,
             "/launch": self._cmd_launch,
             "/pair": self._cmd_repair,
+            "/decision": self._cmd_decision,
         }.get(command)
         if handler is None:
             self._say(chat_id, f"unknown command {command}; /help lists them")
@@ -461,6 +462,81 @@ class TelegramInterface:
         if not ok:
             self._say(chat_id, f"✕ relay failed: {output}")
         return True
+
+    def _cmd_decision(self, chat_id: int, args: list[str]) -> None:
+        """Typed checkpoint response port (docs/signals.md).
+
+        The reply carries a correlation id and a closed decision; the
+        approve/reject still crosses the local exact-token checkpoint
+        boundary via the rails. Stale or unknown correlations refuse.
+        """
+        if len(args) < 2 or args[1] not in {"approve", "reject"}:
+            self._say(chat_id, "usage: /decision <correlation-id> approve|reject")
+            return
+        correlation, decision = args[0], args[1]
+        repo = self._active_repo(chat_id)
+        if repo is None:
+            self._say(chat_id, "no active rails repo; /open one first")
+            return
+        doc, why = self.rails.notifications(repo)
+        if doc is None:
+            self._say(chat_id, f"✕ {why}")
+            return
+        match = None
+        for item in doc.get("notifications", []):
+            request = item.get("request") or {}
+            if (
+                item.get("kind") == "checkpoint-pending"
+                and request.get("correlation_id") == correlation
+            ):
+                match = item
+                break
+        if match is None:
+            self._say(
+                chat_id,
+                "✕ stale or unknown checkpoint correlation id; "
+                "no decision was applied",
+            )
+            return
+        result, why = self.rails.checkpoint_decide(
+            repo, str(match.get("run_id", "")), decision
+        )
+        if result is None:
+            self._say(chat_id, f"✕ {why}")
+            return
+        self._say(
+            chat_id,
+            f"✓ checkpoint {decision} applied to {match.get('run_id')} "
+            f"(state: {result.get('state', 'unknown')})",
+        )
+
+    def push_notifications(self, repo) -> tuple[int, int]:
+        """One bounded pass: send unread, undelivered notification facts
+        to the paired chat and record every attempt outcome. Send-only;
+        the paired chat is already the consented destination."""
+        if self.state.paired_chat is None:
+            return 0, 0
+        doc, _why = self.rails.notifications(repo)
+        if doc is None:
+            return 0, 0
+        pending = [
+            item for item in doc.get("notifications", [])
+            if item.get("unread")
+            and not item.get("delivered")
+            and int(item.get("delivery_attempts", 0)) < 3
+        ]
+        sent = 0
+        for item in pending:
+            try:
+                self._say(self.state.paired_chat, str(item.get("outbound", "")), thread_id=None)
+                self.queue.flush()
+                self.rails.notification_delivered(repo, str(item["id"]))
+                sent += 1
+            except Exception:
+                self.rails.notification_delivered(
+                    repo, str(item["id"]), failed="transport-error"
+                )
+        return sent, len(pending)
 
     def _cmd_repair(self, chat_id: int, args: list[str]) -> None:
         if not args:

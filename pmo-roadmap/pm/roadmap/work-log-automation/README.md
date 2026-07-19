@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-19 (Phase 25 open 5/9 — WLA-25-05 landed the live ledger stream: SSE tails with exact cursor replay, `dw run tail`, and the live Run view).
-**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (5/9).
+**Last updated:** 2026-07-19 (Phase 25 open 6/9 — WLA-25-06 landed durable operator notifications: derived facts, receipted ack, the Telegram push pass, and the `/decision` typed checkpoint response).
+**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (6/9).
 **Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed; Phase 25 (outward signals and bounded nudges) is contracted and in progress.
 
 ## Vision
@@ -74,6 +74,14 @@ summarization can improve those entries after the lifecycle is proven.
   Delivery Workbench may route observed signals back to agents
   automatically, provided every nudge is score-declared, grant-authorized,
   budget-bounded, and ledgered.
+- Comparative study (sidequest), 2026-07-19: ogulcancelik/herdr and its
+  plugin ecosystem — declarative screen-state manifests with auditable
+  `agent explain` derivation (strict blocked-detection, detection firewalled
+  from action), herdr-remote's phone approval UX (one-tap closed response
+  sets, push collapse, digests) whose transport-equals-authority model is
+  explicitly rejected, reviewr's draft-into-input-box review loop, and the
+  zero-SDK "CLI is the plugin API" ecosystem flywheel — candidate phase-26
+  material recorded in the Phase 25 status.
 
 ## Phase index
 

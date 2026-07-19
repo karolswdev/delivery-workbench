@@ -1561,8 +1561,32 @@ function runViewHtml() {
     <section class="run-panel"><div class="run-panel-head"><div><span>declared output conventions</span><strong>Artifact metadata and lineage</strong></div></div>${runArtifactHtml(view)}</section>
     <section class="run-panel">${runRoutesHtml(view)}</section>
     ${runControlsHtml(view)}${runActPreviewHtml(orchState.runAct)}
+    <section class="run-panel"><div class="run-panel-head"><div><span>operator notifications</span><strong>Derived from the ledger and signal chains; ack is receipted</strong></div>${badge("previews, never tokens", "ok")}</div>${runNotificationsHtml(view)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>hash-chained receipts</span><strong>Run ledger timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${runTimelineHtml(view)}</section>
   </div>`;
+}
+
+function runNotificationsHtml(view) {
+  const items = (orchState.notifications || []).filter(
+    (item) => !item.run_id || item.run_id === view.run_id,
+  );
+  if (!items.length) return `<p class="orch-muted">No derived notifications for this run.</p>`;
+  return `<ul class="run-notifications">${items.map((item) => `
+    <li>
+      <code>${esc(item.kind)}</code> ${item.unread ? badge("unread", "warn") : badge("acked", "ok")}
+      ${item.delivered ? badge("delivered", "ok") : badge(`attempts ${esc(item.delivery_attempts)}`, "")}
+      <span>${esc(item.detail)}</span>
+      ${item.request ? `<small>typed response · correlation <code>${esc(item.request.correlation_id)}</code> · applied only through the local exact-token checkpoint boundary</small>` : ""}
+      ${item.unread ? `<button type="button" data-ntf-ack="${esc(item.id)}">ack</button>` : ""}
+    </li>`).join("")}</ul>`;
+}
+
+async function ackNotification(id) {
+  const { status, body } = await postJson("/api/notifications/ack", { id });
+  if (status === 200) {
+    try { orchState.notifications = (await api("/api/notifications")).data.notifications; } catch (err) {}
+    renderOrchestration();
+  }
 }
 
 function orchestrationBody() {
@@ -1820,6 +1844,8 @@ async function refreshRunData() {
     orchState.runInventory = inventory.data.runs || [];
     selectScoreRuns();
     orchState.runView = orchState.runId ? (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data : null;
+    try { orchState.notifications = (await api("/api/notifications")).data.notifications; }
+    catch (err) { orchState.notifications = []; }
   } catch (err) {
     orchState.runError = err.message; orchState.runView = null;
   } finally {
@@ -1851,6 +1877,8 @@ function startRunLive() {
       if (orchState.runId !== runId || orchState.view !== "run") return;
       try {
         orchState.runView = (await api(`/api/runs/${encodeURIComponent(runId)}/view`)).data;
+        try { orchState.notifications = (await api("/api/notifications")).data.notifications; }
+        catch (err) { /* notifications stay stale until the next refresh */ }
         renderOrchestration();
       } catch (err) { /* keep the last rendered view; refresh stays manual */ }
     }, 400);
@@ -1927,6 +1955,7 @@ function wireRunView() {
   document.getElementById("run-act-confirm")?.addEventListener("click", confirmRunAct);
   document.getElementById("run-act-close")?.addEventListener("click", () => { orchState.runAct = null; renderOrchestration(); });
   document.querySelectorAll("[data-run-stream]").forEach((button) => button.addEventListener("click", () => openRunStream(button)));
+  document.querySelectorAll("[data-ntf-ack]").forEach((button) => button.addEventListener("click", () => ackNotification(button.dataset.ntfAck)));
   document.getElementById("run-stream-close")?.addEventListener("click", () => { orchState.runStream = null; renderOrchestration(); });
 }
 

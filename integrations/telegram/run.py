@@ -20,7 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dw_telegram.config import ConfigError, load_config
 from dw_telegram.interface import TelegramInterface
+from dw_telegram.msgqueue import MessageQueue
 from dw_telegram.pairing import PAIRING_TTL_SECONDS, new_pairing_token
+from dw_telegram.rails import RailsClient
 from dw_telegram.runtime import RuntimeState, utc_now
 from dw_telegram.transport import HttpTransport, TransportError
 
@@ -61,7 +63,59 @@ def main(argv: list[str]) -> int:
         except KeyboardInterrupt:
             return 130
         return 0
-    print(f"usage: run.py [pair|serve] (got {verb!r})", file=sys.stderr)
+    if verb == "notify":
+        # One bounded push pass (docs/signals.md): send unread,
+        # undelivered notification facts to the paired chat, record
+        # every attempt outcome, and exit. Send-only — the paired chat
+        # is already the consented destination; facts persist locally
+        # whether or not this pass runs.
+        if state.paired_chat is None:
+            print(
+                "telegram interface: not paired; notification facts stay local",
+                file=sys.stderr,
+            )
+            return 2
+        repo = None
+        if len(argv) > 1:
+            repo = Path(argv[1]).expanduser()
+        elif config.default_repo is not None:
+            repo = config.default_repo
+        if repo is None or not repo.is_dir():
+            print(
+                "telegram interface: notify needs a rails repo "
+                "(run.py notify <repo> or set default_repo)",
+                file=sys.stderr,
+            )
+            return 2
+        rails = RailsClient(dw_cli=config.dw_cli)
+        doc, why = rails.notifications(repo)
+        if doc is None:
+            print(f"telegram interface: {why}", file=sys.stderr)
+            return 1
+        pending = [
+            item for item in doc.get("notifications", [])
+            if item.get("unread")
+            and not item.get("delivered")
+            and int(item.get("delivery_attempts", 0)) < 3
+        ]
+        if not pending:
+            print("telegram interface: nothing to push", file=sys.stderr)
+            return 0
+        queue = MessageQueue(HttpTransport(config.bot_token))
+        sent = 0
+        for item in pending:
+            try:
+                queue.enqueue(state.paired_chat, str(item.get("outbound", "")))
+                queue.flush()
+                rails.notification_delivered(repo, str(item["id"]))
+                sent += 1
+            except TransportError:
+                rails.notification_delivered(
+                    repo, str(item["id"]), failed="transport-error"
+                )
+        print(f"telegram interface: pushed {sent}/{len(pending)} notification(s)")
+        return 0 if sent == len(pending) else 1
+    print(f"usage: run.py [pair|serve|notify] (got {verb!r})", file=sys.stderr)
     return 2
 
 

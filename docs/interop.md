@@ -65,6 +65,9 @@ is added when an external consumer asks for one.
 | `dw orchestration show <score> --json` | `orchestration.compile_score` | normalized runtime score, layout, analysis, semantic hash, and document hash |
 | `dw orchestration validate <score> --json` | `orchestration.validate_score` | exact-key verdict plus JSON-pointer diagnostics/remediation; exit 1 invalid |
 | `dw orchestration simulate <score> --json` | `orchestration.simulate_score` | pure scheduling waves, locks, lineage, branches, budgets, checkpoints, and terminals |
+| `dw notifications list --json` | `notifications.build_notifications` | derived operator notifications (pending checkpoints, terminals, blocked stops, opt-in branch signals) with unread and delivery state; pure (exit 2 when none) |
+| `dw notifications ack <id>` | `notifications.acknowledge_notification` | idempotent, receipted acknowledgement in the local ack log |
+| `dw notifications delivered <id> [--channel C] [--failed reason]` | `notifications.record_delivery` | one recorded delivery-attempt outcome for a channel consumer (ceiling-bounded retries) |
 | `dw signals list [--remote R] [--branch B] --json` | `signals.build_signals_inventory` | observed channels with hash-chained facts and read-time derived status; pure (exit 2 when none) |
 | `dw signals observe [--remote R] [--branch B] [--provider github\|fixture] --json` | `signals.observe_signals` | one bounded observe pass: semantic-diffed appends and content-free refusals; stamps `starts_work: false` |
 | `dw run plan <score> --project <slug> --story <id> --json` | `orchestration_run.build_run_plan` | pure exact score/repository/status/story/capability/budget/expiry binding plus single-use start token |
@@ -112,6 +115,8 @@ or provider argv.
 | `GET /api/orchestration/<score>` | shared compiler | raw score plus validation, compiled model, and simulation; pure |
 | `GET /api/orchestration/<score>/compiled` | `orchestration.compile_score_path` | byte-identical compiled score in `data` |
 | `GET /api/orchestration/<score>/simulation` | `orchestration.simulate_score` | byte-identical pure simulation in `data` |
+| `GET /api/notifications` | `notifications.build_notifications` | the derived notification inventory in `data`; pure |
+| `POST /api/notifications/ack` | `notifications.acknowledge_notification` | receipted idempotent acknowledgement of one notification id |
 | `GET /api/signals?remote=…&branch=…` | `signals.build_signals_inventory` | observed outward channels and derived status in `data`; pure, never an observe pass |
 | `POST /api/orchestration/preview` | `orchestration_edit.build_score_mutation_plan` | normalized save/delete diff, compiler verdict, and state fingerprint; no write/run/event |
 | `POST /api/orchestration/apply` | `orchestration_edit.apply_score_mutation` | one fresh atomic score save/delete with read-back verification and rollback; never starts a run |
@@ -147,14 +152,16 @@ The full tool table with input schemas lives in [mcp.md](./mcp.md);
 this is the inventory. Read-only: `dw_status`, `dw_step`, `dw_context`,
 `dw_next`, `dw_check`, `dw_doctor`, `dw_board`, `dw_holds`,
 `dw_story_show`, `dw_verify`, `dw_gate`, `dw_orchestration_list`,
-`dw_signals`, `dw_orchestration_show`, `dw_orchestration_simulate`,
+`dw_signals`, `dw_notifications`, `dw_orchestration_show`,
+`dw_orchestration_simulate`,
 `dw_run_plan`, `dw_run_list`, `dw_run_show`, `dw_run_view`, and
 `dw_run_preview`.
 Exact-token actions: `dw_step_apply`, `dw_run_start`, `dw_run_tick`,
 `dw_run_pause`, `dw_run_resume`, `dw_run_revoke`, `dw_run_cancel`, and
 `dw_run_checkpoint`. The explicitly opened and bounded `dw_run_stream` is
 the only run tool returning log content. Other guarded mutations:
-`dw_story_status`, `dw_evidence_capture`, `dw_contract_new`.
+`dw_story_status`, `dw_evidence_capture`, `dw_contract_new`, and the
+receipted idempotent `dw_notifications_ack`.
 Certification and commit are never tool calls.
 
 ## The pin

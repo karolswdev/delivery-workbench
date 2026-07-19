@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 25
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-25-01, WLA-25-02, WLA-25-04, WLA-25-05
 - **Unblocks:** WLA-25-09
 - **Owner:** unassigned
@@ -45,26 +45,26 @@ previews — never apply buttons.
 
 ## Acceptance criteria
 
-- [ ] Every notification fact derives from a ledger or signal event by a
+- [x] Every notification fact derives from a ledger or signal event by a
   pure rule, is persisted append-only with unread/ack state, and
   acknowledging is idempotent and receipted; deleting any cache changes
   no answer.
-- [ ] Outbound messages carry facts, references, and the checkpoint
+- [x] Outbound messages carry facts, references, and the checkpoint
   preview document only — a content test proves no token, apply
   command, or third-party content body ever leaves the machine.
-- [ ] Checkpoint request ports are typed: request and response schemas
+- [x] Checkpoint request ports are typed: request and response schemas
   declared in the score, correlation ids unique per pending decision,
   malformed or stale responses refused with a recorded reason, and the
   accepted response applied only through the existing exact-token
   checkpoint boundary.
-- [ ] Per-person consent gates every Telegram delivery exactly as
+- [x] Per-person consent gates every Telegram delivery exactly as
   Phase 20 contracted — an unconsented member in a group triggers
   nothing, re-verified by the existing consent tests extended to
   notification kinds.
-- [ ] Unread notifications survive restart and list identically over
+- [x] Unread notifications survive restart and list identically over
   CLI, MCP, and HTTP; the Workbench shows the same set with live
   updates via WLA-25-05.
-- [ ] Silence is safe: with Telegram unconfigured or unreachable,
+- [x] Silence is safe: with Telegram unconfigured or unreachable,
   notification facts still persist and surface locally, and delivery
   failure is a recorded, retried-with-ceiling outcome, never a crash or
   a silent drop.
@@ -85,6 +85,13 @@ previews — never apply buttons.
 
 The typed-port grammar deliberately makes "answer a checkpoint from the
 phone" a *document* flow rather than a button flow: the phone supplies
-the decision content, the rails supply the authority. Whether
-`ci-failed` on branches with no associated run should notify by default
-or require opt-in per project is open for the contract story.
+the decision content, the rails supply the authority. The branch-signal
+default was settled by WLA-25-01: opt-in (the local
+`.git/pmo-notifications/config.json` `branch_signals` flag).
+
+Delivered interpretation notes: the response schema of a checkpoint
+request port is the run contract's closed decision vocabulary
+(approve|reject) declared by the score's approval node; stale or
+malformed responses refuse deterministically at the bot and exact-token
+boundaries, and persistent refusal receipts for typed responses arrive
+with WLA-25-08's outstanding-request records.

@@ -42,6 +42,10 @@ try:
         apply_step,
         board_model,
         build_context_payload,
+        acknowledge_notification,
+        build_notifications,
+        pending_deliveries,
+        record_delivery,
         build_signals_inventory,
         github_provider_for,
         observe_signals,
@@ -165,6 +169,39 @@ def command_signals_observe(args: argparse.Namespace) -> int:
         f"{remote}\t{branch}\t{result['status']}\t+{result['appended']}"
         f"\trefusal={refusal}\tnot_modified={str(result['not_modified']).lower()}"
     )
+    return 0
+
+
+def command_notifications_list(args: argparse.Namespace) -> int:
+    inventory = build_notifications(args.root)
+    if args.json:
+        print(json.dumps(inventory, sort_keys=True))
+        return 0
+    items = inventory["notifications"]
+    if not items:
+        print("dw notifications: none pending", file=sys.stderr)
+        return 2
+    for item in items:
+        flag = "unread" if item["unread"] else "acked"
+        delivered = "delivered" if item["delivered"] else f"attempts={item['delivery_attempts']}"
+        print(f"{item['id']}\t{item['kind']}\t{flag}\t{delivered}\t{item['run_id'] or item['node']}")
+    return 0
+
+
+def command_notifications_ack(args: argparse.Namespace) -> int:
+    now_ts = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+    result = acknowledge_notification(args.root, args.notification_id, now_ts)
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+def command_notifications_delivered(args: argparse.Namespace) -> int:
+    now_ts = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+    record_delivery(
+        args.root, args.notification_id, args.channel,
+        not args.failed, args.failed or "sent", now_ts,
+    )
+    print(json.dumps({"id": args.notification_id, "ok": not args.failed}, sort_keys=True))
     return 0
 
 
@@ -1109,6 +1146,25 @@ def build_parser() -> argparse.ArgumentParser:
     step.add_argument("--apply", action="store_true", help="apply one current action after validating --expect")
     step.add_argument("--expect", help="sha256 state token from a fresh dw step preview")
     step.set_defaults(func=command_step)
+
+    notifications = sub.add_parser(
+        "notifications",
+        help="derived operator notifications: pending decisions, terminals, blocked stops (pure reads plus receipted ack)",
+    )
+    notifications_sub = notifications.add_subparsers(dest="notifications_command", required=True)
+    notifications_list = notifications_sub.add_parser("list", help="list derived notifications with unread/delivery state")
+    notifications_list.add_argument("--json", action="store_true", help="emit the stamped inventory")
+    notifications_list.set_defaults(func=command_notifications_list)
+    notifications_ack = notifications_sub.add_parser("ack", help="acknowledge one notification (idempotent, receipted)")
+    notifications_ack.add_argument("notification_id")
+    notifications_ack.set_defaults(func=command_notifications_ack)
+    notifications_delivered = notifications_sub.add_parser(
+        "delivered", help="record one delivery attempt outcome for a channel consumer"
+    )
+    notifications_delivered.add_argument("notification_id")
+    notifications_delivered.add_argument("--channel", default="telegram")
+    notifications_delivered.add_argument("--failed", help="content-free failure reason; omit for success")
+    notifications_delivered.set_defaults(func=command_notifications_delivered, failed=None)
 
     signals = sub.add_parser(
         "signals",

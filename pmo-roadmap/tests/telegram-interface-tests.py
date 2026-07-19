@@ -2296,5 +2296,122 @@ class ScreenCommandTest(InterfaceCase):
         self.assertEqual(self.transport.answered[-1]["text"], "refreshed")
 
 
+class _StubRails:
+    """A recording double for the notification/decision seam."""
+
+    def __init__(self, notifications=None, decide_result=None):
+        self.doc = {"notifications": notifications or []}
+        self.decide_result = decide_result or {"state": "active"}
+        self.decisions = []
+        self.deliveries = []
+
+    def notifications(self, _repo):
+        return self.doc, "ok"
+
+    def notification_delivered(self, _repo, notification_id, failed=None):
+        self.deliveries.append({"id": notification_id, "failed": failed})
+        return {"id": notification_id, "ok": failed is None}, "ok"
+
+    def checkpoint_decide(self, _repo, run_id, decision):
+        self.decisions.append({"run_id": run_id, "decision": decision})
+        return self.decide_result, "ok"
+
+
+def _pending_notification(unread=True):
+    return {
+        "id": "ntf-abc123abc123abc123abc123",
+        "kind": "checkpoint-pending",
+        "run_id": "run-0123456789abcdef01234567",
+        "node": "human-gate",
+        "detail": "a named human checkpoint is waiting for a decision",
+        "unread": unread,
+        "delivered": False,
+        "delivery_attempts": 0,
+        "outbound": (
+            "delivery-workbench: checkpoint-pending\n"
+            "run: run-0123456789abcdef01234567\n"
+            "ack: ntf-abc123abc123abc123abc123"
+        ),
+        "request": {
+            "correlation_id": "ntf-abc123abc123abc123abc123",
+            "response_schema": {"decision": ["approve", "reject"]},
+            "boundary": "dw run checkpoint (fresh exact act token)",
+        },
+    }
+
+
+class NotificationDecisionTest(InterfaceCase):
+    """WLA-25-06: typed checkpoint responses and the bounded push pass."""
+
+    def test_decision_applies_through_the_rails_for_the_owner(self):
+        self.pair()
+        stub = _StubRails(
+            notifications=[_pending_notification()],
+            decide_result={"state": "active"},
+        )
+        self.iface.rails = stub
+        self.iface.handle_update(message(
+            OWNER, "/decision ntf-abc123abc123abc123abc123 approve"
+        ))
+        self.assertEqual(
+            stub.decisions,
+            [{"run_id": "run-0123456789abcdef01234567", "decision": "approve"}],
+        )
+        self.assertIn("checkpoint approve applied", self.last_text())
+
+    def test_decision_refuses_stale_correlation_and_bad_usage(self):
+        self.pair()
+        stub = _StubRails(notifications=[])
+        self.iface.rails = stub
+        self.iface.handle_update(message(
+            OWNER, "/decision ntf-abc123abc123abc123abc123 approve"
+        ))
+        self.assertEqual(stub.decisions, [])
+        self.assertIn("stale or unknown checkpoint correlation", self.last_text())
+        self.iface.handle_update(message(OWNER, "/decision onlyone"))
+        self.assertIn("usage: /decision", self.last_text())
+        self.iface.handle_update(message(
+            OWNER, "/decision ntf-abc123abc123abc123abc123 maybe"
+        ))
+        self.assertIn("usage: /decision", self.last_text())
+
+    def test_decision_from_a_stranger_is_refused(self):
+        token = new_pairing_token(self.state, self.clock())
+        self.iface.handle_update(message(OWNER, f"/pair {token}", user=777))
+        self.transport.sent.clear()
+        stub = _StubRails(notifications=[_pending_notification()])
+        self.iface.rails = stub
+        self.iface.handle_update(message(
+            OWNER, "/decision ntf-abc123abc123abc123abc123 approve", user=888
+        ))
+        self.assertEqual(stub.decisions, [])
+        self.assertIn("consent belongs to the paired owner", self.last_text())
+
+    def test_push_pass_sends_outbound_and_records_delivery(self):
+        self.pair()
+        stub = _StubRails(notifications=[_pending_notification()])
+        self.iface.rails = stub
+        sent, pending = self.iface.push_notifications(self.repo)
+        self.assertEqual((sent, pending), (1, 1))
+        self.assertTrue(any(
+            "checkpoint-pending" in text for text in self.sent_texts()
+        ))
+        body = "\n".join(self.sent_texts())
+        for excluded in ("sha256:", "--expect", "apply"):
+            self.assertNotIn(excluded, body)
+        self.assertEqual(
+            stub.deliveries,
+            [{"id": "ntf-abc123abc123abc123abc123", "failed": None}],
+        )
+
+    def test_push_pass_without_pairing_sends_nothing(self):
+        stub = _StubRails(notifications=[_pending_notification()])
+        self.iface.rails = stub
+        sent, pending = self.iface.push_notifications(self.repo)
+        self.assertEqual((sent, pending), (0, 0))
+        self.assertEqual(self.transport.sent, [])
+        self.assertEqual(stub.deliveries, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
