@@ -595,3 +595,8 @@ operator decision:
   CLI/MCP/HTTP contracts already permit remote clients to coordinate a local
   runner; moving the repository consent root to a service would be a separate
   security and operations product decision.
+
+One extension has since been contracted: outward observation and bounded
+nudging — CI, review, merge-state, and agent-activity facts recorded as
+durable signals and routed back to agents under grant authority — is
+specified in the [outward signals contract](./signals.md) (Phase 25).

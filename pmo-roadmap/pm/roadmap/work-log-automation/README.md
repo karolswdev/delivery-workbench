@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-18 (Phase 24 closed 8/8 with the packaged multi-agent orchestration exam green).
-**Current phase:** none.
-**Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed.
+**Last updated:** 2026-07-18 (Phase 25 open 1/9 — WLA-25-01 landed `docs/signals.md`, the outward signal and nudge authority contract).
+**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (1/9).
+**Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed; Phase 25 (outward signals and bounded nudges) is contracted and in progress.
 
 ## Vision
 
@@ -64,6 +64,16 @@ summarization can improve those entries after the lifecycle is proven.
 - [Solution overview](../../../../docs/solution-overview.md), 2026-07-15:
   the whole-system map, evidence snapshot, strengths, gaps, and rationale for
   Phase 22.
+- Comparative study, 2026-07-18: AgentWrapper/agent-orchestrator (observation
+  loops, activity states, CDC liveness, durable notifications, adapter
+  roster) and microsoft/agent-framework-go (typed HITL request ports,
+  outstanding requests in checkpoints, exact-match standing approval rules,
+  privacy-defaulted telemetry) — absorbed under the consent spine as
+  Phase 25.
+- User requirement and correction, 2026-07-18: auto-nudging is supported —
+  Delivery Workbench may route observed signals back to agents
+  automatically, provided every nudge is score-declared, grant-authorized,
+  budget-bounded, and ledgered.
 
 ## Phase index
 
@@ -94,6 +104,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 22 | Give every human and agent one deterministic, versioned answer for repository readiness, current work, and the next safe action, shared across every supported surface. | done | [phase-22-agent-briefing](./phase-22-agent-briefing/) |
 | 23 | Let a human or agent deliberately apply exactly one current, allowlisted recommendation without copy/paste, stale intent, arbitrary execution, certification, or commit automation. | done | [phase-23-deliberate-step](./phase-23-deliberate-step/) |
 | 24 | Delivery Workbench can coordinate a bounded multi-agent run from an exact visually authored score and revocable grant: research, dependencies, context, outputs, checks, failures, budgets, recovery, and human checkpoints. | done | [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/) |
+| 25 | Delivery Workbench hears the world outside the run — CI, reviews, merge state, agent activity — records it as durable facts, and under an explicit grant nudges the right agent back to work: observed, bounded, ledgered, revocable. | not-started | [phase-25-outward-signals](./phase-25-outward-signals/) |
 
 ## Operating cadence
 
