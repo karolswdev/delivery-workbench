@@ -57,7 +57,7 @@ discipline, re-interpreted under the consent spine.
   over per-person-consented Telegram carrying previews and typed-port
   correlation only — never tokens or apply commands — and fail safe
   when the channel is down (WLA-25-06).
-- [ ] A least-privilege non-interactive Claude Code driver passes the
+- [x] A least-privilege non-interactive Claude Code driver passes the
   full conformance suite with harness-owned auth and a recorded live
   specimen, CI green on fixtures alone (WLA-25-07).
 - [ ] Outstanding checkpoint decisions survive crash/pause and resume
@@ -80,13 +80,13 @@ discipline, re-interpreted under the consent spine.
 | WLA-25-04 | Nudge agents under grant authority | done | [story-04-bounded-nudge-engine](./story-04-bounded-nudge-engine.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-25-05 | Stream the ledger live | done | [story-05-ledger-live-stream](./story-05-ledger-live-stream.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-25-06 | Notify the operator durably | done | [story-06-operator-notifications](./story-06-operator-notifications.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-25-07 | Drive Claude Code through the neutral seam | backlog | [story-07-claude-code-driver](./story-07-claude-code-driver.md) | - |
+| WLA-25-07 | Drive Claude Code through the neutral seam | done | [story-07-claude-code-driver](./story-07-claude-code-driver.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-25-08 | Keep pending decisions alive across the pause | backlog | [story-08-typed-checkpoint-resume](./story-08-typed-checkpoint-resume.md) | - |
 | WLA-25-09 | Prove the outward loop end to end | backlog | [story-09-packaged-outward-exam](./story-09-packaged-outward-exam.md) | - |
 
 ## Where we are
 
-Phase open 6/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
+Phase open 7/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
 outward layer — the `delivery-workbench-signal@1` fact model, read-time
 derived-status precedence, the six-state activity vocabulary with its
 receptivity table, the four-layer nudge model (score rule → grant
@@ -177,8 +177,21 @@ checkpoint boundary) and the bounded `run.py notify` push pass to the
 paired chat, send-only and fail-safe. The herdr-remote counterexample
 held: no token or apply command ever leaves the machine. Suites: core
 325, Telegram 152, both floors green. OWED: the live phone leg
-screenshots, recorded in evidence-story-06. Next: WLA-25-07, the
-Claude Code driver.
+screenshots, recorded in evidence-story-06.
+
+WLA-25-07 is done: `ClaudeCodeExecDriver` drives non-interactive
+`claude -p` through the neutral seam — closed tool allowlists per
+workspace mode (never a shell tool), scrubbed environment with
+harness-owned auth, version-pinned discovery refusing content-free
+outside the tested major, honest `active`/`exited`/`unknown` activity,
+and no session-nudge seam (non-receptive is the honest answer). The
+authenticated live specimen ran the real binary twice under one grant
+— research from bounded context, then a signal-driven nudge re-attempt
+carrying the `@nudge` context — and its first capture found a real
+phase-24 gap: re-produced artifacts collided in the store; a later
+attempt now supersedes atomically, with a fixture regression test.
+Core suite 329 on both floors. Next: WLA-25-08, outstanding decisions
+across the pause.
 
 ## Active risks
 
@@ -208,6 +221,8 @@ Claude Code driver.
 - 2026-07-19 - The undelivered nudge is never queued: the ledger event is the delivery marker (at-most-once), and a crash between seam call and injection under-delivers rather than double-delivers - WLA-25-04.
 - 2026-07-19 - Phone decisions are documents, not buttons: `/decision` carries a correlation id and a closed vocabulary, and the approve/reject still crosses the local exact-token boundary - the herdr-remote study's transport-equals-authority model is the recorded counterexample - WLA-25-06.
 - 2026-07-19 - Branch signals notify behind the operator-local `branch_signals` opt-in, and never for a channel a grant already owns - the run-bound channel already nudges; notifying it twice would be noise - WLA-25-06.
+- 2026-07-19 - A later attempt supersedes its stored artifact atomically; the same attempt stays idempotent and an older attempt refuses - nudge re-activation made re-produced artifacts legitimate for the first time, and the live claude specimen caught the collision phase 24 never hit - WLA-25-07.
+- 2026-07-19 - `USER`/`LOGNAME` join the claude adapter's scrubbed environment as identity, not secrets - macOS keychain credential lookups fail closed without them, and authentication stays harness-owned - WLA-25-07.
 
 ## Decisions deferred
 

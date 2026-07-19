@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-19 (Phase 25 open 6/9 — WLA-25-06 landed durable operator notifications: derived facts, receipted ack, the Telegram push pass, and the `/decision` typed checkpoint response).
-**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (6/9).
+**Last updated:** 2026-07-19 (Phase 25 open 7/9 — WLA-25-07 landed the Claude Code driver: least-privilege `claude -p` through the neutral seam, version-pinned discovery, and a live nudge round-trip specimen).
+**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (7/9).
 **Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed; Phase 25 (outward signals and bounded nudges) is contracted and in progress.
 
 ## Vision

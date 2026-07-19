@@ -11,7 +11,10 @@ delivery), the live stream (WLA-25-05: SSE `GET
 cursor replay, `dw run tail`, and the live Run view), and durable
 operator notifications (WLA-25-06: derived facts with receipted ack,
 `dw notifications` across CLI/MCP/HTTP, the Run view card, the
-Telegram push pass, and the `/decision` typed checkpoint response).
+Telegram push pass, and the `/decision` typed checkpoint response), and
+the second real driver (WLA-25-07: `ClaudeCodeExecDriver` over
+non-interactive `claude -p`, least-privilege tool allowlists, version-
+pinned discovery, honest `active`/`exited`/`unknown` activity).
 **Product claim:** Delivery Workbench **can observe** facts from outside a
 run — CI verdicts, review state, mergeability, agent activity — and, under an
 explicit grant, **can nudge** the right agent back to work. It does not claim

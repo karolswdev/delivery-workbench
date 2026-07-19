@@ -5966,6 +5966,122 @@ class OrchestrationDriverTest(unittest.TestCase):
             with self.assertRaises(DwError, msg=key):
                 manager.start(packet, f"conformance-{key}")
 
+    def _fake_claude(self, version="2.9.9 (Claude Code)"):
+        log = self.tmp / "claude-argv.jsonl"
+        script = self.tmp / "fake-claude"
+        script.write_text(
+            "#!/bin/sh\n"
+            f"LOG={json.dumps(str(log))}\n"
+            'if [ "$1" = "--version" ]; then\n'
+            f"  echo {json.dumps(version)}\n"
+            "  exit 0\n"
+            "fi\n"
+            '{ printf "%s\\036" "$PWD" "$@"; printf "\\035"; } >> "$LOG"\n'
+            'printf "# Findings\\nBounded.\\n\\n# Sources\\n"\n'
+            'printf "[Primary](https://example.test/api)\\n\\n# Risks\\nNone.\\n"\n'
+        )
+        script.chmod(0o755)
+        return script, log
+
+    def _claude_config(self, script):
+        config = json.loads(json.dumps(self.config))
+        for profile in config["profiles"].values():
+            profile["adapter"] = "claude-exec"
+            profile["command"] = [str(script)]
+        return config
+
+    def test_claude_adapter_is_least_privilege_by_construction(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        script, log = self._fake_claude()
+        config = self._claude_config(script)
+        claimed, packet = self.claim_packet(
+            "research-api", "claude-read", config=config
+        )
+        manager = drivers.DriverManager(self.root, config)
+        receipt = manager.start(packet, "claude-read")
+        self.assertEqual(receipt["state"], "succeeded")
+        self.assertEqual(receipt["activity"], "exited")
+        calls = [
+            record.split("\x1e")[:-1]
+            for record in log.read_text().split("\x1d")
+            if record.strip("\n")
+        ]
+        self.assertEqual(len(calls), 1)
+        argv = calls[0][1:]
+        self.assertIn("-p", argv)
+        tools = argv[argv.index("--allowedTools") + 1]
+        self.assertIn("Read", tools)
+        self.assertIn("WebSearch", tools)  # network profile
+        self.assertNotIn("Write", tools)
+        self.assertNotIn("Bash", tools)
+        denied = argv[argv.index("--disallowedTools") + 1]
+        self.assertIn("Bash", denied)
+        mode = argv[argv.index("--permission-mode") + 1]
+        self.assertEqual(mode, "default")
+        self.assertNotIn("--dangerously-skip-permissions", argv)
+        collected = manager.collect(
+            self.projection["run_id"], str(receipt["session_id"])
+        )
+        self.assertTrue(collected[0]["valid"])
+
+        self.seed_implementation_brief()
+        claimed, write_packet = self.claim_packet(
+            "implement", "claude-write", projection=claimed, config=config
+        )
+        write_receipt = manager.start(write_packet, "claude-write")
+        self.assertEqual(write_receipt["state"], "succeeded")
+        calls = [
+            record.split("\x1e")[:-1]
+            for record in log.read_text().split("\x1d")
+            if record.strip("\n")
+        ]
+        argv = calls[-1][1:]
+        tools = argv[argv.index("--allowedTools") + 1]
+        self.assertIn("Write", tools)
+        self.assertNotIn("Bash", tools)
+        self.assertNotIn("WebSearch", tools)  # worker profile has no network
+        self.assertEqual(argv[argv.index("--permission-mode") + 1], "acceptEdits")
+        self.assertEqual(
+            Path(calls[-1][0]).resolve(),
+            Path(str(write_packet["workspace"]["path"])).resolve(),
+        )
+
+    def test_claude_adapter_version_pin_refuses_content_free(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        script, log = self._fake_claude(version="3.0.1 (Claude Code)")
+        config = self._claude_config(script)
+        claimed, packet = self.claim_packet(
+            "research-api", "claude-pin", config=config
+        )
+        manager = drivers.DriverManager(self.root, config)
+        receipt = manager.start(packet, "claude-pin")
+        self.assertEqual(receipt["state"], "failed")
+        self.assertEqual(receipt["reason"], "adapter-unavailable")
+        self.assertFalse(log.exists(), "the pinned refusal must precede any -p call")
+
+        missing = self._claude_config(self.tmp / "no-such-claude")
+        _claimed, packet = self.claim_packet(
+            "research-risks", "claude-missing", projection=claimed, config=missing
+        )
+        manager = drivers.DriverManager(self.root, missing)
+        receipt = manager.start(packet, "claude-missing")
+        self.assertEqual(receipt["reason"], "adapter-unavailable")
+
+    def test_claude_adapter_claims_no_rich_activity(self):
+        import inspect
+        import dw_pmo.orchestration_driver as drivers
+
+        source = inspect.getsource(drivers.ClaudeCodeExecDriver.start)
+        self.assertIn('"activity_plan": []', source)
+        self.assertNotIn("waiting_input", source)
+        self.assertNotIn('"blocked"', source)
+        self.assertFalse(
+            hasattr(drivers.ClaudeCodeExecDriver, "deliver_nudge"),
+            "non-interactive exec must refuse session nudges honestly",
+        )
+
     def test_codex_adapter_claims_no_rich_activity(self):
         import inspect
         import dw_pmo.orchestration_driver as drivers
@@ -6817,6 +6933,62 @@ class OrchestrationConductorTest(unittest.TestCase):
         self.assertEqual(
             [json.loads(line) for line in suffix.stdout.splitlines()],
             lines[3:],
+        )
+
+    def test_nudged_reattempt_supersedes_its_stored_artifact(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        research = {
+            "id": "research", "type": "agent", "role": "research",
+            "profile": "reasoning-readonly", "prompt": "Answer from context.",
+            "capabilities": ["repository-read"], "workspace": "read-only",
+            "outputs": [{"name": "answer", "format": "text",
+                         "path": "artifacts/answer.txt", "max_bytes": 20000}],
+        }
+        self._write_score("nudge-artifact", [research], nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "research",
+             "max_total": 2},
+        ])
+        projection = self._start(
+            "nudge-artifact",
+            standing_nudges=["ci-failed=research"],
+            signal_channel="origin/artifact-x",
+        )
+        run_id = projection["run_id"]
+        fixture = drivers.FixtureDriver({
+            "research": {"polls": 0, "outputs": {"answer": "first answer"}},
+        })
+        result = self._run_to_terminal(run_id, fixture)
+        self.assertEqual(result["state"], "awaiting-certification")
+        self._seed_signal(branch="artifact-x", name="ci-a")
+        refreshed = drivers.FixtureDriver({
+            "research": {"polls": 0, "outputs": {"answer": "second answer"}},
+        })
+        result = self._run_to_terminal(run_id, refreshed)
+        self.assertEqual(result["state"], "awaiting-certification")
+        final = runs.replay_run(self.root, run_id, now=self.now)
+        attempts = [
+            item for item in final["completed_claims"]
+            if item["node_id"] == "research"
+        ]
+        self.assertEqual(
+            [item["outcome"] for item in attempts], ["succeeded", "succeeded"]
+        )
+        artifact_dir = (
+            self.root / ".git" / "pmo-orchestration" / "runs" / run_id
+            / "artifacts" / "research" / "answer"
+        )
+        self.assertEqual(
+            artifact_dir.joinpath("content").read_text().strip(),
+            "second answer",
+        )
+        metadata = json.loads(artifact_dir.joinpath("metadata.json").read_text())
+        self.assertEqual(metadata["attempt"], 2)
+        self.assertEqual(
+            list(artifact_dir.parent.glob(".superseded-*")), [],
+            "the retired copy is removed after the replacement publishes",
         )
 
     def test_notifications_derive_ack_and_correlate(self):

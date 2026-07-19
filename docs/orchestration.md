@@ -461,8 +461,14 @@ states without a provider. `CodexExecDriver` is the first real adapter. It uses
 the stable non-interactive `codex exec` surface with an explicit read-only or
 workspace-write sandbox, no interactive approval, ephemeral session rollout,
 a shell environment that inherits no host secrets, bounded stdout/stderr, and
-host-captured final output. The adapter is live-smoked only when authenticated;
-deterministic CI never depends on a model response.
+host-captured final output. `ClaudeCodeExecDriver` (Phase 25) is the second
+real adapter, over non-interactive `claude -p`: the workspace mode maps to a
+closed tool allowlist (no shell tool in either mode), the environment is
+scrubbed to a small allowlist with authentication left entirely to the
+harness, and capability discovery pins the tested `claude` major version —
+outside the pin the adapter refuses content-free instead of degrading.
+Both real adapters are live-smoked only when authenticated; deterministic CI
+never depends on a model response.
 
 ## Checks, outputs, and failure policy
 

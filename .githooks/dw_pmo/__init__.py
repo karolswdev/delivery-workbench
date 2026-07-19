@@ -227,6 +227,7 @@ from .orchestration_driver import (
     DRIVER_RECEIPT_KIND,
     DRIVER_SCHEMA_VERSION,
     WORK_PACKET_KIND,
+    ClaudeCodeExecDriver,
     CodexExecDriver,
     DriverManager,
     FixtureDriver,

@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 25
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-25-01, WLA-25-03
 - **Unblocks:** WLA-25-09
 - **Owner:** unassigned
@@ -41,20 +41,20 @@ implementation, keeping the seam honest about what is fixture-only.
 
 ## Acceptance criteria
 
-- [ ] The adapter passes the full driver conformance suite (start, poll,
+- [x] The adapter passes the full driver conformance suite (start, poll,
   interrupt, collect, restart-receipt, capability refusal) with no
   changes to the seam's neutral schemas.
-- [ ] Sandbox selection is least-privilege by construction: a read-only
+- [x] Sandbox selection is least-privilege by construction: a read-only
   capability can never produce a workspace-write invocation, proven by
   argv inspection tests; writer invocations run only in the node's
   isolated worktree.
-- [ ] No credential-shaped configuration is accepted in `drivers.json`
+- [x] No credential-shaped configuration is accepted in `drivers.json`
   for this adapter; authentication remains entirely harness-owned, and
   the adapter refuses content-free when the harness is unauthenticated.
-- [ ] Activity reporting claims only `active`/`exited`/`unknown`, and
+- [x] Activity reporting claims only `active`/`exited`/`unknown`, and
   nudge delivery through the adapter respects the receptivity table
   with a test for the refusal path.
-- [ ] One authenticated live specimen — a bounded read-only research
+- [x] One authenticated live specimen — a bounded read-only research
   node and one nudge round-trip — passes outside CI, recorded as
   evidence the way the Codex specimen was; CI itself stays green on
   fixtures alone.

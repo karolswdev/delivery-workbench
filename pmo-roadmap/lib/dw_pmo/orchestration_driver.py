@@ -151,7 +151,7 @@ def validate_driver_config(value: object) -> dict[str, object]:
         if unknown:
             raise DwError(f"driver profile {name!r} has unknown keys: {', '.join(unknown)}")
         adapter = raw.get("adapter")
-        if adapter not in {"fixture", "codex-exec"}:
+        if adapter not in {"fixture", "codex-exec", "claude-exec"}:
             raise DwError(f"driver profile {name!r} has unsupported adapter {adapter!r}")
         capabilities = raw.get("capabilities", [])
         if (
@@ -167,7 +167,8 @@ def validate_driver_config(value: object) -> dict[str, object]:
             or len(set(modes)) != len(modes)
         ):
             raise DwError(f"driver profile {name!r} has invalid workspace_modes")
-        command = raw.get("command", ["codex"] if adapter == "codex-exec" else ["fixture"])
+        default_command = {"codex-exec": ["codex"], "claude-exec": ["claude"]}.get(str(adapter), ["fixture"])
+        command = raw.get("command", default_command)
         if (
             not isinstance(command, list) or len(command) != 1
             or not isinstance(command[0], str) or not command[0]
@@ -878,6 +879,138 @@ class CodexExecDriver:
         return False
 
 
+class ClaudeCodeExecDriver:
+    """Real optional adapter over non-interactive `claude -p`.
+
+    Least privilege by construction: the packet's workspace mode maps to
+    a closed tool allowlist (never a shell tool in either mode), the
+    environment is scrubbed to a small allowlist, authentication stays
+    entirely harness-owned, and capability discovery pins the tested
+    `claude` major version — outside the pin the adapter refuses
+    content-free rather than degrading silently (the herdr version-skew
+    lesson, recorded in WLA-25-07).
+    """
+
+    adapter = "claude-exec"
+
+    # The tested major-version pin. A different major refuses with
+    # adapter-unavailable instead of guessing at flag compatibility.
+    TESTED_MAJORS = (2,)
+
+    _READ_TOOLS = "Read,Grep,Glob"
+    _WRITE_TOOLS = "Read,Grep,Glob,Write,Edit,MultiEdit"
+
+    _prompt = staticmethod(CodexExecDriver._prompt)
+
+    @staticmethod
+    def _safe_env() -> dict[str, str]:
+        allowed = {
+            # USER/LOGNAME are identity, not secrets: macOS keychain
+            # lookups (the harness-owned credential store) fail closed
+            # without them.
+            "HOME", "PATH", "TMPDIR", "LANG", "LC_ALL", "TERM",
+            "USER", "LOGNAME",
+            "SSL_CERT_FILE", "SSL_CERT_DIR", "ANTHROPIC_API_KEY",
+            "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+            "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+        }
+        return {key: value for key, value in os.environ.items() if key in allowed}
+
+    def _version_supported(self, executable: str) -> bool:
+        try:
+            probe = subprocess.run(
+                [executable, "--version"], env=self._safe_env(),
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                timeout=20, text=True,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        if probe.returncode != 0:
+            return False
+        match = re.match(r"\s*(\d+)\.", probe.stdout or "")
+        return bool(match) and int(match.group(1)) in self.TESTED_MAJORS
+
+    def start(
+        self, packet: dict[str, object], profile: dict[str, object], staging: Path
+    ) -> dict[str, object]:
+        def refusal(reason: str) -> dict[str, object]:
+            return {"state": "failed", "exit_code": None, "reason": reason,
+                    "polls_remaining": 0, "final_state": "failed",
+                    "stdout_bytes": 0, "stderr_bytes": 0, "activity_plan": []}
+
+        command = str(profile["command"][0])
+        executable = shutil.which(command)
+        if executable is None:
+            return refusal("adapter-unavailable")
+        if not self._version_supported(executable):
+            return refusal("adapter-unavailable")
+        outputs = packet["outputs"]
+        if packet["workspace"]["mode"] == "read-only" and len(outputs) != 1:
+            return refusal("unsupported-output-shape")
+        staging.mkdir(parents=True, exist_ok=True)
+        output_dir = staging / "outputs"
+        output_dir.mkdir(exist_ok=True)
+        stdout_path = staging / "stdout.log"
+        stderr_path = staging / "stderr.log"
+        read_only = packet["workspace"]["mode"] == "read-only"
+        tools = self._READ_TOOLS if read_only else self._WRITE_TOOLS
+        if profile["network"]:
+            tools += ",WebSearch,WebFetch"
+        argv = [
+            executable, "-p", "--output-format", "text",
+            "--allowedTools", tools,
+            "--disallowedTools", "Bash,Task,NotebookEdit",
+            "--permission-mode", "default" if read_only else "acceptEdits",
+        ]
+        if profile.get("model"):
+            argv.extend(["--model", str(profile["model"])])
+        prompt = self._prompt(packet)
+        reason = "completed"
+        exit_code: int | None = None
+        try:
+            with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+                result = subprocess.run(
+                    argv + [prompt], stdout=stdout, stderr=stderr,
+                    env=self._safe_env(), timeout=int(packet["timeout_seconds"]),
+                    cwd=str(packet["workspace"]["path"]),
+                )
+                exit_code = result.returncode
+        except subprocess.TimeoutExpired:
+            reason = "timeout"
+        stdout_bytes = stdout_path.stat().st_size if stdout_path.exists() else 0
+        stderr_bytes = stderr_path.stat().st_size if stderr_path.exists() else 0
+        max_stream = int(packet["max_stream_bytes"])
+        if stdout_bytes > max_stream or stderr_bytes > max_stream:
+            reason = "oversized-stream"
+            exit_code = exit_code if exit_code is not None else 1
+        if exit_code == 0 and stdout_bytes > 0:
+            if read_only:
+                target = output_dir / str(outputs[0]["name"])
+                shutil.copyfile(stdout_path, target)
+            state = "succeeded"
+        else:
+            state = "failed"
+            if reason == "completed":
+                reason = "nonzero-exit" if exit_code is not None else "lost"
+        return {
+            "state": state, "exit_code": exit_code, "reason": reason,
+            "polls_remaining": 0, "final_state": state,
+            "stdout_bytes": min(stdout_bytes, max_stream + 1),
+            "stderr_bytes": min(stderr_bytes, max_stream + 1),
+            # Non-interactive print mode cannot observe prompt or
+            # permission states; it may claim nothing richer than
+            # active/exited.
+            "activity_plan": [],
+        }
+
+    def interrupt(self, _session: dict[str, object]) -> bool:
+        # `start` is bounded and synchronous, exactly like the codex
+        # adapter; asynchronous interruption arrives with a future
+        # interactive driver, not this one.
+        return False
+
+
 def _schema_check(value: object, schema: object, pointer: str = "$") -> list[str]:
     if not isinstance(schema, dict):
         return [f"{pointer}: schema must be an object"]
@@ -1054,15 +1187,24 @@ def validate_and_store_outputs(
     try:
         for receipt, data in prepared:
             destination = artifacts / str(receipt["name"])
+            superseded: Path | None = None
             if destination.exists():
                 existing = _exact_keys(
                     json.loads((destination / "metadata.json").read_text()),
                     _ARTIFACT_KEYS, "artifact receipt",
                 )
-                if canonical_json(existing) != canonical_json(receipt):
+                if canonical_json(existing) == canonical_json(receipt):
+                    receipts.append(existing)
+                    continue
+                if int(existing.get("attempt", 0)) >= int(receipt["attempt"]):
                     raise DwError(f"artifact receipt already exists with different bytes: {receipt['name']}")
-                receipts.append(existing)
-                continue
+                # A nudge- or route-reactivated later attempt legitimately
+                # re-produces the artifact: the newer validated bytes
+                # supersede, atomically, and the retired copy is removed
+                # only after the replacement is published.
+                superseded = destination.parent / f".superseded-{existing['attempt']}-{receipt['name']}"
+                shutil.rmtree(superseded, ignore_errors=True)
+                os.rename(destination, superseded)
             temporary = Path(tempfile.mkdtemp(prefix=".artifact.", dir=str(artifacts.parent if artifacts.parent.exists() else _run_dir(root, str(packet["run_id"])))))
             try:
                 temporary.mkdir(parents=True, exist_ok=True)
@@ -1075,6 +1217,8 @@ def validate_and_store_outputs(
                 destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 os.rename(temporary, destination)
                 written.append(destination)
+                if superseded is not None:
+                    shutil.rmtree(superseded, ignore_errors=True)
             finally:
                 if temporary.exists():
                     shutil.rmtree(temporary, ignore_errors=True)
@@ -1123,7 +1267,9 @@ class DriverManager:
         self.root = root.resolve()
         self.config = load_driver_config(self.root, config)
         self.adapters = adapters or {
-            "fixture": FixtureDriver(), "codex-exec": CodexExecDriver(),
+            "fixture": FixtureDriver(),
+            "codex-exec": CodexExecDriver(),
+            "claude-exec": ClaudeCodeExecDriver(),
         }
 
     def capability(self, profile: str) -> dict[str, object]:
