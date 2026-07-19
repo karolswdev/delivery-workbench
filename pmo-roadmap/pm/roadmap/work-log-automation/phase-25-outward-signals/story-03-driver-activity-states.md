@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 25
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-25-01
 - **Unblocks:** WLA-25-04, WLA-25-07, WLA-25-09
 - **Owner:** unassigned
@@ -39,20 +39,20 @@ test until the fixture driver can fake every state.
 
 ## Acceptance criteria
 
-- [ ] The driver protocol carries the six-value activity vocabulary with
+- [x] The driver protocol carries the six-value activity vocabulary with
   exact meanings from the WLA-25-01 contract, and adapters that cannot
   observe a state must report `unknown` — a conformance test rejects an
   adapter that invents states it cannot substantiate.
-- [ ] The receptivity table is a pure function with exhaustive tests:
+- [x] The receptivity table is a pure function with exhaustive tests:
   every (state, intent) pair maps to deliver, defer, or refuse, and
   `blocked` and `unknown` refuse injection under every intent including
   an operator-initiated manual nudge.
-- [ ] Activity transitions appear as ledger facts with timestamps and
+- [x] Activity transitions appear as ledger facts with timestamps and
   attempt binding, visible in `run show`/`run view` and the Workbench
   without any new polling authority.
-- [ ] `FixtureDriver` can script every state, every transition, and a
+- [x] `FixtureDriver` can script every state, every transition, and a
   mid-flight flip to `blocked`, deterministically across restart.
-- [ ] `CodexExecDriver` reports only `active`/`exited`/`unknown`, proven
+- [x] `CodexExecDriver` reports only `active`/`exited`/`unknown`, proven
   by test; no code path derives a richer state from output heuristics.
 
 ## Test plan

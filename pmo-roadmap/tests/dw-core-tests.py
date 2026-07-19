@@ -5819,6 +5819,107 @@ class OrchestrationDriverTest(unittest.TestCase):
         self.assertEqual(fixture.starts, 0)
         self.assertEqual(paused["state"], "paused")
 
+    def test_activity_follows_the_scripted_plan_and_terminal_mapping(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        responses = self.responses()
+        responses["research-api"] = dict(
+            responses["research-api"], polls=5,
+            activities=["active", "idle", "waiting_input", "unknown", "blocked"],
+        )
+        _claimed, packet = self.claim_packet("research-api", "activity-walk")
+        fixture = drivers.FixtureDriver(responses)
+        manager = drivers.DriverManager(self.root, self.config, adapters={"fixture": fixture})
+        started = manager.start(packet, "activity-walk")
+        self.assertEqual(started["state"], "running")
+        self.assertEqual(started["activity"], "active")
+        run_id = self.projection["run_id"]
+        session = str(started["session_id"])
+        walked = [manager.poll(run_id, session) for _ in range(3)]
+        self.assertEqual(
+            [(item["state"], item["activity"]) for item in walked],
+            [
+                ("running", "idle"),
+                ("running", "waiting_input"),
+                ("running", "unknown"),
+            ],
+        )
+        # A fresh manager (post-restart) continues the same scripted walk
+        # from the persisted session record, deterministically.
+        recovered = drivers.DriverManager(
+            self.root, self.config, adapters={"fixture": drivers.FixtureDriver()}
+        )
+        fourth = recovered.poll(run_id, session)
+        self.assertEqual((fourth["state"], fourth["activity"]), ("running", "blocked"))
+        final = recovered.poll(run_id, session)
+        self.assertEqual((final["state"], final["activity"]), ("succeeded", "exited"))
+
+    def test_lost_maps_to_unknown_and_default_running_activity_is_active(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        responses = self.responses()
+        responses["research-api"] = dict(
+            responses["research-api"], polls=1, state="lost", reason="lost",
+            exit_code=None,
+        )
+        _claimed, packet = self.claim_packet("research-api", "activity-lost")
+        manager = drivers.DriverManager(
+            self.root, self.config,
+            adapters={"fixture": drivers.FixtureDriver(responses)},
+        )
+        started = manager.start(packet, "activity-lost")
+        self.assertEqual(started["activity"], "active")
+        final = manager.poll(self.projection["run_id"], str(started["session_id"]))
+        self.assertEqual((final["state"], final["activity"]), ("lost", "unknown"))
+
+    def test_adapter_inventing_activity_states_is_a_conformance_error(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        _claimed, packet = self.claim_packet("research-api", "conformance")
+
+        def adapter_with_plan(plan):
+            class Inventive:
+                adapter = "fixture"
+
+                def start(self, _packet, _profile, _staging):
+                    result = {
+                        "state": "running", "exit_code": None,
+                        "reason": "running", "polls_remaining": 2,
+                        "final_state": "succeeded", "stdout_bytes": 0,
+                        "stderr_bytes": 0,
+                    }
+                    if plan is not KeyError:
+                        result["activity_plan"] = plan
+                    return result
+
+                def interrupt(self, _session):
+                    return True
+
+            return Inventive()
+
+        cases = [
+            ("invented-state", ["daydreaming"]),
+            ("exited-while-running", ["exited"]),
+            ("not-a-list", "active"),
+            ("oversized", ["active"] * 65),
+            ("missing-key", KeyError),
+        ]
+        for key, plan in cases:
+            manager = drivers.DriverManager(
+                self.root, self.config, adapters={"fixture": adapter_with_plan(plan)}
+            )
+            with self.assertRaises(DwError, msg=key):
+                manager.start(packet, f"conformance-{key}")
+
+    def test_codex_adapter_claims_no_rich_activity(self):
+        import inspect
+        import dw_pmo.orchestration_driver as drivers
+
+        source = inspect.getsource(drivers.CodexExecDriver.start)
+        self.assertIn('"activity_plan": []', source)
+        self.assertNotIn("waiting_input", source)
+        self.assertNotIn('"blocked"', source)
+
 
 class OrchestrationConductorTest(unittest.TestCase):
     """WLA-24-06: deterministic ticks, checks, routes, and recovery."""
@@ -6040,6 +6141,78 @@ class OrchestrationConductorTest(unittest.TestCase):
         self.assertNotIn("pytest", ledger)
         self.assertNotIn("Bounded.", ledger)
         self.assertNotIn('"argv"', ledger)
+
+    def test_activity_transitions_are_ledgered_once_per_change(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+
+        projection = self._start()
+        responses = self._responses(polls=4)
+        responses["research-api"]["activities"] = [
+            "active", "waiting_input", "waiting_input", "blocked",
+        ]
+
+        def check_runner(_argv, _cwd, _timeout, _stdout, _stderr, _env):
+            return 0
+
+        fixture = drivers.FixtureDriver(responses)
+        conductor.tick_run(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, check_runner=check_runner, now=self.now,
+        )
+        live = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        claim = next(
+            item for item in live["active_claims"]
+            if item["node_id"] == "research-api"
+        )
+        self.assertIn(
+            claim["last_activity"]["activity"], {"active", "waiting_input"}
+        )
+        with self.assertRaises(DwError):
+            runs.record_runtime_event(
+                self.root, projection["run_id"], "activity_observed",
+                {
+                    "node_id": claim["node_id"], "attempt": claim["attempt"],
+                    "claim_id": claim["claim_id"], "activity": "daydreaming",
+                    "session_id": "none",
+                },
+                str(live["ledger_head"]), now=self.now,
+            )
+        for _ in range(24):
+            result = conductor.tick_run(
+                self.root, projection["run_id"], driver_config=self.config,
+                adapters={"fixture": fixture}, check_runner=check_runner, now=self.now,
+            )
+            if result["terminal"]:
+                break
+        ledger_path = (
+            self.root / ".git" / "pmo-orchestration" / "runs"
+            / projection["run_id"] / "ledger.jsonl"
+        )
+        observed = [
+            json.loads(line)["detail"]["activity"]
+            for line in ledger_path.read_text(encoding="utf-8").splitlines()
+            if json.loads(line)["event"] == "activity_observed"
+            and json.loads(line)["detail"]["node_id"] == "research-api"
+        ]
+        # The repeated waiting_input poll appends nothing: one fact per change.
+        self.assertEqual(
+            observed, ["active", "waiting_input", "blocked", "exited"]
+        )
+        final = runs.replay_run(self.root, projection["run_id"], now=self.now)
+        released = next(
+            item for item in final["completed_claims"]
+            if item["node_id"] == "research-api"
+        )
+        self.assertEqual(released["last_activity"]["activity"], "exited")
+        view = surface.build_run_view(self.root, projection["run_id"], now=self.now)
+        agent_sessions = [
+            item for item in view["sessions"]["agents"]
+            if item["node_id"] == "research-api"
+        ]
+        self.assertEqual(agent_sessions[0]["activity"], "exited")
 
     def test_invalid_artifact_retries_then_exhausts_without_fan_in(self):
         import dw_pmo.orchestration_conductor as conductor
@@ -7289,6 +7462,27 @@ class SignalsTest(unittest.TestCase):
             self.root, "/api/signals", {"branch": ["no-such-branch"]}
         )
         self.assertEqual(empty["data"]["channels"], [])
+
+    def test_receptivity_table_is_exhaustive_and_refuses_blocked(self):
+        from dw_pmo.orchestration_run import ACTIVITY_STATES
+
+        expected = {
+            "waiting_input": "deliver", "idle": "deliver", "active": "defer",
+            "blocked": "refuse", "unknown": "refuse", "exited": "refuse",
+        }
+        self.assertEqual(set(expected), set(ACTIVITY_STATES))
+        for state in sorted(ACTIVITY_STATES):
+            for intent in ("auto", "manual"):
+                self.assertEqual(
+                    self.sig.receptivity(state, intent), expected[state],
+                    (state, intent),
+                )
+        # blocked refuses even a manual operator nudge, by contract.
+        self.assertEqual(self.sig.receptivity("blocked", "manual"), "refuse")
+        with self.assertRaises(DwError):
+            self.sig.receptivity("active", "operator-shortcut")
+        with self.assertRaises(DwError):
+            self.sig.receptivity("daydreaming", "auto")
 
     def test_github_remote_parsing_and_provider_refusals(self):
         sig = self.sig

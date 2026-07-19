@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-18 (Phase 25 open 2/9 — WLA-25-02 landed the authority-free SCM observer: `dw signals`, MCP `dw_signals`, `GET /api/signals`).
-**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (2/9).
+**Last updated:** 2026-07-19 (Phase 25 open 3/9 — WLA-25-03 landed driver activity states: receipt `activity`, `activity_observed` ledger facts, and the pure receptivity table).
+**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (3/9).
 **Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed; Phase 25 (outward signals and bounded nudges) is contracted and in progress.
 
 ## Vision

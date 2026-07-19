@@ -27,6 +27,7 @@ from .gitio import head_sha
 from .model import DwError
 from .orchestration import CAPABILITIES, WORKSPACE_MODES, canonical_json
 from .orchestration_run import (
+    ACTIVITY_STATES,
     RUN_SCHEMA_VERSION,
     _format_time,
     _grant_freshness_issues,
@@ -72,7 +73,7 @@ _RECEIPT_KEYS = {
     "kind", "schema_version", "run_id", "node_id", "attempt", "claim_id",
     "profile", "adapter", "session_id", "idempotency_key", "packet_hash",
     "state", "started", "exit_code", "reason", "started_at", "updated_at",
-    "stdout_bytes", "stderr_bytes",
+    "stdout_bytes", "stderr_bytes", "activity",
 }
 _ARTIFACT_KEYS = {
     "kind", "schema_version", "run_id", "node_id", "attempt", "name",
@@ -80,8 +81,9 @@ _ARTIFACT_KEYS = {
 }
 _ADAPTER_RESULT_KEYS = {
     "state", "exit_code", "reason", "polls_remaining", "final_state",
-    "stdout_bytes", "stderr_bytes",
+    "stdout_bytes", "stderr_bytes", "activity_plan",
 }
+_MAX_ACTIVITY_PLAN = 64
 _DRIVER_STATES = {"running", "succeeded", "failed", "cancelled", "lost", "refused"}
 _DRIVER_REASONS = {
     "running", "completed", "failed", "cancelled", "lost", "timeout",
@@ -600,15 +602,30 @@ def validate_work_packet(packet: object) -> dict[str, object]:
     return value
 
 
+def _terminal_activity(state: str) -> str:
+    """An honest terminal mapping: a lost session's agent may still be
+    alive somewhere (`unknown`); every other terminal means the session
+    is over (`exited`)."""
+    return "unknown" if state == "lost" else "exited"
+
+
 def _receipt(
     packet: dict[str, object], adapter: str, session_id: str | None,
     idempotency_key: str, state: str, started: bool, exit_code: int | None,
     reason: str, started_at: str | None, updated_at: str,
     stdout_bytes: int = 0, stderr_bytes: int = 0,
+    activity: str | None = None,
 ) -> dict[str, object]:
     if state not in _DRIVER_STATES or reason not in _DRIVER_REASONS:
         raise DwError("driver receipt has an unsupported state or reason")
+    if state == "running":
+        activity = activity or "active"
+        if activity not in ACTIVITY_STATES or activity == "exited":
+            raise DwError("driver receipt has an unsupported activity state")
+    else:
+        activity = _terminal_activity(state)
     return {
+        "activity": activity,
         "kind": DRIVER_RECEIPT_KIND,
         "schema_version": DRIVER_SCHEMA_VERSION,
         "run_id": packet["run_id"], "node_id": packet["node_id"],
@@ -651,7 +668,7 @@ class FixtureDriver:
         if not isinstance(outputs, dict):
             return {"state": "failed", "exit_code": 2, "reason": "malformed-output",
                     "polls_remaining": 0, "final_state": "failed",
-                    "stdout_bytes": 0, "stderr_bytes": 0}
+                    "stdout_bytes": 0, "stderr_bytes": 0, "activity_plan": []}
         output_specs = {item["name"]: item for item in packet["outputs"]}
         output_dir = staging / "outputs"
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -664,14 +681,14 @@ class FixtureDriver:
             if packet["workspace"]["mode"] != "isolated-worktree":
                 return {"state": "failed", "exit_code": 2, "reason": "workspace-refused",
                         "polls_remaining": 0, "final_state": "failed",
-                        "stdout_bytes": 0, "stderr_bytes": 0}
+                        "stdout_bytes": 0, "stderr_bytes": 0, "activity_plan": []}
             workspace = Path(str(packet["workspace"]["path"])).resolve()
             for name, content in workspace_files.items():  # type: ignore[union-attr]
                 target = (workspace / str(name)).resolve()
                 if target != workspace and workspace not in target.parents:
                     return {"state": "failed", "exit_code": 2, "reason": "workspace-refused",
                             "polls_remaining": 0, "final_state": "failed",
-                            "stdout_bytes": 0, "stderr_bytes": 0}
+                            "stdout_bytes": 0, "stderr_bytes": 0, "activity_plan": []}
                 _write_file(target, content, "text")
         final_state = str(script.get("state", "succeeded"))
         if final_state not in {"succeeded", "failed", "cancelled", "lost"}:
@@ -686,6 +703,9 @@ class FixtureDriver:
             reason = "nonzero-exit"
         if reason not in _DRIVER_REASONS:
             reason = "failed"
+        activities = script.get("activities", [])
+        if not isinstance(activities, list):
+            activities = []
         return {
             "state": final_state if polls == 0 else "running",
             "exit_code": exit_code if polls == 0 else None,
@@ -693,6 +713,7 @@ class FixtureDriver:
             "polls_remaining": max(0, polls), "final_state": final_state,
             "stdout_bytes": int(script.get("stdout_bytes", 0)),
             "stderr_bytes": int(script.get("stderr_bytes", 0)),
+            "activity_plan": [str(item) for item in activities],
         }
 
     def interrupt(self, _session: dict[str, object]) -> bool:
@@ -741,12 +762,12 @@ class CodexExecDriver:
         if executable is None:
             return {"state": "failed", "exit_code": None, "reason": "adapter-unavailable",
                     "polls_remaining": 0, "final_state": "failed",
-                    "stdout_bytes": 0, "stderr_bytes": 0}
+                    "stdout_bytes": 0, "stderr_bytes": 0, "activity_plan": []}
         outputs = packet["outputs"]
         if packet["workspace"]["mode"] == "read-only" and len(outputs) != 1:
             return {"state": "failed", "exit_code": None, "reason": "unsupported-output-shape",
                     "polls_remaining": 0, "final_state": "failed",
-                    "stdout_bytes": 0, "stderr_bytes": 0}
+                    "stdout_bytes": 0, "stderr_bytes": 0, "activity_plan": []}
         staging.mkdir(parents=True, exist_ok=True)
         output_dir = staging / "outputs"
         output_dir.mkdir(exist_ok=True)
@@ -800,6 +821,9 @@ class CodexExecDriver:
             "polls_remaining": 0, "final_state": state,
             "stdout_bytes": min(stdout_bytes, max_stream + 1),
             "stderr_bytes": min(stderr_bytes, max_stream + 1),
+            # Non-interactive exec cannot observe prompt or permission
+            # states; it may claim nothing richer than active/exited.
+            "activity_plan": [],
         }
 
     def interrupt(self, _session: dict[str, object]) -> bool:
@@ -1158,6 +1182,19 @@ class DriverManager:
                 or result["polls_remaining"] < 0
             ):
                 raise DwError("adapter returned an invalid bounded result")
+            plan = result["activity_plan"]
+            if (
+                not isinstance(plan, list)
+                or len(plan) > _MAX_ACTIVITY_PLAN
+                or any(
+                    item not in ACTIVITY_STATES or item == "exited"
+                    for item in plan
+                )
+            ):
+                raise DwError(
+                    "adapter reported an activity state outside the "
+                    "contracted vocabulary"
+                )
             if (
                 int(result["stdout_bytes"]) > int(packet["max_stream_bytes"])
                 or int(result["stderr_bytes"]) > int(packet["max_stream_bytes"])
@@ -1172,6 +1209,7 @@ class DriverManager:
                 packet, str(profile["adapter"]), session_id, idempotency_key,
                 str(result["state"]), True, result["exit_code"], str(result["reason"]),
                 now, now, int(result["stdout_bytes"]), int(result["stderr_bytes"]),
+                activity=str(plan[0]) if plan else None,
             )
             record = {
                 "session_id": session_id, "idempotency_key": idempotency_key,
@@ -1179,6 +1217,8 @@ class DriverManager:
                 "staging": str(staging), "adapter": profile["adapter"],
                 "polls_remaining": result["polls_remaining"],
                 "final_state": result["final_state"], "receipt": receipt,
+                "activity_plan": [str(item) for item in plan],
+                "activity_index": 0,
             }
             self._write_record(self._session_dir(run_id) / f"{session_id}.json", record)
             return receipt
@@ -1221,6 +1261,14 @@ class DriverManager:
                         0 if state == "succeeded" else (1 if state == "failed" else None)
                     )
                     receipt["reason"] = "completed" if state == "succeeded" else state
+                    receipt["activity"] = _terminal_activity(state)
+                else:
+                    plan = record.get("activity_plan") or []
+                    index = int(record.get("activity_index", 0)) + 1
+                    record["activity_index"] = index
+                    receipt["activity"] = (
+                        str(plan[min(index, len(plan) - 1)]) if plan else "active"
+                    )
                 receipt["updated_at"] = _format_time(datetime.now(timezone.utc))
                 record["receipt"] = receipt
                 self._write_record(path, record)
@@ -1238,6 +1286,7 @@ class DriverManager:
                 else:
                     receipt["state"] = "cancelled"
                     receipt["reason"] = "interrupted"
+                receipt["activity"] = _terminal_activity(str(receipt["state"]))
                 receipt["exit_code"] = None
                 receipt["updated_at"] = _format_time(datetime.now(timezone.utc))
                 record["receipt"] = receipt

@@ -225,9 +225,9 @@ def _driver_sessions(run_dir: Path) -> list[dict[str, object]]:
             key: receipt.get(key)
             for key in (
                 "run_id", "node_id", "attempt", "claim_id", "profile",
-                "adapter", "session_id", "state", "started", "exit_code",
-                "reason", "started_at", "updated_at", "stdout_bytes",
-                "stderr_bytes",
+                "adapter", "session_id", "state", "activity", "started",
+                "exit_code", "reason", "started_at", "updated_at",
+                "stdout_bytes", "stderr_bytes",
             )
         })
     return sessions

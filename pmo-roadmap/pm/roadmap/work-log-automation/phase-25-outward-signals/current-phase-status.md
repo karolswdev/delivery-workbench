@@ -1,6 +1,6 @@
 # Phase 25 - The listening conductor — outward signals and bounded nudges
 
-**Last updated:** 2026-07-18.
+**Last updated:** 2026-07-19.
 
 ## Goal
 
@@ -42,7 +42,7 @@ discipline, re-interpreted under the consent spine.
 - [x] The SCM observer records deduplicated, hash-chained,
   content-excluded signal facts and byte-equivalent derived status
   across CLI/MCP/HTTP while provably starting nothing (WLA-25-02).
-- [ ] Drivers report the contracted activity states honestly
+- [x] Drivers report the contracted activity states honestly
   (fixture: all; codex exec: `active`/`exited`/`unknown`), and the pure
   receptivity table refuses injection into `blocked`/`unknown` under
   every intent (WLA-25-03).
@@ -76,7 +76,7 @@ discipline, re-interpreted under the consent spine.
 |---|---|---|---|---|
 | WLA-25-01 | Contract the outward signal and nudge authority | done | [story-01-signal-nudge-contract](./story-01-signal-nudge-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-25-02 | Observe SCM facts without acting | done | [story-02-scm-observer](./story-02-scm-observer.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-25-03 | Teach drivers to report activity states | backlog | [story-03-driver-activity-states](./story-03-driver-activity-states.md) | - |
+| WLA-25-03 | Teach drivers to report activity states | done | [story-03-driver-activity-states](./story-03-driver-activity-states.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-25-04 | Nudge agents under grant authority | backlog | [story-04-bounded-nudge-engine](./story-04-bounded-nudge-engine.md) | - |
 | WLA-25-05 | Stream the ledger live | backlog | [story-05-ledger-live-stream](./story-05-ledger-live-stream.md) | - |
 | WLA-25-06 | Notify the operator durably | backlog | [story-06-operator-notifications](./story-06-operator-notifications.md) | - |
@@ -86,7 +86,7 @@ discipline, re-interpreted under the consent spine.
 
 ## Where we are
 
-Phase open 1/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
+Phase open 3/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
 outward layer — the `delivery-workbench-signal@1` fact model, read-time
 derived-status precedence, the six-state activity vocabulary with its
 receptivity table, the four-layer nudge model (score rule → grant
@@ -113,7 +113,22 @@ byte-identically as `dw signals list`, MCP `dw_signals`, and Workbench
 CLI act stamped `starts_work: false`. Ten new tests raise the core suite
 to 307; the live demo walked failing/green/conflicted/closed scenarios,
 parity, fail-closed corruption, and refusal dedup on the installed CLI.
-Next: WLA-25-03, driver activity states.
+
+WLA-25-03 is done: driver receipts carry an exact-key `activity` field
+from the contracted six-state vocabulary, adapters declare bounded
+activity plans that the manager conformance-checks (invented states,
+`exited`-while-running, non-lists, oversized plans, and missing keys all
+refuse), terminal states map honestly (`lost` → `unknown`, otherwise
+`exited`), the conductor ledgers `activity_observed` once per change
+with replay-idempotent dedup, the projection/run view/Workbench surface
+`last_activity` and per-session activity with no new authority, and
+`signals.receptivity` is the pure exhaustive table — `blocked` and
+`unknown` refuse under every intent including manual. FixtureDriver
+scripts every state deterministically across restart; codex exec is
+pinned to its honest subset by source assertion. Core suite 313 on both
+floors; the live demo walked a granted run's deduped transition ledger
+to `awaiting-certification`. Next: WLA-25-04, the nudge engine — its
+receptivity dependency is now real.
 
 ## Active risks
 

@@ -272,6 +272,7 @@ from .orchestration_surface import (
     start_run_by_id,
 )
 from .signals import (
+    NUDGE_INTENTS,
     SIGNALS_KIND,
     SIGNALS_OBSERVE_KIND,
     SIGNAL_SCHEMA_VERSION,
@@ -281,8 +282,10 @@ from .signals import (
     github_provider_for,
     observe_signals,
     parse_github_remote,
+    receptivity,
     replay_channel,
     resolve_signal_channel,
 )
+from .orchestration_run import ACTIVITY_STATES
 
 __version__ = "1.14.0"

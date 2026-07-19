@@ -836,6 +836,44 @@ def _append_receipt(
     return updated, True
 
 
+def _observe_activity(
+    root: Path,
+    projection: dict[str, object],
+    claim: dict[str, object],
+    receipt: dict[str, object],
+    *,
+    now: datetime | None,
+) -> dict[str, object]:
+    """Record a driver activity transition as a ledger fact, once per change.
+
+    Activity is a separate axis from lifecycle state: it says what a live
+    session is doing. Unchanged activity appends nothing, so a replayed
+    tick stays idempotent.
+    """
+    activity = receipt.get("activity")
+    if not activity:
+        return projection
+    last = claim.get("last_activity") or {}
+    if last.get("activity") == activity:
+        return projection
+    updated = record_runtime_event(
+        root,
+        str(projection["run_id"]),
+        "activity_observed",
+        {
+            "node_id": claim["node_id"],
+            "attempt": claim["attempt"],
+            "claim_id": claim["claim_id"],
+            "activity": str(activity),
+            "session_id": str(receipt.get("session_id") or "none"),
+        },
+        str(projection["ledger_head"]),
+        now=now,
+    )
+    claim["last_activity"] = {"activity": str(activity)}
+    return updated
+
+
 def _boundary(hook: BoundaryHook | None, name: str, detail: dict[str, object]) -> None:
     if hook is not None:
         hook(name, detail)
@@ -912,6 +950,7 @@ def _reconcile_claim(
         )
         if appended:
             actions.append({"action": "receipt", "node_id": node["id"], "state": receipt["state"]})
+        projection = _observe_activity(root, projection, claim, receipt, now=now)
         if receipt["state"] == "running" and control_state not in {"cancelled"}:
             polled = manager.poll(run_id, str(receipt["session_id"]))
             projection, appended = _append_receipt(
@@ -919,7 +958,12 @@ def _reconcile_claim(
                 polled.get("session_id"), now=now,
             )
             if appended:
-                actions.append({"action": "poll", "node_id": node["id"], "state": polled["state"]})
+                actions.append({
+                    "action": "poll", "node_id": node["id"],
+                    "state": polled["state"],
+                    "activity": polled.get("activity"),
+                })
+            projection = _observe_activity(root, projection, claim, polled, now=now)
             receipt = polled
         if receipt["state"] == "running":
             return projection

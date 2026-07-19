@@ -85,6 +85,9 @@ _EVENT_DETAIL_KEYS = {
         "node_id", "attempt", "claim_id", "executor", "execution_id",
         "state", "reason", "receipt_hash",
     },
+    "activity_observed": {
+        "node_id", "attempt", "claim_id", "activity", "session_id",
+    },
     "failure_routed": {
         "node_id", "attempt", "action", "target", "visit",
         "target_attempt",
@@ -109,10 +112,18 @@ _EVENT_DETAIL_KEYS = {
 }
 
 _RUNTIME_EVENTS = {
-    "node_receipt", "failure_routed", "route_resolved",
+    "node_receipt", "activity_observed", "failure_routed", "route_resolved",
     "checkpoint_reached", "checkpoint_decided", "run_aborted",
     "run_terminal", "rail_advanced", "external_commit_observed",
 }
+
+# The driver activity vocabulary (docs/signals.md). This is a separate
+# axis from run/node lifecycle states: it says what a live agent session
+# is doing, not whether the node succeeded. `blocked` here means the
+# agent is stopped on a pending permission/approval decision.
+ACTIVITY_STATES = frozenset(
+    {"active", "idle", "waiting_input", "blocked", "exited", "unknown"}
+)
 
 
 def _utc_now() -> datetime:
@@ -790,6 +801,18 @@ def replay_run(
                 raise DwError("node receipt does not match its claim")
             receipts.setdefault(claim_id, []).append({"seq": offset, **dict(detail)})
             claim["last_receipt"] = dict(detail)
+        elif kind == "activity_observed":
+            claim_id = str(detail["claim_id"])
+            claim = active.get(claim_id)
+            if claim is None:
+                raise DwError("activity observation has no active claim")
+            if claim["node_id"] != detail["node_id"] or claim["attempt"] != detail["attempt"]:
+                raise DwError("activity observation does not match its claim")
+            claim["last_activity"] = {
+                "activity": detail["activity"],
+                "session_id": detail["session_id"],
+                "seq": offset,
+            }
         elif kind == "failure_routed":
             source = next(
                 (
@@ -1006,6 +1029,14 @@ def _validate_runtime_transition(
             raise DwError("node receipt has an unsupported state")
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(detail["receipt_hash"])):
             raise DwError("node receipt hash is malformed")
+    elif event == "activity_observed":
+        claim = active.get(str(detail["claim_id"]))
+        if claim is None or any(
+            claim[key] != detail[key] for key in ("node_id", "attempt")
+        ):
+            raise DwError("activity observation does not match an active claim")
+        if detail["activity"] not in ACTIVITY_STATES:
+            raise DwError("activity observation has an unsupported state")
     elif event == "failure_routed":
         source = next(
             (

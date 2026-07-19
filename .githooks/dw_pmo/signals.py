@@ -785,6 +785,35 @@ def build_signals_inventory(root, remote=None, branch=None):
     }
 
 
+NUDGE_INTENTS = ("auto", "manual")
+
+_RECEPTIVITY = {
+    "waiting_input": "deliver",
+    "idle": "deliver",
+    "active": "defer",
+    "blocked": "refuse",
+    "unknown": "refuse",
+    "exited": "refuse",
+}
+
+
+def receptivity(activity, intent):
+    """The pure receptivity table from docs/signals.md.
+
+    Maps (activity state, nudge intent) to deliver | defer | refuse.
+    `blocked` and `unknown` refuse under every intent, including a
+    manual operator nudge: a session stopped on a permission decision
+    is awaiting a ring-4 approval, and honesty about an unobservable
+    state outranks convenience.
+    """
+    if intent not in NUDGE_INTENTS:
+        raise DwError("unsupported nudge intent %r" % (intent,))
+    verdict = _RECEPTIVITY.get(activity)
+    if verdict is None:
+        raise DwError("unsupported activity state %r" % (activity,))
+    return verdict
+
+
 def resolve_signal_channel(root, remote=None, branch=None):
     remote = remote or "origin"
     branch = branch or current_branch(Path(root))

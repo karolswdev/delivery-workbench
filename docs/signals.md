@@ -1,9 +1,11 @@
 # Outward signals and bounded nudges contract
 
-**Status:** Phase 25 contract. The authority-free observer is delivered
-(WLA-25-02: `dw signals`, MCP `dw_signals`, `GET /api/signals`); nudge,
-stream, notification, and driver-activity components remain contract-only
-until their stories land.
+**Status:** Phase 25 contract. Delivered so far: the authority-free
+observer (WLA-25-02: `dw signals`, MCP `dw_signals`, `GET /api/signals`)
+and driver activity states with the receptivity table (WLA-25-03:
+receipt `activity`, `activity_observed` ledger events,
+`signals.receptivity`); nudge, stream, and notification components remain
+contract-only until their stories land.
 **Product claim:** Delivery Workbench **can observe** facts from outside a
 run — CI verdicts, review state, mergeability, agent activity — and, under an
 explicit grant, **can nudge** the right agent back to work. It does not claim
