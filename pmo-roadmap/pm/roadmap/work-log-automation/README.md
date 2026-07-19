@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-19 (Phase 25 open 4/9 — WLA-25-04 landed the bounded nudge engine: score rules, grant standing rules and budgets, at-most-once ledgered delivery, and the awaiting-certification wake).
-**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (4/9).
+**Last updated:** 2026-07-19 (Phase 25 open 5/9 — WLA-25-05 landed the live ledger stream: SSE tails with exact cursor replay, `dw run tail`, and the live Run view).
+**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (5/9).
 **Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed; Phase 25 (outward signals and bounded nudges) is contracted and in progress.
 
 ## Vision

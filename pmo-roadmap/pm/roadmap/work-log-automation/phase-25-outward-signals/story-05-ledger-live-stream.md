@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 25
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-25-01
 - **Unblocks:** WLA-25-06, WLA-25-09
 - **Owner:** unassigned
@@ -43,23 +43,23 @@ over authority that already exists, not new machinery.
 
 ## Acceptance criteria
 
-- [ ] A subscriber connecting with a cursor receives every ledger event
+- [x] A subscriber connecting with a cursor receives every ledger event
   after it exactly once, in order; disconnect/reconnect at an arbitrary
   point replays the missed suffix with no gap and no duplicate, proven
   against a fixture run with a scripted mid-run disconnect.
-- [ ] Stream events are byte-derivable from the ledger alone: a test
+- [x] Stream events are byte-derivable from the ledger alone: a test
   replays a completed run's ledger and reproduces the exact event
   sequence a live subscriber saw.
-- [ ] No stream payload contains prompt text, transcript content,
+- [x] No stream payload contains prompt text, transcript content,
   artifact bodies, or third-party content; the content-exclusion test
   suite runs against recorded streams.
-- [ ] The stream carries no authority: no token, no apply URL, no
+- [x] The stream carries no authority: no token, no apply URL, no
   mutation route is reachable from the SSE surface, enforced by test on
   the HTTP router.
-- [ ] The Workbench Run view renders live updates for dispatch, check,
+- [x] The Workbench Run view renders live updates for dispatch, check,
   failure-route, nudge, checkpoint, and terminal events without
   polling, and degrades to explicit refresh when the stream is closed.
-- [ ] The localhost-only runtime boundary and existing auth posture are
+- [x] The localhost-only runtime boundary and existing auth posture are
   unchanged, re-verified by the runtime boundary tests.
 
 ## Test plan

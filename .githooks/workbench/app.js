@@ -1825,6 +1825,37 @@ async function refreshRunData() {
   } finally {
     orchState.runLoading = false; renderOrchestration();
   }
+  startRunLive();
+}
+
+/* Live ledger tail (SSE, read-only). Any arriving ledger event triggers
+   one debounced re-read of the same run-view read model; if the stream
+   is unavailable the explicit refresh button remains the fallback. */
+let runLive = null;
+let runLiveTimer = null;
+
+function stopRunLive() {
+  if (runLive) { runLive.close(); runLive = null; }
+  if (runLiveTimer) { clearTimeout(runLiveTimer); runLiveTimer = null; }
+}
+
+function startRunLive() {
+  stopRunLive();
+  if (!orchState.runId || orchState.view !== "run" || typeof EventSource === "undefined") return;
+  const runId = orchState.runId;
+  runLive = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
+  runLive.addEventListener("ledger", () => {
+    if (runLiveTimer) return;
+    runLiveTimer = setTimeout(async () => {
+      runLiveTimer = null;
+      if (orchState.runId !== runId || orchState.view !== "run") return;
+      try {
+        orchState.runView = (await api(`/api/runs/${encodeURIComponent(runId)}/view`)).data;
+        renderOrchestration();
+      } catch (err) { /* keep the last rendered view; refresh stays manual */ }
+    }, 400);
+  });
+  runLive.onerror = () => { stopRunLive(); };
 }
 
 async function previewRunGrant(form) {
@@ -1939,6 +1970,7 @@ async function viewOrchestration(name) {
   if (orchState.view === "run" && orchState.runId) {
     try { orchState.runView = (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data; }
     catch (err) { orchState.runError = err.message; orchState.runView = null; }
+    startRunLive();
   }
   renderOrchestration();
   await refreshOrchValidation();
@@ -1948,6 +1980,7 @@ async function viewOrchestration(name) {
 
 async function route() {
   stopMcPoll(); // leaving mission control stops its poll
+  stopRunLive(); // leaving the run view closes its live tail
   app.innerHTML = stateHtml("Loading…");
   const hash = decodeURIComponent(location.hash.replace(/^#/, "")) || "/";
   const parts = hash.split("/").filter(Boolean);

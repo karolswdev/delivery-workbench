@@ -270,6 +270,8 @@ from .orchestration_surface import (
     read_run_stream,
     run_summary_inventory,
     start_run_by_id,
+    tail_run_events,
+    tail_signal_events,
 )
 from .signals import (
     NUDGE_INTENTS,

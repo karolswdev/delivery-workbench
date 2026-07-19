@@ -77,6 +77,7 @@ is added when an external consumer asks for one.
 | `dw run supervise <run> --max-ticks <n> --interval <s> --json` | `orchestration_conductor.supervise_run` | bounded repetition over `tick_run`, stopping at terminal/pause/approval/no-progress |
 | `dw run checkpoint <run> approve|reject --expect <act-token> --json` | `orchestration_surface.apply_run_act` → `orchestration_run.decide_checkpoint` | one fresh decision over the exact pending named checkpoint |
 | `dw run stream <run> agent|check <execution> stdout|stderr --json` | `orchestration_surface.read_run_stream` | one explicitly opened log, independently bounded to 100,000 bytes; never a list/feed/event field |
+| `dw run tail <run> [--after N] [--follow]` | `orchestration_surface.tail_run_events` | the verified hash-chained ledger suffix after a cursor, one canonical event JSON per line; pure read, no tokens or content bodies |
 
 The individual lifecycle spellings are `dw run show`, `dw run pause`,
 `dw run resume`, `dw run revoke`, and `dw run cancel`; the grouped rows above
@@ -122,6 +123,8 @@ or provider argv.
 | `POST /api/runs/start` | `orchestration_surface.start_run_by_id` | identifiers/timestamps/token/approval only; grant creation dispatches nothing |
 | `POST /api/runs/tick`, `POST /api/runs/pause`, `POST /api/runs/resume`, `POST /api/runs/revoke`, `POST /api/runs/cancel`, `POST /api/runs/checkpoint` | `orchestration_surface.apply_run_act` | exact preview token plus only its bound reason/decision; stale is HTTP 409 |
 | `GET /api/runs/<run>/streams/<executor>/<execution>/<stream>` | `orchestration_surface.read_run_stream` | explicit bounded stdout/stderr; no packets, prompts, final message, or artifact content |
+| `GET /api/runs/<run>/events` (SSE) | `orchestration_surface.tail_run_events` | live hash-chained ledger tail; `Last-Event-ID`/`from` cursor replays the exact missed suffix; read-only — no token or mutation is reachable from the stream |
+| `GET /api/signals/events?remote=…&branch=…` (SSE) | `orchestration_surface.tail_signal_events` | live signal-chain tail with the same cursor-replay and no-authority posture |
 | `POST /api/mutations/preview` | guarded editor plan | content diff + state fingerprint; no write |
 | `POST /api/mutations/apply` | guarded editor apply | applies only the matching fresh fingerprint inside `pm/roadmap` |
 | `/api/context` | `api.build_context_payload` | the roadmap context |

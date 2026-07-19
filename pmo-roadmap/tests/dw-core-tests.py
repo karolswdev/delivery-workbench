@@ -1548,6 +1548,7 @@ class DwCoreTest(unittest.TestCase):
             "dw run plan", "dw run start", "dw run list", "dw run show", "dw run view",
             "dw run preview", "dw run tick", "dw run pause", "dw run resume",
             "dw run revoke", "dw run cancel", "dw run checkpoint", "dw run stream",
+            "dw run tail",
         ]
         self.assertEqual(self._interop_missing(verbs, doc), [])
         # the stamped models
@@ -6627,6 +6628,190 @@ class OrchestrationConductorTest(unittest.TestCase):
             if item["node_id"] == "repair"
         ]
         self.assertEqual(len(repaired), 1)
+
+    def _serve_workbench(self):
+        import dw_pmo.workbench as wb
+        from http.server import ThreadingHTTPServer
+        import threading
+
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", 0), wb.create_handler(self.root, None)
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        return server.server_address[1]
+
+    @staticmethod
+    def _sse_frames(body):
+        frames = []
+        for block in body.split("\n\n"):
+            fields = {}
+            for line in block.splitlines():
+                if ":" in line and not line.startswith(":"):
+                    key, _, value = line.partition(":")
+                    fields[key.strip()] = value.strip()
+            if "data" in fields:
+                frames.append((int(fields["id"]), json.loads(fields["data"])))
+        return frames
+
+    def test_ledger_tail_is_exact_derivable_and_content_safe(self):
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_surface as surface
+
+        nodes, responses = self._nudge_nodes()
+        self._write_score("tail-loop", nodes, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 3},
+        ])
+        projection = self._start(
+            "tail-loop",
+            standing_nudges=["ci-failed"],
+            signal_channel="origin/feature-x",
+        )
+        run_id = projection["run_id"]
+        self._run_to_terminal(run_id, drivers.FixtureDriver(responses))
+
+        ledger_path = (
+            self.root / ".git" / "pmo-orchestration" / "runs" / run_id
+            / "ledger.jsonl"
+        )
+        ledger = [
+            json.loads(line)
+            for line in ledger_path.read_text().splitlines()
+        ]
+        full = surface.tail_run_events(self.root, run_id)
+        self.assertIs(full["starts_work"], False)
+        self.assertEqual(full["events"], ledger)
+        self.assertEqual(full["head_seq"], len(ledger) - 1)
+        cut = len(ledger) // 2
+        prefix = surface.tail_run_events(self.root, run_id, -1, limit=cut)
+        suffix = surface.tail_run_events(self.root, run_id, cut - 1)
+        self.assertEqual(prefix["events"] + suffix["events"], ledger)
+        empty = surface.tail_run_events(self.root, run_id, full["head_seq"])
+        self.assertEqual(empty["events"], [])
+        with self.assertRaises(DwError):
+            surface.tail_run_events(self.root, run_id, -5)
+
+        rendered = json.dumps(full, sort_keys=True)
+        for excluded in ("Do the granted work.", "act_token", "start_token",
+                         "prompt", "apply_command"):
+            self.assertNotIn(excluded, rendered)
+
+        # Corrupt chains fail closed instead of streaming.
+        good = ledger_path.read_text()
+        ledger_path.write_text(good.replace("event_hash", "event_hasX", 1))
+        with self.assertRaises(DwError):
+            surface.tail_run_events(self.root, run_id)
+        ledger_path.write_text(good)
+
+    def test_sse_stream_replays_after_disconnect_and_carries_no_authority(self):
+        import http.client
+
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_surface as surface
+
+        nodes, responses = self._nudge_nodes()
+        self._write_score("sse-loop", nodes, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 3},
+        ])
+        projection = self._start(
+            "sse-loop",
+            standing_nudges=["ci-failed"],
+            signal_channel="origin/sse-x",
+        )
+        run_id = projection["run_id"]
+        fixture = drivers.FixtureDriver(responses)
+        self._run_to_terminal(run_id, fixture)
+        port = self._serve_workbench()
+
+        def get(path, headers=None):
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+            conn.request("GET", path, headers=headers or {})
+            response = conn.getresponse()
+            body = response.read().decode("utf-8")
+            conn.close()
+            return response, body
+
+        response, body = get(f"/api/runs/{run_id}/events?follow=0")
+        self.assertEqual(response.status, 200)
+        self.assertIn("text/event-stream", response.getheader("Content-Type"))
+        frames = self._sse_frames(body)
+        ledger = surface.tail_run_events(self.root, run_id)["events"]
+        self.assertEqual([data for _seq, data in frames], ledger)
+        self.assertEqual([seq for seq, _data in frames],
+                         [event["seq"] for event in ledger])
+
+        # A disconnected client resumes from Last-Event-ID: the run gains
+        # new events (a nudge wake plus a repair round), and the
+        # reconnect receives exactly the missed suffix.
+        head = frames[-1][0]
+        self._seed_signal(branch="sse-x", name="ci-sse")
+        self._run_to_terminal(run_id, fixture)
+        response, body = get(
+            f"/api/runs/{run_id}/events?follow=0",
+            headers={"Last-Event-ID": str(head)},
+        )
+        resumed = self._sse_frames(body)
+        self.assertTrue(resumed)
+        self.assertEqual(resumed[0][0], head + 1)
+        after = surface.tail_run_events(self.root, run_id, head)["events"]
+        self.assertEqual([data for _seq, data in resumed], after)
+        self.assertTrue(
+            any(data["event"] == "nudge_delivered" for _seq, data in resumed)
+        )
+        for excluded in ("act_token", "start_token", "apply", "prompt"):
+            self.assertNotIn(excluded, body)
+
+        # The stream endpoint accepts no writes and mints no authority.
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        conn.request("POST", f"/api/runs/{run_id}/events", body="{}",
+                     headers={"Content-Type": "application/json"})
+        refusal = conn.getresponse()
+        refusal_body = refusal.read().decode("utf-8")
+        conn.close()
+        self.assertGreaterEqual(refusal.status, 400)
+        self.assertNotIn("act_token", refusal_body)
+
+        # The signal chain tails through the same read-only shape.
+        response, body = get("/api/signals/events?remote=origin&branch=sse-x&follow=0")
+        self.assertEqual(response.status, 200)
+        signal_frames = self._sse_frames(body)
+        self.assertTrue(signal_frames)
+        self.assertEqual(signal_frames[0][1]["kind"],
+                         "delivery-workbench-signal-event")
+        response, _body = get("/api/runs/run-000000000000000000000000/events?follow=0")
+        self.assertEqual(response.status, 400)
+
+    def test_cli_run_tail_matches_the_ledger(self):
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_surface as surface
+
+        nodes, responses = self._nudge_nodes()
+        self._write_score("tail-cli", [nodes[0]])
+        projection = self._start("tail-cli")
+        run_id = projection["run_id"]
+        self._run_to_terminal(run_id, drivers.FixtureDriver(responses))
+        result = subprocess.run(
+            [sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+             "--root", str(self.root), "run", "tail", run_id],
+            check=True, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        lines = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(lines, surface.tail_run_events(self.root, run_id)["events"])
+        suffix = subprocess.run(
+            [sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+             "--root", str(self.root), "run", "tail", run_id, "--after", "2"],
+            check=True, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.assertEqual(
+            [json.loads(line) for line in suffix.stdout.splitlines()],
+            lines[3:],
+        )
 
     def test_nudge_authority_rides_the_plan_and_grant(self):
         import dw_pmo.orchestration_run as runs

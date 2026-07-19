@@ -70,6 +70,8 @@ try:
         plan_story_status,
         read_text,
         read_run_stream,
+        tail_run_events,
+        tail_signal_events,
         next_story,
         parked_headline,
         parked_lines,
@@ -455,6 +457,21 @@ def command_run_checkpoint(args: argparse.Namespace) -> int:
     else:
         print(_render_run(projection), end="")
     return 0
+
+
+def command_run_tail(args: argparse.Namespace) -> int:
+    import time
+
+    cursor = args.after
+    while True:
+        tail = tail_run_events(args.root, args.run_id, cursor)
+        for event in tail["events"]:
+            print(json.dumps(event, sort_keys=True))
+            cursor = int(event["seq"])
+        sys.stdout.flush()
+        if not args.follow:
+            return 0
+        time.sleep(max(0.1, args.interval))
 
 
 def command_run_stream(args: argparse.Namespace) -> int:
@@ -1229,6 +1246,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_stream.add_argument("--max-bytes", type=int, default=20_000)
     run_stream.add_argument("--json", action="store_true")
     run_stream.set_defaults(func=command_run_stream)
+    run_tail = run_sub.add_parser("tail", help="tail the verified run ledger from a cursor (read-only; one canonical event JSON per line)")
+    run_tail.add_argument("run_id")
+    run_tail.add_argument("--after", type=int, default=-1, help="emit events with seq greater than this cursor (default: all)")
+    run_tail.add_argument("--follow", action="store_true", help="keep polling the ledger until interrupted")
+    run_tail.add_argument("--interval", type=float, default=1.0, help="poll interval in seconds for --follow")
+    run_tail.set_defaults(func=command_run_tail)
 
     projects = sub.add_parser("projects", help="list roadmap projects")
     projects.set_defaults(func=command_projects)

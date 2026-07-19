@@ -598,6 +598,78 @@ def _contained_stream_path(
     return target
 
 
+RUN_TAIL_KIND = "delivery-workbench-run-tail"
+SIGNAL_TAIL_KIND = "delivery-workbench-signal-tail"
+_MAX_TAIL_EVENTS = 1000
+
+
+def _tail_lines(path: Path, after_seq: int, limit: int) -> tuple[list[dict[str, object]], int]:
+    events: list[dict[str, object]] = []
+    head = -1
+    for offset, line in enumerate(path.read_bytes().splitlines()):
+        head = offset
+        if offset <= after_seq or len(events) >= limit:
+            continue
+        events.append(json.loads(line.decode("utf-8")))
+    return events, head
+
+
+def tail_run_events(
+    root: Path, run_id: str, after_seq: int = -1, limit: int = _MAX_TAIL_EVENTS
+) -> dict[str, object]:
+    """The verified ledger suffix after a cursor.
+
+    Pure read with no authority: every event is the canonical hash-chained
+    ledger line (ids, hashes, states, bounded scalar details) — never a
+    token, prompt, transcript, or artifact body. Replay validates the
+    whole chain before a single line is emitted, so a corrupt ledger
+    fails closed instead of streaming.
+    """
+    if isinstance(after_seq, bool) or not isinstance(after_seq, int) or after_seq < -1:
+        raise DwError("tail cursor must be an integer sequence, or -1 for the start")
+    limit = max(1, min(int(limit), _MAX_TAIL_EVENTS))
+    projection = replay_run(root, run_id)
+    run_dir, _grant, _compiled = _load_run_documents(root, run_id)
+    events, head = _tail_lines(run_dir / "ledger.jsonl", after_seq, limit)
+    return {
+        "kind": RUN_TAIL_KIND,
+        "schema_version": RUN_SURFACE_SCHEMA_VERSION,
+        "run_id": run_id,
+        "after": after_seq,
+        "head_seq": head,
+        "state": projection["state"],
+        "events": events,
+        "starts_work": False,
+        "writes_events": False,
+    }
+
+
+def tail_signal_events(
+    root: Path, remote: str, branch: str,
+    after_seq: int = -1, limit: int = _MAX_TAIL_EVENTS,
+) -> dict[str, object]:
+    """The verified signal-chain suffix after a cursor; pure read."""
+    from .signals import _channel_dir, replay_channel
+
+    if isinstance(after_seq, bool) or not isinstance(after_seq, int) or after_seq < -1:
+        raise DwError("tail cursor must be an integer sequence, or -1 for the start")
+    limit = max(1, min(int(limit), _MAX_TAIL_EVENTS))
+    projection = replay_channel(root, remote, branch)
+    chain = _channel_dir(root, remote, branch) / "signals.jsonl"
+    events, head = _tail_lines(chain, after_seq, limit)
+    return {
+        "kind": SIGNAL_TAIL_KIND,
+        "schema_version": RUN_SURFACE_SCHEMA_VERSION,
+        "channel": projection["channel"],
+        "after": after_seq,
+        "head_seq": head,
+        "status": projection["status"],
+        "events": events,
+        "starts_work": False,
+        "writes_events": False,
+    }
+
+
 def read_run_stream(
     root: Path,
     run_id: str,

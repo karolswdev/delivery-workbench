@@ -845,10 +845,111 @@ def create_handler(root: Path, static_dir: Path | None):
                 return
             parsed = urlparse(self.path)
             if parsed.path.startswith("/api"):
+                if self._maybe_stream(parsed):
+                    return
                 status, payload = handle_api(root, parsed.path, parse_qs(parsed.query))
                 self._send_json(status, payload)
                 return
             self._send_static(parsed.path)
+
+        def _sse_frame(self, event: str, seq: object, data: dict[str, object]) -> bool:
+            frame = (
+                f"id: {seq}\nevent: {event}\n"
+                f"data: {json.dumps(data, sort_keys=True)}\n\n"
+            ).encode("utf-8")
+            try:
+                self.wfile.write(frame)
+                self.wfile.flush()
+                return True
+            except OSError:
+                return False
+
+        def _maybe_stream(self, parsed) -> bool:
+            """Serve the read-only SSE ledger/signal tail (docs/signals.md).
+
+            The stream carries the same canonical hash-chained event
+            documents the read surfaces return and nothing else: no
+            token, apply route, or mutation is reachable from it.
+            """
+            parts = parsed.path.strip("/").split("/")
+            query = parse_qs(parsed.query)
+            if (
+                len(parts) == 4
+                and parts[:2] == ["api", "runs"]
+                and parts[3] == "events"
+            ):
+                from .orchestration_surface import tail_run_events
+
+                run_id = parts[2]
+                event_name = "ledger"
+
+                def fetch(cursor: int) -> dict[str, object]:
+                    return tail_run_events(root, run_id, cursor)
+            elif parts == ["api", "signals", "events"]:
+                from .orchestration_surface import tail_signal_events
+
+                remote = query.get("remote", [""])[0].strip()
+                branch = query.get("branch", [""])[0].strip()
+                event_name = "signal"
+
+                def fetch(cursor: int) -> dict[str, object]:
+                    return tail_signal_events(root, remote, branch, cursor)
+            else:
+                return False
+            raw_cursor = (
+                self.headers.get("Last-Event-ID", "").strip()
+                or query.get("from", [""])[0].strip()
+                or "-1"
+            )
+            try:
+                cursor = int(raw_cursor)
+            except ValueError:
+                self._send_json(400, envelope(
+                    {"error": "stream cursor must be an integer sequence"},
+                    ok=False,
+                ))
+                return True
+            follow = query.get("follow", ["1"])[0] != "0"
+            try:
+                first = fetch(cursor)
+            except DwError as err:
+                self._send_json(400, envelope({"error": err.message}, ok=False))
+                return True
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            for event in first["events"]:
+                if not self._sse_frame(event_name, event["seq"], event):
+                    return True
+                cursor = int(event["seq"])
+            if not follow:
+                return True
+            import time as _time
+
+            quiet_beats = 0
+            while True:
+                _time.sleep(1)
+                try:
+                    batch = fetch(cursor)
+                except DwError:
+                    return True
+                if batch["events"]:
+                    quiet_beats = 0
+                    for event in batch["events"]:
+                        if not self._sse_frame(event_name, event["seq"], event):
+                            return True
+                        cursor = int(event["seq"])
+                else:
+                    quiet_beats += 1
+                    if quiet_beats >= 15:
+                        quiet_beats = 0
+                        try:
+                            self.wfile.write(b": keepalive\n\n")
+                            self.wfile.flush()
+                        except OSError:
+                            return True
 
         def _send_static(self, raw_path: str) -> None:
             if static_dir is None:

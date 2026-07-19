@@ -50,7 +50,7 @@ discipline, re-interpreted under the consent spine.
   standing-rule match, deliver at-most-once per signal across restart,
   respect receptivity, and exhaust into a recorded blocked stop —
   each refusal class distinct and receipted (WLA-25-04).
-- [ ] The SSE tail replays the ledger exactly from any cursor, carries
+- [x] The SSE tail replays the ledger exactly from any cursor, carries
   no authority and no excluded content, and drives the live Run view
   without polling (WLA-25-05).
 - [ ] Notification facts persist append-only with unread/ack, deliver
@@ -78,7 +78,7 @@ discipline, re-interpreted under the consent spine.
 | WLA-25-02 | Observe SCM facts without acting | done | [story-02-scm-observer](./story-02-scm-observer.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-25-03 | Teach drivers to report activity states | done | [story-03-driver-activity-states](./story-03-driver-activity-states.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-25-04 | Nudge agents under grant authority | done | [story-04-bounded-nudge-engine](./story-04-bounded-nudge-engine.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-25-05 | Stream the ledger live | backlog | [story-05-ledger-live-stream](./story-05-ledger-live-stream.md) | - |
+| WLA-25-05 | Stream the ledger live | done | [story-05-ledger-live-stream](./story-05-ledger-live-stream.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-25-06 | Notify the operator durably | backlog | [story-06-operator-notifications](./story-06-operator-notifications.md) | - |
 | WLA-25-07 | Drive Claude Code through the neutral seam | backlog | [story-07-claude-code-driver](./story-07-claude-code-driver.md) | - |
 | WLA-25-08 | Keep pending decisions alive across the pause | backlog | [story-08-typed-checkpoint-resume](./story-08-typed-checkpoint-resume.md) | - |
@@ -86,7 +86,7 @@ discipline, re-interpreted under the consent spine.
 
 ## Where we are
 
-Phase open 4/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
+Phase open 5/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
 outward layer — the `delivery-workbench-signal@1` fact model, read-time
 derived-status precedence, the six-state activity vocabulary with its
 receptivity table, the four-layer nudge model (score rule → grant
@@ -149,8 +149,21 @@ interop and the packaged exam; the CLI demo walked
 signal→standing-rule→wake→repair→re-terminal with at-most-once held.
 Note for later Workbench editor work: nudge rules author through the
 editor's JSON view and compiler save path today; a dedicated graphical
-inspector panel is future editor scope. Next: WLA-25-05, the live
-ledger stream.
+inspector panel is future editor scope.
+
+WLA-25-05 is done: the hash-chained ledger is its own change log, and
+liveness is now a tail over it. `tail_run_events`/`tail_signal_events`
+return the verified suffix after a cursor (corrupt chains fail closed
+before streaming); SSE endpoints on the existing localhost runtime
+serve the canonical events with ledger-sequence ids and exact
+`Last-Event-ID` resume; `dw run tail` prints the same lines; and the
+Workbench Run view rides an EventSource that debounce-refreshes the
+existing read model, with explicit refresh as the degradation path.
+The stream carries no authority and no content bodies — proven by a
+live subscriber demo that watched a real run execute, resumed
+mid-ledger, and matched the ledger byte for byte (a planted secret
+prompt never crossed). Suite 323 on both floors; 32 UI renders green.
+Next: WLA-25-06, operator notifications.
 
 ## Active risks
 

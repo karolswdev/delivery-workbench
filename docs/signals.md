@@ -2,12 +2,14 @@
 
 **Status:** Phase 25 contract. Delivered so far: the authority-free
 observer (WLA-25-02: `dw signals`, MCP `dw_signals`, `GET /api/signals`),
-driver activity states with the receptivity table (WLA-25-03), and the
+driver activity states with the receptivity table (WLA-25-03), the
 bounded nudge engine (WLA-25-04: score `nudges` rules, grant standing
 rules + `max_nudges` budget, `nudge_delivered`/`nudge_refused` ledger
 events, the awaiting-certification wake, and driver-seam session
-delivery); stream and notification components remain contract-only until
-their stories land.
+delivery), and the live stream (WLA-25-05: SSE `GET
+/api/runs/<run>/events` and `GET /api/signals/events` with exact
+cursor replay, `dw run tail`, and the live Run view); notification
+components remain contract-only until their stories land.
 **Product claim:** Delivery Workbench **can observe** facts from outside a
 run — CI verdicts, review state, mergeability, agent activity — and, under an
 explicit grant, **can nudge** the right agent back to work. It does not claim
