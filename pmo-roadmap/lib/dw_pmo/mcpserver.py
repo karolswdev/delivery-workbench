@@ -358,6 +358,8 @@ def _tool_run_plan(root: Path, args: dict) -> tuple[str, dict]:
         str(args["story"]),
         issued_at=args.get("issued_at"),
         expires_at=args.get("expires_at"),
+        standing_nudges=args.get("standing_nudges"),
+        signal_channel=args.get("signal_channel"),
     ))
 
 
@@ -404,6 +406,8 @@ def _tool_run_start(root: Path, args: dict) -> tuple[str, dict]:
         str(args["expect"]),
         approved=bool(args.get("approve")),
         approved_by=str(args.get("operator") or ""),
+        standing_nudges=args.get("standing_nudges"),
+        signal_channel=args.get("signal_channel"),
     ))
 
 
@@ -755,6 +759,8 @@ TOOLS: dict[str, dict] = {
                 "story": {"type": "string"},
                 "issued_at": {"type": "string", "description": "Exact ISO-8601 issuance for parity/replay"},
                 "expires_at": {"type": "string", "description": "Exact ISO-8601 grant expiry"},
+                "standing_nudges": {"type": "array", "items": {"type": "string"}, "description": "Standing nudge matchers: signal or signal=target"},
+                "signal_channel": {"type": "string", "description": "Outward signal channel to bind: remote/branch"},
             },
             "required": ["score", "story"],
             "additionalProperties": False,
@@ -806,6 +812,8 @@ TOOLS: dict[str, dict] = {
                 "story": {"type": "string"}, "issued_at": {"type": "string"},
                 "expires_at": {"type": "string"}, "expect": {"type": "string"},
                 "approve": {"type": "boolean"}, "operator": {"type": "string"},
+                "standing_nudges": {"type": "array", "items": {"type": "string"}, "description": "Standing nudge matchers bound into the grant"},
+                "signal_channel": {"type": "string", "description": "Outward signal channel bound into the grant"},
             },
             "required": ["score", "story", "issued_at", "expires_at", "expect", "approve", "operator"],
             "additionalProperties": False,

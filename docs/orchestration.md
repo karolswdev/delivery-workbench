@@ -247,10 +247,22 @@ profile inventory, output lineage, checkpoints, failure branches, budgets,
 and terminal meanings; it explicitly reports `starts_work: false` and
 `writes_events: false`.
 
+Since Phase 25 a score may also declare an optional top-level `nudges`
+section — bounded rules binding one outward signal kind (`ci-failed`,
+`changes-requested`, `merge-conflict`, `waiting-input-timeout`) to one
+declared agent node with finite per-signal and per-rule ceilings and an
+optional bounded expectation string. Rules feed the semantic hash, appear
+in simulation, and execute only under a grant that carries matching
+standing nudge rules and a `max_nudges` budget (score `defaults`). The
+full contract is [signals.md](./signals.md).
+
 ### Score invariants
 
 - Node ids are unique, stable, and selector-safe.
-- `needs` and explicit failure routes resolve to existing nodes.
+- `needs`, explicit failure routes, and nudge targets resolve to existing
+  nodes; a nudge target must be an agent node, and naming a
+  failure-activated node in a nudge rule makes it reachable exactly like
+  a failure route does.
 - The success graph is acyclic. Bounded retries and repair visits are policy,
   never implicit graph cycles.
 - Every executable node declares timeout and output bounds, directly or via

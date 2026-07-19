@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-19 (Phase 25 open 3/9 — WLA-25-03 landed driver activity states: receipt `activity`, `activity_observed` ledger facts, and the pure receptivity table).
-**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (3/9).
+**Last updated:** 2026-07-19 (Phase 25 open 4/9 — WLA-25-04 landed the bounded nudge engine: score rules, grant standing rules and budgets, at-most-once ledgered delivery, and the awaiting-certification wake).
+**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (4/9).
 **Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed; Phase 25 (outward signals and bounded nudges) is contracted and in progress.
 
 ## Vision

@@ -294,6 +294,8 @@ def command_run_plan(args: argparse.Namespace) -> int:
         args.story,
         issued_at=issued,
         expires_at=expires,
+        standing_nudges=args.standing_nudge or [],
+        signal_channel=args.signal_channel,
     )
     if args.json:
         print(json.dumps(plan, sort_keys=True))
@@ -1147,8 +1149,10 @@ def build_parser() -> argparse.ArgumentParser:
     run_plan_expiry = run_plan.add_mutually_exclusive_group()
     run_plan_expiry.add_argument("--expires-in", type=int, default=None, help="grant lifetime in seconds (default: 3600; maximum: 86400)")
     run_plan_expiry.add_argument("--expires-at", help="exact ISO-8601 expiry timestamp")
+    run_plan.add_argument("--standing-nudge", action="append", help="standing nudge matcher: signal or signal=target (repeatable)")
+    run_plan.add_argument("--signal-channel", help="outward signal channel to bind: remote/branch")
     run_plan.add_argument("--json", action="store_true", help="emit the exact start plan")
-    run_plan.set_defaults(func=command_run_plan)
+    run_plan.set_defaults(func=command_run_plan, standing_nudge=None, signal_channel=None)
 
     run_start = run_sub.add_parser("start", help="atomically create one grant from an exact fresh plan and explicit approval")
     run_start.add_argument("--plan", type=Path, required=True, help="plan JSON file, or - for stdin")

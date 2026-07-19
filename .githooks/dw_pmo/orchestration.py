@@ -46,6 +46,11 @@ CAPABILITIES = (
 WORKSPACE_MODES = ("none", "read-only", "isolated-worktree")
 OUTPUT_FORMATS = ("markdown", "json", "text", "git-diff", "directory")
 TERMINALS = ("complete", "blocked", "cancelled", "awaiting-certification")
+# Outward signal kinds a nudge rule may bind (docs/signals.md).
+NUDGE_SIGNALS = (
+    "ci-failed", "changes-requested", "merge-conflict",
+    "waiting-input-timeout",
+)
 FAILURE_ACTIONS = ("retry", "route", "approval", "pause", "abort")
 BUILTIN_CHECKS = ("file-exists", "json-schema", "diff-scope", "rail-status")
 
@@ -56,6 +61,7 @@ DEFAULTS = {
     "max_check_starts": 64,
     "default_timeout_seconds": 900,
     "max_artifact_bytes": 1_000_000,
+    "max_nudges": 5,
 }
 DEFAULT_LIMITS = {
     "max_concurrency": 64,
@@ -64,6 +70,7 @@ DEFAULT_LIMITS = {
     "max_check_starts": 2_000,
     "default_timeout_seconds": 86_400,
     "max_artifact_bytes": 10_000_000,
+    "max_nudges": 50,
 }
 
 _SELECTOR_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -72,7 +79,11 @@ _RESOURCE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$")
 
 _TOP_KEYS = {
     "kind", "schema_version", "slug", "title", "description", "project",
-    "defaults", "nodes", "layout",
+    "defaults", "nodes", "layout", "nudges",
+}
+_NUDGE_KEYS = {
+    "id", "signal", "target", "max_per_signal", "max_total",
+    "expectation", "after_seconds",
 }
 _DEFAULT_KEYS = set(DEFAULTS)
 _COMMON_NODE_KEYS = {
@@ -655,9 +666,16 @@ class _Compiler:
             result["timeout_seconds"] = self.positive_int(raw.get("timeout_seconds"), f"{pointer}/timeout_seconds", defaults["default_timeout_seconds"], DEFAULT_LIMITS["default_timeout_seconds"])
         return result
 
-    def graph_checks(self, nodes: list[dict[str, object]], layout: dict[str, object]) -> None:
+    def graph_checks(
+        self,
+        nodes: list[dict[str, object]],
+        layout: dict[str, object],
+        nudge_targets: set[str] | frozenset[str] = frozenset(),
+    ) -> None:
         ids = {str(node.get("id")): index for index, node in enumerate(nodes) if node.get("id")}
-        failure_targets: set[str] = set()
+        # Explicit nudge routing names a node the same way a failure route
+        # does: either makes a failure-activated node reachable.
+        failure_targets: set[str] = set(nudge_targets)
         for layout_id in (layout.get("nodes") or {}):
             if layout_id not in ids:
                 self.diag(f"/layout/nodes/{layout_id}", "dangling-layout", f"layout references missing node {layout_id!r}", "remove the position or add the node")
@@ -764,6 +782,77 @@ class _Compiler:
                 if expected is not None and expected != output.get("format"):
                     self.diag(f"/nodes/{index}/inputs/{offset}/format", "incompatible-artifact", f"consumer expects {expected!r} but producer emits {output.get('format')!r}", "align the consumer format with the declared output")
 
+    def normalize_nudges(self, value: object) -> list[dict[str, object]]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            self.diag("/nudges", "wrong-type", "nudges must be an array of rules", "provide a list of nudge rule objects or remove the section")
+            return []
+        if len(value) > 20:
+            self.diag("/nudges", "unbounded-value", "nudges exceeds the 20-rule schema bound", "keep the rule set small and exact")
+            value = value[:20]
+        rules: list[dict[str, object]] = []
+        seen: set[str] = set()
+        for offset, raw in enumerate(value):
+            pointer = f"/nudges/{offset}"
+            if not isinstance(raw, dict):
+                self.diag(pointer, "wrong-type", "a nudge rule must be an object", "provide id, signal, target, and max_total")
+                continue
+            self.exact_keys(raw, _NUDGE_KEYS, pointer)
+            rule: dict[str, object] = {
+                "id": self.required_string(raw.get("id"), f"{pointer}/id", pattern=_SELECTOR_RE),
+                "signal": self.required_string(raw.get("signal"), f"{pointer}/signal"),
+                "target": self.required_string(raw.get("target"), f"{pointer}/target", pattern=_SELECTOR_RE),
+                "max_per_signal": self.positive_int(raw.get("max_per_signal"), f"{pointer}/max_per_signal", 1, 5),
+            }
+            if rule["signal"] and rule["signal"] not in NUDGE_SIGNALS:
+                self.diag(f"{pointer}/signal", "unknown-signal", f"{rule['signal']!r} is not a contracted signal kind", "use one of: " + ", ".join(NUDGE_SIGNALS))
+            if raw.get("max_total") is None:
+                self.diag(f"{pointer}/max_total", "missing-bound", "a nudge rule requires an explicit finite max_total", "set max_total from 1 through 20")
+            rule["max_total"] = self.positive_int(raw.get("max_total"), f"{pointer}/max_total", 1, 20)
+            expectation = self.optional_string(raw.get("expectation"), f"{pointer}/expectation", 500)
+            if expectation is not None:
+                rule["expectation"] = expectation
+            after = raw.get("after_seconds")
+            if rule["signal"] == "waiting-input-timeout":
+                if after is None:
+                    self.diag(f"{pointer}/after_seconds", "missing-bound", "waiting-input-timeout requires after_seconds", "set after_seconds from 60 through 86400")
+                    rule["after_seconds"] = 60
+                elif isinstance(after, bool) or not isinstance(after, int) or not 60 <= after <= 86_400:
+                    self.diag(f"{pointer}/after_seconds", "unbounded-value", "after_seconds must be from 60 through 86400", "choose an explicit finite timeout inside the supported bound")
+                    rule["after_seconds"] = 60
+                else:
+                    rule["after_seconds"] = after
+            elif after is not None:
+                self.diag(f"{pointer}/after_seconds", "unknown-key", "after_seconds applies only to waiting-input-timeout rules", "remove the field or change the signal kind")
+            if rule["id"]:
+                if rule["id"] in seen:
+                    self.diag(f"{pointer}/id", "duplicate-id", f"duplicate nudge rule id {rule['id']!r}", "give every nudge rule a unique id")
+                seen.add(str(rule["id"]))
+            rules.append(rule)
+        return rules
+
+    def nudge_graph_checks(
+        self, rules: list[dict[str, object]], nodes: list[dict[str, object]]
+    ) -> None:
+        ids = {str(node["id"]): index for index, node in enumerate(nodes)}
+        for offset, rule in enumerate(rules):
+            target = str(rule.get("target", ""))
+            if not target:
+                continue
+            if target not in ids:
+                self.diag(
+                    f"/nudges/{offset}/target", "dangling-nudge-target",
+                    f"nudge target {target!r} does not exist",
+                    "route the nudge to a declared node in this score",
+                )
+            elif nodes[ids[target]].get("type") != "agent":
+                self.diag(
+                    f"/nudges/{offset}/target", "unsafe-nudge-target",
+                    "a nudge target must be an agent node",
+                    "point the rule at the agent that should resume the work",
+                )
+
     def compile(self) -> tuple[dict[str, object], list[dict[str, str]]]:
         if not isinstance(self.raw, dict):
             self.diag("/", "wrong-type", "score must be a JSON object", "provide an object with kind, schema_version, slug, title, and nodes")
@@ -802,7 +891,14 @@ class _Compiler:
             self.diag("/nodes", "unbounded-graph", "score exceeds the 500-node schema bound", "split the orchestration into smaller scores")
             nodes_raw = nodes_raw[:500]
         nodes = [self.normalize_node(node, index, defaults) for index, node in enumerate(nodes_raw)]
-        self.graph_checks(nodes, layout)
+        nudges = self.normalize_nudges(raw.get("nudges"))
+        self.graph_checks(
+            nodes, layout,
+            nudge_targets={
+                str(rule["target"]) for rule in nudges if rule.get("target")
+            },
+        )
+        self.nudge_graph_checks(nudges, nodes)
         normalized: dict[str, object] = {
             "kind": SCORE_KIND,
             "schema_version": SCORE_SCHEMA_VERSION,
@@ -816,6 +912,8 @@ class _Compiler:
             normalized["description"] = description
         if project is not None:
             normalized["project"] = project
+        if nudges:
+            normalized["nudges"] = nudges
         self.diagnostics.sort(key=lambda item: (item["pointer"], item["code"], item["message"]))
         return normalized, self.diagnostics
 
@@ -889,6 +987,7 @@ def _analysis(normalized: dict[str, object]) -> dict[str, object]:
         "checkpoints": checkpoints,
         "terminals": terminals,
         "role_presets": list(ROLE_PRESETS),
+        "nudges": [dict(rule) for rule in normalized.get("nudges", [])],
     }
 
 
@@ -975,6 +1074,7 @@ def simulate_score(score_or_compiled: object) -> dict[str, object]:
         "failure_branches": analysis["failure_edges"],
         "budgets": defaults,
         "terminals": analysis["terminals"],
+        "nudges": analysis["nudges"],
         "writes_events": False,
         "starts_work": False,
     }

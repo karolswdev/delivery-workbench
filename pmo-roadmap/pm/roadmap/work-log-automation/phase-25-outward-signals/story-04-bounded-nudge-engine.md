@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 25
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-25-01, WLA-25-02, WLA-25-03
 - **Unblocks:** WLA-25-06, WLA-25-09
 - **Owner:** unassigned
@@ -47,27 +47,27 @@ dispatch.
 
 ## Acceptance criteria
 
-- [ ] A score without a `nudges` section compiles to a run in which the
+- [x] A score without a `nudges` section compiles to a run in which the
   nudge engine is inert, proven by test; nudge rules are validated at
   compile time (known signal kinds, resolvable targets, finite ceilings)
   with exact diagnostics.
-- [ ] A nudge happens only under a grant whose budgets cover it: no
+- [x] A nudge happens only under a grant whose budgets cover it: no
   grant, exhausted budget, expired/revoked/paused run, or missing
   standing rule each produce a distinct recorded refusal, never a
   delivery.
-- [ ] Standing nudge rules follow the exact-match grammar (kind, or
+- [x] Standing nudge rules follow the exact-match grammar (kind, or
   kind + exact target), default to absent, are stated in the grant
   preview the operator approves, and revoke with the grant; a rule can
   never broaden at runtime.
-- [ ] Every delivered nudge is one ledger receipt binding signal hash,
+- [x] Every delivered nudge is one ledger receipt binding signal hash,
   rule, target, attempt, packet hash, and remaining budgets; replaying
   the same signal fact cannot produce a second delivery (at-most-once
   per signal per rule, enforced across restart).
-- [ ] Delivery consults the receptivity table at dispatch time:
+- [x] Delivery consults the receptivity table at dispatch time:
   `blocked`/`unknown` refuse, `active` defers with bounded re-poll, and
   a mid-flight flip to `blocked` (fixture-scripted) converts the nudge
   to a recorded refusal.
-- [ ] Budget exhaustion converts the run to a recorded `blocked` stop
+- [x] Budget exhaustion converts the run to a recorded `blocked` stop
   with an operator-facing reason — a nudge storm can never loop; the
   fixture exam in WLA-25-09 includes this red path.
 
@@ -89,7 +89,8 @@ grant, not forbidden. The design splits AO's single implicit behavior
 into three explicit layers: rule (score, reviewable), authority (grant,
 revocable), act (ledger, auditable).
 
-Whether a nudge may target a *new* node start (spawn a repair agent that
-was not otherwise eligible) versus only re-activating declared route
-targets is an open question for the WLA-25-01 contract to settle before
-this story starts.
+The target question was settled by the WLA-25-01 contract before this
+story started: nudge targets are declared route targets only — a rule may
+name any agent node in the score (naming a failure-activated node makes
+it reachable exactly like a failure route does), and an unwired fixer
+remains a score edit plus re-grant.

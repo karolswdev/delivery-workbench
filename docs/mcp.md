@@ -100,7 +100,7 @@ commands, driver configuration, scheduling choices, or credentials.
 | `dw_signals` | `signals.build_signals_inventory` | `{remote?, branch?}`; pure outward-signal inventory with read-time derived status; the observe pass stays a CLI act |
 | `dw_orchestration_show` | `orchestration.compile_score_path` | `{score}` |
 | `dw_orchestration_simulate` | `orchestration.simulate_score` | `{score}`; pure, starts nothing |
-| `dw_run_plan` | `orchestration_run.build_run_plan` | `{score, story, project?, issued_at?, expires_at?}`; exact pure grant preview |
+| `dw_run_plan` | `orchestration_run.build_run_plan` | `{score, story, project?, issued_at?, expires_at?, standing_nudges?, signal_channel?}`; exact pure grant preview including nudge authority |
 | `dw_run_list` | `orchestration_run.run_inventory` | `{}`; content-safe projections only |
 | `dw_run_show` | `orchestration_run.replay_run` | `{run_id}` |
 | `dw_run_view` | `orchestration_surface.build_run_view` | `{run_id}`; live graph, attempts, sessions/check receipts, artifact metadata/lineage, budgets, routes, controls, and ledger timeline |

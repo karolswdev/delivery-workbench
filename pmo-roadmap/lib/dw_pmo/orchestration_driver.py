@@ -558,6 +558,37 @@ def build_work_packet(
         root, run_id, node,
         min(MAX_PACKET_BYTES, int(grant["budgets"]["max_artifact_bytes"])),
     )
+    nudge = next(
+        (
+            item for item in reversed(list(projection.get("nudges", [])))
+            if item.get("delivered")
+            and str(item["node_id"]) == str(claim["node_id"])
+            and int(item["attempt"]) == int(claim["attempt"])
+        ),
+        None,
+    )
+    if nudge is not None:
+        rules = {
+            str(rule.get("id")): rule
+            for rule in compiled["score"].get("nudges", [])
+            if isinstance(rule, dict)
+        }
+        rule = rules.get(str(nudge["rule"]), {})
+        data = canonical_json({
+            "kind": "delivery-workbench-nudge-context",
+            "rule": nudge["rule"],
+            "signal": nudge["signal"],
+            "signal_hash": nudge["signal_hash"],
+            "signal_channel": str(grant.get("signal_channel") or ""),
+            "expectation": str(rule.get("expectation") or ""),
+        }).encode("utf-8")
+        contexts.append({
+            "selector": "@nudge", "path": "@nudge", "bytes": len(data),
+            "included_bytes": len(data),
+            "sha256": "sha256:" + hashlib.sha256(data).hexdigest(),
+            "truncated": False,
+            "content": data.decode("utf-8"),
+        })
     created = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(microsecond=0)
     deadline = min(
         created + timedelta(seconds=timeout),
@@ -717,6 +748,20 @@ class FixtureDriver:
         }
 
     def interrupt(self, _session: dict[str, object]) -> bool:
+        return True
+
+    def deliver_nudge(
+        self, record: dict[str, object], packet: dict[str, object]
+    ) -> bool:
+        staging = Path(str(record.get("staging", "")))
+        if not staging.is_dir():
+            return False
+        target = staging / "nudges"
+        target.mkdir(exist_ok=True)
+        name = str(packet.get("packet_hash", "nudge")).split(":", 1)[-1][:24]
+        (target / f"{name}.json").write_text(
+            json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         return True
 
 
@@ -1273,6 +1318,43 @@ class DriverManager:
                 record["receipt"] = receipt
                 self._write_record(path, record)
             return receipt
+
+    def can_nudge(self, run_id: str, session_id: str) -> bool:
+        try:
+            _path, record = self._find(run_id, session_id)
+        except DwError:
+            return False
+        receipt = record.get("receipt", {})
+        adapter = self.adapters.get(str(record.get("adapter")))
+        return (
+            isinstance(receipt, dict)
+            and receipt.get("state") == "running"
+            and adapter is not None
+            and hasattr(adapter, "deliver_nudge")
+        )
+
+    def nudge_session(
+        self, run_id: str, session_id: str, note: dict[str, object]
+    ) -> bool:
+        """Deliver one structured nudge packet into a live session."""
+        with self._lock(run_id):
+            path, record = self._find(run_id, session_id)
+            receipt = _exact_keys(record["receipt"], _RECEIPT_KEYS, "driver receipt")
+            if receipt["state"] != "running":
+                return False
+            adapter = self.adapters.get(str(record["adapter"]))
+            deliver = getattr(adapter, "deliver_nudge", None)
+            if deliver is None:
+                return False
+            packet = dict(note)
+            packet["packet_hash"] = _sha(note)
+            if not deliver(record, packet):
+                return False
+            receipt["activity"] = "active"
+            receipt["updated_at"] = _format_time(datetime.now(timezone.utc))
+            record["receipt"] = receipt
+            self._write_record(path, record)
+            return True
 
     def interrupt(self, run_id: str, session_id: str) -> dict[str, object]:
         with self._lock(run_id):

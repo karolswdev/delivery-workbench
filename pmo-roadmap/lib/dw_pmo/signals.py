@@ -302,6 +302,7 @@ def replay_channel(root, remote, branch):
             "detail": event["detail"],
             "ts": event["ts"],
             "seq": event["seq"],
+            "event_hash": event["event_hash"],
         }
     projection = {
         "channel": channel,

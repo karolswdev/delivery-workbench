@@ -34,6 +34,7 @@ from .orchestration_driver import (
 from .orchestration_run import (
     _format_time,
     _load_run_documents,
+    _parse_time,
     _run_dir,
     _sha,
     claim_node,
@@ -43,6 +44,8 @@ from .orchestration_run import (
     replay_run,
     transition_run,
 )
+from .signals import receptivity as signal_receptivity
+from .signals import replay_channel as signal_replay_channel
 from .status import build_status
 from .step import StepChild, apply_step, build_step
 
@@ -180,6 +183,18 @@ def schedule_decision(
             states.append({"node_id": node_id, "state": "active", "attempt": active[node_id]["attempt"]})
             continue
 
+        pending_nudge = _pending_nudge_for(projection, node_id)
+        if pending_nudge is not None:
+            candidates.append({
+                "node_id": node_id, "attempt": int(pending_nudge["attempt"]),
+                "kind": "claim", "reason": "nudge",
+            })
+            states.append({
+                "node_id": node_id, "state": "eligible",
+                "attempt": int(pending_nudge["attempt"]),
+            })
+            continue
+
         if node.get("activation") == "failure":
             route = _open_route_for_target(projection, node_id)
             if route is None:
@@ -307,7 +322,12 @@ def schedule_decision(
     success_nodes = [
         str(node["id"]) for node in nodes if node.get("activation") == "success"
     ]
-    terminal_needed = bool(success_nodes) and all(node_id in successful for node_id in success_nodes)
+    terminal_needed = (
+        bool(success_nodes)
+        and all(node_id in successful for node_id in success_nodes)
+        and not active
+        and not any(item["kind"] == "claim" for item in candidates)
+    )
     return {
         "kind": CONDUCTOR_DECISION_KIND,
         "schema_version": CONDUCTOR_SCHEMA_VERSION,
@@ -1191,6 +1211,247 @@ def _record_failure_policy(
     return projection
 
 
+_SCM_NUDGE_KINDS = {"ci-failed", "changes-requested", "merge-conflict"}
+_FAILED_CONCLUSIONS = {"failure", "timed_out", "startup_failure"}
+
+
+def _pending_nudge_for(
+    projection: dict[str, object], node_id: str
+) -> dict[str, object] | None:
+    completed = {
+        int(item["attempt"]) for item in projection["completed_claims"]
+        if str(item["node_id"]) == node_id
+    }
+    active = {
+        int(item["attempt"]) for item in projection["active_claims"]
+        if str(item["node_id"]) == node_id
+    }
+    for entry in reversed(list(projection.get("nudges", []))):
+        if entry.get("delivered") and str(entry["node_id"]) == node_id:
+            attempt = int(entry["attempt"])
+            if attempt not in completed and attempt not in active:
+                return entry
+    return None
+
+
+def _nudge_triggers(
+    root: Path,
+    grant: dict[str, object],
+    projection: dict[str, object],
+    rules: list[dict[str, object]],
+    observed: datetime,
+) -> list[tuple[dict[str, object], str]]:
+    """Match current outward facts against score rules; pure read."""
+    triggers: list[tuple[dict[str, object], str]] = []
+    channel = str(grant.get("signal_channel") or "")
+    chan: dict[str, object] | None = None
+    if channel and any(r.get("signal") in _SCM_NUDGE_KINDS for r in rules):
+        remote, _, branch = channel.partition("/")
+        try:
+            chan = signal_replay_channel(root, remote, branch)
+        except DwError:
+            chan = None
+    for rule in rules:
+        kind = str(rule.get("signal"))
+        if kind in _SCM_NUDGE_KINDS:
+            if chan is None:
+                continue
+            fact = None
+            for record in chan["facts"].values():  # type: ignore[union-attr]
+                detail = record["detail"]
+                matched = (
+                    (kind == "ci-failed" and record["fact"] == "pr-check"
+                     and detail.get("conclusion") in _FAILED_CONCLUSIONS)
+                    or (kind == "changes-requested"
+                        and record["fact"] == "pr-review-thread"
+                        and detail.get("changes_requested") is True)
+                    or (kind == "merge-conflict"
+                        and record["fact"] == "pr-mergeability"
+                        and detail.get("mergeable") == "false")
+                )
+                if matched and (fact is None or record["seq"] > fact["seq"]):
+                    fact = record
+            if fact is not None:
+                triggers.append((rule, str(fact["event_hash"])))
+        elif kind == "waiting-input-timeout":
+            after = int(rule.get("after_seconds", 60))
+            for claim in projection["active_claims"]:
+                if str(claim["node_id"]) != str(rule.get("target")):
+                    continue
+                last = claim.get("last_activity") or {}
+                if last.get("activity") != "waiting_input" or not last.get("ts"):
+                    continue
+                age = (observed - _parse_time(last["ts"], "ts")).total_seconds()
+                if age >= after:
+                    triggers.append((
+                        rule,
+                        _sha(["waiting-input", claim["claim_id"], last.get("seq")]),
+                    ))
+    return triggers
+
+
+def _standing_covers(grant: dict[str, object], rule: dict[str, object]) -> bool:
+    for item in grant.get("standing_nudge_rules", []):  # type: ignore[union-attr]
+        if str(item.get("signal")) != str(rule.get("signal")):
+            continue
+        target = str(item.get("target") or "")
+        if not target or target == str(rule.get("target")):
+            return True
+    return False
+
+
+def _evaluate_nudges(
+    root: Path,
+    run_id: str,
+    projection: dict[str, object],
+    compiled: dict[str, object],
+    grant: dict[str, object],
+    actions: list[dict[str, object]],
+    *,
+    driver_config: object | None = None,
+    adapters: dict[str, object] | None = None,
+    now: datetime | None,
+) -> dict[str, object]:
+    """Turn matched outward facts into at-most-once ledgered nudges.
+
+    Rule (score) -> authority (grant standing rules + budgets) ->
+    receptivity (target session) -> receipt (ledger). Every stop on that
+    path is a distinct recorded refusal; delivery on an
+    awaiting-certification run is the sanctioned wake.
+    """
+    rules = [
+        rule for rule in compiled["score"].get("nudges", [])  # type: ignore[union-attr]
+        if isinstance(rule, dict)
+    ]
+    if not rules:
+        return projection
+    state = str(projection["state"])
+    if state not in {"active", "awaiting-certification", "paused"}:
+        return projection
+    observed = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(microsecond=0)
+    triggers = _nudge_triggers(root, grant, projection, rules, observed)
+    for rule, signal_hash in triggers:
+        rule_id = str(rule["id"])
+        entries = [
+            item for item in projection["nudges"]
+            if item["rule"] == rule_id and item["signal_hash"] == signal_hash
+        ]
+        if any(item["delivered"] for item in entries):
+            continue
+
+        def refused(reason: str) -> bool:
+            if any(
+                not item["delivered"] and item.get("reason") == reason
+                for item in entries
+            ):
+                return False
+            nonlocal projection
+            projection = record_runtime_event(
+                root, run_id, "nudge_refused",
+                {"rule": rule_id, "signal": str(rule["signal"]),
+                 "signal_hash": signal_hash, "reason": reason},
+                str(projection["ledger_head"]), now=now,
+            )
+            actions.append({
+                "action": "nudge-refused", "rule": rule_id, "reason": reason,
+            })
+            return True
+
+        if projection["expired"]:
+            refused("grant-expired")
+            continue
+        if state == "paused":
+            refused("run-inactive")
+            continue
+        delivered_total = [
+            item for item in projection["nudges"]
+            if item["delivered"] and item["rule"] == rule_id
+        ]
+        if len(delivered_total) >= int(rule.get("max_total", 1)):
+            refused("rule-exhausted")
+            continue
+        budget = projection["budgets"]["max_nudges"]
+        if int(budget["used"]) >= int(budget["limit"]):
+            if refused("nudge-budget-exhausted") and str(projection["state"]) == "active":
+                projection = record_runtime_event(
+                    root, run_id, "run_aborted",
+                    {"node_id": "conductor", "reason": "nudge-budget-exhausted",
+                     "generation": int(projection["control_generation"]) + 1},
+                    str(projection["ledger_head"]), now=now,
+                )
+                actions.append({"action": "abort", "reason": "nudge-budget-exhausted"})
+            continue
+        if not _standing_covers(grant, rule):
+            refused("no-standing-rule")
+            continue
+        target = str(rule["target"])
+        active_claim = next(
+            (item for item in projection["active_claims"]
+             if str(item["node_id"]) == target),
+            None,
+        )
+        if active_claim is None:
+            activity = "idle"
+        else:
+            activity = str(
+                (active_claim.get("last_activity") or {}).get("activity", "unknown")
+            )
+        verdict = signal_receptivity(activity, "auto")
+        if verdict == "defer":
+            actions.append({"action": "nudge-deferred", "rule": rule_id})
+            continue
+        if verdict == "refuse":
+            refused("non-receptive")
+            continue
+        session_id = None
+        if active_claim is not None:
+            # Session delivery: the target is live and receptive; the
+            # packet goes through the driver seam. Adapters that cannot
+            # inject (non-interactive exec) refuse honestly.
+            attempt = int(active_claim["attempt"])
+            manager = _driver_manager(root, driver_config, adapters)
+            receipt = manager.receipt_for_claim(run_id, str(active_claim["claim_id"]))
+            session_id = str(receipt["session_id"]) if receipt else None
+            if session_id is None or not manager.can_nudge(run_id, session_id):
+                refused("non-receptive")
+                continue
+        else:
+            past = [
+                int(item["attempt"]) for item in projection["completed_claims"]
+                if str(item["node_id"]) == target
+            ]
+            attempt = (max(past) + 1) if past else 1
+            if attempt > 20:
+                refused("attempt-ceiling")
+                continue
+        remaining = int(budget["limit"]) - int(budget["used"]) - 1
+        projection = record_runtime_event(
+            root, run_id, "nudge_delivered",
+            {"rule": rule_id, "signal": str(rule["signal"]),
+             "signal_hash": signal_hash, "node_id": target,
+             "attempt": attempt, "remaining": remaining},
+            str(projection["ledger_head"]), now=now,
+        )
+        if session_id is not None:
+            manager.nudge_session(run_id, session_id, {
+                "kind": "delivery-workbench-nudge",
+                "schema_version": 1,
+                "run_id": run_id,
+                "rule": rule_id,
+                "signal": str(rule["signal"]),
+                "signal_hash": signal_hash,
+                "node_id": target,
+                "attempt": attempt,
+                "expectation": str(rule.get("expectation") or ""),
+            })
+        actions.append({
+            "action": "nudge-delivered", "rule": rule_id,
+            "node_id": target, "attempt": attempt,
+        })
+        state = str(projection["state"])
+    return projection
+
+
 def _observe_external_commit(
     root: Path,
     run_id: str,
@@ -1261,6 +1522,23 @@ def _tick_run_once(
         )
 
     projection = replay_run(root, run_id, now=now)
+    if projection["state"] == "awaiting-certification":
+        # Outward observation first, then the nudge engine: a granted,
+        # covered nudge is the one sanctioned wake from this terminal.
+        projection, observed = _observe_external_commit(
+            root, run_id, projection, grant, now=now
+        )
+        if observed:
+            actions.append({"action": "external-commit-observed", "state": projection["state"]})
+        projection = _evaluate_nudges(
+            root, run_id, projection, compiled, grant, actions,
+            driver_config=driver_config, adapters=adapters, now=now,
+        )
+    elif projection["state"] in {"active", "paused"}:
+        projection = _evaluate_nudges(
+            root, run_id, projection, compiled, grant, actions,
+            driver_config=driver_config, adapters=adapters, now=now,
+        )
     if projection["state"] in TERMINAL_STATES:
         projection, observed = _observe_external_commit(
             root, run_id, projection, grant, now=now

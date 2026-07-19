@@ -24,7 +24,13 @@ from typing import Iterator
 
 from .gitio import current_branch, head_sha, in_rewrite_state, run_git, write_tree
 from .model import DwError, normalize_status
-from .orchestration import canonical_json, compile_score, compile_score_path, find_score_path
+from .orchestration import (
+    NUDGE_SIGNALS,
+    canonical_json,
+    compile_score,
+    compile_score_path,
+    find_score_path,
+)
 from .parse import discover_phases, discover_projects, find_story, get_project, story_title
 from .paths import rel
 from .status import build_status
@@ -56,13 +62,21 @@ _PLAN_KEYS = {
     "repository", "status", "story", "score", "authority",
     "start_token", "starts_work", "writes_run_state",
 }
-_REQUEST_KEYS = {"score", "project", "story", "issued_at", "expires_at"}
+_REQUEST_KEYS = {
+    "score", "project", "story", "issued_at", "expires_at",
+    "standing_nudges", "signal_channel",
+}
 _GRANT_KEYS = {
     "kind", "schema_version", "run_id", "grant_hash", "start_token",
     "repository", "status_hash", "score", "project", "story",
     "capabilities", "profiles", "workspace_modes", "budgets",
+    "standing_nudge_rules", "signal_channel",
     "issued_at", "expires_at", "approved_at", "approved_by",
     "revocation_generation", "permanent_exclusions",
+}
+_NUDGE_REFUSAL_REASONS = {
+    "no-standing-rule", "nudge-budget-exhausted", "rule-exhausted",
+    "run-inactive", "grant-expired", "non-receptive", "attempt-ceiling",
 }
 _EVENT_KEYS = {
     "kind", "schema_version", "run_id", "seq", "event", "ts", "detail",
@@ -88,6 +102,12 @@ _EVENT_DETAIL_KEYS = {
     "activity_observed": {
         "node_id", "attempt", "claim_id", "activity", "session_id",
     },
+    "nudge_delivered": {
+        "rule", "signal", "signal_hash", "node_id", "attempt", "remaining",
+    },
+    "nudge_refused": {
+        "rule", "signal", "signal_hash", "reason",
+    },
     "failure_routed": {
         "node_id", "attempt", "action", "target", "visit",
         "target_attempt",
@@ -112,7 +132,8 @@ _EVENT_DETAIL_KEYS = {
 }
 
 _RUNTIME_EVENTS = {
-    "node_receipt", "activity_observed", "failure_routed", "route_resolved",
+    "node_receipt", "activity_observed", "nudge_delivered", "nudge_refused",
+    "failure_routed", "route_resolved",
     "checkpoint_reached", "checkpoint_decided", "run_aborted",
     "run_terminal", "rail_advanced", "external_commit_observed",
 }
@@ -295,6 +316,32 @@ def _repository_id(root: Path) -> str:
     return _sha({"root": str(root.resolve()), "git_dir": str(_git_dir(root))})
 
 
+def _normalize_standing_nudges(value: object) -> tuple[list[str], list[str]]:
+    """Normalize `signal` / `signal=target` matchers; return (rules, issues)."""
+    if value is None:
+        return [], []
+    if not isinstance(value, (list, tuple)):
+        return [], ["standing nudge rules must be a list of matcher strings"]
+    issues: list[str] = []
+    rules: set[str] = set()
+    for raw in value:
+        text = str(raw).strip()
+        if not text:
+            continue
+        signal, _, target = text.partition("=")
+        if signal not in NUDGE_SIGNALS:
+            issues.append(f"standing nudge rule names unknown signal {signal!r}")
+            continue
+        if target and not _SAFE_NODE_RE.fullmatch(target):
+            issues.append(f"standing nudge rule has unsafe target {target!r}")
+            continue
+        rules.add(f"{signal}={target}" if target else signal)
+    if len(rules) > 20:
+        issues.append("standing nudge rules exceed the 20-rule bound")
+        return [], issues
+    return sorted(rules), issues
+
+
 def build_run_plan(
     root: Path,
     score_selector: str,
@@ -303,6 +350,8 @@ def build_run_plan(
     *,
     expires_at: str | datetime | None = None,
     issued_at: str | datetime | None = None,
+    standing_nudges: object = None,
+    signal_channel: str | None = None,
 ) -> dict[str, object]:
     """Build a pure, exact start plan.  No run directory is read or written."""
     root = root.resolve()
@@ -382,6 +431,23 @@ def build_run_plan(
         issues.append(
             f"story {story_document['id']} must be in-progress, not {story_document['status']}"
         )
+    standing, standing_issues = _normalize_standing_nudges(standing_nudges)
+    issues.extend(standing_issues)
+    channel = str(signal_channel or "").strip()
+    if channel and "/" not in channel:
+        issues.append("signal channel must be remote/branch")
+    rule_signals = {
+        str(rule.get("signal"))
+        for rule in score.get("nudges", [])
+        if isinstance(rule, dict)
+    }
+    for matcher in standing:
+        if matcher.partition("=")[0] not in rule_signals:
+            issues.append(
+                f"standing nudge rule {matcher!r} covers no declared score rule"
+            )
+    if channel and not rule_signals - {"waiting-input-timeout"}:
+        issues.append("signal channel is bound but the score declares no SCM nudge rules")
 
     request = {
         "score": score_selector,
@@ -389,6 +455,8 @@ def build_run_plan(
         "story": story_document["id"],
         "issued_at": _format_time(issued),
         "expires_at": _format_time(expiry),
+        "standing_nudges": standing,
+        "signal_channel": channel,
     }
     score_binding = {
         "selector": score_selector,
@@ -407,6 +475,11 @@ def build_run_plan(
         "profiles": profiles,
         "workspace_modes": workspace_modes,
         "budgets": budgets,
+        "standing_nudge_rules": [
+            {"signal": matcher.partition("=")[0], "target": matcher.partition("=")[2]}
+            for matcher in standing
+        ],
+        "signal_channel": channel,
         "permanent_exclusions": list(PERMANENT_EXCLUSIONS),
         "revocation_generation": 0,
     }
@@ -537,6 +610,8 @@ def start_run(
         str(request["story"]),  # type: ignore[index]
         issued_at=str(request["issued_at"]),  # type: ignore[index]
         expires_at=str(request["expires_at"]),  # type: ignore[index]
+        standing_nudges=request.get("standing_nudges", []),  # type: ignore[union-attr]
+        signal_channel=str(request.get("signal_channel", "")),  # type: ignore[union-attr]
     )
     if canonical_json(rebuilt) != canonical_json(document):
         raise DwError("run plan is stale or altered; no run state was written")
@@ -567,6 +642,8 @@ def start_run(
         "profiles": document["authority"]["profiles"],  # type: ignore[index]
         "workspace_modes": document["authority"]["workspace_modes"],  # type: ignore[index]
         "budgets": document["authority"]["budgets"],  # type: ignore[index]
+        "standing_nudge_rules": document["authority"]["standing_nudge_rules"],  # type: ignore[index]
+        "signal_channel": document["authority"]["signal_channel"],  # type: ignore[index]
         "issued_at": request["issued_at"],  # type: ignore[index]
         "expires_at": request["expires_at"],  # type: ignore[index]
         "approved_at": approved_at,
@@ -719,7 +796,11 @@ def replay_run(
     external_commits: list[dict[str, object]] = []
     claimed_attempts: set[tuple[str, int]] = set()
     idempotency_keys: set[str] = set()
-    counters = {"agent_starts": 0, "check_starts": 0, "artifact_bytes": 0}
+    nudges: list[dict[str, object]] = []
+    counters = {
+        "agent_starts": 0, "check_starts": 0, "artifact_bytes": 0,
+        "nudges": 0,
+    }
     for offset, event in enumerate(events):
         kind = str(event["event"])
         detail = event["detail"]
@@ -812,7 +893,20 @@ def replay_run(
                 "activity": detail["activity"],
                 "session_id": detail["session_id"],
                 "seq": offset,
+                "ts": event["ts"],
             }
+        elif kind == "nudge_delivered":
+            if state == "awaiting-certification":
+                # The only sanctioned wake from a terminal state: a granted,
+                # budgeted, receipted nudge re-opens the run for one more
+                # bounded round. Certification authority is untouched.
+                state = "active"
+            elif state != "active":
+                raise DwError("nudge delivery recorded in an inactive run")
+            counters["nudges"] += 1
+            nudges.append({"seq": offset, "delivered": True, **dict(detail)})
+        elif kind == "nudge_refused":
+            nudges.append({"seq": offset, "delivered": False, **dict(detail)})
         elif kind == "failure_routed":
             source = next(
                 (
@@ -919,6 +1013,10 @@ def replay_run(
             "used": max(0, int((observed - _parse_time(grant["approved_at"], "approved_at")).total_seconds())),
             "limit": budgets["max_wall_seconds"],
         },
+        "max_nudges": {
+            "used": counters["nudges"],
+            "limit": int(budgets.get("max_nudges", 0)),
+        },
     }
     wall_exhausted = budget_state["max_wall_seconds"]["used"] >= budget_state["max_wall_seconds"]["limit"]
     node_order = {
@@ -941,6 +1039,7 @@ def replay_run(
         "profiles": grant["profiles"],
         "workspace_modes": grant["workspace_modes"],
         "budgets": budget_state,
+        "nudges": nudges,
         "active_claims": sorted(
             active.values(),
             key=lambda item: (node_order[str(item["node_id"])], int(item["attempt"])),
@@ -1037,6 +1136,58 @@ def _validate_runtime_transition(
             raise DwError("activity observation does not match an active claim")
         if detail["activity"] not in ACTIVITY_STATES:
             raise DwError("activity observation has an unsupported state")
+    elif event == "nudge_delivered":
+        if state not in {"active", "awaiting-certification"}:
+            raise DwError(
+                "nudge delivery requires an active or awaiting-certification run"
+            )
+        if projection["expired"]:
+            raise DwError("nudge delivery refused on an expired grant")
+        target = nodes.get(str(detail["node_id"]))
+        if target is None or target.get("type") != "agent":
+            raise DwError("nudge delivery must target a declared agent node")
+        rules = {
+            str(rule.get("id")): rule
+            for rule in compiled["score"].get("nudges", [])  # type: ignore[union-attr]
+            if isinstance(rule, dict)
+        }
+        rule = rules.get(str(detail["rule"]))
+        if rule is None:
+            raise DwError("nudge delivery names an undeclared rule")
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(detail["signal_hash"])):
+            raise DwError("nudge signal hash is malformed")
+        attempt = detail["attempt"]
+        if isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 20:
+            raise DwError("nudge attempt is outside its finite bound")
+        budget = projection["budgets"]["max_nudges"]
+        if int(budget["used"]) >= int(budget["limit"]):
+            raise DwError("nudge budget is exhausted; no delivery may be recorded")
+        delivered = [
+            item for item in projection["nudges"]
+            if item.get("delivered")
+            and item["rule"] == detail["rule"]
+        ]
+        per_signal = [
+            item for item in delivered
+            if item["signal_hash"] == detail["signal_hash"]
+        ]
+        if len(per_signal) >= int(rule.get("max_per_signal", 1)):
+            raise DwError(
+                "nudge replay refused: this signal already received its delivery"
+            )
+        if len(delivered) >= int(rule.get("max_total", 1)):
+            raise DwError("nudge rule ceiling reached; no delivery may be recorded")
+    elif event == "nudge_refused":
+        if detail["reason"] not in _NUDGE_REFUSAL_REASONS:
+            raise DwError("nudge refusal has an unsupported reason")
+        if any(
+            not item.get("delivered")
+            and item["rule"] == detail["rule"]
+            and item["signal_hash"] == detail["signal_hash"]
+            and item["reason"] == detail["reason"]
+            for item in projection["nudges"]
+        ):
+            raise DwError("duplicate nudge refusal for the same signal and reason")
     elif event == "failure_routed":
         source = next(
             (

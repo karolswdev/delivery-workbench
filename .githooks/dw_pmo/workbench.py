@@ -263,6 +263,11 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             project = query.get("project", [""])[0].strip() or None
             issued_at = query.get("issued_at", [""])[0].strip() or None
             expires_at = query.get("expires_at", [""])[0].strip() or None
+            standing = [
+                item for item in query.get("standing_nudge", [])
+                if item.strip()
+            ]
+            channel = query.get("signal_channel", [""])[0].strip() or None
             return 200, envelope(build_run_plan(
                 root,
                 score,
@@ -270,6 +275,8 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
                 story,
                 issued_at=issued_at,
                 expires_at=expires_at,
+                standing_nudges=standing,
+                signal_channel=channel,
             ))
 
         if parts == ["api", "runs"]:
@@ -621,6 +628,8 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
                 expect,
                 approved=True,
                 approved_by=operator,
+                standing_nudges=body.get("standing_nudges"),
+                signal_channel=str(body.get("signal_channel", "") or "") or None,
             ))
         except DwError as err:
             return _run_error(err)

@@ -4609,6 +4609,54 @@ class OrchestrationCompilerTest(unittest.TestCase):
             first["semantic_hash"], orch.compile_score(changed)["semantic_hash"]
         )
 
+    def test_nudge_rules_compile_simulate_and_refuse_exactly(self):
+        import dw_pmo.orchestration as orch
+
+        template = json.loads(
+            (TESTS_DIR.parent / "templates" / "orchestration"
+             / "research-build-review.json").read_text()
+        )
+        baseline = orch.compile_score(template)["semantic_hash"]
+        template["nudges"] = [{
+            "id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+            "max_total": 2, "expectation": "make the pushed branch green",
+        }]
+        verdict = orch.validate_score(template)
+        self.assertTrue(verdict["valid"], verdict["diagnostics"])
+        compiled = orch.compile_score(template)
+        self.assertEqual(len(compiled["score"]["nudges"]), 1)
+        self.assertEqual(compiled["analysis"]["nudges"][0]["target"], "repair")
+        self.assertNotEqual(compiled["semantic_hash"], baseline)
+        simulation = orch.simulate_score(template)
+        self.assertEqual(simulation["nudges"][0]["id"], "on-ci-failed")
+        self.assertEqual(simulation["budgets"]["max_nudges"], 5)
+
+        def broken(**overrides):
+            document = json.loads(json.dumps(template))
+            document["nudges"][0].update(overrides)
+            return self.codes(orch.validate_score(document))
+
+        self.assertIn("dangling-nudge-target", broken(target="ghost"))
+        self.assertIn("unsafe-nudge-target", broken(target="tests"))
+        self.assertIn("unknown-signal", broken(signal="vibes"))
+        self.assertIn("missing-bound", broken(max_total=None))
+        self.assertIn("unbounded-value", broken(max_total=999))
+        self.assertIn("unknown-key", broken(surprise=True))
+        self.assertIn("unknown-key", broken(after_seconds=120))
+        duplicated = json.loads(json.dumps(template))
+        duplicated["nudges"].append(dict(duplicated["nudges"][0]))
+        self.assertIn(
+            "duplicate-id", self.codes(orch.validate_score(duplicated))
+        )
+        timeout_rule = json.loads(json.dumps(template))
+        timeout_rule["nudges"] = [{
+            "id": "on-stall", "signal": "waiting-input-timeout",
+            "target": "implement", "max_total": 1,
+        }]
+        self.assertIn(
+            "missing-bound", self.codes(orch.validate_score(timeout_rule))
+        )
+
     def test_exact_keys_duplicate_ids_and_dangling_references_refuse(self):
         import dw_pmo.orchestration as orch
 
@@ -5994,7 +6042,7 @@ class OrchestrationConductorTest(unittest.TestCase):
         self._cmd("git", "add", ".")
         self._cmd("git", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", message)
 
-    def _write_score(self, name, nodes, defaults=None):
+    def _write_score(self, name, nodes, defaults=None, nudges=None):
         score = {
             "kind": "delivery-workbench-orchestration",
             "schema_version": 1,
@@ -6011,17 +6059,20 @@ class OrchestrationConductorTest(unittest.TestCase):
             },
             "nodes": nodes,
         }
+        if nudges:
+            score["nudges"] = nudges
         path = self.root / "pm" / "orchestration" / f"{name}.json"
         path.write_text(json.dumps(score, indent=2) + "\n", encoding="utf-8")
         self._commit(f"score {name}")
         return score
 
-    def _start(self, score="research-build-review", offset=3600):
+    def _start(self, score="research-build-review", offset=3600, **plan_kwargs):
         import dw_pmo.orchestration_run as runs
 
         plan = runs.build_run_plan(
             self.root, score, "sample", "SMP-0-01",
             issued_at=self.now, expires_at=self.now + timedelta(seconds=offset),
+            **plan_kwargs,
         )
         return runs.start_run(
             self.root, plan, plan["start_token"], approved=True,
@@ -6213,6 +6264,427 @@ class OrchestrationConductorTest(unittest.TestCase):
             if item["node_id"] == "research-api"
         ]
         self.assertEqual(agent_sessions[0]["activity"], "exited")
+
+    def _nudge_nodes(self, worker_polls=0, worker_activities=None):
+        worker = {
+            "id": "worker", "type": "agent", "role": "implementation",
+            "profile": "worker-write", "prompt": "Do the granted work.",
+            "capabilities": ["repository-read", "repository-write"],
+            "workspace": "isolated-worktree",
+        }
+        repair = {
+            "id": "repair", "type": "agent", "role": "repair",
+            "profile": "worker-write", "activation": "failure",
+            "prompt": "Repair from the nudge facts.",
+            "capabilities": ["repository-read", "repository-write"],
+            "workspace": "isolated-worktree",
+        }
+        responses = {
+            "worker": {"polls": worker_polls,
+                       "workspace_files": {"src/w.py": "V = 1"}},
+            "repair": {"polls": 0,
+                       "workspace_files": {"src/fix.py": "V = 2"}},
+        }
+        if worker_activities is not None:
+            responses["worker"]["activities"] = worker_activities
+        return [worker, repair], responses
+
+    def _seed_signal(self, branch="feature-x", name="ci", conclusion="failure"):
+        import dw_pmo.signals as sig
+
+        scenario = self.tmp / f"signal-{name}-{conclusion}.json"
+        scenario.write_text(json.dumps({"prs": [{
+            "number": 1, "state": "open", "head": branch, "base": "main",
+            "url": "u",
+            "checks": [{"name": name, "status": "completed",
+                        "conclusion": conclusion, "url": "u"}],
+        }]}))
+        return sig.observe_signals(
+            self.root, sig.FixtureProvider(scenario), "origin", branch
+        )
+
+    def _run_to_terminal(self, run_id, fixture, ticks=20):
+        import dw_pmo.orchestration_conductor as conductor
+
+        result = None
+        for _ in range(ticks):
+            result = conductor.tick_run(
+                self.root, run_id, driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+            if result["terminal"]:
+                break
+        return result
+
+    def test_nudge_wakes_awaiting_certification_and_delivers_at_most_once(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+        import dw_pmo.signals as sig
+
+        nodes, responses = self._nudge_nodes()
+        self._write_score("nudge-loop", nodes, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 3, "expectation": "make the pushed branch green"},
+        ])
+        projection = self._start(
+            "nudge-loop",
+            standing_nudges=["ci-failed=repair"],
+            signal_channel="origin/feature-x",
+        )
+        run_id = projection["run_id"]
+        fixture = drivers.FixtureDriver(responses)
+        result = self._run_to_terminal(run_id, fixture)
+        self.assertEqual(result["state"], "awaiting-certification")
+
+        self._seed_signal()
+        chan = sig.replay_channel(self.root, "origin", "feature-x")
+        check_fact = next(
+            record for record in chan["facts"].values()
+            if record["fact"] == "pr-check"
+        )
+        result = self._run_to_terminal(run_id, fixture)
+        self.assertEqual(result["state"], "awaiting-certification")
+        final = runs.replay_run(self.root, run_id, now=self.now)
+        delivered = [item for item in final["nudges"] if item["delivered"]]
+        self.assertEqual(len(delivered), 1)
+        self.assertEqual(delivered[0]["signal_hash"], check_fact["event_hash"])
+        self.assertEqual(delivered[0]["node_id"], "repair")
+        self.assertEqual(final["budgets"]["max_nudges"]["used"], 1)
+        repaired = [
+            item for item in final["completed_claims"]
+            if item["node_id"] == "repair"
+        ]
+        self.assertEqual(len(repaired), 1)
+        self.assertEqual(repaired[0]["outcome"], "succeeded")
+
+        # The nudge facts rode into the repair packet as bounded context.
+        session_dir = (
+            self.root / ".git" / "pmo-orchestration" / "runs" / run_id
+            / "driver-sessions"
+        )
+        packets = []
+        for record_path in session_dir.glob("session-*.json"):
+            record = json.loads(record_path.read_text())
+            packet = json.loads(Path(record["packet_path"]).read_text())
+            if packet["node_id"] == "repair":
+                packets.append(packet)
+        self.assertEqual(len(packets), 1)
+        selectors = [
+            doc["selector"] for doc in packets[0]["context"]["documents"]
+        ]
+        self.assertIn("@nudge", selectors)
+        nudge_doc = next(
+            doc for doc in packets[0]["context"]["documents"]
+            if doc["selector"] == "@nudge"
+        )
+        self.assertIn("make the pushed branch green", nudge_doc["content"])
+
+        # Replaying the same signal fact appends nothing more.
+        for _ in range(3):
+            conductor.tick_run(
+                self.root, run_id, driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+        again = runs.replay_run(self.root, run_id, now=self.now)
+        self.assertEqual(
+            len([item for item in again["nudges"] if item["delivered"]]), 1
+        )
+        view = surface.build_run_view(self.root, run_id, now=self.now)
+        self.assertEqual(len(view["nudges"]), len(again["nudges"]))
+
+    def test_nudge_refusals_are_distinct_recorded_and_deduped(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        nodes, responses = self._nudge_nodes()
+        self._write_score("nudge-uncovered", nodes, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 3},
+        ])
+        projection = self._start(
+            "nudge-uncovered", signal_channel="origin/feature-x",
+        )
+        run_id = projection["run_id"]
+        fixture = drivers.FixtureDriver(responses)
+        self._run_to_terminal(run_id, fixture)
+        self._seed_signal()
+        for _ in range(3):
+            conductor.tick_run(
+                self.root, run_id, driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+        final = runs.replay_run(self.root, run_id, now=self.now)
+        refusals = [item for item in final["nudges"] if not item["delivered"]]
+        self.assertEqual(len(refusals), 1)
+        self.assertEqual(refusals[0]["reason"], "no-standing-rule")
+        self.assertEqual(final["state"], "awaiting-certification")
+        self.assertEqual(final["budgets"]["max_nudges"]["used"], 0)
+
+        # A paused run records run-inactive instead of delivering.
+        nodes2, responses2 = self._nudge_nodes(worker_polls=10)
+        self._write_score("nudge-paused", nodes2, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 3},
+        ])
+        paused_projection = self._start(
+            "nudge-paused",
+            standing_nudges=["ci-failed"],
+            signal_channel="origin/paused-x",
+        )
+        paused_run = paused_projection["run_id"]
+        fixture2 = drivers.FixtureDriver(responses2)
+        conductor.tick_run(
+            self.root, paused_run, driver_config=self.config,
+            adapters={"fixture": fixture2}, now=self.now,
+        )
+        live = runs.replay_run(self.root, paused_run, now=self.now)
+        runs.transition_run(
+            self.root, paused_run, "pause", str(live["ledger_head"]),
+            reason="operator pause", now=self.now,
+        )
+        self._seed_signal(branch="paused-x", name="ci-p")
+        conductor.tick_run(
+            self.root, paused_run, driver_config=self.config,
+            adapters={"fixture": fixture2}, now=self.now,
+        )
+        paused_state = runs.replay_run(self.root, paused_run, now=self.now)
+        self.assertEqual(
+            [item["reason"] for item in paused_state["nudges"]],
+            ["run-inactive"],
+        )
+
+        # Grant expiry is its own recorded reason.
+        late = self.now + timedelta(hours=2)
+        self._seed_signal(name="ci-late")
+        conductor.tick_run(
+            self.root, run_id, driver_config=self.config,
+            adapters={"fixture": fixture}, now=late,
+        )
+        expired = runs.replay_run(self.root, run_id, now=late)
+        reasons = {
+            item["reason"] for item in expired["nudges"]
+            if not item["delivered"]
+        }
+        self.assertIn("grant-expired", reasons)
+
+    def test_nudge_budget_exhaustion_is_a_recorded_blocked_stop(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        nodes, responses = self._nudge_nodes(worker_polls=10)
+        defaults = {
+            "max_concurrency": 3, "max_wall_seconds": 3600,
+            "max_agent_starts": 20, "max_check_starts": 20,
+            "default_timeout_seconds": 60, "max_artifact_bytes": 1000000,
+            "max_nudges": 1,
+        }
+        self._write_score("nudge-storm", nodes, defaults=defaults, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 5},
+        ])
+        projection = self._start(
+            "nudge-storm",
+            standing_nudges=["ci-failed"],
+            signal_channel="origin/feature-x",
+        )
+        run_id = projection["run_id"]
+        fixture = drivers.FixtureDriver(responses)
+        conductor.tick_run(
+            self.root, run_id, driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        self._seed_signal(name="ci-one")
+        conductor.tick_run(
+            self.root, run_id, driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        first = runs.replay_run(self.root, run_id, now=self.now)
+        self.assertEqual(
+            len([item for item in first["nudges"] if item["delivered"]]), 1
+        )
+        self._seed_signal(name="ci-two")
+        conductor.tick_run(
+            self.root, run_id, driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        stormed = runs.replay_run(self.root, run_id, now=self.now)
+        self.assertEqual(stormed["state"], "blocked")
+        reasons = {
+            item["reason"] for item in stormed["nudges"]
+            if not item["delivered"]
+        }
+        self.assertIn("nudge-budget-exhausted", reasons)
+
+    def test_nudge_receptivity_gates_live_sessions(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        # A blocked session refuses; a waiting session receives through
+        # the driver seam and the poked receipt returns to active.
+        for activities, expectation in (
+            (["blocked"], "refused"),
+            (["active"], "deferred"),
+            (["waiting_input"], "delivered"),
+        ):
+            slug = f"nudge-session-{expectation}"
+            nodes, responses = self._nudge_nodes(
+                worker_polls=10, worker_activities=activities
+            )
+            nodes = [nodes[0]]
+            self._write_score(slug, nodes, nudges=[
+                {"id": "on-ci-failed", "signal": "ci-failed",
+                 "target": "worker", "max_total": 3},
+            ])
+            projection = self._start(
+                slug,
+                standing_nudges=["ci-failed=worker"],
+                signal_channel=f"origin/{slug}",
+            )
+            run_id = projection["run_id"]
+            fixture = drivers.FixtureDriver(responses)
+            conductor.tick_run(
+                self.root, run_id, driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+            self._seed_signal(branch=slug)
+            conductor.tick_run(
+                self.root, run_id, driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+            final = runs.replay_run(self.root, run_id, now=self.now)
+            delivered = [item for item in final["nudges"] if item["delivered"]]
+            refused = [item for item in final["nudges"] if not item["delivered"]]
+            if expectation == "refused":
+                self.assertEqual(delivered, [])
+                self.assertEqual(refused[0]["reason"], "non-receptive")
+            elif expectation == "deferred":
+                # An active session defers: no delivery, no refusal —
+                # the next tick simply re-evaluates.
+                self.assertEqual(final["nudges"], [])
+            else:
+                self.assertEqual(len(delivered), 1)
+                self.assertEqual(int(delivered[0]["attempt"]), 1)
+                session_dir = (
+                    self.root / ".git" / "pmo-orchestration" / "runs"
+                    / run_id / "driver-sessions"
+                )
+                record = json.loads(
+                    next(iter(sorted(session_dir.glob("session-*.json")))).read_text()
+                )
+                nudge_files = list(
+                    (Path(record["staging"]) / "nudges").glob("*.json")
+                )
+                self.assertEqual(len(nudge_files), 1)
+                self.assertEqual(record["receipt"]["activity"], "active")
+
+    def test_nudge_crash_after_delivery_recovers_without_duplicate(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        nodes, responses = self._nudge_nodes()
+        self._write_score("nudge-crash", nodes, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 3},
+        ])
+        projection = self._start(
+            "nudge-crash",
+            standing_nudges=["ci-failed"],
+            signal_channel="origin/feature-x",
+        )
+        run_id = projection["run_id"]
+        fixture = drivers.FixtureDriver(responses)
+        self._run_to_terminal(run_id, fixture)
+        self._seed_signal(name="ci-crash")
+
+        def crash_hook(name, detail):
+            if name == "after-claim" and detail.get("node_id") == "repair":
+                raise RuntimeError("planted crash after nudge delivery")
+
+        with self.assertRaises(RuntimeError):
+            conductor.tick_run(
+                self.root, run_id, driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+                boundary_hook=crash_hook,
+            )
+        crashed = runs.replay_run(self.root, run_id, now=self.now)
+        self.assertEqual(
+            len([item for item in crashed["nudges"] if item["delivered"]]), 1
+        )
+        result = self._run_to_terminal(run_id, fixture)
+        self.assertEqual(result["state"], "awaiting-certification")
+        final = runs.replay_run(self.root, run_id, now=self.now)
+        self.assertEqual(
+            len([item for item in final["nudges"] if item["delivered"]]), 1
+        )
+        repaired = [
+            item for item in final["completed_claims"]
+            if item["node_id"] == "repair"
+        ]
+        self.assertEqual(len(repaired), 1)
+
+    def test_nudge_authority_rides_the_plan_and_grant(self):
+        import dw_pmo.orchestration_run as runs
+
+        nodes, _responses = self._nudge_nodes()
+        self._write_score("nudge-authority", nodes, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 3},
+        ])
+        bad = runs.build_run_plan(
+            self.root, "nudge-authority", "sample", "SMP-0-01",
+            issued_at=self.now, expires_at=self.now + timedelta(hours=1),
+            standing_nudges=["vibes=repair"],
+        )
+        self.assertFalse(bad["applicable"])
+        self.assertTrue(
+            any("unknown signal" in issue for issue in bad["issues"])
+        )
+        malformed = runs.build_run_plan(
+            self.root, "nudge-authority", "sample", "SMP-0-01",
+            issued_at=self.now, expires_at=self.now + timedelta(hours=1),
+            signal_channel="nochannel",
+        )
+        self.assertTrue(
+            any("remote/branch" in issue for issue in malformed["issues"])
+        )
+        plan = runs.build_run_plan(
+            self.root, "nudge-authority", "sample", "SMP-0-01",
+            issued_at=self.now, expires_at=self.now + timedelta(hours=1),
+            standing_nudges=["ci-failed=repair"],
+            signal_channel="origin/feature-x",
+        )
+        self.assertTrue(plan["applicable"])
+        self.assertEqual(
+            plan["authority"]["standing_nudge_rules"],
+            [{"signal": "ci-failed", "target": "repair"}],
+        )
+        self.assertEqual(plan["authority"]["signal_channel"], "origin/feature-x")
+        started = runs.start_run(
+            self.root, plan, plan["start_token"], approved=True,
+            approved_by="conductor-fixture", now=self.now,
+        )
+        run_dir = (
+            self.root / ".git" / "pmo-orchestration" / "runs"
+            / started["run_id"]
+        )
+        grant = json.loads((run_dir / "grant.json").read_text())
+        self.assertEqual(
+            grant["standing_nudge_rules"],
+            [{"signal": "ci-failed", "target": "repair"}],
+        )
+        grant["standing_nudge_rules"] = [{"signal": "ci-failed", "target": ""}]
+        os.chmod(run_dir / "grant.json", 0o600)
+        (run_dir / "grant.json").write_text(
+            json.dumps(grant, indent=2, sort_keys=True) + "\n"
+        )
+        with self.assertRaises(DwError):
+            runs.replay_run(self.root, started["run_id"], now=self.now)
 
     def test_invalid_artifact_retries_then_exhausts_without_fan_in(self):
         import dw_pmo.orchestration_conductor as conductor

@@ -57,6 +57,8 @@ def start_run_by_id(
     *,
     approved: bool,
     approved_by: str,
+    standing_nudges: object = None,
+    signal_channel: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, object]:
     """Rebuild and consume one plan without accepting caller-owned semantics."""
@@ -67,6 +69,8 @@ def start_run_by_id(
         story,
         issued_at=issued_at,
         expires_at=expires_at,
+        standing_nudges=standing_nudges,
+        signal_channel=signal_channel,
     )
     return start_run(
         root,
@@ -101,7 +105,16 @@ def _act_applicability(
         issues.append(f"run {action} does not accept a checkpoint decision")
 
     if action == "tick":
-        if state != "active":
+        if state == "awaiting-certification":
+            # A tick here observes external commits and evaluates the
+            # score's declared nudge rules — the sanctioned wake. With no
+            # rules declared there is nothing a tick could do.
+            _run_path, _grant, compiled = _load_run_documents(
+                root, str(projection["run_id"])
+            )
+            if not compiled["score"].get("nudges"):
+                issues.append(f"cannot tick a run in state {state}")
+        elif state != "active":
             issues.append(f"cannot tick a run in state {state}")
         elif not projection["dispatch_allowed"]:
             issues.append("run grant does not currently permit dispatch")
@@ -457,6 +470,7 @@ def build_run_view(
         },
         "artifacts": safe_artifacts,
         "budgets": projection["budgets"],
+        "nudges": projection["nudges"],
         "routes": projection["routes"],
         "checkpoints": projection["checkpoints"],
         "pending_checkpoint": projection["pending_checkpoint"],

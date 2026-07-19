@@ -46,7 +46,7 @@ discipline, re-interpreted under the consent spine.
   (fixture: all; codex exec: `active`/`exited`/`unknown`), and the pure
   receptivity table refuses injection into `blocked`/`unknown` under
   every intent (WLA-25-03).
-- [ ] Auto-nudges happen only under score rule + grant budget +
+- [x] Auto-nudges happen only under score rule + grant budget +
   standing-rule match, deliver at-most-once per signal across restart,
   respect receptivity, and exhaust into a recorded blocked stop —
   each refusal class distinct and receipted (WLA-25-04).
@@ -77,7 +77,7 @@ discipline, re-interpreted under the consent spine.
 | WLA-25-01 | Contract the outward signal and nudge authority | done | [story-01-signal-nudge-contract](./story-01-signal-nudge-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-25-02 | Observe SCM facts without acting | done | [story-02-scm-observer](./story-02-scm-observer.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-25-03 | Teach drivers to report activity states | done | [story-03-driver-activity-states](./story-03-driver-activity-states.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-25-04 | Nudge agents under grant authority | backlog | [story-04-bounded-nudge-engine](./story-04-bounded-nudge-engine.md) | - |
+| WLA-25-04 | Nudge agents under grant authority | done | [story-04-bounded-nudge-engine](./story-04-bounded-nudge-engine.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-25-05 | Stream the ledger live | backlog | [story-05-ledger-live-stream](./story-05-ledger-live-stream.md) | - |
 | WLA-25-06 | Notify the operator durably | backlog | [story-06-operator-notifications](./story-06-operator-notifications.md) | - |
 | WLA-25-07 | Drive Claude Code through the neutral seam | backlog | [story-07-claude-code-driver](./story-07-claude-code-driver.md) | - |
@@ -86,7 +86,7 @@ discipline, re-interpreted under the consent spine.
 
 ## Where we are
 
-Phase open 3/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
+Phase open 4/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
 outward layer — the `delivery-workbench-signal@1` fact model, read-time
 derived-status precedence, the six-state activity vocabulary with its
 receptivity table, the four-layer nudge model (score rule → grant
@@ -127,8 +127,30 @@ with replay-idempotent dedup, the projection/run view/Workbench surface
 scripts every state deterministically across restart; codex exec is
 pinned to its honest subset by source assertion. Core suite 313 on both
 floors; the live demo walked a granted run's deduped transition ledger
-to `awaiting-certification`. Next: WLA-25-04, the nudge engine — its
-receptivity dependency is now real.
+to `awaiting-certification`.
+
+WLA-25-04 is done: the nudge engine is live as the contract's four
+layers. Scores declare bounded `nudges` rules (compile-validated,
+semantic-hash-covered, simulated); grants carry exact-match standing
+rules, a `max_nudges` budget, and the bound signal channel — all stated
+in the plan preview and dying with the grant; ticks match chain facts by
+event hash and walk the seven-reason refusal taxonomy as deduped
+`nudge_refused` events; a covered match appends one `nudge_delivered`
+receipt that is the at-most-once marker across restart and the one
+sanctioned wake of an `awaiting-certification` run. Idle targets
+re-activate as fresh attempts whose packets carry an `@nudge` context
+document; live `waiting_input` sessions receive hash-bound packets
+through the new `deliver_nudge` driver seam; `active` defers and
+`blocked`/`unknown` refuse. Budget exhaustion on an active run is a
+recorded blocked stop. The run-act surface now permits `tick` on
+`awaiting-certification` exactly when the score declares nudges — the
+gap the demo's first capture caught. Suite 320 on both floors plus
+interop and the packaged exam; the CLI demo walked
+signal→standing-rule→wake→repair→re-terminal with at-most-once held.
+Note for later Workbench editor work: nudge rules author through the
+editor's JSON view and compiler save path today; a dedicated graphical
+inspector panel is future editor scope. Next: WLA-25-05, the live
+ledger stream.
 
 ## Active risks
 
@@ -153,6 +175,9 @@ receptivity dependency is now real.
 - 2026-07-18 - Nudge targets are declared route targets only - a nudge changes when a declared node runs, never whether an undeclared node exists, so `orchestration simulate` can still show every way a run can unfold; an unwired fixer is a score edit plus re-grant - WLA-25-01 (docs/signals.md).
 - 2026-07-18 - Red CI / review signals on branches with no associated run notify per-project opt-in - observation everywhere by default would make the quiet channel noisy before it earns trust - WLA-25-01 (docs/signals.md).
 - 2026-07-18 - The observe pass is a CLI act; MCP and HTTP expose reads only - a remote client can see every fact and derived status but cannot make the machine poll a forge, keeping the observer's write path (its own store) local-operator-initiated - WLA-25-02.
+- 2026-07-19 - `nudge_delivered` is the only event that reverses a terminal state (`awaiting-certification` → `active`) - the wake is granted, budgeted, at-most-once, and receipted, and certification/commit authority is untouched - WLA-25-04.
+- 2026-07-19 - Naming a failure-activated node in a nudge rule makes it reachable exactly like a failure route - explicit nudge routing is declared routing, so `orchestration simulate` still shows every way a run can unfold - WLA-25-04.
+- 2026-07-19 - The undelivered nudge is never queued: the ledger event is the delivery marker (at-most-once), and a crash between seam call and injection under-delivers rather than double-delivers - WLA-25-04.
 
 ## Decisions deferred
 
