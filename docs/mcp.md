@@ -97,6 +97,7 @@ commands, driver configuration, scheduling choices, or credentials.
 | Tool | Core function | Input schema |
 |---|---|---|
 | `dw_orchestration_list` | `orchestration.score_inventory` | `{}` |
+| `dw_signals` | `signals.build_signals_inventory` | `{remote?, branch?}`; pure outward-signal inventory with read-time derived status; the observe pass stays a CLI act |
 | `dw_orchestration_show` | `orchestration.compile_score_path` | `{score}` |
 | `dw_orchestration_simulate` | `orchestration.simulate_score` | `{score}`; pure, starts nothing |
 | `dw_run_plan` | `orchestration_run.build_run_plan` | `{score, story, project?, issued_at?, expires_at?}`; exact pure grant preview |

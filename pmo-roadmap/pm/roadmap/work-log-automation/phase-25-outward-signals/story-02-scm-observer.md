@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 25
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-25-01
 - **Unblocks:** WLA-25-04, WLA-25-06, WLA-25-09
 - **Owner:** unassigned
@@ -43,21 +43,21 @@ stories can act on facts that already exist and are already auditable.
 
 ## Acceptance criteria
 
-- [ ] The observer is pure read: no code path mutates the repository, the
+- [x] The observer is pure read: no code path mutates the repository, the
   forge, any run, or any agent; `starts_work: false` is stamped on every
   observe result and enforced by test.
-- [ ] Signal facts are append-only, hash-chained, and deduplicated by
+- [x] Signal facts are append-only, hash-chained, and deduplicated by
   semantic diff — an unchanged forge response appends nothing; a corrupt
   or forked signal chain fails closed exactly like the run ledger.
-- [ ] Derived status follows the contracted precedence table and is
+- [x] Derived status follows the contracted precedence table and is
   computed at read time; deleting the projection cache changes no answer.
-- [ ] Raw third-party content stays out of durable facts: checks carry
+- [x] Raw third-party content stays out of durable facts: checks carry
   name/status/conclusion/URL, review threads carry counts/authors/URLs,
   and a test proves no comment body or log text is persisted.
-- [ ] CLI, MCP, and HTTP return byte-equivalent signal and status models,
+- [x] CLI, MCP, and HTTP return byte-equivalent signal and status models,
   with the fixture provider proving green, failing, conflicted, and
   closed-unmerged scenarios end to end.
-- [ ] ETag/conditional requests are used when the forge offers them, and
+- [x] ETag/conditional requests are used when the forge offers them, and
   a rate-limited or unauthenticated forge degrades to a recorded
   content-free refusal, never a crash or a stale-silent success.
 

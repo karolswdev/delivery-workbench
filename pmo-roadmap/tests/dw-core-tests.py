@@ -1544,6 +1544,7 @@ class DwCoreTest(unittest.TestCase):
             "dw holds", "dw story show", "dw sessions --json", "dw events",
             "dw check", "dw gate --porcelain", "dw verify",
             "dw orchestration list", "dw orchestration show", "dw orchestration simulate",
+            "dw signals list", "dw signals observe",
             "dw run plan", "dw run start", "dw run list", "dw run show", "dw run view",
             "dw run preview", "dw run tick", "dw run pause", "dw run resume",
             "dw run revoke", "dw run cancel", "dw run checkpoint", "dw run stream",
@@ -2692,7 +2693,7 @@ class MCPServerTest(unittest.TestCase):
             "dw_check", "dw_doctor",
             "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",
-            "dw_orchestration_list", "dw_orchestration_show",
+            "dw_orchestration_list", "dw_signals", "dw_orchestration_show",
             "dw_orchestration_simulate", "dw_run_plan", "dw_run_list",
             "dw_run_show", "dw_run_view", "dw_run_preview", "dw_run_start",
             "dw_run_tick", "dw_run_pause", "dw_run_resume", "dw_run_revoke",
@@ -7022,6 +7023,322 @@ class AgentHooksTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         line = json.loads(self.events.read_text().strip())
         self.assertEqual(line["event"], "Stop")
+
+
+class SignalsTest(unittest.TestCase):
+    """WLA-25-02: the authority-free SCM observer (docs/signals.md)."""
+
+    def setUp(self):
+        import dw_pmo.signals as sig
+
+        self.sig = sig
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-signals-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.root.mkdir()
+        self._cmd("git", "init", "-q", "-b", "main")
+        self._cmd("git", "config", "user.name", "Signals Fixture")
+        self._cmd("git", "config", "user.email", "signals@example.test")
+        (self.root / "README.md").write_text("# Signals fixture\n")
+        demo = self.root / "pm" / "roadmap" / "demo"
+        phase = demo / "phase-1-alpha"
+        phase.mkdir(parents=True)
+        (demo / "README.md").write_text(README)
+        (phase / "current-phase-status.md").write_text(STATUS_FILE)
+        (phase / "story-01-first.md").write_text(
+            STORY_TMPL.format(sid="DM-1-01", title="First thing", status="done")
+        )
+        (phase / "story-02-second.md").write_text(
+            STORY_TMPL.format(sid="DM-1-02", title="Second thing", status="ready")
+        )
+        (phase / "evidence-story-01.md").write_text(EVIDENCE_01)
+        self._cmd("git", "add", ".")
+        self._cmd(
+            "git", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "init"
+        )
+        self.scenario = self.tmp / "scenario.json"
+        self._write_scenario(self._snapshot())
+
+    def _cmd(self, *argv, check=True):
+        return subprocess.run(
+            list(argv), cwd=self.root, check=check, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+    def _snapshot(self, **overrides):
+        pr = {
+            "number": 7,
+            "state": "open",
+            "draft": False,
+            "head": "feature/x",
+            "base": "main",
+            "url": "https://example.test/pr/7",
+            "checks": [
+                {
+                    "name": "tests",
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "url": "https://example.test/checks/1",
+                }
+            ],
+            "review": {
+                "unresolved": 1,
+                "resolved": 0,
+                "changes_requested": True,
+                "approved": False,
+                "reviewers": ["alice"],
+                "url": "https://example.test/pr/7",
+                "body": "PLANTED REVIEW PROSE",
+            },
+            "mergeable": "true",
+            "log_text": "PLANTED CI LOG",
+        }
+        pr.update(overrides)
+        return {"prs": [pr]}
+
+    def _write_scenario(self, snapshot):
+        self.scenario.write_text(json.dumps(snapshot))
+
+    def _observe(self):
+        provider = self.sig.FixtureProvider(self.scenario)
+        return self.sig.observe_signals(self.root, provider, "origin", "feature/x")
+
+    def _chain_path(self):
+        return (
+            self.root / ".git" / "pmo-signals" / "origin" / "feature%2Fx"
+            / "signals.jsonl"
+        )
+
+    def test_observe_is_pure_appends_facts_and_stamps_no_work(self):
+        result = self._observe()
+        self.assertEqual(result["kind"], "delivery-workbench-signals-observe")
+        self.assertIs(result["starts_work"], False)
+        self.assertEqual(result["appended"], 4)
+        self.assertEqual(result["status"], "ci-failed")
+        # The operator tree stays untouched; writes land only under
+        # .git/pmo-signals (git's own transient files are not asserted on,
+        # after the maintenance.lock CI flake).
+        self.assertEqual(self._cmd("git", "status", "--porcelain").stdout, "")
+        self.assertTrue(self._chain_path().is_file())
+
+    def test_semantic_dedup_appends_nothing_when_unchanged(self):
+        self._observe()
+        second = self._observe()
+        self.assertEqual(second["appended"], 0)
+        self.assertIs(second["not_modified"], True)
+        # Same content rewritten is still semantically unchanged.
+        self._write_scenario(self._snapshot())
+        third = self._observe()
+        self.assertEqual(third["appended"], 0)
+
+    def test_changed_facts_append_and_status_rederives(self):
+        self._observe()
+        snapshot = self._snapshot()
+        snapshot["prs"][0]["checks"][0]["conclusion"] = "success"
+        snapshot["prs"][0]["review"]["changes_requested"] = False
+        snapshot["prs"][0]["review"]["approved"] = True
+        self._write_scenario(snapshot)
+        result = self._observe()
+        self.assertEqual(result["appended"], 2)
+        self.assertEqual(result["status"], "approved")
+
+    def test_status_precedence_matches_the_contract(self):
+        sig = self.sig
+        cases = [
+            (dict(state="merged"), "merged"),
+            (dict(state="closed"), "closed-unmerged"),
+            (dict(), "ci-failed"),
+            (dict(checks=[], mergeable="false"), "merge-conflict"),
+            (dict(checks=[], mergeable="true"), "changes-requested"),
+            (
+                dict(
+                    checks=[{"name": "t", "status": "in_progress",
+                             "conclusion": "", "url": ""}],
+                    review={"unresolved": 0, "resolved": 0,
+                            "changes_requested": False, "approved": False,
+                            "reviewers": [], "url": ""},
+                ),
+                "ci-pending",
+            ),
+            (
+                dict(
+                    checks=[],
+                    review={"unresolved": 0, "resolved": 1,
+                            "changes_requested": False, "approved": True,
+                            "reviewers": ["bob"], "url": ""},
+                ),
+                "approved",
+            ),
+            (
+                dict(
+                    checks=[{"name": "t", "status": "completed",
+                             "conclusion": "success", "url": ""}],
+                    review={"unresolved": 0, "resolved": 0,
+                            "changes_requested": False, "approved": False,
+                            "reviewers": [], "url": ""},
+                    mergeable="true",
+                ),
+                "mergeable",
+            ),
+            (
+                dict(checks=[], mergeable="unknown",
+                     review={"unresolved": 0, "resolved": 0,
+                             "changes_requested": False, "approved": False,
+                             "reviewers": [], "url": ""}),
+                "pr-open",
+            ),
+        ]
+        for overrides, expected in cases:
+            snapshot = self._snapshot(**overrides)
+            facts = {}
+            for fact, detail in sig._facts_from_snapshot("fixture", snapshot):
+                facts[sig._fact_key(fact, detail)] = {
+                    "fact": fact, "detail": detail, "ts": "", "seq": 0,
+                }
+            self.assertEqual(sig.derive_status(facts), expected, overrides)
+        self.assertEqual(sig.derive_status({}), "unobserved")
+
+    def test_chain_fails_closed_on_corruption_fork_and_truncation(self):
+        self._observe()
+        chain = self._chain_path()
+        good = chain.read_text()
+        lines = good.splitlines(True)
+
+        chain.write_text(good.rstrip("\n"))
+        with self.assertRaises(DwError):
+            self.sig.replay_channel(self.root, "origin", "feature/x")
+
+        chain.write_text("".join(lines[:-1]) + "not json\n")
+        with self.assertRaises(DwError):
+            self.sig.replay_channel(self.root, "origin", "feature/x")
+
+        forked = json.loads(lines[-1])
+        forked["prev_hash"] = "sha256:" + "0" * 64
+        chain.write_text(
+            "".join(lines[:-1])
+            + json.dumps(forked, sort_keys=True, separators=(",", ":")) + "\n"
+        )
+        with self.assertRaises(DwError):
+            self.sig.replay_channel(self.root, "origin", "feature/x")
+
+        tampered = json.loads(lines[-1])
+        tampered["detail"] = dict(tampered["detail"])
+        if "state" in tampered["detail"]:
+            tampered["detail"]["state"] = "merged"
+        else:
+            tampered["detail"]["url"] = "https://tampered.example"
+        chain.write_text(
+            "".join(lines[:-1])
+            + json.dumps(tampered, sort_keys=True, separators=(",", ":")) + "\n"
+        )
+        with self.assertRaises(DwError):
+            self.sig.replay_channel(self.root, "origin", "feature/x")
+
+        chain.write_text(good)
+        self.sig.replay_channel(self.root, "origin", "feature/x")
+
+    def test_projection_cache_is_disposable(self):
+        self._observe()
+        before = self.sig.build_signals_inventory(self.root)
+        (self._chain_path().parent / "projection.json").unlink()
+        self.assertEqual(self.sig.build_signals_inventory(self.root), before)
+
+    def test_third_party_content_never_persists(self):
+        self._observe()
+        stored = self._chain_path().read_text()
+        self.assertNotIn("PLANTED", stored)
+        self.assertNotIn("PROSE", stored)
+        self.assertNotIn("LOG", stored)
+
+    def test_refusals_are_content_free_recorded_and_deduped(self):
+        self._write_scenario({"refusal": "rate-limited"})
+        first = self._observe()
+        self.assertEqual(first["refusal"], "rate-limited")
+        self.assertEqual(first["appended"], 1)
+        second = self._observe()
+        self.assertEqual(second["appended"], 0)
+        self._write_scenario({"refusal": "SECRET DETAIL app_token=xyz"})
+        third = self._observe()
+        self.assertEqual(third["refusal"], "forge-error")
+        self.assertNotIn("SECRET", self._chain_path().read_text())
+
+    def test_inventory_agrees_across_cli_mcp_and_http(self):
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.workbench as wb
+
+        self._observe()
+        inventory = self.sig.build_signals_inventory(self.root)
+        self.assertIs(inventory["starts_work"], False)
+        cli = subprocess.run(
+            [sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+             "--root", str(self.root), "signals", "list", "--json"],
+            check=True, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.assertEqual(json.loads(cli.stdout), inventory)
+        mcp_result = mcp.call_tool(self.root, "dw_signals", {})
+        self.assertEqual(mcp_result["structuredContent"], inventory)
+        status, http_result = wb.handle_api(self.root, "/api/signals", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(http_result["data"], inventory)
+        status, filtered = wb.handle_api(
+            self.root, "/api/signals", {"branch": ["feature/x"]}
+        )
+        self.assertEqual(filtered["data"]["channels"], inventory["channels"])
+        status, empty = wb.handle_api(
+            self.root, "/api/signals", {"branch": ["no-such-branch"]}
+        )
+        self.assertEqual(empty["data"]["channels"], [])
+
+    def test_github_remote_parsing_and_provider_refusals(self):
+        sig = self.sig
+        self.assertEqual(
+            sig.parse_github_remote("https://github.com/o/r.git"), ("o", "r")
+        )
+        self.assertEqual(
+            sig.parse_github_remote("git@github.com:o/r.git"), ("o", "r")
+        )
+        self.assertEqual(
+            sig.parse_github_remote("ssh://git@github.com/o/r"), ("o", "r")
+        )
+        with self.assertRaises(DwError):
+            sig.parse_github_remote("https://gitlab.example/o/r.git")
+        with self.assertRaises(DwError):
+            sig.github_provider_for(self.root, "nonexistent-remote", "main")
+
+        import urllib.error
+
+        def opener_for(code):
+            def opener(request, timeout=0):
+                raise urllib.error.HTTPError(
+                    request.full_url, code, "refused", {}, None
+                )
+            return opener
+
+        for code, reason in ((401, "unauthenticated"), (403, "rate-limited"),
+                             (429, "rate-limited"), (500, "forge-error")):
+            provider = sig.GithubProvider(
+                "o", "r", "main", token="t", opener=opener_for(code)
+            )
+            snapshot, _, not_modified = provider.fetch({})
+            self.assertEqual(snapshot["refusal"], reason, code)
+            self.assertIs(not_modified, False)
+
+        provider = sig.GithubProvider(
+            "o", "r", "main", token="t", opener=opener_for(304)
+        )
+        snapshot, _, not_modified = provider.fetch({"etag": "W/\"cached\""})
+        self.assertIsNone(snapshot.get("refusal"))
+        self.assertIs(not_modified, True)
+
+        def network_error(request, timeout=0):
+            raise urllib.error.URLError("no route")
+
+        provider = sig.GithubProvider(
+            "o", "r", "main", token="t", opener=network_error
+        )
+        snapshot, _, _ = provider.fetch({})
+        self.assertEqual(snapshot["refusal"], "network-error")
 
 
 if __name__ == "__main__":

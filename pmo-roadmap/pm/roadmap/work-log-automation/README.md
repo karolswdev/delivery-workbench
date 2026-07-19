@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-18 (Phase 25 open 1/9 — WLA-25-01 landed `docs/signals.md`, the outward signal and nudge authority contract).
-**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (1/9).
+**Last updated:** 2026-07-18 (Phase 25 open 2/9 — WLA-25-02 landed the authority-free SCM observer: `dw signals`, MCP `dw_signals`, `GET /api/signals`).
+**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (2/9).
 **Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed; Phase 25 (outward signals and bounded nudges) is contracted and in progress.
 
 ## Vision

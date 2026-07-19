@@ -6,8 +6,8 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Current phase: 24 (phase-24-bounded-orchestration)
-- Next story: WLA-24-07 — Expose and monitor runs across every surface [backlog]
+- Current phase: 25 (phase-25-outward-signals)
+- Next story: WLA-25-02 — Observe SCM facts without acting [in-progress]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

@@ -39,7 +39,7 @@ discipline, re-interpreted under the consent spine.
   precedence, activity vocabulary, nudge/receipt semantics, standing
   rules, typed checkpoint ports, and permanent exclusions, with a
   threat table naming exact fail checks (WLA-25-01).
-- [ ] The SCM observer records deduplicated, hash-chained,
+- [x] The SCM observer records deduplicated, hash-chained,
   content-excluded signal facts and byte-equivalent derived status
   across CLI/MCP/HTTP while provably starting nothing (WLA-25-02).
 - [ ] Drivers report the contracted activity states honestly
@@ -75,7 +75,7 @@ discipline, re-interpreted under the consent spine.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-25-01 | Contract the outward signal and nudge authority | done | [story-01-signal-nudge-contract](./story-01-signal-nudge-contract.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-25-02 | Observe SCM facts without acting | backlog | [story-02-scm-observer](./story-02-scm-observer.md) | - |
+| WLA-25-02 | Observe SCM facts without acting | done | [story-02-scm-observer](./story-02-scm-observer.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-25-03 | Teach drivers to report activity states | backlog | [story-03-driver-activity-states](./story-03-driver-activity-states.md) | - |
 | WLA-25-04 | Nudge agents under grant authority | backlog | [story-04-bounded-nudge-engine](./story-04-bounded-nudge-engine.md) | - |
 | WLA-25-05 | Stream the ledger live | backlog | [story-05-ledger-live-stream](./story-05-ledger-live-stream.md) | - |
@@ -101,8 +101,19 @@ update check, diff hygiene). Both deferred contract questions are
 settled on record: nudge targets are declared route targets only, and
 run-less branch signals notify per-project opt-in. The phase plan
 stands at nine ordered stories from the two 2026-07-18 source studies
-(AgentWrapper/agent-orchestrator; microsoft/agent-framework-go). Next:
-WLA-25-02, the authority-free SCM observer.
+(AgentWrapper/agent-orchestrator; microsoft/agent-framework-go).
+
+WLA-25-02 is done: `lib/dw_pmo/signals.py` delivers the authority-free
+observer — provider port with fixture oracle and least-privilege GitHub
+adapter, hash-chained facts under `.git/pmo-signals/` in the run-ledger
+discipline, semantic dedup, content exclusion by construction, read-time
+derived status, and content-free degraded-forge refusals — surfaced
+byte-identically as `dw signals list`, MCP `dw_signals`, and Workbench
+`GET /api/signals`, with the bounded `dw signals observe` pass staying a
+CLI act stamped `starts_work: false`. Ten new tests raise the core suite
+to 307; the live demo walked failing/green/conflicted/closed scenarios,
+parity, fail-closed corruption, and refusal dedup on the installed CLI.
+Next: WLA-25-03, driver activity states.
 
 ## Active risks
 
@@ -126,6 +137,7 @@ WLA-25-02, the authority-free SCM observer.
 - 2026-07-18 - Undelivered nudges are refused and re-derived from signal facts, never queued - the ledger stays the only truth; MAF-go's in-flight message persistence is deliberately not copied - WLA-25-08.
 - 2026-07-18 - Nudge targets are declared route targets only - a nudge changes when a declared node runs, never whether an undeclared node exists, so `orchestration simulate` can still show every way a run can unfold; an unwired fixer is a score edit plus re-grant - WLA-25-01 (docs/signals.md).
 - 2026-07-18 - Red CI / review signals on branches with no associated run notify per-project opt-in - observation everywhere by default would make the quiet channel noisy before it earns trust - WLA-25-01 (docs/signals.md).
+- 2026-07-18 - The observe pass is a CLI act; MCP and HTTP expose reads only - a remote client can see every fact and derived status but cannot make the machine poll a forge, keeping the observer's write path (its own store) local-operator-initiated - WLA-25-02.
 
 ## Decisions deferred
 

@@ -326,6 +326,16 @@ def _tool_orchestration_list(root: Path, _args: dict) -> tuple[str, dict]:
     return _json_tool(score_inventory(root))
 
 
+def _tool_signals(root: Path, args: dict) -> tuple[str, dict]:
+    from .signals import build_signals_inventory
+
+    return _json_tool(
+        build_signals_inventory(
+            root, remote=args.get("remote"), branch=args.get("branch")
+        )
+    )
+
+
 def _tool_orchestration_show(root: Path, args: dict) -> tuple[str, dict]:
     from .orchestration import compile_score_path, find_score_path
 
@@ -700,6 +710,18 @@ TOOLS: dict[str, dict] = {
         "description": "Pure score inventory. Adapter over orchestration.score_inventory.",
         "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
         "handler": _tool_orchestration_list,
+    },
+    "dw_signals": {
+        "description": "Pure outward-signal inventory with derived status; observation stays a CLI act. Adapter over signals.build_signals_inventory.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "remote": {"type": "string", "description": "Filter by remote name"},
+                "branch": {"type": "string", "description": "Filter by branch name"},
+            },
+            "additionalProperties": False,
+        },
+        "handler": _tool_signals,
     },
     "dw_orchestration_show": {
         "description": "Compile one score through the shared exact compiler; starts nothing.",

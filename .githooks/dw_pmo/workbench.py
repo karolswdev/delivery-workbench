@@ -227,6 +227,15 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
             return 200, envelope(score_inventory(root))
 
+        if parts == ["api", "signals"]:
+            from .signals import build_signals_inventory
+
+            remote = query.get("remote", [""])[0].strip() or None
+            branch = query.get("branch", [""])[0].strip() or None
+            return 200, envelope(
+                build_signals_inventory(root, remote=remote, branch=branch)
+            )
+
         if (
             len(parts) == 4
             and parts[:2] == ["api", "orchestration"]

@@ -271,5 +271,18 @@ from .orchestration_surface import (
     run_summary_inventory,
     start_run_by_id,
 )
+from .signals import (
+    SIGNALS_KIND,
+    SIGNALS_OBSERVE_KIND,
+    SIGNAL_SCHEMA_VERSION,
+    FixtureProvider,
+    GithubProvider,
+    build_signals_inventory,
+    github_provider_for,
+    observe_signals,
+    parse_github_remote,
+    replay_channel,
+    resolve_signal_channel,
+)
 
 __version__ = "1.14.0"

@@ -42,6 +42,11 @@ try:
         apply_step,
         board_model,
         build_context_payload,
+        build_signals_inventory,
+        github_provider_for,
+        observe_signals,
+        resolve_signal_channel,
+        FixtureProvider,
         build_status,
         build_step,
         build_run_plan,
@@ -121,6 +126,43 @@ def read_body_arg(body: str | None, from_file: Path | None) -> str:
 def command_projects(args: argparse.Namespace) -> int:
     for project in discover_projects(args.root):
         print(f"{project.slug}\t{project.prefix}\t{project.path.relative_to(args.root)}")
+    return 0
+
+
+def command_signals_list(args: argparse.Namespace) -> int:
+    inventory = build_signals_inventory(args.root, remote=args.remote, branch=args.branch)
+    if args.json:
+        print(json.dumps(inventory, sort_keys=True))
+        return 0
+    channels = inventory["channels"]
+    if not channels:
+        print("dw signals: no observed channels under .git/pmo-signals", file=sys.stderr)
+        return 2
+    for channel in channels:
+        print(
+            f"{channel['remote']}\t{channel['branch']}\t{channel['status']}"
+            f"\t{channel['ledger_events']}\t{channel['last_observed']}"
+        )
+    return 0
+
+
+def command_signals_observe(args: argparse.Namespace) -> int:
+    remote, branch = resolve_signal_channel(args.root, args.remote, args.branch)
+    if args.provider == "fixture":
+        if not args.fixture_file:
+            raise DwError("--provider fixture requires --fixture-file")
+        provider = FixtureProvider(args.fixture_file)
+    else:
+        provider = github_provider_for(args.root, remote, branch)
+    result = observe_signals(args.root, provider, remote, branch)
+    if args.json:
+        print(json.dumps(result, sort_keys=True))
+        return 0
+    refusal = result["refusal"] or "-"
+    print(
+        f"{remote}\t{branch}\t{result['status']}\t+{result['appended']}"
+        f"\trefusal={refusal}\tnot_modified={str(result['not_modified']).lower()}"
+    )
     return 0
 
 
@@ -1048,6 +1090,28 @@ def build_parser() -> argparse.ArgumentParser:
     step.add_argument("--apply", action="store_true", help="apply one current action after validating --expect")
     step.add_argument("--expect", help="sha256 state token from a fresh dw step preview")
     step.set_defaults(func=command_step)
+
+    signals = sub.add_parser(
+        "signals",
+        help="observe outward SCM facts and derived status (pure; starts no work)",
+    )
+    signals_sub = signals.add_subparsers(dest="signals_command", required=True)
+    signals_list = signals_sub.add_parser("list", help="list observed channels and derived status")
+    signals_list.add_argument("--remote", help="filter by remote name")
+    signals_list.add_argument("--branch", help="filter by branch name")
+    signals_list.add_argument("--json", action="store_true", help="emit the stamped inventory")
+    signals_list.set_defaults(func=command_signals_list, remote=None, branch=None)
+    signals_observe = signals_sub.add_parser(
+        "observe", help="one bounded observe pass: poll, diff semantically, append changed facts"
+    )
+    signals_observe.add_argument("--remote", help="remote name (default origin)")
+    signals_observe.add_argument("--branch", help="branch name (default current branch)")
+    signals_observe.add_argument(
+        "--provider", choices=("github", "fixture"), default="github", help="SCM provider adapter"
+    )
+    signals_observe.add_argument("--fixture-file", help="snapshot JSON for --provider fixture")
+    signals_observe.add_argument("--json", action="store_true", help="emit the stamped observe result")
+    signals_observe.set_defaults(func=command_signals_observe, remote=None, branch=None, fixture_file=None)
 
     orchestration = sub.add_parser(
         "orchestration",
