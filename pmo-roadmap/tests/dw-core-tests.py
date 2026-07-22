@@ -5580,6 +5580,14 @@ class OrchestrationDriverTest(unittest.TestCase):
         self.assertEqual(capability["kind"], drivers.DRIVER_CAPABILITY_KIND)
         self.assertEqual(capability["adapter"], "fixture")
         self.assertEqual(capability["network"], "operator-enabled")
+        self.assertEqual(capability["principal"], "research-readonly")
+        self.assertTrue(capability["available"])
+        self.assertRegex(
+            capability["principal_fingerprint"], r"^sha256:[0-9a-f]{64}$"
+        )
+        self.assertRegex(
+            capability["capability_fingerprint"], r"^sha256:[0-9a-f]{64}$"
+        )
         self.assertFalse(capability["stores_credentials"])
         poisoned = json.loads(json.dumps(self.config))
         poisoned["profiles"]["research-readonly"]["api_token"] = "secret"
@@ -9081,17 +9089,77 @@ class ProgramPlannerTest(unittest.TestCase):
                 "version": "1.0.0",
                 "criteria": [],
             })
+
+        def fixture_agent(agent_id, profile, duties, *, writer=False):
+            capabilities = ["agent:dispatch"]
+            if writer:
+                capabilities.append("workspace:write")
+            elif any(duty in {"verifier", "meta-verifier", "master-architect", "judge"} for duty in duties):
+                capabilities.append("certification:verdict")
+            return {
+                "id": agent_id,
+                "profile": profile,
+                "duties": duties,
+                "workspace_domain": agent_id,
+                "capability_ceiling": capabilities,
+                "max_concurrency": 1,
+                "weight": 1,
+            }
+
+        def fixture_role(role_id, duty, pool, *, independent=(), required=True):
+            writer = duty in {"implementer", "repairer"}
+            judgment = duty in {"verifier", "meta-verifier", "master-architect", "judge"}
+            capabilities = ["agent:dispatch"]
+            if writer:
+                capabilities.append("workspace:write")
+            elif judgment:
+                capabilities.append("certification:verdict")
+            return {
+                "id": role_id,
+                "duty": duty,
+                "pool": pool,
+                "required": required,
+                "cardinality": 1,
+                "capability_ceiling": capabilities,
+                "driver_capabilities": ["repository-read", "repository-write"] if writer else ["repository-read"],
+                "workspace": "isolated-worktree" if writer else "read-only",
+                "context": {
+                    "allow": ["story", "phase", "roadmap", "workflow-inputs", "candidate-diff", "mechanical-receipts", "prior-verdicts", "dissent", "proposal", "public-artifacts"],
+                    "expressions": ["context", "parameter", "literal", "artifact"],
+                    "max_bytes": 500000,
+                },
+                "artifacts": {
+                    "read": ["markdown", "json", "text", "git-diff", "verdict", "decision", "mechanical-fact"],
+                    "write": ["markdown", "json", "text", "git-diff"] if writer else ["verdict", "decision"],
+                    "max_bytes": 50000000,
+                },
+                "output_schema": None if judgment else "fixture-output@1",
+                "verdict_schema": "fixture-verdict@1" if judgment else None,
+                "max_concurrency": 1,
+                "resource_groups": ["repository-writer"] if writer else [],
+                "may_request": [],
+                "may_judge": ["implementer"] if duty == "verifier" else [],
+                "independent_from": list(independent),
+                "replacement": {
+                    "reasons": [],
+                    "max_replacements": 0,
+                    "fallback_pools": [],
+                    "on_exhausted": "block",
+                    "preserve_history": True,
+                },
+            }
+
         self._write_json("pm/organizations/delivery-core.json", {
             "kind": "delivery-workbench-organization",
             "schema_version": 1,
             "slug": "delivery-core",
             "title": "Delivery core",
             "agents": [
-                {"id": "builder-a", "profile": "builder-a", "duties": ["implementer", "repairer"], "workspace_domain": "builder-a", "weight": 1},
-                {"id": "builder-b", "profile": "builder-b", "duties": ["implementer", "repairer"], "workspace_domain": "builder-b", "weight": 1},
-                {"id": "verifier-a", "profile": "verifier-a", "duties": ["verifier", "judge"], "workspace_domain": "verifier-a", "weight": 1},
-                {"id": "meta-a", "profile": "meta-a", "duties": ["meta-verifier"], "workspace_domain": "meta-a", "weight": 1},
-                {"id": "architect-a", "profile": "architect-a", "duties": ["master-architect"], "workspace_domain": "architect-a", "weight": 1},
+                fixture_agent("builder-a", "builder-a", ["implementer", "repairer"], writer=True),
+                fixture_agent("builder-b", "builder-b", ["implementer", "repairer"], writer=True),
+                fixture_agent("verifier-a", "verifier-a", ["verifier", "judge"]),
+                fixture_agent("meta-a", "meta-a", ["meta-verifier"]),
+                fixture_agent("architect-a", "architect-a", ["master-architect"]),
             ],
             "pools": [
                 {"id": "builders", "agents": ["builder-a", "builder-b"]},
@@ -9102,10 +9170,10 @@ class ProgramPlannerTest(unittest.TestCase):
             "teams": [{
                 "id": "story-cell",
                 "roles": [
-                    {"id": "implementer", "duty": "implementer", "pool": "builders", "required": True, "independent_from": []},
-                    {"id": "verifier", "duty": "verifier", "pool": "verifiers", "required": True, "independent_from": ["implementer"]},
-                    {"id": "meta", "duty": "meta-verifier", "pool": "auditors", "required": False, "independent_from": ["implementer", "verifier"]},
-                    {"id": "architect", "duty": "master-architect", "pool": "architects", "required": False, "independent_from": ["implementer", "verifier"]},
+                    fixture_role("implementer", "implementer", "builders"),
+                    fixture_role("verifier", "verifier", "verifiers", independent=("implementer",)),
+                    fixture_role("meta", "meta-verifier", "auditors", independent=("implementer", "verifier"), required=False),
+                    fixture_role("architect", "master-architect", "architects", independent=("implementer", "verifier"), required=False),
                 ],
             }],
             "councils": [{
@@ -9114,6 +9182,7 @@ class ProgramPlannerTest(unittest.TestCase):
                 "judge": "verifier",
                 "quorum": 1,
                 "meta_verifier": "meta",
+                "distinct_principals": True,
             }],
         })
         self.program = {
@@ -9255,6 +9324,11 @@ class ProgramPlannerTest(unittest.TestCase):
         self.assertIn("organization", plan["program"]["reference_hashes"])
         assignment = plan["assignment"]
         self.assertEqual(assignment["team"], "story-cell")
+        self.assertEqual(
+            assignment["kind"], "delivery-workbench-team-assignment"
+        )
+        self.assertTrue(assignment["separation"]["passed"])
+        self.assertTrue(assignment["separation"]["facts"]["verifier_preassigned"])
         self.assertNotEqual(
             assignment["implementer"]["profile"], assignment["verifier"]["profile"]
         )
@@ -9264,6 +9338,15 @@ class ProgramPlannerTest(unittest.TestCase):
         )
         self.assertIsNotNone(assignment["meta_verifier"])
         self.assertIsNotNone(assignment["master_architect"])
+        self.assertRegex(
+            assignment["verifier"]["adapter_capability_fingerprint"],
+            r"^sha256:[0-9a-f]{64}$",
+        )
+        verifier_policy = next(
+            role["packet_policy"] for role in assignment["roles"]
+            if role["duty"] == "verifier"
+        )
+        self.assertEqual(verifier_policy["workspace"], "read-only")
         reasons = {item["story"]: item["reason"] for item in plan["candidates"]}
         self.assertEqual(reasons["DM-1-01"], "already-done")
         self.assertEqual(reasons["DM-1-03"], "out-of-scope")
@@ -9485,6 +9568,329 @@ class ProgramPlannerTest(unittest.TestCase):
         self.assertEqual(inventory["programs"], [])
         self.assertTrue(inventory["healthy"])
         self.assertEqual(before, list(empty_root.rglob("*")))
+
+
+class ProgramOrganizationTest(unittest.TestCase):
+    """WLA-26-04: role topology, separation, visibility, and replacement."""
+
+    def setUp(self):
+        import dw_pmo.program_organization as organization_core
+
+        self.core = organization_core
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-organization-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.root.mkdir()
+        template = (
+            TESTS_DIR.parent / "templates" / "organizations"
+            / "autonomous-story-cell.json"
+        )
+        self.raw = json.loads(template.read_text(encoding="utf-8"))
+        self.path = self.root / "pm/organizations/autonomous-story-cell.json"
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text(
+            json.dumps(self.raw, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+    def config(self):
+        profiles = {}
+        for agent in self.raw["agents"]:
+            writer = "workspace:write" in agent["capability_ceiling"]
+            profiles[agent["profile"]] = {
+                "adapter": "fixture",
+                "adapter_version": "fixture-organization-v1",
+                "principal": agent["profile"],
+                "available": True,
+                "max_concurrency": agent["max_concurrency"],
+                "capabilities": (
+                    ["repository-read", "repository-write"]
+                    if writer else ["repository-read"]
+                ),
+                "workspace_modes": (
+                    ["isolated-worktree"] if writer else ["read-only"]
+                ),
+            }
+        return {
+            "kind": "delivery-workbench-driver-config",
+            "schema_version": 1,
+            "workspace_root": None,
+            "profiles": profiles,
+        }
+
+    def assign(self, config=None, workflow=None):
+        compiled = self.core.compile_organization(self.root, self.raw)
+        return self.core.assign_organization_team(
+            compiled,
+            "story-cell",
+            driver_config=config or self.config(),
+            policy_bundle_hash="sha256:" + "7" * 64,
+            story_id="DM-1-02",
+            workflow_address=(
+                "program/demo/phase/1/story/DM-1-02/workflow/story"
+            ),
+            program_capabilities=[
+                "agent:dispatch", "workspace:write", "certification:verdict",
+            ],
+            workflow=workflow,
+        )
+
+    @staticmethod
+    def codes(document):
+        return {item["code"] for item in document["diagnostics"]}
+
+    def cli(self, *args, root=None):
+        return subprocess.run(
+            [
+                sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+                "--root", str(root or self.root), "organization", *args,
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def test_compiler_is_closed_layout_independent_and_pure(self):
+        core = self.core
+        before = self.path.read_bytes()
+        compiled = core.compile_organization(self.root, "autonomous-story-cell")
+        self.assertEqual(compiled["kind"], core.COMPILED_ORGANIZATION_KIND)
+        self.assertTrue(compiled["logical_assignment_proofs"][0]["satisfiable"])
+        self.assertRegex(compiled["semantic_hash"], r"^sha256:[0-9a-f]{64}$")
+        moved = json.loads(json.dumps(self.raw))
+        moved["layout"] = {"nodes": {"verifier": {"x": 20, "y": 30}}}
+        moved_compiled = core.compile_organization(self.root, moved)
+        self.assertEqual(compiled["semantic_hash"], moved_compiled["semantic_hash"])
+        self.assertNotEqual(compiled["document_hash"], moved_compiled["document_hash"])
+        simulation = core.simulate_organization(self.root, "autonomous-story-cell")
+        self.assertFalse(simulation["starts_work"])
+        self.assertFalse(simulation["writes_run_state"])
+        self.assertEqual(before, self.path.read_bytes())
+
+    def test_assignment_preassigns_independent_verifier_and_packet_boundaries(self):
+        assignment = self.assign()
+        self.assertTrue(assignment["applicable"], assignment["issues"])
+        self.assertTrue(assignment["separation"]["passed"])
+        self.assertTrue(all(assignment["separation"]["facts"].values()))
+        implementer = assignment["implementer"]
+        verifier = assignment["verifier"]
+        self.assertNotEqual(
+            implementer["principal_fingerprint"],
+            verifier["principal_fingerprint"],
+        )
+        self.assertNotEqual(
+            implementer["session_binding_key"], verifier["session_binding_key"]
+        )
+        roles = {item["role"]: item for item in assignment["roles"]}
+        self.assertEqual(roles["verifier"]["packet_policy"]["workspace"], "read-only")
+        self.assertNotIn(
+            "workspace:write",
+            roles["verifier"]["packet_policy"]["effective_capability_ceiling"],
+        )
+        self.assertNotIn("candidate-diff", roles["critic"]["packet_policy"]["context"]["allow"])
+        self.assertIn("roadmap", roles["master-architect"]["packet_policy"]["context"]["allow"])
+        serialized = json.dumps(assignment).lower()
+        for forbidden in ('"command"', '"model"', "api_token", "password", "credential"):
+            self.assertNotIn(forbidden, serialized)
+        for role in assignment["roles"]:
+            for member in role["members"]:
+                self.assertRegex(
+                    member["adapter_capability_fingerprint"],
+                    r"^sha256:[0-9a-f]{64}$",
+                )
+
+    def test_assignment_is_stable_and_explains_unavailable_fallbacks(self):
+        config = self.config()
+        config["profiles"]["verifier-primary"]["available"] = False
+        first = self.assign(config)
+        second = self.assign(config)
+        self.assertEqual(
+            self.core.canonical_json(first), self.core.canonical_json(second)
+        )
+        self.assertTrue(first["applicable"], first["issues"])
+        self.assertEqual(first["verifier"]["profile"], "verifier-backup")
+        verifier_role = next(
+            item for item in first["roles"] if item["role"] == "verifier"
+        )
+        self.assertIn(
+            {"agent": "verifier-primary", "reason": "profile-unavailable"},
+            verifier_role["exclusions"],
+        )
+        self.assertTrue(first["verifier"]["fallback"])
+
+        config["profiles"]["verifier-backup"]["available"] = False
+        refused = self.assign(config)
+        self.assertFalse(refused["applicable"])
+        self.assertIn(
+            "separation-violation", {item["code"] for item in refused["issues"]}
+        )
+
+    def test_colliding_principals_and_capability_downgrade_refuse(self):
+        collision = self.config()
+        for profile in (
+            "builder-primary", "builder-backup",
+            "verifier-primary", "verifier-backup",
+        ):
+            collision["profiles"][profile]["principal"] = "shared-delivery-session"
+        collided = self.assign(collision)
+        self.assertFalse(collided["applicable"])
+        self.assertIn(
+            "separation-violation", {item["code"] for item in collided["issues"]}
+        )
+
+        downgraded = self.config()
+        downgraded["profiles"]["verifier-primary"]["capabilities"] = []
+        downgraded["profiles"]["verifier-backup"]["capabilities"] = []
+        refused = self.assign(downgraded)
+        verifier = next(item for item in refused["roles"] if item["role"] == "verifier")
+        self.assertIn("capability-mismatch", {item["reason"] for item in verifier["exclusions"]})
+        self.assertFalse(refused["applicable"])
+
+    def test_council_cardinality_resources_and_visibility_are_explicit(self):
+        assignment = self.assign()
+        council = assignment["councils"][0]
+        self.assertEqual(council["member_cardinality"], 3)
+        self.assertEqual(len(council["assigned_principals"]), 3)
+        self.assertTrue(council["quorum_satisfiable"])
+        conflicts = assignment["resource_plan"]["conflicts"]
+        self.assertTrue(any(
+            {item["left"], item["right"]} == {"critic", "judge"}
+            and item["effect"] == "serialize"
+            for item in conflicts
+        ))
+        waves = assignment["resource_plan"]["concurrency_waves"]
+        critic_wave = next(index for index, wave in enumerate(waves) if "critic[1]" in wave)
+        judge_wave = next(index for index, wave in enumerate(waves) if "judge[1]" in wave)
+        self.assertNotEqual(critic_wave, judge_wave)
+
+    def test_replacement_is_finite_and_preserves_verdict_lineage(self):
+        core = self.core
+        assignment = self.assign()
+        replacement = core.plan_assignment_replacement(
+            assignment, "verifier", "failed"
+        )
+        self.assertTrue(replacement["applicable"], replacement["issues"])
+        self.assertTrue(replacement["preserves_history"])
+        self.assertTrue(replacement["capability_unchanged"])
+        self.assertEqual(replacement["new"]["assignment_generation"], 2)
+        self.assertEqual(len(replacement["preserved_lineage"]), 2)
+        self.assertTrue(any(path.endswith("/verdict") for path in replacement["invalidates"]))
+
+        advanced = json.loads(json.dumps(assignment))
+        verifier = next(item for item in advanced["roles"] if item["role"] == "verifier")
+        verifier["members"] = [replacement["new"]]
+        verifier["selected"] = replacement["new"]
+        exhausted = core.plan_assignment_replacement(advanced, "verifier", "failed")
+        self.assertFalse(exhausted["applicable"])
+        self.assertEqual(exhausted["route"], "block")
+        self.assertIn("replacement-exhausted", {item["code"] for item in exhausted["issues"]})
+
+    def test_static_collisions_quorum_and_write_smuggling_refuse(self):
+        broken = json.loads(json.dumps(self.raw))
+        agents = {item["id"]: item for item in broken["agents"]}
+        agents["verifier-primary"]["profile"] = "builder-primary"
+        agents["verifier-primary"]["workspace_domain"] = "builder-primary"
+        broken["councils"][0]["quorum"] = 4
+        verifier = next(
+            role for role in broken["teams"][0]["roles"]
+            if role["id"] == "verifier"
+        )
+        verifier["capability_ceiling"].append("workspace:write")
+        validation = self.core.validate_organization(self.root, broken)
+        self.assertFalse(validation["valid"])
+        self.assertTrue(
+            {"impossible-independence", "impossible-quorum", "capability-smuggling"}
+            <= self.codes(validation),
+            validation["diagnostics"],
+        )
+
+    def test_workflow_role_requirements_intersect_capability_and_visibility(self):
+        from dw_pmo.program_workflow import compile_workflow
+
+        workflow = compile_workflow(self.root, {
+            "kind": "delivery-workbench-workflow",
+            "schema_version": 1,
+            "slug": "organization-check",
+            "title": "Organization check",
+            "version": "1.0.0",
+            "parameters": [{
+                "id": "story-id", "type": "string", "required": True,
+                "max_bytes": 100,
+            }],
+            "defaults": {"story-id": "DM-1-02"},
+            "nodes": [
+                {
+                    "id": "implement", "type": "agent", "role": "implementer",
+                    "task": "Implement.", "workspace": "isolated-worktree",
+                    "capability_ceiling": ["agent:dispatch", "workspace:write"],
+                    "timeout_seconds": 60, "max_attempts": 1,
+                    "inputs": {"story": {"kind": "parameter", "name": "story-id"}},
+                    "outputs": [{"id": "candidate", "kind": "git-diff", "max_bytes": 1000}],
+                    "on_failure": {"kind": "action", "target": "block"},
+                },
+                {
+                    "id": "verify", "type": "verdict", "needs": ["implement"],
+                    "role": "verifier", "rubric": "quality",
+                    "subject": {"kind": "artifact", "name": "implement.candidate"},
+                    "freshness_seconds": 60, "max_rationale_bytes": 1000,
+                    "results": ["pass", "fail"],
+                    "routes": {
+                        "pass": {"kind": "terminal", "target": "complete"},
+                        "fail": {"kind": "action", "target": "block"},
+                    },
+                },
+            ],
+            "terminals": [{"id": "complete", "meaning": "complete"}],
+        })
+        organization = self.core.compile_organization(self.root, self.raw)
+        requirements, issues = self.core.validate_workflow_team(
+            organization,
+            "story-cell",
+            workflow,
+            ["agent:dispatch", "workspace:write", "certification:verdict"],
+        )
+        self.assertEqual(issues, [])
+        self.assertEqual(
+            requirements["verifier"]["artifact_reads"], ["git-diff"]
+        )
+        narrowed = json.loads(json.dumps(organization))
+        verifier = next(
+            role for role in narrowed["organization"]["teams"][0]["roles"]
+            if role["id"] == "verifier"
+        )
+        verifier["capability_ceiling"].remove("certification:verdict")
+        verifier["artifacts"]["read"].remove("git-diff")
+        _requirements, refused = self.core.validate_workflow_team(
+            narrowed,
+            "story-cell",
+            workflow,
+            ["agent:dispatch", "workspace:write", "certification:verdict"],
+        )
+        self.assertTrue(
+            {"role-capability-denied", "visibility-denied"}
+            <= {item["code"] for item in refused}
+        )
+
+    def test_cli_inventory_validate_simulate_and_empty_state_share_core(self):
+        listed = self.cli("list", "--json")
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertEqual(json.loads(listed.stdout), self.core.organization_inventory(self.root))
+        valid = self.cli("validate", "autonomous-story-cell", "--json")
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        self.assertTrue(json.loads(valid.stdout)["valid"])
+        simulation = self.cli("simulate", "autonomous-story-cell", "--json")
+        self.assertEqual(simulation.returncode, 0, simulation.stderr)
+        self.assertEqual(
+            json.loads(simulation.stdout),
+            self.core.simulate_organization(self.root, "autonomous-story-cell"),
+        )
+        empty = self.tmp / "empty"
+        empty.mkdir()
+        before = list(empty.rglob("*"))
+        inventory = self.core.organization_inventory(empty)
+        self.assertTrue(inventory["healthy"])
+        self.assertEqual(inventory["organizations"], [])
+        self.assertEqual(before, list(empty.rglob("*")))
 
 
 class ProgramWorkflowTest(unittest.TestCase):

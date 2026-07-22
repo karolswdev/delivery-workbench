@@ -230,19 +230,28 @@ cannot continue to another story.
 An organization contains:
 
 - logical `agents` with stable id, local driver profile selector, allowed duty
-  set, capability ceiling, workspace-domain requirement, and assignment weight;
+  set, program-capability ceiling, workspace-domain requirement, concurrency
+  ceiling, and assignment weight;
 - ordered `pools` containing agent ids;
-- `teams` with named role slots, candidate pool, cardinality, required duties,
-  and independence rules;
-- `councils` with speaker slots, protocol, quorum, judge/tie policy, dissent
-  handling, and optional meta-verifier; and
-- replacement/escalation rules with finite replacement counts.
+- `teams` with named role slots, candidate/fallback pools, exact cardinality,
+  required duties, program and driver capability ceilings, workspace mode,
+  allowed context channels/expression kinds, readable/writable artifact kinds,
+  output/verdict schema, concurrency/resource groups, request/judgment edges,
+  and ordered independence rules;
+- `councils` with member role slots, distinct-principal quorum, judge, and
+  optional meta-verifier; and
+- per-role replacement/escalation rules with closed eligible reasons, finite
+  replacement counts, exact fallback pools, exhaustion route, and mandatory
+  history preservation for judgment roles.
 
 Tracked agents are logical candidates, not credentials. At plan time local
 driver discovery resolves each profile to a `principal_fingerprint`, executable
-version, supported capabilities, isolation mode, and availability. The bundle
-and grant bind that roster fingerprint. Resolution that cannot prove the
-requested capability or separation refuses before assignment.
+adapter/version, capability fingerprint, supported capabilities, isolation
+mode, concurrency ceiling, and availability. The bundle and grant bind that
+roster fingerprint. Local `principal` labels may intentionally join multiple
+profiles to one execution identity; they contain no credential. Resolution
+that cannot prove the requested capability or separation refuses before
+assignment.
 
 ### Rubric document
 
@@ -349,11 +358,10 @@ also stamp `writes_policy: false`, `writes_roadmap: false`,
 `writes_run_state: false`, and `creates_grant: false`. Repeated plans at one
 observation are canonical-byte identical. No command creates
 `.git/pmo-programs`, and none accepts a mode, capability, assignment, or route
-override from the caller. Full hierarchical workflow compilation and the
-expanded organization/replacement model were deliberately separate follow-on
-slices; WLA-26-03 now supplies the workflow bundle/envelope pinned by each
-program binding, while the richer organization/replacement model remains
-WLA-26-04.
+override from the caller. WLA-26-03 supplies the workflow bundle/envelope
+pinned by each program binding, and WLA-26-04 supplies the compiled
+organization, packet policy, principal-level separation proof, council/resource
+plan, and finite replacement lineage consumed by the same pure program plan.
 
 ## Hierarchical workflow semantics
 
@@ -529,6 +537,31 @@ old/new assignment and reason; increments assignment generation; invalidates
 outstanding work for the old principal; and requires fresh outputs/verdicts
 where subject or independence could have changed. Exhaustion follows the
 declared escalation route.
+
+### Delivered pure organization surface (WLA-26-04)
+
+`dw organization list|validate|simulate` now owns the tracked
+`pm/organizations/*.json` registry. An absent directory is a healthy empty
+inventory. Validation closes every agent, pool, role, visibility, schema,
+cardinality, independence, council, resource, and finite replacement field;
+it also proves that tracked required pools can satisfy implementer/verifier
+separation before consulting local providers. Simulation exposes the logical
+assignment witness and resource-compatible concurrency waves while stamping
+that no work, policy, state, or grant is created.
+
+During `dw program plan`, the same compiler intersects workflow role lanes with
+program authority, role and logical-agent ceilings, and the operator-local
+driver roster. The assignment receipt records each role-slot address, selected
+logical agent/profile, non-secret principal and adapter-capability fingerprints,
+packet visibility, effective child ceiling, candidates/exclusions, session
+binding key, council quorum, resource conflicts, and exact separation facts.
+Local unavailability uses only declared fallback pools. Pure replacement plans
+preserve prior lineage and dissent, keep the capability ceiling unchanged,
+invalidate outstanding work/verdicts, and route exhaustion explicitly.
+
+The wheel ships one optional `autonomous-story-cell` organization example but
+install/update never creates `pm/organizations/`. Adopting or saving that file
+is an explicit policy act, just like adopting a workflow or program.
 
 ## Verdict taxonomy and quality gates
 
@@ -809,6 +842,9 @@ the ones they declare.
 
 One core compiler/planner/projection owns semantics. Intended adapters are:
 
+- CLI policy reads: `dw organization list|validate|simulate`,
+  `dw workflow list|validate|simulate`, and
+  `dw program list|validate|simulate|plan`;
 - CLI: `dw program list|show|validate|simulate|plan|start|tick|supervise|pause|
   resume|revoke|cancel|tail`;
 - MCP/HTTP: byte-equivalent reads plus exact-token, closed-parameter acts;
@@ -818,11 +854,11 @@ One core compiler/planner/projection owns semantics. Intended adapters are:
   lineage, rounds, verdicts/dissent, gates, authority, budgets, events, and
   exact stop/refusal explanation.
 
-The program namespace is additive. With no program files, `program list`
-returns a healthy empty inventory and ordinary status/MCP/HTTP/Workbench models
-stay behavior-compatible. Opening the Workbench does not create a program
-directory, start SSE, poll providers, send notifications, or show blocking
-setup. Program Studio is entered deliberately.
+The program namespace is additive. With no organization, workflow, or program
+files, each list command returns a healthy empty inventory and ordinary
+status/MCP/HTTP/Workbench models stay behavior-compatible. Opening the
+Workbench does not create policy directories, start SSE, poll providers, send
+notifications, or show blocking setup. Program Studio is entered deliberately.
 
 Graph/config round trips are lossless. Saving uses guarded
 preview→fingerprint→apply and starts nothing. Simulation is pure. Authority is

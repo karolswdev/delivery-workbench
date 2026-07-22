@@ -356,6 +356,15 @@ step. The confirmation shows the token and tokenized argv, sends only
 `project` + `expect`, refreshes on success or stale conflict, and never offers
 controls for certification or commit.
 
+`organization list|validate|simulate` is the pure agent-organization surface.
+It closes tracked logical pools, role cardinality and packet visibility,
+program/driver capability ceilings, workspace/principal independence,
+councils, resource conflicts, and finite history-preserving replacement.
+Program planning resolves those roles against non-secret local principal and
+adapter-capability fingerprints before any work can start. No
+`pm/organizations/` directory is a healthy state; the wheel-shipped
+`autonomous-story-cell` example is never copied into policy by install/update.
+
 `workflow list|validate|simulate` is the pure reusable-hierarchy surface.
 Tracked templates resolve exact version/hash subflows and explicit bounded
 Phase 24 leaves, reject general cycles and undeclared capability flow, and
