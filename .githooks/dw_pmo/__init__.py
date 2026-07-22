@@ -211,6 +211,8 @@ from .orchestration_run import (
     build_run_plan,
     claim_node,
     decide_checkpoint,
+    decide_outstanding_request,
+    maintain_outstanding_requests,
     observed_fact_binding,
     record_runtime_event,
     release_node_claim,

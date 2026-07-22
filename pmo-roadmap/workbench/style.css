@@ -536,9 +536,18 @@ details.blane.closed[open] summary { margin-bottom: 8px; }
 .run-node.state-failed rect, .run-node.state-blocked rect, .run-node.state-routing rect { stroke: var(--err); }
 .run-node.state-awaiting-approval rect { stroke: var(--warn); stroke-width: 3; }
 .run-node.state-dormant { opacity: .58; }
-.run-session-columns, .run-route-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.run-session-columns > section, .run-route-grid > section { min-width: 0; }
-.run-session-columns h3, .run-route-grid h3 { margin: 0 0 7px; color: var(--muted); font: 10px/1.3 var(--mono); text-transform: uppercase; }
+.run-session-columns, .run-route-grid, .run-request-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.run-session-columns > section, .run-route-grid > section, .run-request-grid > section { min-width: 0; }
+.run-session-columns h3, .run-route-grid h3, .run-request-grid h3 { margin: 0 0 7px; color: var(--muted); font: 10px/1.3 var(--mono); text-transform: uppercase; }
+.run-request { display: grid; gap: 5px; padding: 8px; margin-bottom: 6px; border: 1px solid var(--line); background: var(--panel-2); }
+.run-request > div { display: flex; gap: 7px; align-items: center; justify-content: space-between; }
+.run-request small { color: var(--muted); }
+.run-decision-tree, .run-decision-tree ol { margin: 0; padding-left: 16px; list-style: none; }
+.run-decision-tree li { margin: 0 0 7px; padding: 7px; border-left: 2px solid var(--accent); background: var(--panel-2); }
+.run-decision-tree li > div { display: flex; gap: 7px; justify-content: space-between; }
+.run-decision-tree details dl { display: grid; gap: 3px; }
+.run-decision-tree details dl div { display: grid; grid-template-columns: minmax(100px, .5fr) 1fr; gap: 6px; }
+.run-decision-tree dt, .run-decision-tree dd { margin: 0; font-size: 10px; }
 .run-session { margin-bottom: 6px; padding: 8px; border: 1px solid var(--line); border-left: 3px solid var(--link); border-radius: 4px; background: var(--panel-2); }
 .run-session > div:first-child { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .run-session small, .run-session code { display: block; margin-top: 4px; color: var(--muted); overflow-wrap: anywhere; }
@@ -600,7 +609,7 @@ details.blane.closed[open] summary { margin-bottom: 8px; }
   .orch-inspector { max-height: none; border-left: 0; border-top: 1px solid var(--line); }
   .orch-validate-grid, .orch-hashes { grid-template-columns: 1fr; }
   .run-summary, .run-budgets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .run-session-columns, .run-route-grid, .run-empty { grid-template-columns: 1fr; }
+  .run-session-columns, .run-route-grid, .run-request-grid, .run-empty { grid-template-columns: 1fr; }
   .run-empty .run-consent { grid-column: 1; }
 }
 

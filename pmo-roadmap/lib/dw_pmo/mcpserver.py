@@ -407,6 +407,7 @@ def _tool_run_preview(root: Path, args: dict) -> tuple[str, dict]:
         str(args["action"]),
         reason=str(args.get("reason") or ""),
         decision=str(args.get("decision") or ""),
+        correlation_id=str(args.get("correlation_id") or ""),
     ))
 
 
@@ -438,6 +439,7 @@ def _apply_run_tool(root: Path, args: dict, action: str) -> tuple[str, dict]:
         str(args["expect"]),
         reason=str(args.get("reason") or ""),
         decision=str(args.get("decision") or ""),
+        correlation_id=str(args.get("correlation_id") or ""),
     ))
 
 
@@ -463,6 +465,10 @@ def _tool_run_cancel(root: Path, args: dict) -> tuple[str, dict]:
 
 def _tool_run_checkpoint(root: Path, args: dict) -> tuple[str, dict]:
     return _apply_run_tool(root, args, "checkpoint")
+
+
+def _tool_run_request(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_run_tool(root, args, "request")
 
 
 def _tool_run_stream(root: Path, args: dict) -> tuple[str, dict]:
@@ -826,9 +832,10 @@ TOOLS: dict[str, dict] = {
             "type": "object",
             "properties": {
                 "run_id": _RUN_ID_PROP,
-                "action": {"type": "string", "enum": ["tick", "pause", "resume", "revoke", "cancel", "checkpoint"]},
+                "action": {"type": "string", "enum": ["tick", "pause", "resume", "revoke", "cancel", "checkpoint", "request"]},
                 "reason": {"type": "string"},
-                "decision": {"type": "string", "enum": ["approve", "reject"]},
+                "decision": {"type": "string"},
+                "correlation_id": {"type": "string"},
             },
             "required": ["run_id", "action"],
             "additionalProperties": False,
@@ -898,12 +905,27 @@ TOOLS: dict[str, dict] = {
             "type": "object",
             "properties": {
                 "run_id": _RUN_ID_PROP, "expect": _RUN_EXPECT_PROP,
-                "decision": {"type": "string", "enum": ["approve", "reject"]},
+                "decision": {"type": "string"},
+                "correlation_id": {"type": "string"},
             },
             "required": ["run_id", "expect", "decision"],
             "additionalProperties": False,
         },
         "handler": _tool_run_checkpoint,
+    },
+    "dw_run_request": {
+        "description": "Apply one freshly previewed typed response to the exact correlated outstanding request; malformed responses are ledgered refusals.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _RUN_ID_PROP, "expect": _RUN_EXPECT_PROP,
+                "correlation_id": {"type": "string"},
+                "decision": {"type": "string"},
+            },
+            "required": ["run_id", "expect", "correlation_id", "decision"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_run_request,
     },
     "dw_run_stream": {
         "description": "Explicitly open one bounded agent/check stdout or stderr log; never lists packets, prompts, source, or artifact content.",

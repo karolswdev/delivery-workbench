@@ -96,14 +96,15 @@ class RailsClient:
         return self._json_doc(repo, tail)
 
     def checkpoint_decide(
-        self, repo: Path, run_id: str, decision: str
+        self, repo: Path, run_id: str, correlation_id: str, decision: str
     ) -> tuple[dict | None, str]:
-        """Preview then apply one checkpoint decision through the
+        """Preview then apply one correlated request decision through the
         exact-token boundary. The phone supplies the decision content;
         the rails supply the authority."""
         preview, why = self._json_doc(
             repo,
-            ["run", "preview", run_id, "checkpoint",
+            ["run", "preview", run_id, "request",
+             "--correlation", correlation_id,
              "--decision", decision, "--json"],
         )
         if preview is None:
@@ -113,7 +114,7 @@ class RailsClient:
             return None, f"checkpoint preview refused: {issues}"
         return self._json_doc(
             repo,
-            ["run", "checkpoint", run_id, decision,
+            ["run", "request", run_id, correlation_id, decision,
              "--expect", str(preview.get("act_token", "")), "--json"],
         )
 

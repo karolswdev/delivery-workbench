@@ -1,6 +1,6 @@
 # Phase 25 - The listening conductor — outward signals and bounded nudges
 
-**Last updated:** 2026-07-19.
+**Last updated:** 2026-07-21.
 
 ## Goal
 
@@ -60,7 +60,7 @@ discipline, re-interpreted under the consent spine.
 - [x] A least-privilege non-interactive Claude Code driver passes the
   full conformance suite with harness-owned auth and a recorded live
   specimen, CI green on fixtures alone (WLA-25-07).
-- [ ] Outstanding checkpoint decisions survive crash/pause and resume
+- [x] Outstanding checkpoint decisions survive crash/pause and resume
   with exactly-once typed republish, ledger-derivable pending sets,
   visible age/origin, and expiry-to-refusal semantics (WLA-25-08).
 - [ ] A wheel-installed fresh consumer walks the whole outward loop —
@@ -81,12 +81,12 @@ discipline, re-interpreted under the consent spine.
 | WLA-25-05 | Stream the ledger live | done | [story-05-ledger-live-stream](./story-05-ledger-live-stream.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-25-06 | Notify the operator durably | done | [story-06-operator-notifications](./story-06-operator-notifications.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-25-07 | Drive Claude Code through the neutral seam | done | [story-07-claude-code-driver](./story-07-claude-code-driver.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-25-08 | Keep pending decisions alive across the pause | backlog | [story-08-typed-checkpoint-resume](./story-08-typed-checkpoint-resume.md) | - |
+| WLA-25-08 | Keep pending decisions alive across the pause | done | [story-08-typed-checkpoint-resume](./story-08-typed-checkpoint-resume.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-25-09 | Prove the outward loop end to end | backlog | [story-09-packaged-outward-exam](./story-09-packaged-outward-exam.md) | - |
 
 ## Where we are
 
-Phase open 7/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
+Phase open 8/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
 outward layer — the `delivery-workbench-signal@1` fact model, read-time
 derived-status precedence, the six-state activity vocabulary with its
 receptivity table, the four-layer nudge model (score rule → grant
@@ -190,8 +190,21 @@ authenticated live specimen ran the real binary twice under one grant
 carrying the `@nudge` context — and its first capture found a real
 phase-24 gap: re-produced artifacts collided in the store; a later
 attempt now supersedes atomically, with a fixture regression test.
-Core suite 329 on both floors. Next: WLA-25-08, outstanding decisions
+Core suite 329 on both floors; WLA-25-08 followed with outstanding decisions
 across the pause.
+
+WLA-25-08 is evidence-complete: the existing opening ledger fact now derives
+one durable, typed `req-…` port with no second-store crash gap; replay owns the
+pending set, original correlation, once-per-generation republish, typed
+decision/refusal, expiry, and terminal cleanup recovery. One generic
+exact-token `run request` boundary crosses CLI/MCP/HTTP/Workbench/Telegram;
+the old checkpoint spelling is a type-restricted alias. `run show` and the
+Run view expose age/origin/schema, while the inspect-only decision tree binds
+history to the exact pre-decision ledger head (age is display-only, never
+token material). Eight regressions raise core 329 → 337 on both Python floors;
+Telegram 152, 32 UI renders, interop, and the Python-3.9 wheel exit exams are
+green in `evidence-story-08.md`. Next: WLA-25-09, the fresh-wheel outward-loop
+exam and live specimen.
 
 ## Active risks
 
@@ -223,6 +236,11 @@ across the pause.
 - 2026-07-19 - Branch signals notify behind the operator-local `branch_signals` opt-in, and never for a channel a grant already owns - the run-bound channel already nudges; notifying it twice would be noise - WLA-25-06.
 - 2026-07-19 - A later attempt supersedes its stored artifact atomically; the same attempt stays idempotent and an older attempt refuses - nudge re-activation made re-produced artifacts legitimate for the first time, and the live claude specimen caught the collision phase 24 never hit - WLA-25-07.
 - 2026-07-19 - `USER`/`LOGNAME` join the claude adapter's scrubbed environment as identity, not secrets - macOS keychain credential lookups fail closed without them, and authentication stays harness-owned - WLA-25-07.
+- 2026-07-21 - The post-Phase-25 destination is a governed roadmap program conductor, ahead of a general extension seam: choose the next eligible story, instantiate a reusable visual workflow, conduct independent work, enforce quality/evidence gates, route bounded repair and policy-authorized integration, advance the exact roadmap rails, and repeat under a revocable program grant - owner direction.
+- 2026-07-21 - Program autonomy will be explicit and inspectable (`advisory`, `checkpointed`, or `continuous`); certification, commit, push, merge, release, and deploy remain separate capabilities rather than being inherited from work authority - preserves progressive trust while making auto-advancing roadmaps a real product mode - owner direction.
+- 2026-07-21 - Outstanding-request identity derives from the existing hash-chained opening event rather than a second request store; republish/decision/refusal are the only added lifecycle facts - removes the crash gap between "waiting" and "persisted" while keeping old ledgers replayable - WLA-25-08.
+- 2026-07-21 - `run request` is the generic exact-token decision boundary and `run checkpoint` remains a checkpoint-only alias; a valid correlation for the wrong request kind is still a recorded mismatch, never type-confused authority - WLA-25-08.
+- 2026-07-21 - Read-time age is display data, not token material; historical lineage binds to the decision event's previous hash, the exact ledger head authorized, and terminal request cleanup is restart-recoverable without dispatch - WLA-25-08.
 
 ## Decisions deferred
 
@@ -240,4 +258,5 @@ across the pause.
   surface as the plugin API with injected run/story env context, publish
   a JSON Schema for the stamped models, adopt a `dw-plugin` topic
   convention, and gate plugin capabilities behind the grant system -
-  candidate phase 26 - default is no new seam this phase.
+  sequence after the governed roadmap conductor unless its adapter boundary
+  is required by that phase - default is no new seam this phase.

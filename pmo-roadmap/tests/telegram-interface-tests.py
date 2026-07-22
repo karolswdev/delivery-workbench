@@ -2312,8 +2312,11 @@ class _StubRails:
         self.deliveries.append({"id": notification_id, "failed": failed})
         return {"id": notification_id, "ok": failed is None}, "ok"
 
-    def checkpoint_decide(self, _repo, run_id, decision):
-        self.decisions.append({"run_id": run_id, "decision": decision})
+    def checkpoint_decide(self, _repo, run_id, correlation_id, decision):
+        self.decisions.append({
+            "run_id": run_id, "correlation_id": correlation_id,
+            "decision": decision,
+        })
         return self.decide_result, "ok"
 
 
@@ -2333,7 +2336,7 @@ def _pending_notification(unread=True):
             "ack: ntf-abc123abc123abc123abc123"
         ),
         "request": {
-            "correlation_id": "ntf-abc123abc123abc123abc123",
+            "correlation_id": "req-abc123abc123abc123abc123",
             "response_schema": {"decision": ["approve", "reject"]},
             "boundary": "dw run checkpoint (fresh exact act token)",
         },
@@ -2351,27 +2354,32 @@ class NotificationDecisionTest(InterfaceCase):
         )
         self.iface.rails = stub
         self.iface.handle_update(message(
-            OWNER, "/decision ntf-abc123abc123abc123abc123 approve"
+            OWNER, "/decision req-abc123abc123abc123abc123 approve"
         ))
         self.assertEqual(
             stub.decisions,
-            [{"run_id": "run-0123456789abcdef01234567", "decision": "approve"}],
+            [{
+                "run_id": "run-0123456789abcdef01234567",
+                "correlation_id": "req-abc123abc123abc123abc123",
+                "decision": "approve",
+            }],
         )
-        self.assertIn("checkpoint approve applied", self.last_text())
+        self.assertIn("request approve applied", self.last_text())
 
     def test_decision_refuses_stale_correlation_and_bad_usage(self):
         self.pair()
         stub = _StubRails(notifications=[])
         self.iface.rails = stub
         self.iface.handle_update(message(
-            OWNER, "/decision ntf-abc123abc123abc123abc123 approve"
+            OWNER, "/decision req-abc123abc123abc123abc123 approve"
         ))
         self.assertEqual(stub.decisions, [])
         self.assertIn("stale or unknown checkpoint correlation", self.last_text())
         self.iface.handle_update(message(OWNER, "/decision onlyone"))
         self.assertIn("usage: /decision", self.last_text())
+        stub.doc = {"notifications": [_pending_notification()]}
         self.iface.handle_update(message(
-            OWNER, "/decision ntf-abc123abc123abc123abc123 maybe"
+            OWNER, "/decision req-abc123abc123abc123abc123 maybe"
         ))
         self.assertIn("usage: /decision", self.last_text())
 
@@ -2382,7 +2390,7 @@ class NotificationDecisionTest(InterfaceCase):
         stub = _StubRails(notifications=[_pending_notification()])
         self.iface.rails = stub
         self.iface.handle_update(message(
-            OWNER, "/decision ntf-abc123abc123abc123abc123 approve", user=888
+            OWNER, "/decision req-abc123abc123abc123abc123 approve", user=888
         ))
         self.assertEqual(stub.decisions, [])
         self.assertIn("consent belongs to the paired owner", self.last_text())

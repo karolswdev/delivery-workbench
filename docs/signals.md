@@ -11,10 +11,12 @@ delivery), the live stream (WLA-25-05: SSE `GET
 cursor replay, `dw run tail`, and the live Run view), and durable
 operator notifications (WLA-25-06: derived facts with receipted ack,
 `dw notifications` across CLI/MCP/HTTP, the Run view card, the
-Telegram push pass, and the `/decision` typed checkpoint response), and
+Telegram push pass, and the `/decision` typed response), and
 the second real driver (WLA-25-07: `ClaudeCodeExecDriver` over
 non-interactive `claude -p`, least-privilege tool allowlists, version-
-pinned discovery, honest `active`/`exited`/`unknown` activity).
+pinned discovery, honest `active`/`exited`/`unknown` activity), and durable
+typed request ports (WLA-25-08: ledger-derived correlation, restart/resume
+republish, exact response/refusal, expiry, and inspect-only lineage).
 **Product claim:** Delivery Workbench **can observe** facts from outside a
 run — CI verdicts, review state, mergeability, agent activity — and, under an
 explicit grant, **can nudge** the right agent back to work. It does not claim
@@ -230,21 +232,45 @@ from their signal facts — the ledger stays the only truth.
 ## Request ports and outstanding requests
 
 Every pending human decision — a checkpoint, an uncovered nudge preview —
-is a typed request port: the score declares its request and response
-schemas, each pending instance carries a unique correlation id, and a
-response is validated against both before it can reach the exact-token
-apply boundary. A malformed, stale, or mismatched response is a recorded
-refusal that leaves the request outstanding.
+is a typed request port. The compiled score supplies the declaration:
+approval-node options become the checkpoint response enum, failure
+checkpoints use the existing approve/reject type, and a nudge rule supplies
+the rule/signal/target preview with the same closed response enum. The
+hash-chained opening fact (`checkpoint_reached` or
+`nudge_refused:no-standing-rule`) deterministically supplies a unique
+`req-…` correlation id; there is no second request database and no crash
+window between "waiting" and "persisted." A response is validated against
+that id and schema only after a fresh exact preview. A malformed or
+mismatched response appends a content-free `request_refused` event and
+leaves the request outstanding.
 
-Outstanding requests persist in run state, are derivable from the ledger
-alone, and survive pause, crash, and resume: resume republishes each one
-exactly once as a `request-republished` event carrying the original
-correlation id. Requests older than the grant's expiry convert to recorded
-`expired` refusals. Checkpoint lineage is explicit — each decision event
-records its parent decision point, so the decision history renders as a
-tree and any historical decision shows the exact preview its decider saw.
-Inspection is read-only; forking a run from a past checkpoint is excluded
-in this phase.
+Outstanding requests persist in the replayed run projection, are derivable
+from the ledger alone, and survive pause, crash, and resume. A maintenance
+tick republishes each request at most once in one control generation;
+`run resume` does the same after changing generation, always retaining the
+original correlation id. Repeated restart ticks append nothing. A fresh
+`dw run request <run> <correlation> <decision> --expect <act-token>` records
+the typed decision; the older `run checkpoint` command remains a compatible
+checkpoint-only alias. Approval of an uncovered nudge authorizes that one
+declared rule+signal instance for delivery on the next tick, never a
+standing rule.
+
+Requests older than the grant's expiry, or still live when its authority is
+revoked/cancelled, convert to recorded `expired` refusals and derive
+`request-expired` notifications. Opening and controlled republishing derive
+`request-pending` and `request-republished` notifications without a second
+queue. If a crash lands after terminal authority (`complete`, `blocked`,
+`cancelled`, or `revoked`) but before request cleanup, an explicitly
+confirmed maintenance tick expires the stranded requests and dispatches no
+work. Checkpoint lineage
+is explicit and replay-derived: each request records its parent decision
+point, and the run view renders a tree whose inspect-only historical preview
+contains the exact ledger head, state, control generation, origin, and expiry
+the decider saw. Forking a run from a past checkpoint remains excluded.
+Read-time age stays visible but is deliberately absent from the signed act
+preview, so a token changes only when a durable bound fact changes. The
+checkpoint compatibility alias refuses a live nudge correlation as a typed
+mismatch; only the generic request boundary spans request kinds.
 
 ## Live stream
 

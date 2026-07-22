@@ -24,6 +24,9 @@ NOTIFICATIONS_SCHEMA_VERSION = 1
 
 NOTIFICATION_KINDS = (
     "checkpoint-pending",
+    "request-pending",
+    "request-republished",
+    "request-expired",
     "awaiting-certification",
     "run-blocked",
     "nudge-budget-exhausted",
@@ -101,26 +104,69 @@ def _run_notifications(root, now=None):
             continue
         run_id = str(entry["run_id"])
         projection = entry["run"]
-        pending = projection.get("pending_checkpoint")
-        if projection["state"] == "awaiting-approval" and isinstance(pending, dict):
+        for request in projection.get("outstanding_requests", []):
+            request_kind = str(request.get("kind") or "")
+            kind = (
+                "checkpoint-pending"
+                if request_kind == "checkpoint"
+                else "request-pending"
+            )
             payload = {
-                "kind": "checkpoint-pending", "run_id": run_id,
-                "node": pending.get("node_id"), "seq": pending.get("seq"),
+                "kind": kind,
+                "run_id": run_id,
+                "correlation_id": request.get("correlation_id"),
+                "seq": request.get("opened_seq"),
             }
             facts.append({
                 "id": _notification_id(payload),
-                "kind": "checkpoint-pending",
+                "kind": kind,
                 "run_id": run_id,
-                "node": str(pending.get("node_id") or pending.get("checkpoint") or ""),
-                "detail": "a named human checkpoint is waiting for a decision",
+                "node": str(request.get("origin_node") or request.get("origin") or ""),
+                "detail": (
+                    "a named human checkpoint is waiting for a decision"
+                    if request_kind == "checkpoint"
+                    else "an uncovered nudge preview is waiting for a decision"
+                ),
                 "request": {
-                    "correlation_id": _notification_id(payload),
-                    "response_schema": {
-                        "decision": ["approve", "reject"],
-                        "reason": "optional bounded text",
-                    },
-                    "boundary": "dw run checkpoint (fresh exact act token)",
+                    "correlation_id": request.get("correlation_id"),
+                    "response_schema": request.get("response_schema"),
+                    "boundary": "dw run request (fresh exact act token)",
                 },
+            })
+            for republish in request.get("republished", []):
+                republished_payload = {
+                    "kind": "request-republished",
+                    "run_id": run_id,
+                    "correlation_id": request.get("correlation_id"),
+                    "generation": republish.get("generation"),
+                }
+                facts.append({
+                    "id": _notification_id(republished_payload),
+                    "kind": "request-republished",
+                    "run_id": run_id,
+                    "node": str(request.get("origin_node") or request.get("origin") or ""),
+                    "detail": "an outstanding request was republished after resume or restart",
+                    "request": {
+                        "correlation_id": request.get("correlation_id"),
+                        "response_schema": request.get("response_schema"),
+                        "boundary": "dw run request (fresh exact act token)",
+                    },
+                })
+        for request in projection.get("request_history", []):
+            if request.get("status") != "expired":
+                continue
+            payload = {
+                "kind": "request-expired",
+                "run_id": run_id,
+                "correlation_id": request.get("correlation_id"),
+                "seq": request.get("refusal_seq"),
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "request-expired",
+                "run_id": run_id,
+                "node": str(request.get("origin_node") or request.get("origin") or ""),
+                "detail": "an outstanding request expired into a recorded refusal",
             })
         for item in projection.get("nudges", []):
             if not item.get("delivered") and item.get("reason") == "nudge-budget-exhausted":
@@ -268,13 +314,16 @@ def render_outbound(notification):
     lines.append(notification.get("detail", ""))
     request = notification.get("request")
     if request:
+        options = request.get("response_schema", {}).get(
+            "decision", ["approve", "reject"]
+        )
         lines.append(
             "to decide, reply: "
-            f"/decision {request['correlation_id']} approve|reject"
+            f"/decision {request['correlation_id']} {'|'.join(options)}"
         )
         lines.append(
             "the decision applies only through the local exact-token "
-            "checkpoint boundary"
+            "request boundary"
         )
     lines.append(f"ack: {notification['id']}")
     return "\n".join(line for line in lines if line)
@@ -308,7 +357,9 @@ def resolve_correlation(root, correlation_id):
     match = next(
         (
             item for item in inventory["notifications"]
-            if item["kind"] == "checkpoint-pending"
+            if item["kind"] in {
+                "checkpoint-pending", "request-pending", "request-republished",
+            }
             and item.get("request", {}).get("correlation_id") == correlation_id
         ),
         None,

@@ -312,6 +312,7 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
                 parts[4],
                 reason=query.get("reason", [""])[0],
                 decision=query.get("decision", [""])[0],
+                correlation_id=query.get("correlation_id", [""])[0],
             ))
 
         if (
@@ -606,7 +607,9 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
             return _run_error(err)
 
     if route == "/api/runs/preview":
-        unknown = sorted(set(body) - {"run_id", "action", "reason", "decision"})
+        unknown = sorted(set(body) - {
+            "run_id", "action", "reason", "decision", "correlation_id",
+        })
         if unknown:
             return _error(400, f"unknown run preview parameter(s): {', '.join(unknown)}")
         try:
@@ -619,6 +622,7 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
                 action,
                 reason=str(body.get("reason", "") or ""),
                 decision=str(body.get("decision", "") or ""),
+                correlation_id=str(body.get("correlation_id", "") or ""),
             ))
         except DwError as err:
             return _run_error(err)
@@ -658,13 +662,14 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
     if route in {
         "/api/runs/tick", "/api/runs/pause", "/api/runs/resume",
         "/api/runs/revoke", "/api/runs/cancel", "/api/runs/checkpoint",
+        "/api/runs/request",
     }:
         action = route.rsplit("/", 1)[-1]
         allowed = {"run_id", "expect"}
         if action in {"pause", "revoke", "cancel"}:
             allowed.add("reason")
-        if action == "checkpoint":
-            allowed.add("decision")
+        if action in {"checkpoint", "request"}:
+            allowed.update({"decision", "correlation_id"})
         unknown = sorted(set(body) - allowed)
         if unknown:
             return _error(400, f"unknown run {action} parameter(s): {', '.join(unknown)}")
@@ -679,6 +684,7 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
                 expect,
                 reason=str(body.get("reason", "") or ""),
                 decision=str(body.get("decision", "") or ""),
+                correlation_id=str(body.get("correlation_id", "") or ""),
             ))
         except DwError as err:
             return _run_error(err)

@@ -362,8 +362,11 @@ profiles/capabilities/workspaces, all finite budgets, expiry, and permanent
 exclusions while writing nothing. `run start` rechecks the complete plan and
 consumes its exact token only with `--approve --operator`; `run list`, `show`,
 `pause`, `resume`, `revoke`, and `cancel` replay or append to the authoritative
-hash-chained local ledger. A grant authorizes bounded dispatch later—it does
-not itself run an agent or check.
+hash-chained local ledger. Pending checkpoints and uncovered nudges are
+durable typed requests: `run request` binds the correlation, closed response
+schema, and current ledger head to one fresh token; `run checkpoint` remains a
+compatibility alias. A grant authorizes bounded dispatch later—it does not
+itself run an agent or check.
 
 Agent providers stay behind `orchestration_driver`: local untracked
 `drivers.json` maps logical score profiles to adapter capability/workspace

@@ -65,20 +65,21 @@ is added when an external consumer asks for one.
 | `dw orchestration show <score> --json` | `orchestration.compile_score` | normalized runtime score, layout, analysis, semantic hash, and document hash |
 | `dw orchestration validate <score> --json` | `orchestration.validate_score` | exact-key verdict plus JSON-pointer diagnostics/remediation; exit 1 invalid |
 | `dw orchestration simulate <score> --json` | `orchestration.simulate_score` | pure scheduling waves, locks, lineage, branches, budgets, checkpoints, and terminals |
-| `dw notifications list --json` | `notifications.build_notifications` | derived operator notifications (pending checkpoints, terminals, blocked stops, opt-in branch signals) with unread and delivery state; pure (exit 2 when none) |
+| `dw notifications list --json` | `notifications.build_notifications` | derived operator notifications (pending/republished/expired requests, terminals, blocked stops, opt-in branch signals) with unread and delivery state; pure (exit 2 when none) |
 | `dw notifications ack <id>` | `notifications.acknowledge_notification` | idempotent, receipted acknowledgement in the local ack log |
 | `dw notifications delivered <id> [--channel C] [--failed reason]` | `notifications.record_delivery` | one recorded delivery-attempt outcome for a channel consumer (ceiling-bounded retries) |
 | `dw signals list [--remote R] [--branch B] --json` | `signals.build_signals_inventory` | observed channels with hash-chained facts and read-time derived status; pure (exit 2 when none) |
 | `dw signals observe [--remote R] [--branch B] [--provider github\|fixture] --json` | `signals.observe_signals` | one bounded observe pass: semantic-diffed appends and content-free refusals; stamps `starts_work: false` |
 | `dw run plan <score> --project <slug> --story <id> --json` | `orchestration_run.build_run_plan` | pure exact score/repository/status/story/capability/budget/expiry binding plus single-use start token |
 | `dw run start --plan <file> --expect <token> --approve --operator <id> --json` | `orchestration_run.start_run` | immutable local grant and initial hash-chained projection; no node dispatch |
-| `dw run list|show [<run>] --json` | `orchestration_run.run_inventory/replay_run` | authoritative ledger-derived projections; disposable cache is ignored |
-| `dw run view <run> --json` | `orchestration_surface.build_run_view` | pure content-safe live graph, attempts, sessions/checks, artifact lineage, budgets, routes, controls, and ledger |
-| `dw run preview <run> <act> --json` | `orchestration_surface.build_run_act_preview` | pure action+parameters+ledger-bound consent document and exact `act_token` |
+| `dw run list|show [<run>] --json` | `orchestration_run.run_inventory/replay_run` | authoritative ledger-derived projections, including outstanding requests and their history; disposable cache is ignored |
+| `dw run view <run> --json` | `orchestration_surface.build_run_view` | pure content-safe live graph, attempts, sessions/checks, artifact lineage, budgets, routes, outstanding requests, inspect-only decision lineage, controls, and ledger |
+| `dw run preview <run> <act> --json` | `orchestration_surface.build_run_act_preview` | pure action+parameters+correlation+ledger-bound consent document and exact `act_token` |
 | `dw run pause|resume|revoke|cancel <run> --expect <act-token> --json` | `orchestration_surface.apply_run_act` | one exact preview-confirm lifecycle transition that immediately gates future dispatch |
 | `dw run tick <run> --expect <act-token> --json` | `orchestration_surface.apply_run_act` → `orchestration_conductor.tick_run` | one explicitly confirmed replay/reconcile/route/schedule boundary with exact receipts and no hidden continuation |
 | `dw run supervise <run> --max-ticks <n> --interval <s> --json` | `orchestration_conductor.supervise_run` | bounded repetition over `tick_run`, stopping at terminal/pause/approval/no-progress |
-| `dw run checkpoint <run> approve|reject --expect <act-token> --json` | `orchestration_surface.apply_run_act` → `orchestration_run.decide_checkpoint` | one fresh decision over the exact pending named checkpoint |
+| `dw run request <run> <correlation> <decision> --expect <act-token> --json` | `orchestration_surface.apply_run_act` → `orchestration_run.decide_outstanding_request` | one fresh typed response over the exact outstanding request; schema/correlation refusals are ledgered and leave the request live |
+| `dw run checkpoint <run> approve|reject [--correlation <id>] --expect <act-token> --json` | generic request boundary → `orchestration_run.decide_checkpoint` | compatibility alias for the exact pending checkpoint request |
 | `dw run stream <run> agent|check <execution> stdout|stderr --json` | `orchestration_surface.read_run_stream` | one explicitly opened log, independently bounded to 100,000 bytes; never a list/feed/event field |
 | `dw run tail <run> [--after N] [--follow]` | `orchestration_surface.tail_run_events` | the verified hash-chained ledger suffix after a cursor, one canonical event JSON per line; pure read, no tokens or content bodies |
 
@@ -124,9 +125,9 @@ or provider argv.
 | `GET /api/runs` | `orchestration_run.run_inventory` | authoritative local projections; no prompts, argv, source, transcripts, or artifact bytes |
 | `GET /api/runs/<run>` | `orchestration_run.replay_run` | byte-identical projection in `data` |
 | `GET /api/runs/<run>/view` | `orchestration_surface.build_run_view` | pure live explanation/consent model used by Workbench Run |
-| `GET /api/runs/<run>/act/<action>` / `POST /api/runs/preview` | `orchestration_surface.build_run_act_preview` | exact pure act preview; POST keeps operator reasons out of the address bar |
+| `GET /api/runs/<run>/act/<action>` / `POST /api/runs/preview` | `orchestration_surface.build_run_act_preview` | exact pure act preview; POST carries bounded reason/decision/correlation fields and keeps them out of the address bar |
 | `POST /api/runs/start` | `orchestration_surface.start_run_by_id` | identifiers/timestamps/token/approval only; grant creation dispatches nothing |
-| `POST /api/runs/tick`, `POST /api/runs/pause`, `POST /api/runs/resume`, `POST /api/runs/revoke`, `POST /api/runs/cancel`, `POST /api/runs/checkpoint` | `orchestration_surface.apply_run_act` | exact preview token plus only its bound reason/decision; stale is HTTP 409 |
+| `POST /api/runs/tick`, `POST /api/runs/pause`, `POST /api/runs/resume`, `POST /api/runs/revoke`, `POST /api/runs/cancel`, `POST /api/runs/request`, `POST /api/runs/checkpoint` | `orchestration_surface.apply_run_act` | exact preview token plus only its bound reason/decision/correlation; stale is HTTP 409; checkpoint is a compatibility alias |
 | `GET /api/runs/<run>/streams/<executor>/<execution>/<stream>` | `orchestration_surface.read_run_stream` | explicit bounded stdout/stderr; no packets, prompts, final message, or artifact content |
 | `GET /api/runs/<run>/events` (SSE) | `orchestration_surface.tail_run_events` | live hash-chained ledger tail; `Last-Event-ID`/`from` cursor replays the exact missed suffix; read-only — no token or mutation is reachable from the stream |
 | `GET /api/signals/events?remote=…&branch=…` (SSE) | `orchestration_surface.tail_signal_events` | live signal-chain tail with the same cursor-replay and no-authority posture |
@@ -157,8 +158,9 @@ this is the inventory. Read-only: `dw_status`, `dw_step`, `dw_context`,
 `dw_run_plan`, `dw_run_list`, `dw_run_show`, `dw_run_view`, and
 `dw_run_preview`.
 Exact-token actions: `dw_step_apply`, `dw_run_start`, `dw_run_tick`,
-`dw_run_pause`, `dw_run_resume`, `dw_run_revoke`, `dw_run_cancel`, and
-`dw_run_checkpoint`. The explicitly opened and bounded `dw_run_stream` is
+`dw_run_pause`, `dw_run_resume`, `dw_run_revoke`, `dw_run_cancel`,
+`dw_run_request`, and the checkpoint-compatible `dw_run_checkpoint`. The
+explicitly opened and bounded `dw_run_stream` is
 the only run tool returning log content. Other guarded mutations:
 `dw_story_status`, `dw_evidence_capture`, `dw_contract_new`, and the
 receipted idempotent `dw_notifications_ack`.
