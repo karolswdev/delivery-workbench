@@ -6,8 +6,8 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Current phase: 25 (phase-25-outward-signals)
-- Next story: WLA-25-09 — Prove the outward loop end to end [backlog]
+- Current phase: 26 (phase-26-autonomous-delivery-programs)
+- Next story: WLA-26-01 — Contract autonomous delivery programs and trust [in-progress]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

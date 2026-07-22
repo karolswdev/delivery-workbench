@@ -1,6 +1,6 @@
 # Phase 25 - The listening conductor — outward signals and bounded nudges
 
-**Last updated:** 2026-07-21.
+**Last updated:** 2026-07-22.
 
 ## Goal
 
@@ -63,12 +63,14 @@ discipline, re-interpreted under the consent spine.
 - [x] Outstanding checkpoint decisions survive crash/pause and resume
   with exactly-once typed republish, ledger-derivable pending sets,
   visible age/origin, and expiry-to-refusal semantics (WLA-25-08).
-- [ ] A wheel-installed fresh consumer walks the whole outward loop —
+- [x] A wheel-installed fresh consumer walks the whole outward loop —
   push, red CI, auto-nudge, repair, review signal, checkpoint through
-  restart, phone-side typed decision, notifications — with every new
+  restart, typed decision and notifications — with every new
   red path refused exactly, at-most-once held under a planted crash,
   operator-only certification, and a separate live specimen
-  (WLA-25-09).
+  (WLA-25-09). The package oracle covers the full decision core; the owner
+  explicitly waived the separate phone-device confidence supplement, recorded
+  as unperformed rather than passed.
 
 ## Story status
 
@@ -82,11 +84,11 @@ discipline, re-interpreted under the consent spine.
 | WLA-25-06 | Notify the operator durably | done | [story-06-operator-notifications](./story-06-operator-notifications.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-25-07 | Drive Claude Code through the neutral seam | done | [story-07-claude-code-driver](./story-07-claude-code-driver.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-25-08 | Keep pending decisions alive across the pause | done | [story-08-typed-checkpoint-resume](./story-08-typed-checkpoint-resume.md) | [evidence-story-08](./evidence-story-08.md) |
-| WLA-25-09 | Prove the outward loop end to end | in-progress | [story-09-packaged-outward-exam](./story-09-packaged-outward-exam.md) | - |
+| WLA-25-09 | Prove the outward loop end to end | done | [story-09-packaged-outward-exam](./story-09-packaged-outward-exam.md) | [evidence-story-09](./evidence-story-09.md) |
 
 ## Where we are
 
-Phase open 8/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
+Phase CLOSED 9/9. WLA-25-01 is done: `docs/signals.md` contracts the whole
 outward layer — the `delivery-workbench-signal@1` fact model, read-time
 derived-status precedence, the six-state activity vocabulary with its
 receptivity table, the four-layer nudge model (score rule → grant
@@ -203,8 +205,21 @@ Run view expose age/origin/schema, while the inspect-only decision tree binds
 history to the exact pre-decision ledger head (age is display-only, never
 token material). Eight regressions raise core 329 → 337 on both Python floors;
 Telegram 152, 32 UI renders, interop, and the Python-3.9 wheel exit exams are
-green in `evidence-story-08.md`. Next: WLA-25-09, the fresh-wheel outward-loop
-exam and live specimen.
+green in `evidence-story-08.md`.
+
+WLA-25-09 closes the phase: a Python-3.9-built wheel in a fresh consumer walked
+operator push → external commit rebind → red CI → one bounded repair nudge →
+green CI → changes-requested → second nudge → named approval policy → crash/
+restart → exactly-once request republish → stale refusal → typed decision →
+notification delivery/ack → exact stream replay. It recorded zero duplicate
+starts, zero duplicate nudges, one republish, two nudges, no observer side
+effects, and operator-only certification. The full 338-test suite passed on
+both Python floors alongside package, Telegram, Workbench, docs, interop, and
+history proof. An authenticated real Claude Code nudge specimen remains the
+live harness proof. The owner waived the additional phone-device specimen on
+2026-07-22; a real pending request was revoked and expired without approval,
+and evidence records it as unperformed. The final summary holds the complete
+measured outcome and Phase 26 takes up autonomous, multi-story program work.
 
 ## Active risks
 
@@ -241,6 +256,8 @@ exam and live specimen.
 - 2026-07-21 - Outstanding-request identity derives from the existing hash-chained opening event rather than a second request store; republish/decision/refusal are the only added lifecycle facts - removes the crash gap between "waiting" and "persisted" while keeping old ledgers replayable - WLA-25-08.
 - 2026-07-21 - `run request` is the generic exact-token decision boundary and `run checkpoint` remains a checkpoint-only alias; a valid correlation for the wrong request kind is still a recorded mismatch, never type-confused authority - WLA-25-08.
 - 2026-07-21 - Read-time age is display data, not token material; historical lineage binds to the decision event's previous hash, the exact ledger head authorized, and terminal request cleanup is restart-recoverable without dispatch - WLA-25-08.
+- 2026-07-22 - Close Phase 25 without the optional phone-device confidence supplement - the owner explicitly waived that leg; the real pending request was revoked and expired without approval, while the deterministic package exam remains the authoritative product proof - owner direction / WLA-25-09.
+- 2026-07-22 - The next destination is a programmable autonomous delivery organization, not merely a linear story picker: visually/configurably authored workflows span stories and phases, assign implementers and independent verifiers, support bounded debate and repair loops, verifier-of-verifier and master-architect roles, and may integrate/advance continuously under explicit program authority - owner clarification.
 
 ## Decisions deferred
 
