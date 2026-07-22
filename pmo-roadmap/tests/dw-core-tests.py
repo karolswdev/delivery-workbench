@@ -104,9 +104,9 @@ class DwCoreTest(unittest.TestCase):
     def test_missioncontrol_readonly_fitness_guard(self):
         # WLA-15-03: the read-only guarantee as a fitness test. The
         # mutation dispatcher's source must never mention the
-        # missioncontrol path, and the only POST routes are the two
-        # guarded mutation endpoints — so no import or route edit can
-        # quietly grow the belt a write path.
+        # missioncontrol path, and every direct POST route is a named
+        # exact-token act or guarded content preview/apply boundary — so no
+        # import or route edit can quietly grow the belt a write path.
         import inspect
 
         import dw_pmo.workbench as wb
@@ -117,9 +117,10 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 8,
-            "only deliberate-step, guarded roadmap/score edits, run preview/start, "
-            "and the receipted notification ack use direct POST equality routes; "
+            len(post_routes), 10,
+            "only deliberate-step, guarded roadmap/score/Studio edits, run "
+            "preview/start, and the receipted notification ack use direct POST "
+            "equality routes; "
             f"found: {post_routes}",
         )
         self.assertTrue(any('/api/step/apply' in line for line in post_routes))
@@ -127,6 +128,8 @@ class DwCoreTest(unittest.TestCase):
         self.assertTrue(any('/api/mutations/apply' in line for line in post_routes))
         self.assertTrue(any('/api/orchestration/preview' in line for line in post_routes))
         self.assertTrue(any('/api/orchestration/apply' in line for line in post_routes))
+        self.assertTrue(any('/api/program-studio/preview' in line for line in post_routes))
+        self.assertTrue(any('/api/program-studio/apply' in line for line in post_routes))
         self.assertTrue(any('/api/runs/preview' in line for line in post_routes))
         self.assertTrue(any('/api/runs/start' in line for line in post_routes))
         self.assertTrue(any('/api/notifications/ack' in line for line in post_routes))
@@ -8626,7 +8629,10 @@ class OrchestrationConductorTest(unittest.TestCase):
     def test_run_view_static_contract_has_consent_privacy_and_no_poller(self):
         app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
         css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
-        run_source = app[app.index("function runStateBadge"):app.index("/* ── router")]
+        run_source = app[
+            app.index("function runStateBadge"):
+            app.index("/* ── optional Program / Workflow Studio")
+        ]
         for token in (
             "live run · ledger replay", "fail checks", "Artifact metadata and lineage",
             "failure routes", "human checkpoints", "hash-chained receipts",
@@ -9891,6 +9897,256 @@ class ProgramOrganizationTest(unittest.TestCase):
         self.assertTrue(inventory["healthy"])
         self.assertEqual(inventory["organizations"], [])
         self.assertEqual(before, list(empty.rglob("*")))
+
+
+class ProgramStudioTest(unittest.TestCase):
+    """WLA-26-06: optional Studio parity, graph/config, and guarded saves."""
+
+    def setUp(self):
+        import dw_pmo.program_studio as studio_core
+
+        self.core = studio_core
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-program-studio-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        (self.root / "pm/workflows").mkdir(parents=True)
+        (self.root / "pm/organizations").mkdir(parents=True)
+        (self.root / "pm/orchestration").mkdir(parents=True)
+        for source in (TESTS_DIR.parent / "templates/workflows").glob("*.json"):
+            shutil.copy2(source, self.root / "pm/workflows" / source.name)
+        shutil.copy2(
+            TESTS_DIR.parent / "templates/organizations/autonomous-story-cell.json",
+            self.root / "pm/organizations/autonomous-story-cell.json",
+        )
+        shutil.copy2(
+            TESTS_DIR.parent / "templates/orchestration/research-build-review.json",
+            self.root / "pm/orchestration/research-build-review.json",
+        )
+
+    def test_no_program_is_healthy_pure_and_creates_nothing(self):
+        empty = self.tmp / "ordinary"
+        empty.mkdir()
+        before = list(empty.rglob("*"))
+        model = self.core.build_program_studio(empty)
+        self.assertTrue(model["healthy"])
+        self.assertTrue(model["empty"])
+        self.assertTrue(model["ordinary_workbench_ready"])
+        self.assertEqual(model["default_route"], "#/")
+        self.assertEqual(model["studio_route"], "#/program-studio")
+        self.assertEqual(model["empty_state"]["tone"], "neutral")
+        self.assertFalse(model["empty_state"]["blocking"])
+        self.assertFalse(model["empty_state"]["setup_required"])
+        for key in (
+            "starts_work", "writes_policy", "writes_roadmap",
+            "writes_run_state", "creates_grant", "background_polling",
+            "changes_default_route",
+        ):
+            self.assertFalse(model[key], key)
+        self.assertEqual(before, list(empty.rglob("*")))
+
+    def test_workflow_graph_uses_shared_compiler_and_round_trips_losslessly(self):
+        import dw_pmo.program_workflow as workflow_core
+
+        detail = self.core.build_studio_document(
+            self.root, "workflow", "architect-debate-delivery"
+        )
+        expected = workflow_core.compile_workflow(
+            self.root, "architect-debate-delivery"
+        )
+        self.assertEqual(detail["compiled"], expected)
+        self.assertEqual(
+            detail["simulation"],
+            workflow_core.simulate_workflow(
+                self.root, "architect-debate-delivery"
+            ),
+        )
+        graph = detail["graph"]
+        types = {node["type"] for node in graph["nodes"]}
+        self.assertTrue({"agent", "debate", "subflow", "loop"} <= types)
+        self.assertTrue(graph["features"]["nested_subflows"])
+        self.assertTrue(graph["features"]["bounded_loops"])
+        self.assertTrue(graph["features"]["debates"])
+        self.assertTrue(all(node["keyboard"] for node in graph["nodes"]))
+        self.assertTrue(all(edge["keyboard"] for edge in graph["edges"]))
+        self.assertTrue(any(node["drilldown"] for node in graph["nodes"]))
+        self.assertTrue(any(item["max_rounds"] for item in graph["containers"]))
+        round_trip = detail["round_trip"]
+        self.assertTrue(round_trip["lossless"])
+        self.assertTrue(round_trip["semantic_hash_preserved"])
+        self.assertTrue(round_trip["document_hash_preserved"])
+        self.assertTrue(round_trip["layout_hash_preserved"])
+        self.assertEqual(
+            self.core.studio_graph_to_config(graph), detail["raw"]
+        )
+
+    def test_organization_graph_exposes_separation_council_meta_and_architect(self):
+        detail = self.core.build_studio_document(
+            self.root, "organization", "autonomous-story-cell"
+        )
+        self.assertTrue(detail["validation"]["valid"])
+        graph = detail["graph"]
+        self.assertTrue(graph["features"]["implementer_verifier_separation"])
+        self.assertTrue(graph["features"]["councils"])
+        self.assertTrue(graph["features"]["meta_verifier"])
+        self.assertTrue(graph["features"]["master_architect"])
+        self.assertTrue(any(edge["kind"] == "separation" for edge in graph["edges"]))
+        council = next(node for node in graph["nodes"] if node["type"] == "council")
+        self.assertEqual(council["summary"]["meta_verifier"], "meta-verifier")
+        self.assertIn("max_rounds", council["summary"]["budgets"])
+        self.assertFalse(detail["simulation"]["starts_work"])
+        self.assertFalse(detail["authority"]["creates_grant"])
+
+    def test_diagnostics_link_exact_graph_node_and_json_pointer(self):
+        document = self.core.new_studio_document("workflow", "broken-flow")
+        document["nodes"][0]["shell"] = "never"
+        plan = self.core.build_studio_mutation_plan(
+            self.root, "workflow", "save", "broken-flow", document
+        )
+        preview = self.core.studio_mutation_preview(plan)
+        self.assertFalse(preview["applicable"])
+        diagnostic = next(
+            item for item in preview["studio"]["validation"]["diagnostics"]
+            if item["pointer"] == "/nodes/0/shell"
+        )
+        self.assertEqual(diagnostic["target"]["node_id"], "review")
+        self.assertIn("nodes-0-shell", diagnostic["target"]["field_id"])
+        self.assertIsNone(preview["studio"]["compiled"])
+        self.assertTrue(preview["studio"]["round_trip"]["lossless"])
+        self.assertFalse(
+            preview["studio"]["round_trip"]["semantic_hash_preserved"]
+        )
+
+    def test_layout_move_changes_document_not_semantic_hash(self):
+        import dw_pmo.program_workflow as workflow_core
+
+        document = self.core.new_studio_document("workflow", "move-proof")
+        baseline = workflow_core.compile_workflow(self.root, document)
+        moved = json.loads(json.dumps(document))
+        moved["layout"]["nodes"]["review"] = {"x": 777, "y": 333}
+        compiled = workflow_core.compile_workflow(self.root, moved)
+        self.assertEqual(baseline["semantic_hash"], compiled["semantic_hash"])
+        self.assertNotEqual(baseline["document_hash"], compiled["document_hash"])
+        round_trip = self.core.graph_config_round_trip(
+            self.root, "workflow", moved
+        )
+        self.assertTrue(round_trip["lossless"])
+        self.assertTrue(round_trip["semantic_hash_preserved"])
+        self.assertTrue(round_trip["layout_hash_preserved"])
+
+    def test_authority_preview_separates_requests_and_never_grants(self):
+        document = self.core.new_studio_document("program", "authority-proof")
+        document["mode_ceiling"] = "checkpointed"
+        document["requested_capabilities"] = [
+            "agent:dispatch", "certification:verdict",
+            "evidence:materialize", "git:commit", "roadmap:phase-advance",
+        ]
+        authority = self.core.build_authority_preview(
+            "program", document, None
+        )
+        groups = {group["id"]: group for group in authority["groups"]}
+        work = {
+            item["id"] for item in groups["work-and-verdict"]["capabilities"]
+            if item["requested"]
+        }
+        delivery = {
+            item["id"] for item in groups["delivery-rails"]["capabilities"]
+            if item["requested"]
+        }
+        self.assertEqual(work, {"agent:dispatch", "certification:verdict"})
+        self.assertEqual(
+            delivery,
+            {"evidence:materialize", "git:commit", "roadmap:phase-advance"},
+        )
+        modes = {item["id"]: item for item in authority["modes"]}
+        self.assertTrue(modes["advisory"]["within_ceiling"])
+        self.assertTrue(modes["checkpointed"]["within_ceiling"])
+        self.assertFalse(modes["continuous"]["within_ceiling"])
+        self.assertTrue(authority["grant_required"])
+        self.assertFalse(authority["creates_grant"])
+        self.assertFalse(authority["starts_work"])
+
+    def test_guarded_save_is_one_file_stale_safe_and_delete_is_explicit(self):
+        document = self.core.new_studio_document("workflow", "guarded-flow")
+        target = self.root / "pm/workflows/guarded-flow.json"
+        plan = self.core.build_studio_mutation_plan(
+            self.root, "workflow", "save", "guarded-flow", document
+        )
+        preview = self.core.studio_mutation_preview(plan)
+        self.assertTrue(preview["applicable"])
+        self.assertFalse(target.exists())
+        for key in (
+            "starts_work", "writes_policy", "writes_roadmap",
+            "writes_run_state", "creates_grant", "starts_agent",
+            "starts_check", "starts_observer", "sends_notification",
+            "applies_integration",
+        ):
+            self.assertFalse(preview[key], key)
+        result = self.core.apply_studio_mutation(plan, preview["fingerprint"])
+        self.assertTrue(target.is_file())
+        self.assertEqual(result["writes_only"], ["pm/workflows/guarded-flow.json"])
+        self.assertTrue(result["writes_policy"])
+        self.assertFalse(result["starts_work"])
+        with self.assertRaisesRegex(DwError, "stale Program Studio preview"):
+            self.core.apply_studio_mutation(plan, preview["fingerprint"])
+
+        delete = self.core.build_studio_mutation_plan(
+            self.root, "workflow", "delete", "guarded-flow"
+        )
+        delete_preview = self.core.studio_mutation_preview(delete)
+        self.assertTrue(delete_preview["applicable"])
+        self.assertTrue(target.exists())
+        self.core.apply_studio_mutation(delete, delete_preview["fingerprint"])
+        self.assertFalse(target.exists())
+        self.assertFalse((self.root / ".git/pmo-programs").exists())
+        self.assertFalse((self.root / "pm/program-runs").exists())
+
+    def test_containment_and_http_adapter_share_the_same_model(self):
+        from dw_pmo.workbench import handle_api, handle_mutation
+
+        with self.assertRaises(DwError):
+            self.core.build_studio_mutation_plan(
+                self.root, "workflow", "save", "../escape", {}
+            )
+        status, listed = handle_api(self.root, "/api/program-studio", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            listed["data"], self.core.build_program_studio(self.root)
+        )
+        status, detail = handle_api(
+            self.root,
+            "/api/program-studio/workflow/architect-debate-delivery",
+            {},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            detail["data"],
+            self.core.build_studio_document(
+                self.root, "workflow", "architect-debate-delivery"
+            ),
+        )
+        document = self.core.new_studio_document("workflow", "http-flow")
+        request = {
+            "family": "workflow", "action": "save", "name": "http-flow",
+            "document": document,
+        }
+        status, body = handle_mutation(
+            self.root, "/api/program-studio/preview", request
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(body["data"]["applicable"])
+        request["fingerprint"] = body["data"]["fingerprint"]
+        status, applied = handle_mutation(
+            self.root, "/api/program-studio/apply", request
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            applied["data"]["writes_only"], ["pm/workflows/http-flow.json"]
+        )
+        status, stale = handle_mutation(
+            self.root, "/api/program-studio/apply", request
+        )
+        self.assertEqual(status, 409)
+        self.assertFalse(stale["ok"])
 
 
 class ProgramDeliberationTest(unittest.TestCase):

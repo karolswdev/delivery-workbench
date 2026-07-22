@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 26
-- **Status:** in-progress
+- **Status:** done
   <!-- status vocabulary: roadmap-builder.md §2.3 -->
 - **Depends on:** WLA-26-02, WLA-26-03, WLA-26-04, WLA-26-05
 - **Unblocks:** WLA-26-11, WLA-26-12
@@ -35,27 +35,27 @@ program inventory into an error, or asking vanilla users to configure autonomy.
 
 ## Acceptance criteria
 
-- [ ] Every contract field is authorable either directly in the studio or in
+- [x] Every contract field is authorable either directly in the studio or in
   lossless JSON/config view; graph↔config round trips preserve semantic and
   layout hashes exactly.
-- [ ] Nested subflows, loop boundaries/max rounds/exit/exhaustion, fan-out/in,
+- [x] Nested subflows, loop boundaries/max rounds/exit/exhaustion, fan-out/in,
   implementer/verifier separation, councils, meta-verifier and architect gates,
   artifacts, verdicts, capabilities, budgets and stop routes are visually
   distinct and keyboard accessible.
-- [ ] Live shared-compiler diagnostics link to the exact graph/inspector field;
+- [x] Live shared-compiler diagnostics link to the exact graph/inspector field;
   simulation animates candidate assignment and bounded green/red/debate/repair/
   exhaustion routes with worst-case envelopes before any grant exists.
-- [ ] Saving/deleting uses a stale-safe preview/fingerprint/apply flow, writes
+- [x] Saving/deleting uses a stale-safe preview/fingerprint/apply flow, writes
   only the declared tracked policy, and starts no program, agent, check,
   observer, notification, or integration act.
-- [ ] Progressive disclosure makes Program Studio explicitly reachable without
+- [x] Progressive disclosure makes Program Studio explicitly reachable without
   routing ordinary Workbench sessions through it; no program means no nag,
   blocking setup, background poller, changed default route, or empty-state
   warning.
-- [ ] Authority preview visibly separates requested work/verdict capabilities
+- [x] Authority preview visibly separates requested work/verdict capabilities
   from evidence/certification/commit/push/story/phase capabilities and renders
   advisory/checkpointed/continuous differences without granting them.
-- [ ] UI smoke covers nested, debate-active, verifier-failed, budget-exhausted,
+- [x] UI smoke covers nested, debate-active, verifier-failed, budget-exhausted,
   phase-transition and complete organizations across supported desktop/mobile
   viewports with no clipping or inaccessible inspector state; golden no-program
   UI/API cases preserve existing Workbench behavior.
@@ -73,3 +73,25 @@ program inventory into an error, or asking vanilla users to configure autonomy.
 
 The studio can borrow familiar workflow notation, but the contract—not BPMN or
 the browser—owns which loops, roles, and authority are legal.
+
+## Delivered
+
+- Added an optional `#/program-studio` workspace without changing the ordinary
+  `#/` Workbench route, healthy no-program state, or bounded-run experience.
+- Built one source/vendored Program Studio model over the existing program,
+  workflow, organization, deliberation, and planning compilers, with
+  Design/Simulate/Validate/JSON/Authority views and exact diagnostic targets.
+- Rendered role lanes, fan-out/fan-in, nested subflows, bounded loops/debates,
+  organization separation, councils, meta-verification, architect gates,
+  artifacts, verdicts, capabilities, budgets, and stop routes accessibly across
+  desktop and mobile layouts.
+- Proved lossless graph/config round trips with stable document, semantic, and
+  layout hashes; moving a node changes no executable semantics or authority.
+- Added guarded preview/diff/fingerprint/apply and delete flows that atomically
+  mutate one declared tracked policy, reject stale or escaping targets, and
+  start no program, agent, check, observer, notification, or integration act.
+- Made authority preview explanatory only: requested work/verdict capabilities
+  remain visibly separate from evidence, certification, Git, and roadmap rails,
+  and advisory/checkpointed/continuous previews create no grant.
+- Added core, explorer, package, and 52-viewport UI coverage for empty,
+  nested, debate, failure, exhaustion, phase-transition, and complete states.

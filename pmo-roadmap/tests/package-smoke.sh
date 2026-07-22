@@ -126,6 +126,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_workflow.py" ] || fail "wheel omitted the finite hierarchical workflow compiler"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_organization.py" ] || fail "wheel omitted the pure organization and assignment compiler"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_deliberation.py" ] || fail "wheel omitted the replayable deliberation protocol core"
+[ -f "$FIXTURE/.githooks/dw_pmo/program_studio.py" ] || fail "wheel omitted the pure Program Studio model/edit core"
 [ -f "$FIXTURE/pm/orchestration/research-build-review.json" ] \
   || fail "install did not seed the ordinary orchestration preset"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
@@ -139,6 +140,9 @@ PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
   'from dw_pmo import DELIBERATION_PLAN_KIND, claim_next_deliberation, compile_deliberation_plan, record_deliberation_replacement, record_deliberation_submission, replay_deliberation, simulate_deliberation, start_deliberation; assert DELIBERATION_PLAN_KIND == "delivery-workbench-deliberation-plan"; assert all(callable(item) for item in (compile_deliberation_plan, simulate_deliberation, start_deliberation, claim_next_deliberation, record_deliberation_submission, record_deliberation_replacement, replay_deliberation))' \
   || fail "packaged core does not expose the bounded deliberation protocol"
+PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
+  'from pathlib import Path; from dw_pmo import STUDIO_KIND, apply_studio_mutation, build_program_studio, build_studio_document, build_studio_graph, build_studio_mutation_plan, graph_config_round_trip, new_studio_document, studio_graph_to_config, studio_mutation_preview; from dw_pmo.workbench import handle_api, handle_mutation; root=Path("'$FIXTURE'"); model=build_program_studio(root); assert STUDIO_KIND == "delivery-workbench-program-studio" and model["empty"] and model["healthy"] and model["ordinary_workbench_ready"] and model["default_route"] == "#/" and not model["starts_work"] and not model["creates_grant"] and not model["background_polling"]; draft=new_studio_document("workflow", "packaged-studio"); rt=graph_config_round_trip(root, "workflow", draft); assert rt["lossless"] and rt["semantic_hash_preserved"] and rt["layout_hash_preserved"]; plan=build_studio_mutation_plan(root, "workflow", "save", "packaged-studio", draft); preview=studio_mutation_preview(plan); assert preview["applicable"] and preview["studio"]["graph"]["nodes"][0]["keyboard"] and not preview["writes_policy"] and not preview["starts_work"] and not preview["creates_grant"]; assert handle_api(root, "/api/program-studio", {})[1]["data"] == model; assert all(callable(item) for item in (apply_studio_mutation, build_studio_document, build_studio_graph, studio_graph_to_config, handle_mutation))' \
+  || fail "packaged core does not expose pure optional Program Studio parity"
 (cd "$FIXTURE" && ./.githooks/dw orchestration validate research-build-review --json) \
   | grep -q '"valid": true' \
   || fail "packaged orchestration preset did not validate"
@@ -149,6 +153,8 @@ PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
   || fail "packaged install created optional workflow policy without an explicit user act"
 [ ! -e "$FIXTURE/pm/organizations" ] \
   || fail "packaged install created optional organization policy without an explicit user act"
+[ ! -e "$FIXTURE/pm/programs" ] \
+  || fail "packaged install created optional program policy without an explicit user act"
 (cd "$FIXTURE" && ./.githooks/dw organization list --json) \
   | grep -q '"healthy": true.*"organizations": \[\].*"starts_work": false' \
   || fail "packaged no-organization inventory was not healthy and pure"

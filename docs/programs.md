@@ -921,6 +921,19 @@ status/MCP/HTTP/Workbench models stay behavior-compatible. Opening the
 Workbench does not create policy directories, start SSE, poll providers, send
 notifications, or show blocking setup. Program Studio is entered deliberately.
 
+The delivered authoring route is `#/program-studio`, with family documents at
+`#/program-studio/<program|workflow|organization>/<name>`. Its five initial
+views are Design, Simulate, Validate, JSON, and Authority; organization,
+rubric/verdict, scope, and gate inspectors live inside those views rather than
+creating browser-only policy kinds. `GET /api/program-studio` returns a healthy
+neutral empty inventory, while the family/name read and
+`POST /api/program-studio/preview|apply` expose the exact compiler, graph,
+simulation, authority, diff, and stale-fingerprint models. The graph embeds the
+lossless config and proves semantic/document/layout hash identity on every
+round trip. Apply is direct-contained to one selected tracked JSON policy and
+returns explicit false facts for grant, run, agent, check, observer,
+notification, integration, roadmap, and background-polling effects.
+
 Graph/config round trips are lossless. Saving uses guarded
 preview→fingerprint→apply and starts nothing. Simulation is pure. Authority is
 a separate preview/confirm surface and never a Save button side effect. Browser

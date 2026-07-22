@@ -236,6 +236,21 @@ explicit pause/resume/revoke/cancel decisions. Refresh and stream opens are
 deliberate; there is no hidden poller, generic terminal, certification button,
 or commit shortcut.
 
+At `#/program-studio`, an explicitly entered advanced workspace authors the
+optional Phase 26 policy family without changing that ordinary front door.
+Programs show roadmap scope, binding rules, phase gates, requested
+capabilities, finite budgets, and stops; workflows show accessible role lanes,
+nested subflows, fan-in/out, typed loop/debate containers, verdicts, artifacts,
+and exhaustion routes; organizations show implementer/verifier separation,
+councils, meta-verifiers, architects, replacement, and audit bounds. Design,
+Simulate, Validate, JSON, and Authority are projections of the same Python
+compilers. Graph/config round trips preserve semantic and layout hashes, and
+save/delete uses one stale-safe preview→diff→fingerprint→apply boundary scoped
+to the selected tracked policy. Saving starts no work and grants no authority.
+With no `pm/programs`, `pm/workflows`, or `pm/organizations`, the Studio is a
+neutral optional empty state: `#/` remains ordinary Delivery Workbench, with
+no setup prompt, background poller, or runtime state.
+
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 
 More screenshots and two terminal recordings are in

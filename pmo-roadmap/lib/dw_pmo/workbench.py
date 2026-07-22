@@ -227,6 +227,16 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
             return 200, envelope(score_inventory(root))
 
+        if parts == ["api", "program-studio"]:
+            from .program_studio import build_program_studio
+
+            return 200, envelope(build_program_studio(root))
+
+        if len(parts) == 4 and parts[:2] == ["api", "program-studio"]:
+            from .program_studio import build_studio_document
+
+            return 200, envelope(build_studio_document(root, parts[2], parts[3]))
+
         if parts == ["api", "notifications"]:
             from .notifications import build_notifications
 
@@ -781,6 +791,89 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
                 )
             return _error(400, err.message)
 
+    if route == "/api/program-studio/preview":
+        unknown = sorted(set(body) - {"family", "action", "name", "document"})
+        if unknown:
+            return _error(
+                400,
+                f"unknown Program Studio preview parameter(s): {', '.join(unknown)}",
+            )
+        family = str(body.get("family", "") or "")
+        action = str(body.get("action", "") or "")
+        name = str(body.get("name", "") or "")
+        if action == "delete" and "document" in body:
+            return _error(400, "Program Studio delete preview does not accept document content")
+        try:
+            from .program_studio import (
+                build_studio_mutation_plan,
+                studio_mutation_preview,
+            )
+
+            plan = build_studio_mutation_plan(
+                root, family, action, name, body.get("document")
+            )
+            return 200, envelope(studio_mutation_preview(plan))
+        except DwError as err:
+            return _error(400, err.message)
+
+    if route == "/api/program-studio/apply":
+        unknown = sorted(
+            set(body) - {"family", "action", "name", "document", "fingerprint"}
+        )
+        if unknown:
+            return _error(
+                400,
+                f"unknown Program Studio apply parameter(s): {', '.join(unknown)}",
+            )
+        supplied = str(body.get("fingerprint", "") or "")
+        if not supplied:
+            return _error(400, "Program Studio apply requires a preview fingerprint")
+        family = str(body.get("family", "") or "")
+        action = str(body.get("action", "") or "")
+        name = str(body.get("name", "") or "")
+        if action == "delete" and "document" in body:
+            return _error(400, "Program Studio delete apply does not accept document content")
+        try:
+            from .program_studio import (
+                apply_studio_mutation,
+                build_studio_mutation_plan,
+                studio_mutation_preview,
+            )
+
+            plan = build_studio_mutation_plan(
+                root, family, action, name, body.get("document")
+            )
+            preview = studio_mutation_preview(plan)
+            if supplied != plan.fingerprint:
+                return 409, envelope(
+                    {
+                        "error": "stale Program Studio preview: policy bytes or desired content changed",
+                        "supplied_fingerprint": supplied,
+                        "current_fingerprint": plan.fingerprint,
+                        "preview": preview,
+                    },
+                    ok=False,
+                    issues=["stale Program Studio preview refused; nothing was written"],
+                )
+            if not preview["applicable"]:
+                return 400, envelope(
+                    {
+                        "error": "invalid Program Studio policies cannot be applied",
+                        "preview": preview,
+                    },
+                    ok=False,
+                    issues=["shared compiler diagnostics must be resolved before apply"],
+                )
+            return 200, envelope(apply_studio_mutation(plan, supplied))
+        except DwError as err:
+            if "rolled back" in err.message:
+                return 500, envelope(
+                    {"error": err.message, "rolled_back": True},
+                    ok=False,
+                    issues=[err.message],
+                )
+            return _error(400, err.message)
+
     if route == "/api/mutations/preview":
         try:
             plan = build_mutation_plan(root, body)
@@ -835,7 +928,8 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
         405,
         "unsupported method or route; use /api/step/apply, guarded roadmap "
         "/api/mutations/preview|apply, or guarded score "
-        "/api/orchestration/preview|apply, or exact-token /api/runs/* routes",
+        "/api/orchestration/preview|apply, /api/program-studio/preview|apply, "
+        "or exact-token /api/runs/* routes",
     )
 
 def create_handler(root: Path, static_dir: Path | None):
@@ -1058,8 +1152,8 @@ def serve(root: Path, port: int = 8377, quiet: bool = False) -> None:
     print(f"dw-workbench: serving {root}")
     print(f"dw-workbench: http://127.0.0.1:{port}/ (localhost or your own .ts.net tailnet; Ctrl-C to stop)")
     print(
-        "dw-workbench: writes require /api/mutations preview→apply or an exact "
-        "/api/step/apply token; never stages, certifies, or commits"
+        "dw-workbench: writes require a guarded preview→apply content boundary "
+        "or an exact step/run token; never stages, certifies, or commits"
     )
 
     def _term(_sig, _frame):  # graceful SIGTERM

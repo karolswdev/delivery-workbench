@@ -60,7 +60,7 @@ roadmap-advancement acts.
   rounds with finite budgets, preserved dissent, quorum/tie policy, and
   verifier-of-verifier audit—never opaque chat or an invented route
   (WLA-26-05).
-- [ ] The Workbench visual studio authors the complete program, workflow,
+- [x] The Workbench visual studio authors the complete program, workflow,
   organization, loops, gates, scope, authority request, and stop policy with
   lossless graph/config round trips, live compiler diagnostics/simulation, and
   guarded saves that start nothing; progressive disclosure preserves the
@@ -102,8 +102,8 @@ roadmap-advancement acts.
 | WLA-26-03 | Compile reusable hierarchical workflows and bounded loops | done | [story-03-compile-reusable-hierarchical-workflows-and-bounded-loops](./story-03-compile-reusable-hierarchical-workflows-and-bounded-loops.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-26-04 | Model agent roles, teams, and separation of duties | done | [story-04-model-agent-roles-teams-and-separation-of-duties](./story-04-model-agent-roles-teams-and-separation-of-duties.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-26-05 | Run debates, councils, and meta-verification | done | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-26-06 | Build the visual program and workflow studio | in-progress | [story-06-build-the-visual-program-and-workflow-studio](./story-06-build-the-visual-program-and-workflow-studio.md) | - |
-| WLA-26-07 | Turn quality and evidence into governed verdicts | backlog | [story-07-turn-quality-and-evidence-into-governed-verdicts](./story-07-turn-quality-and-evidence-into-governed-verdicts.md) | - |
+| WLA-26-06 | Build the visual program and workflow studio | done | [story-06-build-the-visual-program-and-workflow-studio](./story-06-build-the-visual-program-and-workflow-studio.md) | [evidence-story-06](./evidence-story-06.md) |
+| WLA-26-07 | Turn quality and evidence into governed verdicts | in-progress | [story-07-turn-quality-and-evidence-into-governed-verdicts](./story-07-turn-quality-and-evidence-into-governed-verdicts.md) | - |
 | WLA-26-08 | Grant continuous program authority explicitly | backlog | [story-08-grant-continuous-program-authority-explicitly](./story-08-grant-continuous-program-authority-explicitly.md) | - |
 | WLA-26-09 | Conduct and recover hierarchical multi-phase programs | backlog | [story-09-conduct-and-recover-hierarchical-multi-phase-programs](./story-09-conduct-and-recover-hierarchical-multi-phase-programs.md) | - |
 | WLA-26-10 | Integrate work and advance exact roadmap rails | backlog | [story-10-integrate-work-and-advance-exact-roadmap-rails](./story-10-integrate-work-and-advance-exact-roadmap-rails.md) | - |
@@ -112,23 +112,21 @@ roadmap-advancement acts.
 
 ## Where we are
 
-Phase open 5/12. Optional program planning, finite workflow hierarchy, and
-independent organization topology remain evidence-backed. WLA-26-05 is done:
-one authority-neutral deliberation compiler intersects an assigned workflow
-debate and council into a finite schedule/proof, and one hash-chained replay
-engine records only bounded proposal, critique, rebuttal, vote, judgment,
-meta-verdict, architect-verdict, replacement, citation, and route metadata.
-Majority, weighted, unanimous, judge, veto, tie, quorum-loss, abstention,
-preserved dissent, repair, redeliberation, and budget exhaustion are exact
-policies rather than agent improvisation. Full/sample meta-audits preserve the
-original verdict; master architects are read-only and gain no integration,
-Git, or roadmap authority. Nine deliberation fixtures cover two rounds through
-a planted between-round crash, deterministic replay with no duplicate speaker,
-minority dissent, overturn, architect repair, replacement, exhaustion, and
-corrupt/opaque-content refusals. The full matrix passed 387/387 on both Python
-floors and the fresh wheel while no-program install remains empty. WLA-26-06 is
-in progress: build the progressively disclosed, lossless visual Program and
-Workflow Studio over these shared compilers and simulations.
+Phase open 6/12. Optional planning, finite workflow hierarchy, independent
+organization topology, deliberation, and visual authoring are evidence-backed.
+WLA-26-06 is done: the additive `#/program-studio` workspace authors programs,
+workflows, and organizations through Design/Simulate/Validate/JSON/Authority
+views over the shared compilers. Graph/config round trips preserve exact config
+and semantic/document/layout hashes; direct node placement changes no authority.
+Nested subflows, bounded loops/debates, role separation, councils, meta-review,
+architect gates, scope, artifacts, verdicts, capabilities, budgets, stops, and
+seven scenario states are accessible across desktop and mobile. Guarded
+preview/fingerprint/apply changes one declared tracked policy while starting no
+runtime act or grant. Empty inventory remains healthy, `#/` remains the default,
+and the fresh wheel creates no program machinery. The matrix passed 395/395 on
+both Python floors, fresh-wheel package smoke, explorer coverage, and 52
+viewport renders. WLA-26-07 is in progress: make mechanical facts and governed
+agent judgments compose into honest, typed, freshness-bound verdict proofs.
 
 ## Active risks
 
@@ -227,6 +225,20 @@ Workflow Studio over these shared compilers and simulations.
   make architects explicitly read-only; uphold/overturn/escalate and
   approve/repair/escalate/veto govern only declared routes and never grant
   implementation, integration, Git, or roadmap authority - WLA-26-05.
+- 2026-07-22 - Add Program Studio at `#/program-studio` while keeping `#/` as
+  the ordinary no-program Workbench front door; an empty program inventory is
+  neutral and creates no setup, polling, state, or warning - WLA-26-06.
+- 2026-07-22 - Make the Studio a projection of one shared backend model and
+  compiler set, with guarded server-side mutation as the only write boundary -
+  browser rendering cannot become a second policy or validation engine -
+  WLA-26-06.
+- 2026-07-22 - Embed complete config in the graph model and prove graph/config
+  equality plus semantic, document, and layout hashes; layout remains editable
+  but cannot change executable meaning or capability - WLA-26-06.
+- 2026-07-22 - Keep Authority view explanatory and grant-free, visibly
+  separating work/verdict requests from evidence, integration, certification,
+  Git, and roadmap rails across advisory, checkpointed, and continuous modes -
+  WLA-26-06.
 - 2026-07-22 - Treat capabilities as independent granted bits with explicit
   prerequisites, not implication shortcuts; agent dispatch never inherits
   evidence, integration, certification, Git, or roadmap authority - WLA-26-01.
