@@ -85,10 +85,10 @@ is added when an external consumer asks for one.
 | `dw orchestration simulate <score> --json` | `orchestration.simulate_score` | pure scheduling waves, locks, lineage, branches, budgets, checkpoints, and terminals |
 | `dw organization list --json` | `program_organization.organization_inventory` | healthy empty inventory or direct-contained organization validation/hash summaries; pure |
 | `dw organization validate <organization> --json` | `program_organization.validate_organization` | closed role/capability/visibility/cardinality/independence/council/replacement policy plus logical feasibility diagnostics; exit 1 invalid |
-| `dw organization simulate <organization> --json` | `program_organization.simulate_organization` | logical assignment witnesses, packet policies, councils, and resource-compatible concurrency waves; pure |
+| `dw organization simulate <organization> --json` | `program_organization.simulate_organization` | logical assignment witnesses, packet policies, council aggregation/audit/budgets, and resource-compatible concurrency waves; pure |
 | `dw workflow list --json` | `program_workflow.workflow_inventory` | healthy empty inventory or contained source-aware template validation plus finite envelope/hash summaries; pure |
 | `dw workflow validate <workflow> --json` | `program_workflow.validate_workflow` | closed parameters/nodes/routes, exact nested version/hash and bounded-score references, recursion/cycle/capability/envelope diagnostics; exit 1 invalid |
-| `dw workflow simulate <workflow> --json` | `program_workflow.simulate_workflow` | namespaced hierarchy, fan waves, typed route outcomes, concrete bounded rounds, per-node/route/worst-case envelopes, source provenance, and capability consumers; pure |
+| `dw workflow simulate <workflow> --json` | `program_workflow.simulate_workflow` | namespaced hierarchy, fan waves, typed route outcomes, concrete bounded rounds, debate byte/token/route proof, per-node/route/worst-case envelopes, source provenance, and capability consumers; pure |
 | `dw program list --json` | `programs.program_inventory` | healthy empty inventory when no program is configured; otherwise contained policy validation/hashes; pure |
 | `dw program validate <program> --json` | `programs.validate_program` | exact-key policy/reference/scope/binding verdict plus source-aware diagnostics; exit 1 invalid |
 | `dw program simulate <program> --json` | `programs.simulate_program` | every roadmap candidate reason plus deterministic workflow/team/role assignment; explicitly no work/state/grant |
@@ -114,6 +114,15 @@ is added when an external consumer asks for one.
 The individual lifecycle spellings are `dw run show`, `dw run pause`,
 `dw run resume`, `dw run revoke`, and `dw run cancel`; the grouped rows above
 do not imply a combined command.
+
+The WLA-26-05 deliberation seam is currently an embedded core, not ambient CLI
+authority: `program_deliberation.compile_deliberation_plan` and
+`simulate_deliberation` are pure; `start_deliberation`,
+`claim_next_deliberation`, `record_deliberation_submission`,
+`record_deliberation_replacement`, and `replay_deliberation` operate only on a
+caller-owned exact event list and dispatch nothing. WLA-26-09 places those
+transitions under the program conductor/grant, and WLA-26-11 exposes the shared
+projection across public surfaces.
 | `dw context [project] [--compact] [--trace]` | `api.build_context_payload` | the stamped roadmap context |
 | `dw state --json` | `statefeed.build_state_feed` | the mission-control feed (`feed_schema` 1) |
 | `dw next [project] --json` | `api.next_story` | the next actionable story or `{next_story: null, parked}` |

@@ -346,6 +346,9 @@ def command_organization_simulate(args: argparse.Namespace) -> int:
         print(
             f"council\t{council['id']}\tmembers={council['member_cardinality']}"
             f"\tquorum={council['quorum']}\tjudge={council['judge']}"
+            f"\tdecision={council['decision']['method']}"
+            f"\taudit={council['audit']['mode']}"
+            f"\tmax_rounds={council['budgets']['max_rounds']}"
         )
     print("starts-work\tfalse")
     return 0
@@ -416,7 +419,9 @@ def command_workflow_simulate(args: argparse.Namespace) -> int:
     for debate in simulation["debates"]:
         print(
             f"debate\t{debate['address']}\tmax_rounds={debate['max_rounds']}"
-            f"\tjudge={debate['judge_role']}"
+            f"\tjudge={debate['judge_role']}\tquorum={debate['quorum']}"
+            f"\tartifact_tokens={debate['artifact_max_tokens']}"
+            f"\ttie={debate['tie_policy']}\tdissent={debate['dissent_policy']}"
         )
     for route in simulation["routes"]:
         print(

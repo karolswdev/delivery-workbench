@@ -125,6 +125,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw_pmo/programs.py" ] || fail "wheel omitted the pure program compiler/planner"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_workflow.py" ] || fail "wheel omitted the finite hierarchical workflow compiler"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_organization.py" ] || fail "wheel omitted the pure organization and assignment compiler"
+[ -f "$FIXTURE/.githooks/dw_pmo/program_deliberation.py" ] || fail "wheel omitted the replayable deliberation protocol core"
 [ -f "$FIXTURE/pm/orchestration/research-build-review.json" ] \
   || fail "install did not seed the ordinary orchestration preset"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
@@ -135,6 +136,9 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
   'from dw_pmo import CONDUCTOR_TICK_KIND, DRIVER_CAPABILITY_KIND, PROGRAM_KIND, PROGRAM_ORGANIZATION_KIND, PROGRAM_WORKFLOW_KIND, RUN_ACT_PREVIEW_KIND, RUN_PLAN_KIND, RUN_STREAM_KIND, RUN_SUMMARY_KIND, RUN_VIEW_KIND, SCORE_KIND, STEP_RESULT_KIND, WORK_PACKET_KIND, DriverManager, FixtureDriver, StepChild, apply_run_act, assign_organization_team, build_program_plan, build_run_act_preview, build_run_plan, build_run_view, build_step, build_work_packet, compile_organization, compile_program, compile_score_path, compile_workflow, decide_outstanding_request, maintain_outstanding_requests, organization_inventory, plan_assignment_replacement, program_inventory, read_run_stream, replay_run, run_summary_inventory, schedule_decision, simulate_organization, simulate_program, simulate_workflow, start_run, start_run_by_id, supervise_run, tick_run, validate_organization, validate_program, validate_workflow, workflow_inventory; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api, handle_mutation; assert callable(build_step); assert callable(build_program_plan) and callable(compile_program) and callable(validate_program) and callable(simulate_program) and callable(program_inventory); assert callable(compile_workflow) and callable(validate_workflow) and callable(simulate_workflow) and callable(workflow_inventory); assert callable(compile_organization) and callable(validate_organization) and callable(simulate_organization) and callable(organization_inventory) and callable(assign_organization_team) and callable(plan_assignment_replacement); assert callable(build_run_plan) and callable(start_run) and callable(replay_run); assert callable(build_work_packet) and DriverManager and FixtureDriver; assert callable(schedule_decision) and callable(tick_run) and callable(supervise_run); assert callable(build_run_act_preview) and callable(apply_run_act) and callable(build_run_view); assert callable(decide_outstanding_request) and callable(maintain_outstanding_requests); assert callable(start_run_by_id) and callable(read_run_stream) and callable(run_summary_inventory); assert CONDUCTOR_TICK_KIND == "delivery-workbench-conductor-tick"; assert DRIVER_CAPABILITY_KIND == "delivery-workbench-driver-capability"; assert PROGRAM_KIND == "delivery-workbench-program"; assert PROGRAM_ORGANIZATION_KIND == "delivery-workbench-organization"; assert PROGRAM_WORKFLOW_KIND == "delivery-workbench-workflow"; assert RUN_ACT_PREVIEW_KIND == "delivery-workbench-run-act-preview"; assert RUN_VIEW_KIND == "delivery-workbench-run-view"; assert RUN_STREAM_KIND == "delivery-workbench-run-stream"; assert RUN_SUMMARY_KIND == "delivery-workbench-run-summary-list"; assert WORK_PACKET_KIND == "delivery-workbench-work-packet"; assert RUN_PLAN_KIND == "delivery-workbench-run-plan"; assert SCORE_KIND == "delivery-workbench-orchestration"; assert STEP_RESULT_KIND == "delivery-workbench-step-result"; assert StepChild(0).started; assert {"dw_status", "dw_step", "dw_step_apply", "dw_run_plan", "dw_run_view", "dw_run_preview", "dw_run_start", "dw_run_tick", "dw_run_pause", "dw_run_resume", "dw_run_revoke", "dw_run_cancel", "dw_run_request", "dw_run_checkpoint", "dw_run_stream"} <= set(TOOLS); assert callable(handle_api) and callable(handle_mutation)' \
   || fail "packaged core and MCP/HTTP adapters do not expose the guided operations"
+PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
+  'from dw_pmo import DELIBERATION_PLAN_KIND, claim_next_deliberation, compile_deliberation_plan, record_deliberation_replacement, record_deliberation_submission, replay_deliberation, simulate_deliberation, start_deliberation; assert DELIBERATION_PLAN_KIND == "delivery-workbench-deliberation-plan"; assert all(callable(item) for item in (compile_deliberation_plan, simulate_deliberation, start_deliberation, claim_next_deliberation, record_deliberation_submission, record_deliberation_replacement, replay_deliberation))' \
+  || fail "packaged core does not expose the bounded deliberation protocol"
 (cd "$FIXTURE" && ./.githooks/dw orchestration validate research-build-review --json) \
   | grep -q '"valid": true' \
   || fail "packaged orchestration preset did not validate"
@@ -154,7 +158,7 @@ cp "$PAYLOAD_ORGANIZATIONS"/*.json "$FIXTURE/pm/organizations/"
   | grep -q '"valid": true' \
   || fail "packaged autonomous organization template did not validate"
 (cd "$FIXTURE" && ./.githooks/dw organization simulate autonomous-story-cell --json) \
-  | grep -q '"creates_grant": false.*"starts_work": false.*"writes_run_state": false' \
+  | grep -q '"audit":.*"decision":.*"creates_grant": false.*"starts_work": false.*"writes_run_state": false' \
   || fail "packaged organization simulation was not pure"
 (cd "$FIXTURE" && ./.githooks/dw organization --help) \
   | grep -q 'list,validate,simulate' \
@@ -170,7 +174,7 @@ for template in docs-only research-build-verify architect-debate-delivery; do
     || fail "packaged workflow template did not validate: $template"
 done
 (cd "$FIXTURE" && ./.githooks/dw workflow simulate architect-debate-delivery --json) \
-  | grep -q '"creates_grant": false.*"loops":.*"starts_work": false' \
+  | grep -q '"creates_grant": false.*"artifact_max_tokens":.*"verdict_routes":.*"loops":.*"starts_work": false' \
   || fail "packaged hierarchical workflow simulation was not finite and pure"
 (cd "$FIXTURE" && ./.githooks/dw workflow --help) \
   | grep -q 'list,validate,simulate' \

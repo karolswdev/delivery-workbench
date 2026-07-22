@@ -59,13 +59,14 @@
         }
       },
       "participants": [
-        "proposer",
+        "researcher",
         "critic"
       ],
       "judge_role": "judge",
       "max_rounds": 2,
       "quorum": 2,
       "artifact_max_bytes": 30000,
+      "artifact_max_tokens": 4000,
       "round_timeout_seconds": 1800,
       "tie_policy": "judge",
       "dissent_policy": "preserve",
@@ -73,9 +74,17 @@
         "kind": "node",
         "target": "delivery"
       },
+      "on_repair": {
+        "kind": "action",
+        "target": "block"
+      },
       "on_dissent": {
         "kind": "action",
         "target": "checkpoint"
+      },
+      "on_quorum_lost": {
+        "kind": "action",
+        "target": "escalate"
       },
       "on_exhausted": {
         "kind": "action",

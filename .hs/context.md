@@ -7,7 +7,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 ### work-log-automation
 
 - Current phase: 26 (phase-26-autonomous-delivery-programs)
-- Next story: WLA-26-05 — Run debates, councils, and meta-verification [in-progress]
+- Next story: WLA-26-06 — Build the visual program and workflow studio [in-progress]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->
