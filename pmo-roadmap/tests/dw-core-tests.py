@@ -9749,8 +9749,8 @@ class ProgramOrganizationTest(unittest.TestCase):
     def test_council_cardinality_resources_and_visibility_are_explicit(self):
         assignment = self.assign()
         council = assignment["councils"][0]
-        self.assertEqual(council["member_cardinality"], 3)
-        self.assertEqual(len(council["assigned_principals"]), 3)
+        self.assertEqual(council["member_cardinality"], 4)
+        self.assertEqual(len(council["assigned_principals"]), 4)
         self.assertTrue(council["quorum_satisfiable"])
         conflicts = assignment["resource_plan"]["conflicts"]
         self.assertTrue(any(
@@ -9790,7 +9790,7 @@ class ProgramOrganizationTest(unittest.TestCase):
         agents = {item["id"]: item for item in broken["agents"]}
         agents["verifier-primary"]["profile"] = "builder-primary"
         agents["verifier-primary"]["workspace_domain"] = "builder-primary"
-        broken["councils"][0]["quorum"] = 4
+        broken["councils"][0]["quorum"] = 5
         verifier = next(
             role for role in broken["teams"][0]["roles"]
             if role["id"] == "verifier"
@@ -9891,6 +9891,601 @@ class ProgramOrganizationTest(unittest.TestCase):
         self.assertTrue(inventory["healthy"])
         self.assertEqual(inventory["organizations"], [])
         self.assertEqual(before, list(empty.rglob("*")))
+
+
+class ProgramDeliberationTest(unittest.TestCase):
+    """WLA-26-05: bounded councils, replay, meta-audit, and architecture."""
+
+    def setUp(self):
+        import dw_pmo.program_deliberation as deliberation_core
+        import dw_pmo.program_organization as organization_core
+        import dw_pmo.program_workflow as workflow_core
+
+        self.core = deliberation_core
+        self.organization_core = organization_core
+        self.workflow_core = workflow_core
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-deliberation-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        workflow_dir = self.root / "pm/workflows"
+        score_dir = self.root / "pm/orchestration"
+        workflow_dir.mkdir(parents=True)
+        score_dir.mkdir(parents=True)
+        for source in (TESTS_DIR.parent / "templates/workflows").glob("*.json"):
+            shutil.copy2(source, workflow_dir / source.name)
+        shutil.copy2(
+            TESTS_DIR.parent
+            / "templates/orchestration/research-build-review.json",
+            score_dir / "research-build-review.json",
+        )
+        self.organization = json.loads(
+            (
+                TESTS_DIR.parent
+                / "templates/organizations/autonomous-story-cell.json"
+            ).read_text(encoding="utf-8")
+        )
+        # The default runtime fixture is a two-of-three majority with a full
+        # audit. Other tests compile the weighted/unanimous/judge variants.
+        decision = self.organization["councils"][0]["decision"]
+        decision["method"] = "majority"
+        decision["threshold"] = 2
+        decision["veto_roles"] = []
+        self.workflow = self.workflow_core.compile_workflow(
+            self.root, "architect-debate-delivery"
+        )
+
+    @staticmethod
+    def clone(value):
+        return json.loads(json.dumps(value))
+
+    def config(self, organization=None):
+        profiles = {}
+        for agent in (organization or self.organization)["agents"]:
+            writer = "workspace:write" in agent["capability_ceiling"]
+            profiles[agent["profile"]] = {
+                "adapter": "fixture",
+                "adapter_version": "fixture-deliberation-v1",
+                "principal": agent["profile"],
+                "available": True,
+                "max_concurrency": agent["max_concurrency"],
+                "capabilities": (
+                    ["repository-read", "repository-write"]
+                    if writer else ["repository-read"]
+                ),
+                "workspace_modes": (
+                    ["isolated-worktree"] if writer else ["read-only"]
+                ),
+            }
+        return {
+            "kind": "delivery-workbench-driver-config",
+            "schema_version": 1,
+            "workspace_root": None,
+            "profiles": profiles,
+        }
+
+    def assignment(self, organization=None):
+        raw = organization or self.organization
+        compiled = self.organization_core.compile_organization(self.root, raw)
+        return self.organization_core.assign_organization_team(
+            compiled,
+            "story-cell",
+            driver_config=self.config(raw),
+            policy_bundle_hash="sha256:" + "7" * 64,
+            story_id="DM-1-02",
+            workflow_address="program/demo/phase/1/story/DM-1-02/workflow/design",
+            program_capabilities=[
+                "agent:dispatch", "workspace:write", "certification:verdict",
+            ],
+            workflow=None,
+        )
+
+    def architect_policy(self):
+        return {
+            "boundary": "phase",
+            "rubric": {
+                "slug": "phase-architecture",
+                "semantic_hash": "sha256:" + "4" * 64,
+                "criteria": ["cohesion", "boundary-safety"],
+            },
+            "evidence": [{
+                "kind": "markdown",
+                "hash": "sha256:" + "5" * 64,
+                "ref": "artifacts/phase-summary.md",
+            }],
+            "routes": {
+                "approve": "retain",
+                "repair": "repair",
+                "escalate": "escalate",
+                "veto": "block",
+            },
+        }
+
+    def plan(self, organization=None, workflow=None, *, architect=False):
+        assignment = self.assignment(organization)
+        self.assertTrue(assignment["applicable"], assignment["issues"])
+        plan = self.core.compile_deliberation_plan(
+            workflow or self.workflow,
+            assignment,
+            council_id="debate-council",
+            program_run_id="program-fixture",
+            phase=1,
+            story="DM-1-02",
+            rubric={
+                "slug": "design-quality",
+                "semantic_hash": "sha256:" + "1" * 64,
+                "criteria": ["coherent", "bounded", "evidenced"],
+            },
+            subject={
+                "kind": "story-design",
+                "hash": "sha256:" + "2" * 64,
+            },
+            evidence=[{
+                "kind": "markdown",
+                "hash": "sha256:" + "3" * 64,
+                "ref": "artifacts/architect-frame.md",
+            }],
+            debate_address="design-council",
+            architect=self.architect_policy() if architect else None,
+        )
+        return plan, assignment
+
+    def submission(self, claim, ordinal, *, vote=None, result=None):
+        stage = claim["stage"]
+        kind = {
+            "proposal": "proposal",
+            "critique": "critique",
+            "rebuttal": "rebuttal",
+            "judgment": self.core.COUNCIL_VERDICT_KIND,
+            "meta-audit": self.core.META_VERDICT_KIND,
+            "architect-review": self.core.ARCHITECT_VERDICT_KIND,
+        }[stage]
+        return {
+            "kind": kind,
+            "content_hash": "sha256:" + format(ordinal, "064x"),
+            "content_ref": f"artifacts/receipt-{ordinal}.json",
+            "bytes": 200,
+            "tokens": 20,
+            "citations": ["evidence:architect-frame"],
+            "vote": vote,
+            "result": result,
+            "rationale": (
+                f"Bounded governed rationale for {result}."
+                if result is not None else None
+            ),
+        }
+
+    def drive(
+        self,
+        plan,
+        events,
+        *,
+        votes,
+        judgments,
+        meta="uphold",
+        architect="approve",
+    ):
+        vote_offsets = {}
+        ordinal = len(events)
+        while True:
+            projection = self.core.replay_deliberation(plan, events)
+            if projection["state"] == "complete":
+                return events, projection
+            if projection["active_claim"] is None:
+                claimed = self.core.claim_next_deliberation(
+                    plan, events, "2026-07-22T00:01:00Z"
+                )
+                events = claimed["events"]
+                claim = claimed["claim"]
+            else:
+                claim = projection["active_claim"]
+            ordinal += 1
+            vote = None
+            result = None
+            if claim["stage"] == "rebuttal":
+                round_number = claim["round"]
+                offset = vote_offsets.get(round_number, 0)
+                vote = votes[round_number][offset]
+                vote_offsets[round_number] = offset + 1
+            elif claim["stage"] == "judgment":
+                result = judgments[claim["round"]]
+            elif claim["stage"] == "meta-audit":
+                result = meta
+            elif claim["stage"] == "architect-review":
+                result = architect
+            recorded = self.core.record_deliberation_submission(
+                plan,
+                events,
+                claim["claim_id"],
+                self.submission(claim, ordinal, vote=vote, result=result),
+                "2026-07-22T00:01:00Z",
+            )
+            events = recorded["events"]
+
+    def test_compile_and_simulate_prove_every_finite_council_bound(self):
+        plan, _assignment = self.plan(architect=True)
+        simulation = self.core.simulate_deliberation(plan)
+        self.assertTrue(simulation["proof"]["finite"])
+        self.assertEqual(simulation["maximum"]["rounds"], 2)
+        self.assertEqual(simulation["maximum"]["speaker_slots"], 3)
+        self.assertEqual(simulation["maximum"]["starts_per_round"], 10)
+        self.assertEqual(simulation["maximum"]["agent_starts"], 22)
+        self.assertEqual(simulation["maximum"]["artifacts"], 22)
+        self.assertEqual(simulation["maximum"]["tokens"], 88000)
+        self.assertEqual(simulation["maximum"]["output_bytes"], 660000)
+        self.assertEqual(simulation["maximum"]["wall_seconds"], 7200)
+        self.assertEqual(simulation["quorum"], 3)
+        self.assertEqual(simulation["decision"]["method"], "majority")
+        self.assertEqual(
+            simulation["proof"]["verdict_effects"]["repair"],
+            "follows-declared-repair-route",
+        )
+        self.assertFalse(simulation["starts_work"])
+        self.assertFalse(simulation["dispatches_agents"])
+        self.assertFalse(simulation["writes_run_state"])
+        self.assertEqual(
+            {item["stage"] for item in simulation["round_schedule"]},
+            {"proposal", "critique", "rebuttal", "judgment"},
+        )
+
+    def test_two_round_restart_preserves_dissent_and_runs_meta_then_architect(self):
+        plan, _assignment = self.plan(architect=True)
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        first = self.core.claim_next_deliberation(
+            plan, events, "2026-07-22T00:01:00Z"
+        )
+        events = first["events"]
+        # A crash after the claim recovers the same claim instead of starting
+        # the same speaker twice.
+        restarted = json.loads(json.dumps(events))
+        duplicate = self.core.claim_next_deliberation(
+            plan, restarted, "2026-07-22T00:01:00Z"
+        )
+        self.assertFalse(duplicate["appended"])
+        self.assertEqual(duplicate["events"], restarted)
+        self.assertEqual(duplicate["claim"], first["claim"])
+
+        # Finish round one, then plant the required crash exactly between
+        # rounds. Replay must claim the first round-two speaker once.
+        events = restarted
+        vote_offset = 0
+        ordinal = len(events)
+        while not self.core.replay_deliberation(plan, events)["council_verdicts"]:
+            projection = self.core.replay_deliberation(plan, events)
+            if projection["active_claim"] is None:
+                claimed = self.core.claim_next_deliberation(
+                    plan, events, "2026-07-22T00:01:00Z"
+                )
+                events = claimed["events"]
+                claim = claimed["claim"]
+            else:
+                claim = projection["active_claim"]
+            ordinal += 1
+            vote = None
+            result = None
+            if claim["stage"] == "rebuttal":
+                vote = ["advance", "repair", "abstain"][vote_offset]
+                vote_offset += 1
+            elif claim["stage"] == "judgment":
+                result = "redeliberate"
+            events = self.core.record_deliberation_submission(
+                plan,
+                events,
+                claim["claim_id"],
+                self.submission(claim, ordinal, vote=vote, result=result),
+                "2026-07-22T00:01:00Z",
+            )["events"]
+        between_rounds = json.loads(json.dumps(events))
+        round_two = self.core.claim_next_deliberation(
+            plan, between_rounds, "2026-07-22T00:01:00Z"
+        )
+        same_round_two = self.core.claim_next_deliberation(
+            plan, round_two["events"], "2026-07-22T00:01:00Z"
+        )
+        self.assertFalse(same_round_two["appended"])
+        self.assertEqual(same_round_two["claim"], round_two["claim"])
+        self.assertEqual(round_two["claim"]["round"], 2)
+
+        events, projection = self.drive(
+            plan,
+            round_two["events"],
+            votes={
+                2: ["advance", "advance", "repair"],
+            },
+            judgments={2: "advance"},
+            meta="uphold",
+            architect="repair",
+        )
+        self.assertEqual(len(projection["rounds"]), 2)
+        self.assertEqual(projection["council_verdicts"][0]["result"], "redeliberate")
+        self.assertEqual(projection["council_verdicts"][1]["result"], "advance")
+        self.assertEqual(len(projection["dissent"]), 1)
+        self.assertEqual(len(projection["abstentions"]), 1)
+        self.assertEqual(projection["meta_verdict"]["result"], "uphold")
+        self.assertTrue(
+            projection["meta_verdict"]["aggregation"]["original_verdict_preserved"]
+        )
+        self.assertEqual(
+            len(projection["meta_verdict"]["aggregation"]["audited_receipts"]),
+            4,
+        )
+        self.assertEqual(projection["architect_verdict"]["result"], "repair")
+        self.assertFalse(
+            projection["architect_verdict"]["aggregation"]["authority"]["may_commit"]
+        )
+        self.assertEqual(
+            projection["route"], {"kind": "action", "target": "repair"}
+        )
+        self.assertEqual(projection["budget"]["agent_starts"], 22)
+        self.assertEqual(
+            self.core.replay_deliberation(plan, json.loads(json.dumps(events))),
+            projection,
+        )
+
+    def test_weighted_vote_and_veto_are_deterministic_and_keep_minorities(self):
+        weighted = self.clone(self.organization)
+        decision = weighted["councils"][0]["decision"]
+        decision.update({
+            "method": "weighted",
+            "weights": {"researcher": 3, "critic": 1, "judge": 1},
+            "threshold": 3,
+            "veto_roles": [],
+        })
+        weighted["councils"][0]["audit"].update({"mode": "none", "sample_size": 0})
+        plan, _assignment = self.plan(weighted)
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        _events, projection = self.drive(
+            plan,
+            events,
+            votes={1: ["advance", "repair", "repair"]},
+            judgments={1: "advance"},
+        )
+        verdict = projection["council_verdicts"][0]
+        self.assertEqual(verdict["aggregation"]["advance_weight"], 3)
+        self.assertEqual(verdict["aggregation"]["repair_weight"], 2)
+        self.assertEqual(len(verdict["aggregation"]["dissent"]), 2)
+        self.assertEqual(projection["final_result"], "advance")
+
+        vetoed = self.clone(weighted)
+        vetoed["councils"][0]["decision"]["veto_roles"] = ["critic"]
+        plan, _assignment = self.plan(vetoed)
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        _events, projection = self.drive(
+            plan,
+            events,
+            votes={1: ["advance", "repair", "repair"]},
+            judgments={1: "repair"},
+        )
+        self.assertEqual(
+            projection["council_verdicts"][0]["aggregation"]["basis"], "veto"
+        )
+        self.assertEqual(
+            projection["route"], {"kind": "action", "target": "block"}
+        )
+
+    def test_tie_checkpoint_and_quorum_loss_take_only_declared_routes(self):
+        no_audit = self.clone(self.organization)
+        no_audit["councils"][0]["audit"].update({"mode": "none", "sample_size": 0})
+        workflow_raw = json.loads(
+            (self.root / "pm/workflows/architect-debate-delivery.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        workflow_raw["nodes"][1]["tie_policy"] = "checkpoint"
+        workflow = self.workflow_core.compile_workflow(self.root, workflow_raw)
+        plan, _assignment = self.plan(no_audit, workflow)
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        _events, tied = self.drive(
+            plan,
+            events,
+            votes={1: ["advance", "repair", "abstain"]},
+            judgments={1: "checkpoint"},
+        )
+        self.assertEqual(tied["route"], {"kind": "action", "target": "checkpoint"})
+
+        plan, _assignment = self.plan(no_audit)
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        _events, lost = self.drive(
+            plan,
+            events,
+            votes={1: ["abstain", "abstain", "abstain"]},
+            judgments={1: "quorum-lost"},
+        )
+        self.assertEqual(lost["final_result"], "quorum-lost")
+        self.assertEqual(lost["route"], {"kind": "action", "target": "escalate"})
+        self.assertEqual(
+            lost["council_verdicts"][0]["aggregation"]["quorum_observed"], 1
+        )
+
+    def test_meta_overturn_never_rewrites_the_original_council_verdict(self):
+        plan, _assignment = self.plan()
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        _events, projection = self.drive(
+            plan,
+            events,
+            votes={1: ["advance", "advance", "advance"]},
+            judgments={1: "advance"},
+            meta="overturn",
+        )
+        self.assertEqual(projection["council_verdicts"][0]["result"], "advance")
+        self.assertEqual(projection["meta_verdict"]["result"], "overturn")
+        self.assertTrue(
+            projection["meta_verdict"]["aggregation"]["original_verdict_preserved"]
+        )
+        self.assertFalse(
+            projection["meta_verdict"]["aggregation"]["converts_judgment_to_fact"]
+        )
+        self.assertEqual(
+            projection["route"], {"kind": "action", "target": "repair"}
+        )
+
+    def test_budget_exhaustion_is_terminal_and_uses_compiled_exhaustion_route(self):
+        plan, _assignment = self.plan()
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        exhausted = self.core.claim_next_deliberation(
+            plan, events, "2026-07-22T04:00:01Z"
+        )
+        projection = exhausted["projection"]
+        self.assertEqual(projection["state"], "complete")
+        self.assertEqual(projection["final_result"], "exhausted")
+        self.assertEqual(
+            projection["route"], {"kind": "action", "target": "escalate"}
+        )
+        self.assertEqual(projection["budget_exhaustion"]["counter"], "wall_seconds")
+        again = self.core.claim_next_deliberation(
+            plan, exhausted["events"], "2026-07-22T04:00:02Z"
+        )
+        self.assertFalse(again["appended"])
+
+    def test_replacement_receipt_keeps_dissent_and_invalidates_no_completed_vote(self):
+        organization = self.clone(self.organization)
+        primary = next(
+            item for item in organization["agents"] if item["id"] == "researcher"
+        )
+        backup = self.clone(primary)
+        backup.update({
+            "id": "researcher-backup",
+            "profile": "researcher-backup",
+            "workspace_domain": "researcher-backup",
+        })
+        organization["agents"].append(backup)
+        organization["pools"].append({
+            "id": "researcher-fallbacks", "agents": ["researcher-backup"],
+        })
+        role = next(
+            item for item in organization["teams"][0]["roles"]
+            if item["id"] == "researcher"
+        )
+        role["replacement"].update({
+            "max_replacements": 1,
+            "fallback_pools": ["researcher-fallbacks"],
+        })
+        plan, assignment = self.plan(organization)
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        # Stop after the council judgment, before the required meta-audit.
+        ordinal = 0
+        vote_offset = 0
+        while True:
+            projection = self.core.replay_deliberation(plan, events)
+            if projection["council_verdicts"]:
+                break
+            claimed = self.core.claim_next_deliberation(
+                plan, events, "2026-07-22T00:01:00Z"
+            )
+            events = claimed["events"]
+            claim = claimed["claim"]
+            ordinal += 1
+            vote = None
+            result = None
+            if claim["stage"] == "rebuttal":
+                vote = ["advance", "advance", "repair"][vote_offset]
+                vote_offset += 1
+            elif claim["stage"] == "judgment":
+                result = "advance"
+            events = self.core.record_deliberation_submission(
+                plan,
+                events,
+                claim["claim_id"],
+                self.submission(claim, ordinal, vote=vote, result=result),
+                "2026-07-22T00:01:00Z",
+            )["events"]
+        self.assertEqual(len(projection["dissent"]), 1)
+        replacement = self.organization_core.plan_assignment_replacement(
+            assignment, "researcher", "lost"
+        )
+        self.assertTrue(replacement["applicable"], replacement["issues"])
+        recorded = self.core.record_deliberation_replacement(
+            plan, events, replacement, "2026-07-22T00:01:00Z"
+        )
+        replayed = recorded["projection"]
+        self.assertEqual(len(replayed["dissent"]), 1)
+        self.assertEqual(len(replayed["replacements"]), 1)
+        self.assertEqual(
+            replayed["replacements"][0]["dissent_before"],
+            [replayed["dissent"][0]["receipt_hash"]],
+        )
+        self.assertIsNone(replayed["replacements"][0]["invalidated_claim_id"])
+
+    def test_closed_receipts_refuse_transcripts_and_replay_detects_corruption(self):
+        plan, _assignment = self.plan()
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        claimed = self.core.claim_next_deliberation(
+            plan, events, "2026-07-22T00:01:00Z"
+        )
+        submission = self.submission(claimed["claim"], 1)
+        submission["transport_transcript"] = "opaque chat"
+        with self.assertRaises(self.core.DeliberationError) as refused:
+            self.core.record_deliberation_submission(
+                plan,
+                claimed["events"],
+                claimed["claim"]["claim_id"],
+                submission,
+                "2026-07-22T00:01:00Z",
+            )
+        self.assertIn("unknown-key", str(refused.exception))
+        self.assertFalse(
+            claimed["projection"]["durable_content"]["transport_transcripts"]
+        )
+
+        valid = self.submission(claimed["claim"], 1)
+        recorded = self.core.record_deliberation_submission(
+            plan,
+            claimed["events"],
+            claimed["claim"]["claim_id"],
+            valid,
+            "2026-07-22T00:01:00Z",
+        )
+        repeated = self.core.record_deliberation_submission(
+            plan,
+            recorded["events"],
+            claimed["claim"]["claim_id"],
+            valid,
+            "2026-07-22T00:01:00Z",
+        )
+        self.assertFalse(repeated["appended"])
+        changed = self.clone(valid)
+        changed["content_hash"] = "sha256:" + "9" * 64
+        with self.assertRaises(self.core.DeliberationError) as conflict:
+            self.core.record_deliberation_submission(
+                plan,
+                recorded["events"],
+                claimed["claim"]["claim_id"],
+                changed,
+                "2026-07-22T00:01:00Z",
+            )
+        self.assertIn("idempotency-conflict", str(conflict.exception))
+
+        corrupt = self.clone(claimed["events"])
+        corrupt[-1]["detail"]["role"] = "invented-role"
+        with self.assertRaises(self.core.DeliberationError) as invalid:
+            self.core.replay_deliberation(plan, corrupt)
+        self.assertIn("ledger-corrupt", str(invalid.exception))
+
+    def test_council_policy_is_closed_and_budget_mismatch_refuses_plan(self):
+        for method, threshold in (
+            ("majority", 2), ("weighted", 2), ("unanimous", 3), ("judge", 1),
+        ):
+            raw = self.clone(self.organization)
+            raw["councils"][0]["decision"].update({
+                "method": method, "threshold": threshold,
+            })
+            compiled = self.organization_core.compile_organization(self.root, raw)
+            self.assertEqual(
+                compiled["organization"]["councils"][0]["decision"]["method"],
+                method,
+            )
+
+        unknown = self.clone(self.organization)
+        unknown["councils"][0]["opaque_chat"] = True
+        validation = self.organization_core.validate_organization(self.root, unknown)
+        self.assertIn(
+            "unknown-key", {item["code"] for item in validation["diagnostics"]}
+        )
+
+        too_small = self.clone(self.organization)
+        too_small["councils"][0]["budgets"]["max_tokens"] = 1
+        with self.assertRaises(self.core.DeliberationError) as refused:
+            self.plan(too_small)
+        self.assertIn("council-budget-exceeded", str(refused.exception))
 
 
 class ProgramWorkflowTest(unittest.TestCase):

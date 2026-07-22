@@ -271,6 +271,24 @@ from .program_organization import (
     validate_workflow_team,
     workflow_role_requirements,
 )
+from .program_deliberation import (
+    ARCHITECT_VERDICT_KIND,
+    COUNCIL_VERDICT_KIND,
+    DELIBERATION_EVENT_KIND,
+    DELIBERATION_PLAN_KIND,
+    DELIBERATION_PROJECTION_KIND,
+    DELIBERATION_SCHEMA_VERSION,
+    DELIBERATION_SIMULATION_KIND,
+    META_VERDICT_KIND,
+    DeliberationError,
+    claim_next_deliberation,
+    compile_deliberation_plan,
+    record_deliberation_replacement,
+    record_deliberation_submission,
+    replay_deliberation,
+    simulate_deliberation,
+    start_deliberation,
+)
 from .orchestration_edit import (
     SCORE_MUTATION_PREVIEW_KIND,
     SCORE_MUTATION_RESULT_KIND,

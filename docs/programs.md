@@ -238,8 +238,10 @@ An organization contains:
   allowed context channels/expression kinds, readable/writable artifact kinds,
   output/verdict schema, concurrency/resource groups, request/judgment edges,
   and ordered independence rules;
-- `councils` with member role slots, distinct-principal quorum, judge, and
-  optional meta-verifier; and
+- `councils` with member role slots, distinct-principal quorum, judge, optional
+  meta-verifier, majority/weighted/unanimous/judge aggregation, role weights,
+  vetoes, sampling/full-audit policy, and finite round/start/artifact/byte/token/
+  wall ceilings; and
 - per-role replacement/escalation rules with closed eligible reasons, finite
   replacement counts, exact fallback pools, exhaustion route, and mandatory
   history preservation for judgment roles.
@@ -405,10 +407,11 @@ and verdict hashes, never hidden reviewer conversation. A fresh verification
 round evaluates the post-repair subject; an older green verdict cannot cover a
 new diff.
 
-A debate is not free-form group chat. Each round emits ordered, bounded
-`proposal`, `critique`, `rebuttal`, and `judgment` artifacts from declared role
-slots. Quorum counts eligible non-abstaining principals, the judge applies an
-exact rubric, dissent is preserved, and the configured tie/exhaustion route is
+A debate is not free-form group chat. Each round emits ordered, byte- and
+token-bounded `proposal`, `critique`, `rebuttal`, and `judgment` artifacts from
+declared role slots. Quorum counts eligible non-abstaining principals, the
+judge applies an exact rubric, dissent is preserved, and the separately
+declared advance, repair, dissent, quorum-loss, tie, and exhaustion route is
 followed. A council may recommend; it gains no integration or roadmap authority
 from reaching consensus.
 
@@ -473,8 +476,9 @@ capability ceiling. A child capability outside that ceiling is
 `capability-smuggling`. `loop` adds a named purpose, explicit `max_rounds`,
 typed `until`, exact carried artifacts, success route, and exhaustion route;
 its body is a separate acyclic subflow. `debate` declares distinct speaker and
-judge roles, round ceiling, quorum, artifact/time bounds, tie/dissent policy,
-and consensus/dissent/exhaustion routes. Missing bounds, reference recursion,
+judge roles, round ceiling, quorum, artifact byte/token/time bounds,
+tie/dissent policy, and advance/repair/dissent/quorum-loss/exhaustion routes.
+Missing bounds, reference recursion,
 backward routes, impossible quorum, and a finite envelope above compiler or
 program ceilings refuse before a plan exists.
 
@@ -562,6 +566,63 @@ invalidate outstanding work/verdicts, and route exhaustion explicitly.
 The wheel ships one optional `autonomous-story-cell` organization example but
 install/update never creates `pm/organizations/`. Adopting or saving that file
 is an explicit policy act, just like adopting a workflow or program.
+
+## Bounded deliberation protocol
+
+### Delivered council execution core (WLA-26-05)
+
+`compile_deliberation_plan` now intersects one compiled workflow debate with
+one already-resolved organization assignment and council. Its immutable proof
+enumerates every round/stage/role-slot address and the maximum rounds, speakers,
+agent starts, artifacts, output bytes, tokens, and wall time; binds the exact
+rubric, subject, evidence receipts, principals, assignment generations,
+quorum, aggregation, tie/dissent rules, audit mode, architect boundary, and
+every possible route; and refuses a workflow/council mismatch, insufficient
+principals, writable judge/auditor, missing visibility, or any maximum above
+the narrower council ceiling. `simulate_deliberation` renders that same proof
+without state or work. Workflow and organization simulation also expose the
+underlying token/routes and council decision/audit/budget policy.
+
+The authority-neutral transition core is
+`start_deliberation` → `claim_next_deliberation` →
+`record_deliberation_submission`, with `replay_deliberation` as the truth
+projection. It appends exact hash-chained `protocol_started`, `speaker_claimed`,
+`artifact_recorded`, `member_replaced`, and `budget_exhausted` events to a
+caller-owned event list. A claim is deterministic over protocol, complete
+round/stage/role-slot address, assignment generation, and bound principal.
+Restart returns the unresolved claim; an exact repeated receipt is idempotent;
+a different receipt conflicts. The module starts no driver, writes no run
+store, creates no grant, and mutates no repository or roadmap. WLA-26-09 can
+place these exact transitions behind program-ledger claims without inventing
+new council semantics.
+
+Only closed artifact receipts are durable. Proposal, critique, and rebuttal
+records carry content hash/reference, bounded byte/token counts, and citations;
+the rebuttal also carries one `advance | repair | abstain` vote. The judgment
+records every distinct-principal vote receipt, weight/count, abstention,
+duplicate-principal exclusion, veto, quorum fact, allowed result, concise judge
+rationale, dissent, and resulting route. Artifact/prompt bodies, transport
+transcripts, and private reasoning are neither accepted nor required state.
+Replacement keeps old/new generations, invalidated claim, earlier verdict
+lineage, and dissent.
+
+Council aggregation is closed to `majority | weighted | unanimous | judge`.
+The judge can choose only a computed allowed result; a tie can invoke the
+declared judge, dissent, or checkpoint policy; redeliberation consumes one
+precompiled round and becomes exhaustion at the ceiling. Preserved minority
+dissent remains visible even when the declared majority/weight result may
+advance. Quorum loss, veto, repair, checkpoint, and exhaustion can never fall
+through to a green route.
+
+An enabled sampling or full meta-audit claim contains the exact rubric,
+evidence receipts, original vote/judgment lineage, and deterministic audited
+receipt set. The independent read-only meta-verifier emits only `uphold |
+overturn | escalate`; its receipt retains the original council verdict and
+cannot write implementation or relabel judgment as mechanical fact. An
+optional story/phase master-architect claim similarly sees only declared
+cross-boundary artifacts and emits `approve | repair | escalate | veto`. Its
+packet explicitly denies implementation, integration, commit, push, and
+roadmap authority; `approve` merely retains the already-governed route.
 
 ## Verdict taxonomy and quality gates
 

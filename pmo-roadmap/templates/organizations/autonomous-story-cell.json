@@ -389,11 +389,35 @@
   "councils": [
     {
       "id": "debate-council",
-      "members": ["critic", "judge"],
+      "members": ["researcher", "critic", "judge"],
       "judge": "judge",
       "quorum": 3,
       "meta_verifier": "meta-verifier",
-      "distinct_principals": true
+      "distinct_principals": true,
+      "decision": {
+        "method": "unanimous",
+        "weights": {
+          "researcher": 1,
+          "critic": 1,
+          "judge": 1
+        },
+        "threshold": 3,
+        "veto_roles": ["judge"]
+      },
+      "audit": {
+        "mode": "full",
+        "sample_size": 4,
+        "on_overturn": "repair",
+        "on_escalate": "escalate"
+      },
+      "budgets": {
+        "max_rounds": 4,
+        "max_speaker_starts": 64,
+        "max_artifacts": 64,
+        "max_output_bytes": 5000000,
+        "max_tokens": 100000,
+        "max_wall_seconds": 14400
+      }
     }
   ],
   "layout": {}

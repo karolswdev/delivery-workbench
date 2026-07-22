@@ -101,7 +101,39 @@ _REPLACEMENT_KEYS = {
 }
 _COUNCIL_KEYS = {
     "id", "members", "judge", "quorum", "meta_verifier",
+    "distinct_principals", "decision", "audit", "budgets",
+}
+_COUNCIL_REQUIRED_KEYS = {
+    "id", "members", "judge", "quorum", "meta_verifier",
     "distinct_principals",
+}
+_COUNCIL_DECISION_KEYS = {"method", "weights", "threshold", "veto_roles"}
+_COUNCIL_AUDIT_KEYS = {
+    "mode", "sample_size", "on_overturn", "on_escalate",
+}
+_COUNCIL_BUDGET_KEYS = {
+    "max_rounds", "max_speaker_starts", "max_artifacts",
+    "max_output_bytes", "max_tokens", "max_wall_seconds",
+}
+COUNCIL_DECISION_METHODS = ("majority", "weighted", "unanimous", "judge")
+COUNCIL_AUDIT_MODES = ("none", "sample", "full")
+COUNCIL_RESULT_ROUTES = ("repair", "escalate", "block", "checkpoint", "abort")
+
+_COUNCIL_BUDGET_DEFAULTS = {
+    "max_rounds": 20,
+    "max_speaker_starts": 2_048,
+    "max_artifacts": 2_048,
+    "max_output_bytes": 100_000_000,
+    "max_tokens": 10_000_000,
+    "max_wall_seconds": 1_728_000,
+}
+_COUNCIL_BUDGET_LIMITS = {
+    "max_rounds": 100,
+    "max_speaker_starts": 100_000,
+    "max_artifacts": 100_000,
+    "max_output_bytes": 10_000_000_000,
+    "max_tokens": 1_000_000_000,
+    "max_wall_seconds": 31_536_000,
 }
 
 _MAX_AGENTS = 128
@@ -645,7 +677,7 @@ class _Compiler:
             if not isinstance(raw, dict):
                 self.diag(pointer, "wrong-type", "council must be an object", "provide a council object")
                 continue
-            self.exact_keys(raw, _COUNCIL_KEYS, pointer, _COUNCIL_KEYS)
+            self.exact_keys(raw, _COUNCIL_KEYS, pointer, _COUNCIL_REQUIRED_KEYS)
             council_id = self.string(raw.get("id"), f"{pointer}/id", pattern=_SAFE_ID_RE)
             if council_id in ids:
                 self.diag(f"{pointer}/id", "duplicate-id", f"duplicate council id {council_id!r}", "use unique ids")
@@ -674,6 +706,99 @@ class _Compiler:
             distinct = raw.get("distinct_principals")
             if distinct is not True:
                 self.diag(f"{pointer}/distinct_principals", "duplicate-principal", "council quorum must require distinct principals", "set distinct_principals to true")
+
+            decision_raw = raw.get("decision", {})
+            if not isinstance(decision_raw, dict):
+                self.diag(f"{pointer}/decision", "wrong-type", "council decision policy must be an object", "declare a closed decision policy")
+                decision_raw = {}
+            self.exact_keys(decision_raw, _COUNCIL_DECISION_KEYS, f"{pointer}/decision")
+            method = decision_raw.get("method", "majority")
+            if method not in COUNCIL_DECISION_METHODS:
+                self.diag(f"{pointer}/decision/method", "unsupported-value", "unsupported council decision method", f"choose one of: {', '.join(COUNCIL_DECISION_METHODS)}")
+                method = "majority"
+            weights_raw = decision_raw.get("weights", {})
+            if not isinstance(weights_raw, dict):
+                self.diag(f"{pointer}/decision/weights", "wrong-type", "weights must map member role ids to positive integers", "declare a closed role-weight map")
+                weights_raw = {}
+            weights: dict[str, int] = {}
+            for role_id, weight in sorted(weights_raw.items()):
+                weight_pointer = f"{pointer}/decision/weights/{role_id}"
+                if role_id not in members:
+                    self.diag(weight_pointer, "dangling-role-reference", f"weight names non-member role {role_id!r}", "weight only declared council member roles")
+                    continue
+                weights[str(role_id)] = self.integer(weight, weight_pointer, 1, 100)
+            for member in members:
+                weights.setdefault(member, 1)
+            voting_slots = sum(
+                int(roles.get(role, {}).get("cardinality", 0))
+                for role in members if role != judge
+            )
+            total_weight = sum(
+                int(roles.get(role, {}).get("cardinality", 0)) * weights[role]
+                for role in members if role != judge
+            )
+            default_threshold = {
+                "majority": voting_slots // 2 + 1,
+                "weighted": total_weight // 2 + 1,
+                "unanimous": max(voting_slots, 1),
+                "judge": 1,
+            }[str(method)]
+            threshold_max = max(total_weight if method == "weighted" else voting_slots, 1)
+            threshold = self.integer(
+                decision_raw.get("threshold", default_threshold),
+                f"{pointer}/decision/threshold", 1, threshold_max,
+            )
+            if method == "unanimous" and threshold != max(voting_slots, 1):
+                self.diag(f"{pointer}/decision/threshold", "invalid-threshold", "unanimous councils require every voting speaker", "set threshold to the voting speaker cardinality")
+            veto_roles = self.id_list(
+                decision_raw.get("veto_roles", []),
+                f"{pointer}/decision/veto_roles",
+            )
+            for offset, role_id in enumerate(veto_roles):
+                if role_id not in members:
+                    self.diag(f"{pointer}/decision/veto_roles/{offset}", "dangling-role-reference", f"veto role {role_id!r} is not a council member", "name only council member roles")
+
+            audit_raw = raw.get("audit", {})
+            if not isinstance(audit_raw, dict):
+                self.diag(f"{pointer}/audit", "wrong-type", "council audit policy must be an object", "declare a closed audit policy")
+                audit_raw = {}
+            self.exact_keys(audit_raw, _COUNCIL_AUDIT_KEYS, f"{pointer}/audit")
+            audit_mode = audit_raw.get("mode", "none")
+            if audit_mode not in COUNCIL_AUDIT_MODES:
+                self.diag(f"{pointer}/audit/mode", "unsupported-value", "unsupported meta-audit mode", f"choose one of: {', '.join(COUNCIL_AUDIT_MODES)}")
+                audit_mode = "none"
+            sample_default = 0 if audit_mode == "none" else (total_members if audit_mode == "full" else 1)
+            sample_minimum = 0 if audit_mode == "none" else 1
+            sample_size = self.integer(
+                audit_raw.get("sample_size", sample_default),
+                f"{pointer}/audit/sample_size", sample_minimum, max(total_members, sample_minimum),
+            )
+            if audit_mode == "none" and sample_size != 0:
+                self.diag(f"{pointer}/audit/sample_size", "invalid-bound", "disabled meta-audit requires sample_size 0", "set sample_size to 0")
+            if audit_mode == "full" and sample_size != total_members:
+                self.diag(f"{pointer}/audit/sample_size", "invalid-bound", "full meta-audit must cover every council member slot", "set sample_size to member cardinality")
+            if audit_mode != "none" and meta is None:
+                self.diag(f"{pointer}/meta_verifier", "missing-meta-verifier", "enabled audit requires a declared meta-verifier role", "name an independent meta-verifier")
+            audit_routes: dict[str, str] = {}
+            for field, default in (("on_overturn", "repair"), ("on_escalate", "escalate")):
+                route = audit_raw.get(field, default)
+                if route not in COUNCIL_RESULT_ROUTES:
+                    self.diag(f"{pointer}/audit/{field}", "unsupported-value", f"unsupported audit route {route!r}", f"choose one of: {', '.join(COUNCIL_RESULT_ROUTES)}")
+                    route = default
+                audit_routes[field] = str(route)
+
+            budgets_raw = raw.get("budgets", {})
+            if not isinstance(budgets_raw, dict):
+                self.diag(f"{pointer}/budgets", "wrong-type", "council budgets must be an object", "declare finite council budgets")
+                budgets_raw = {}
+            self.exact_keys(budgets_raw, _COUNCIL_BUDGET_KEYS, f"{pointer}/budgets")
+            budgets = {
+                key: self.integer(
+                    budgets_raw.get(key, default),
+                    f"{pointer}/budgets/{key}", 1, _COUNCIL_BUDGET_LIMITS[key],
+                )
+                for key, default in _COUNCIL_BUDGET_DEFAULTS.items()
+            }
             councils.append({
                 "id": council_id,
                 "members": members,
@@ -682,6 +807,18 @@ class _Compiler:
                 "member_cardinality": total_members,
                 "meta_verifier": meta,
                 "distinct_principals": True,
+                "decision": {
+                    "method": method,
+                    "weights": weights,
+                    "threshold": threshold,
+                    "veto_roles": veto_roles,
+                },
+                "audit": {
+                    "mode": audit_mode,
+                    "sample_size": sample_size,
+                    **audit_routes,
+                },
+                "budgets": budgets,
             })
         return councils
 

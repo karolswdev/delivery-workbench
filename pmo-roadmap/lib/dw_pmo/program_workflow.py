@@ -151,8 +151,9 @@ _NODE_KEYS = {
     },
     "debate": _COMMON_NODE_KEYS | {
         "participants", "judge_role", "max_rounds", "quorum",
-        "artifact_max_bytes", "round_timeout_seconds", "tie_policy",
-        "dissent_policy", "on_consensus", "on_dissent", "on_exhausted",
+        "artifact_max_bytes", "artifact_max_tokens", "round_timeout_seconds",
+        "tie_policy", "dissent_policy", "on_consensus", "on_repair",
+        "on_dissent", "on_quorum_lost", "on_exhausted",
     },
     "verdict": _COMMON_NODE_KEYS | {
         "role", "rubric", "subject", "freshness_seconds",
@@ -1072,6 +1073,9 @@ class _RegistryCompiler:
                 self.diag(source, f"{pointer}/dissent_policy", "unsupported-value", "dissent_policy must be preserve or veto", "choose a closed dissent policy")
                 dissent_policy = "preserve"
             artifact_max = self.positive_int(raw.get("artifact_max_bytes"), source, f"{pointer}/artifact_max_bytes", 20_000, 1_000_000)
+            if "artifact_max_tokens" not in raw:
+                self.diag(source, f"{pointer}/artifact_max_tokens", "missing-bound", "debate must bound tokens per declared artifact", "add a finite positive artifact_max_tokens")
+            artifact_tokens = self.positive_int(raw.get("artifact_max_tokens"), source, f"{pointer}/artifact_max_tokens", 4_000, 1_000_000)
             round_timeout = self.positive_int(raw.get("round_timeout_seconds"), source, f"{pointer}/round_timeout_seconds", 1_800, 86_400)
             node.update({
                 "participants": participants,
@@ -1079,11 +1083,14 @@ class _RegistryCompiler:
                 "max_rounds": rounds,
                 "quorum": quorum,
                 "artifact_max_bytes": artifact_max,
+                "artifact_max_tokens": artifact_tokens,
                 "round_timeout_seconds": round_timeout,
                 "tie_policy": tie_policy,
                 "dissent_policy": dissent_policy,
                 "on_consensus": self.normalize_route(raw.get("on_consensus"), source, f"{pointer}/on_consensus"),
+                "on_repair": self.normalize_route(raw.get("on_repair"), source, f"{pointer}/on_repair"),
                 "on_dissent": self.normalize_route(raw.get("on_dissent"), source, f"{pointer}/on_dissent"),
+                "on_quorum_lost": self.normalize_route(raw.get("on_quorum_lost"), source, f"{pointer}/on_quorum_lost"),
                 "on_exhausted": self.normalize_route(raw.get("on_exhausted"), source, f"{pointer}/on_exhausted"),
             })
             starts_per_round = len(participants) * 3 + 1
@@ -1203,7 +1210,10 @@ class _RegistryCompiler:
     @staticmethod
     def node_routes(node: dict[str, object]) -> list[tuple[str, dict[str, str]]]:
         routes: list[tuple[str, dict[str, str]]] = []
-        for key in ("on_success", "on_failure", "on_exhausted", "on_consensus", "on_dissent"):
+        for key in (
+            "on_success", "on_failure", "on_exhausted", "on_consensus",
+            "on_repair", "on_dissent", "on_quorum_lost",
+        ):
             route = node.get(key)
             if isinstance(route, dict):
                 routes.append((key.removeprefix("on_"), route))
@@ -1595,11 +1605,34 @@ class _RegistryCompiler:
                     debates.extend(child.get("debates", []))
                     route_edges.extend(child.get("routes", []))
             if node_type == "debate":
+                starts_per_round = len(node["participants"]) * 3 + 1
                 debates.append({
                     "address": node_address,
                     "participants": node["participants"],
                     "judge_role": node["judge_role"],
                     "max_rounds": node["max_rounds"],
+                    "quorum": node["quorum"],
+                    "artifact_max_bytes": node["artifact_max_bytes"],
+                    "artifact_max_tokens": node["artifact_max_tokens"],
+                    "round_timeout_seconds": node["round_timeout_seconds"],
+                    "tie_policy": node["tie_policy"],
+                    "dissent_policy": node["dissent_policy"],
+                    "maximum": {
+                        "speaker_slots": len(node["participants"]),
+                        "starts_per_round": starts_per_round,
+                        "agent_starts": starts_per_round * int(node["max_rounds"]),
+                        "artifacts": starts_per_round * int(node["max_rounds"]),
+                        "artifact_bytes": starts_per_round * int(node["max_rounds"]) * int(node["artifact_max_bytes"]),
+                        "artifact_tokens": starts_per_round * int(node["max_rounds"]) * int(node["artifact_max_tokens"]),
+                        "wall_seconds": int(node["max_rounds"]) * int(node["round_timeout_seconds"]),
+                    },
+                    "verdict_routes": {
+                        "advance": node["on_consensus"],
+                        "repair": node["on_repair"],
+                        "dissent": node["on_dissent"],
+                        "quorum-lost": node["on_quorum_lost"],
+                        "exhausted": node["on_exhausted"],
+                    },
                     "rounds": [
                         {
                             "round": round_number,

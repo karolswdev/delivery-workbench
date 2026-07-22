@@ -56,7 +56,7 @@ roadmap-advancement acts.
   separation of duties, artifact/context visibility, stable assignment, and
   replacement/escalation rules for implementers, verifiers, meta-verifiers,
   architects, researchers, reviewers, and repairers (WLA-26-04).
-- [ ] Debate corners and councils run declared propose→critique→rebut→judge
+- [x] Debate corners and councils run declared propose→critique→rebut→judge
   rounds with finite budgets, preserved dissent, quorum/tie policy, and
   verifier-of-verifier audit—never opaque chat or an invented route
   (WLA-26-05).
@@ -101,8 +101,8 @@ roadmap-advancement acts.
 | WLA-26-02 | Select work across a governed roadmap scope | done | [story-02-select-work-across-a-governed-roadmap-scope](./story-02-select-work-across-a-governed-roadmap-scope.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-26-03 | Compile reusable hierarchical workflows and bounded loops | done | [story-03-compile-reusable-hierarchical-workflows-and-bounded-loops](./story-03-compile-reusable-hierarchical-workflows-and-bounded-loops.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-26-04 | Model agent roles, teams, and separation of duties | done | [story-04-model-agent-roles-teams-and-separation-of-duties](./story-04-model-agent-roles-teams-and-separation-of-duties.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-26-05 | Run debates, councils, and meta-verification | in-progress | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | - |
-| WLA-26-06 | Build the visual program and workflow studio | backlog | [story-06-build-the-visual-program-and-workflow-studio](./story-06-build-the-visual-program-and-workflow-studio.md) | - |
+| WLA-26-05 | Run debates, councils, and meta-verification | done | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | [evidence-story-05](./evidence-story-05.md) |
+| WLA-26-06 | Build the visual program and workflow studio | in-progress | [story-06-build-the-visual-program-and-workflow-studio](./story-06-build-the-visual-program-and-workflow-studio.md) | - |
 | WLA-26-07 | Turn quality and evidence into governed verdicts | backlog | [story-07-turn-quality-and-evidence-into-governed-verdicts](./story-07-turn-quality-and-evidence-into-governed-verdicts.md) | - |
 | WLA-26-08 | Grant continuous program authority explicitly | backlog | [story-08-grant-continuous-program-authority-explicitly](./story-08-grant-continuous-program-authority-explicitly.md) | - |
 | WLA-26-09 | Conduct and recover hierarchical multi-phase programs | backlog | [story-09-conduct-and-recover-hierarchical-multi-phase-programs](./story-09-conduct-and-recover-hierarchical-multi-phase-programs.md) | - |
@@ -112,21 +112,23 @@ roadmap-advancement acts.
 
 ## Where we are
 
-Phase open 4/12. The optional trust contract, deterministic roadmap planner,
-and finite hierarchical workflow compiler are evidence-backed. WLA-26-04 is
-done: the pure organization compiler closes logical agents, pools, exact role
-packet/capability policy, cardinality, principal/workspace/session separation,
-councils, resources, and finite replacement. Program planning now intersects
-workflow lanes with program, role, logical-agent, and local driver ceilings;
-preassigns a distinct read-only verifier; records non-secret principal and
-adapter-capability fingerprints plus every selection/fallback exclusion; and
-proves council quorum and resource waves without starting anything. Aliases on
-one local principal cannot satisfy independence, replacements preserve prior
-dissent/lineage, and the optional organization template is never seeded into a
-consumer. Nine organization tests plus the existing planner/workflow/driver
-suites are green; the captured full matrix passed 378/378 on both Python floors
-and the fresh wheel. WLA-26-05 is in progress: execute bounded debate corners,
-councils, judging, and verifier-of-verifier audit with replayable receipts.
+Phase open 5/12. Optional program planning, finite workflow hierarchy, and
+independent organization topology remain evidence-backed. WLA-26-05 is done:
+one authority-neutral deliberation compiler intersects an assigned workflow
+debate and council into a finite schedule/proof, and one hash-chained replay
+engine records only bounded proposal, critique, rebuttal, vote, judgment,
+meta-verdict, architect-verdict, replacement, citation, and route metadata.
+Majority, weighted, unanimous, judge, veto, tie, quorum-loss, abstention,
+preserved dissent, repair, redeliberation, and budget exhaustion are exact
+policies rather than agent improvisation. Full/sample meta-audits preserve the
+original verdict; master architects are read-only and gain no integration,
+Git, or roadmap authority. Nine deliberation fixtures cover two rounds through
+a planted between-round crash, deterministic replay with no duplicate speaker,
+minority dissent, overturn, architect repair, replacement, exhaustion, and
+corrupt/opaque-content refusals. The full matrix passed 387/387 on both Python
+floors and the fresh wheel while no-program install remains empty. WLA-26-06 is
+in progress: build the progressively disclosed, lossless visual Program and
+Workflow Studio over these shared compilers and simulations.
 
 ## Active risks
 
@@ -208,6 +210,23 @@ councils, judging, and verifier-of-verifier audit with replayable receipts.
 - 2026-07-22 - Ship `autonomous-story-cell` in the package but never create
   `pm/organizations/` during install/update - organization policy is optional
   payload adopted only by an explicit user act - WLA-26-04.
+- 2026-07-22 - Treat debate as a closed artifact protocol, not a chat log:
+  propose, critique, rebuttal/vote, and judgment receipts carry bounded hashes,
+  references, citations, and concise rationale while prompt bodies, transport
+  transcripts, private reasoning, and artifact bodies stay out of durable state
+  - WLA-26-05.
+- 2026-07-22 - Compile council outcome from distinct principals and one closed
+  majority, weighted, unanimous, or judge rule with explicit veto, tie,
+  dissent, quorum-loss, repair, and exhaustion routes - a judge or model cannot
+  invent a green continuation - WLA-26-05.
+- 2026-07-22 - Make the deliberation engine an authority-neutral replay core:
+  deterministic claims and exact receipts operate on a caller-owned hash chain
+  but dispatch nothing and write no grant/store/repository/roadmap until the
+  later program conductor supplies authority - WLA-26-05.
+- 2026-07-22 - Keep original council verdicts immutable under meta-review and
+  make architects explicitly read-only; uphold/overturn/escalate and
+  approve/repair/escalate/veto govern only declared routes and never grant
+  implementation, integration, Git, or roadmap authority - WLA-26-05.
 - 2026-07-22 - Treat capabilities as independent granted bits with explicit
   prerequisites, not implication shortcuts; agent dispatch never inherits
   evidence, integration, certification, Git, or roadmap authority - WLA-26-01.

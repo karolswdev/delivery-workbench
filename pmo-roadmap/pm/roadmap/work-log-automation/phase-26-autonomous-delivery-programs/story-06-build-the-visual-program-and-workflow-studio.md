@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 26
-- **Status:** backlog
+- **Status:** in-progress
   <!-- status vocabulary: roadmap-builder.md §2.3 -->
 - **Depends on:** WLA-26-02, WLA-26-03, WLA-26-04, WLA-26-05
 - **Unblocks:** WLA-26-11, WLA-26-12

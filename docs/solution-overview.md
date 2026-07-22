@@ -503,8 +503,11 @@ driver activity, durable requests, notifications, and replayable streams over
 the same finite run spine. Phase 26 now contracts an additional opt-in program
 layer above bounded runs: deterministic multi-phase selection, reusable
 hierarchical workflows, logical delivery organizations, independent per-story
-verification, typed councils/meta-review, and separately granted integration
-and roadmap advancement.
+verification, and now a replayable bounded council protocol for typed
+propose→critique→rebut→judge rounds, distinct-principal quorum, preserved
+dissent, meta-review, and read-only architect verdicts. The remaining program
+grant/conductor slices will place that protocol behind separately granted
+integration and roadmap advancement.
 
 This does not redefine the product's ordinary mode. Vanilla Delivery Workbench
 remains complete with no program configured, and a Phase 24 score remains an
