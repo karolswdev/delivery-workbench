@@ -18,22 +18,40 @@ debate/review/repair loops that can push the project completely autonomously.
 Before runtime code, the product needs one exact language and trust model for
 that larger promise.
 
+That promise is an optional capability, not a replacement product. A repository
+must remain fully healthy and useful with only vanilla Delivery Workbench, and
+one bounded Phase 24/25 score/run must remain possible without creating or
+joining a program. The contract must protect those defaults before it defines
+the more powerful layer.
+
 ## Scope
 
 - **In:** `docs/programs.md`; versioned `delivery-workbench-program@1` and
   hierarchical workflow contract (including its relationship to
-  `delivery-workbench-orchestration@1`); roadmap scope; workflow bindings;
+  `delivery-workbench-orchestration@1`); a progressive capability ladder from
+  vanilla → bounded run → advisory program → checkpointed program → continuous
+  program; no-program and bounded-run compatibility behavior; opt-in discovery,
+  install/update, and Workbench UI rules; roadmap scope; workflow bindings;
   organization/role topology; typed loops, verdicts and gates; program states,
   events, claims, budgets, capabilities, child runs, integration acts, privacy,
   storage, interop, threat table, refusal taxonomy, and exit proof standard.
-- **Out:** compiler/runtime/UI implementation; a hosted service; provider
-  selection or credentials; unbounded recursion; merge/release/deploy authority.
+- **Out:** compiler/runtime/UI implementation; any migration that requires a
+  program for existing commands or Workbench flows; ambient activation; a
+  hosted service; provider selection or credentials; unbounded recursion;
+  merge/release/deploy authority.
 
 ## Acceptance criteria
 
 - [ ] The contract distinguishes tracked program/workflow/organization policy,
   local driver resolution, and a separate finite program grant; opening,
   compiling, simulating, or saving policy starts nothing.
+- [ ] Vanilla roadmap/evidence/briefing/deliberate-step/gate/Workbench behavior
+  remains a complete, behavior-compatible no-program mode: absent program
+  configuration is healthy, and install/update starts no program state,
+  process, observer, notification, network call, or setup ceremony.
+- [ ] `delivery-workbench-orchestration@1` remains an independently opt-in
+  one-score/one-run contract with terminal handoff; a score, run, template, or
+  existing bounded grant is never auto-wrapped in or interpreted as a program.
 - [ ] Multi-phase scope, deterministic work/team assignment, hierarchical
   subflows, fan-out/fan-in, bounded loop/exhaustion semantics, and optional
   human checkpoints are complete enough to simulate every legal route.
@@ -50,14 +68,16 @@ that larger promise.
 - [ ] A threat table covers ambient authority, self-verification, prompt/rubric
   mutation, infinite loops, colluding councils, hidden dissent, stale verdicts,
   phase skipping, duplicate destructive acts, content leakage, and UI/runtime
-  drift; docs/canon structural tests pin the decisions.
+  drift, plus default-mode creep and mandatory program setup; docs/canon
+  structural tests pin the decisions.
 
 ## Test plan
 
 - **Unit:** structural assertions in `pmo-roadmap/tests/dw-core-tests.py` plus
   `pmo-roadmap/tests/docs-lint.sh` and `canon-lint.sh`.
-- **Integration:** no runtime integration; cross-link and generated/vendor
-  parity suites must remain green.
+- **Integration:** no program runtime integration; cross-link and generated/
+  vendor parity suites must remain green, and the contract defines the separate
+  fresh no-program regression lane required before Phase 26 can close.
 - **Manual / device:** read the whole contract as one operator-facing authority
   preview; confirm a reader can tell who may do what, why, how often, and when
   the organization must stop.

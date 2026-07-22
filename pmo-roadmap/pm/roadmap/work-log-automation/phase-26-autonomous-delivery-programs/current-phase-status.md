@@ -1,14 +1,23 @@
-# Phase 26 — The autonomous delivery organization
+# Phase 26 — Optional autonomous delivery programs
 
 **Last updated:** 2026-07-22.
 
 ## Goal
 
-Delivery Workbench can run a governed autonomous delivery organization across an explicit roadmap scope: visually or declaratively authored hierarchical workflows assign specialist implementers, independent verifiers, verifier-of-verifier and master-architect roles; bounded debate, review, repair, and escalation loops drive each story and phase; and a finite revocable program grant permits only the declared quality, integration, and roadmap-advancement acts.
+Without changing vanilla Delivery Workbench or its optional bounded-run mode,
+Delivery Workbench can additionally run a governed autonomous delivery
+organization across an explicit roadmap scope: visually or declaratively
+authored hierarchical workflows assign specialist implementers, independent
+verifiers, verifier-of-verifier and master-architect roles; bounded debate,
+review, repair, and escalation loops drive each story and phase; and a finite
+revocable program grant permits only the declared quality, integration, and
+roadmap-advancement acts.
 
 ## Scope
 
-- **In:** a versioned autonomous-program contract over an explicit set/range of
+- **In:** a compatibility invariant that preserves no-program vanilla usage and
+  one-score/one-run bounded orchestration as complete independent modes; a
+  versioned autonomous-program contract over an explicit set/range of
   roadmap phases and stories; deterministic eligibility and assignment;
   reusable hierarchical workflows; typed subflows plus bounded iteration,
   debate, review, repair, audit, and escalation loops; specialist role/team
@@ -19,7 +28,9 @@ Delivery Workbench can run a governed autonomous delivery organization across an
   compiler; finite program grants, budgets, ledger, recovery, signals, and
   exact integration/roadmap acts; CLI/MCP/HTTP/Workbench parity; fresh-wheel
   multi-phase proof.
-- **Out:** unbounded or data-dependent recursion without a declared ceiling;
+- **Out:** making program setup, state, runtime, or UI ceremony mandatory for
+  vanilla or bounded-run usage; ambient program activation on install/update;
+  unbounded or data-dependent recursion without a declared ceiling;
   agents selecting their own authority, checks, or verifier; one identity
   implementing and independently verifying the same result; arbitrary shell or
   provider secrets in tracked policy; hidden model confidence presented as a
@@ -31,7 +42,8 @@ Delivery Workbench can run a governed autonomous delivery organization across an
 - [ ] `docs/programs.md` contracts the autonomous organization, program/
   workflow/grant split, multi-phase scope, trust and authority model, bounded
   loop semantics, verdict taxonomy, event/refusal vocabulary, and threat table
-  before runtime work begins (WLA-26-01).
+  before runtime work begins, while pinning vanilla and Phase 24/25 bounded
+  orchestration as behavior-compatible independent usage modes (WLA-26-01).
 - [ ] A pure planner explains every candidate and deterministically assigns the
   next eligible story, workflow, implementer, independent verifier, optional
   council/meta-verifier, and architect policy across the granted roadmap scope
@@ -51,7 +63,8 @@ Delivery Workbench can run a governed autonomous delivery organization across an
 - [ ] The Workbench visual studio authors the complete program, workflow,
   organization, loops, gates, scope, authority request, and stop policy with
   lossless graph/config round trips, live compiler diagnostics/simulation, and
-  guarded saves that start nothing (WLA-26-06).
+  guarded saves that start nothing; progressive disclosure preserves the
+  existing Workbench as the no-program front door (WLA-26-06).
 - [ ] Quality/evidence evaluation distinguishes hard mechanical facts from
   declared agent judgments; typed verifier verdicts require exact rubrics and
   evidence/citations, can require quorum/meta-review, preserve dissent, and
@@ -77,7 +90,8 @@ Delivery Workbench can run a governed autonomous delivery organization across an
   independent verification, one bounded debate, one repair loop, meta-verifier
   and master-architect participation, evidence/integration/commit/push, exact
   roadmap/phase advancement, planted crash recovery, and the complete refusal
-  matrix (WLA-26-12).
+  matrix; a separate fresh no-program consumer proves vanilla behavior and
+  absence of ambient program machinery (WLA-26-12).
 
 ## Story status
 
@@ -105,13 +119,17 @@ autonomous delivery organization that operates across multiple phases, not
 merely apply one fixed pipeline to the next story. Each autonomous story has a
 specific independent verifier; workflows may contain finite debate corners,
 repair/review loops, verifier-of-verifier audits, and master-architect passes.
-WLA-26-01 is in progress: freeze this program/workflow/organization/trust model and
-its fail-closed semantics before extending the runtime.
+The owner then sharpened the boundary: this is an optional layer, not a new
+definition of Delivery Workbench. Vanilla usage remains complete and the Phase
+24/25 bounded score/run remains independently opt-in. WLA-26-01 is in progress:
+freeze the capability ladder, compatibility invariant, program/workflow/
+organization/trust model, and fail-closed semantics before extending runtime.
 
 ## Active risks
 
 | Risk | Likelihood | Mitigation | Stop signal |
 |---|---|---|---|
+| The advanced layer consumes or complicates the vanilla product | high | Pin no-program behavior in the contract and fresh-wheel regression lane; progressively disclose Program Studio; keep default commands and install/update behavior program-free | Install/update or the ordinary Workbench requires program setup, or starts program state, a process, observer, or network activity |
 | “Autonomous” becomes ambient authority | high | Configuration is policy; a separate exact, finite, revocable program grant names every capability and budget | Opening/saving a program or selecting an agent starts work |
 | Workflow expressiveness becomes an unbounded agent loop | high | Typed loop/subflow primitives require max rounds, budget, stop predicate, and exhaustion route at compile time | A cycle can compile without a finite proof |
 | Verifiers become rubber stamps or self-review | high | Separate assignment/capability identity, exact rubric, cited evidence, dissent and optional meta-verification | The implementer can supply its own independent verdict |
@@ -124,6 +142,14 @@ its fail-closed semantics before extending the runtime.
 
 ## Decisions made (this phase)
 
+- 2026-07-22 - Preserve vanilla Delivery Workbench as a complete first-class
+  product and Phase 24/25 bounded orchestration as an independent opt-in; no
+  program configuration is normal healthy state, and install/update creates no
+  program state or runtime activity - owner clarification.
+- 2026-07-22 - Expose programs through progressive disclosure instead of
+  replacing the existing Workbench front door - “can be autonomous” does not
+  mean “should be autonomous,” and discovery cannot become mandatory setup -
+  owner clarification.
 - 2026-07-22 - Model the product as an autonomous delivery organization, not a
   linear autopilot - the desired workflow spans stories and phases and lets
   specialist implementers, verifiers, meta-verifiers, architects, researchers,

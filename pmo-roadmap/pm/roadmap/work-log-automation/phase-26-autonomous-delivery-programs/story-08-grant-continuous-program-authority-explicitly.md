@@ -17,6 +17,10 @@ integration boundary, then issue finite authority that can be inspected and
 revoked. Advisory, checkpointed, and continuous must be profiles over the same
 ledgered machinery rather than three subtly different products.
 
+Those three are optional program profiles, not global product modes. Vanilla
+Delivery Workbench and a bounded score/run select none of them and carry no
+program store, program observer, or implicit program authority.
+
 ## Scope
 
 - **In:** pure start plan; exact approval; immutable grant binding repository,
@@ -35,6 +39,10 @@ ledgered machinery rather than three subtly different products.
 - [ ] Preview states exact scope, candidate/team/workflow derivation, worst-case
   bounds, requested capabilities, exclusions, stop conditions, mode, expiry and
   accountable operator while writing and starting nothing.
+- [ ] No program mode is auto-selected and no program grant is implied by
+  install/update, shipped templates, the presence or execution of a bounded
+  score, opening Workbench, or invoking ordinary `status`, `next`, `step`, or
+  gate flows.
 - [ ] Advisory authorizes no dispatch or mutation; checkpointed runs only
   between named typed ports; continuous can repeat exact program ticks and
   complete stories/phases with zero human interaction only inside the explicit

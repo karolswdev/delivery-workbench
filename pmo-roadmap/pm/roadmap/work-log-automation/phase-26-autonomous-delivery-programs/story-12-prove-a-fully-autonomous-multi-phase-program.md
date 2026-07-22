@@ -18,6 +18,11 @@ independent verification, debate/meta/architect layers, repair, evidence,
 integration, commit/push and exact roadmap advancement must survive together on
 a fresh machine and across planted crashes.
 
+The proof is incomplete if autonomy works by quietly changing the base product.
+A separate fresh consumer must also prove that installing the same wheel with
+no program configured preserves ordinary guided, deliberate, and manual flows
+and activates no program machinery.
+
 ## Scope
 
 - **In:** Python-floor-built wheel in a fresh consumer; two-or-more phase,
@@ -26,7 +31,8 @@ a fresh machine and across planted crashes.
   organization and SCM provider; local bare remote; one continuous grant;
   complete autonomous green path and compiler/runtime/authority/integration red
   matrix; crash injection; full repository/distribution/UI/history proof;
-  separate optional authenticated live-agent specimen.
+  separate no-program vanilla regression consumer; separate optional
+  authenticated live-agent specimen.
 - **Out:** a real forge/model as CI oracle; phone requirement; merge/release/
   deploy/publication; hosted execution; claims beyond the tested local program.
 
@@ -60,6 +66,11 @@ a fresh machine and across planted crashes.
   nested organization/loops/verdicts/authority legible; core tests pass on both
   Python floors; package/docs/canon/Telegram/Workbench/interop/range/history
   suites are green; Homebrew environment abstention is recorded honestly.
+- [ ] A separate fresh installed-wheel consumer with no program files or grant
+  proves the established roadmap, briefing, deliberate-step, manual evidence,
+  gate, bounded-score, and Workbench models remain behavior-compatible, while
+  no program store, process, observer, notification, network call, default UI
+  detour, or required setup appears.
 - [ ] Phase exit and final summary distinguish deterministic fixture proof from
   any optional authenticated live model specimen and make no claim that an
   untested provider or hosted deployment is autonomous.
@@ -67,8 +78,9 @@ a fresh machine and across planted crashes.
 ## Test plan
 
 - **Unit:** n/a—focused units belong to WLA-26-01..11.
-- **Integration:** installed-wheel autonomous-organization exam plus the entire
-  documented repository matrix and pre-close `dw verify` history sweep.
+- **Integration:** installed-wheel autonomous-organization exam, separate
+  installed-wheel no-program regression exam, the entire documented repository
+  matrix, and pre-close `dw verify` history sweep.
 - **Manual / device:** desktop/mobile visual inspection; optional authenticated
   live agent outside CI. No phone interaction is required for phase completion.
 

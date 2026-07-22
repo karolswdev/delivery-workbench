@@ -35,6 +35,10 @@ must not become a second consent or scheduler path.
 - [ ] CLI JSON, MCP `structuredContent`, HTTP `data`, Workbench bootstrap and
   SSE replay expose byte-equivalent program state at one observation instant;
   reads and stream carry no token or mutation authority.
+- [ ] Program routes and views are additive and dormant: with no program
+  configured, inventory is a healthy empty result, ordinary CLI/MCP/HTTP/
+  Workbench behavior remains compatible, and no stream, poller, notification,
+  process, or program store starts merely because a surface opens.
 - [ ] The control room answers: why this story/phase, why this workflow/team,
   who implements/verifies/meta-verifies/architects, which loop/round is active,
   which evidence/verdict/dissent gates progress, and what next action/refusal is

@@ -2,14 +2,18 @@
 
 **Status:** Phase 24 delivered the bounded inward loop; Phase 25 extends the
 same grant/ledger spine through outward facts, standing-rule nudges, durable
-typed requests, and the wheel-installed outward-loop exam. Phase 26 is now
-contracting the higher-level autonomous delivery organization—multi-phase
+typed requests, and the wheel-installed outward-loop exam. Without changing
+vanilla Delivery Workbench or making bounded runs mandatory, Phase 26 is now
+contracting an optional higher-level autonomous delivery capability—multi-phase
 programs, hierarchical workflows, independent verifiers, bounded councils and
 loops—without retroactively broadening any existing run grant.
 **Product claim:** Delivery Workbench **can coordinate** a bounded multi-agent
 delivery run when an operator has configured an exact orchestration score and
 authorized a grant over that score. It does not claim that every repository
-or story should be orchestrated.
+or story should be orchestrated. Scores, bounded runs, and programs are opt-in
+layers: ordinary roadmap, evidence, briefing, deliberate-step, gate, and
+Workbench flows require none of them, and a bounded run does not imply a
+program.
 
 ## Why this layer exists now
 
