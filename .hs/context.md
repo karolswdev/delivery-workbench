@@ -7,7 +7,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 ### work-log-automation
 
 - Current phase: 26 (phase-26-autonomous-delivery-programs)
-- Next story: WLA-26-03 — Compile reusable hierarchical workflows and bounded loops [in-progress]
+- Next story: WLA-26-04 — Model agent roles, teams, and separation of duties [in-progress]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

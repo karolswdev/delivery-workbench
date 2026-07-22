@@ -28,6 +28,7 @@ from .model import (
 )
 from .orchestration import canonical_json
 from .orchestration_driver import driver_capability, driver_inventory, load_driver_config
+from .program_workflow import WorkflowValidationError, compile_workflow
 from .parse import (
     discover_phases,
     discover_projects,
@@ -147,7 +148,7 @@ _SCOPE_KEYS = {
 _PHASE_RANGE_KEYS = {"from", "through"}
 _PHASE_INCLUDE_KEYS = {"include"}
 _STORY_SELECTOR_KEYS = {"include"}
-_BINDING_KEYS = {"id", "priority", "match", "workflow", "team", "rubrics"}
+_BINDING_KEYS = {"id", "priority", "match", "workflow", "with", "team", "rubrics"}
 _MATCH_KEYS = {"phase_from", "phase_through", "story_ids"}
 _PHASE_GATE_KEYS = {"id", "when", "role", "rubric", "on_fail"}
 
@@ -373,6 +374,7 @@ class _Compiler:
         self.references: dict[str, object] = {
             "organization": None,
             "workflows": {},
+            "workflow_instances": {},
             "rubrics": {},
         }
         self.project: object | None = None
@@ -893,7 +895,28 @@ class _Compiler:
                 "workflows", workflow, WORKFLOW_KIND, _WORKFLOW_KEYS,
                 f"{pointer}/workflow",
             )
+            workflow_instance: dict[str, object] | None = None
+            workflow_bindings = raw.get("with", {})
+            if not isinstance(workflow_bindings, dict):
+                self.diag(f"{pointer}/with", "wrong-type", "workflow parameter bindings must be an object", "map declared parameters to typed literal/context expressions")
+                workflow_bindings = {}
             if workflow_ref is not None:
+                try:
+                    workflow_instance = compile_workflow(
+                        self.root,
+                        workflow_ref["document"],
+                        bindings=workflow_bindings,
+                        require_bound=True,
+                        source=str(workflow_ref["path"]),
+                    )
+                except WorkflowValidationError as exc:
+                    self.diagnostics.extend(exc.diagnostics)
+                else:
+                    workflow_ref["semantic_hash"] = workflow_instance["semantic_hash"]
+                    workflow_ref["document_hash"] = workflow_instance["document_hash"]
+                    workflow_ref["version"] = workflow_instance["version"]
+                    workflow_ref["source_hashes"] = workflow_instance["source_hashes"]
+                    self.references["workflow_instances"][binding_id] = workflow_instance  # type: ignore[index]
                 self.references["workflows"][workflow] = workflow_ref  # type: ignore[index]
             team = self.string(raw.get("team"), f"{pointer}/team", pattern=_SAFE_ID_RE)
             if team and team not in team_ids:
@@ -922,6 +945,26 @@ class _Compiler:
                     "story_ids": list(story_ids),
                 },
                 "workflow": workflow,
+                "with": (
+                    workflow_instance["bindings"]
+                    if workflow_instance is not None else dict(workflow_bindings)
+                ),
+                "workflow_version": (
+                    workflow_instance["version"]
+                    if workflow_instance is not None else None
+                ),
+                "workflow_semantic_hash": (
+                    workflow_instance["semantic_hash"]
+                    if workflow_instance is not None else None
+                ),
+                "workflow_bundle_hash": (
+                    workflow_instance["bundle_hash"]
+                    if workflow_instance is not None else None
+                ),
+                "workflow_envelope": (
+                    workflow_instance["envelope"]
+                    if workflow_instance is not None else None
+                ),
                 "team": team,
                 "rubrics": list(rubrics_raw),
             })
@@ -1054,6 +1097,43 @@ class _Compiler:
             self.diag("/budgets/max_phases", "scope-exceeds-budget", "phase scope exceeds max_phases", "raise the policy budget or narrow scope")
         if budgets["max_stories"] < len(scope["story_ids"]):
             self.diag("/budgets/max_stories", "scope-exceeds-budget", "story scope exceeds max_stories", "raise the policy budget or narrow scope")
+        workflow_instances = self.references["workflow_instances"]
+        assert isinstance(workflow_instances, dict)
+        envelope_budget_keys = {
+            "child_runs": "max_child_runs",
+            "agent_starts": "max_agent_starts",
+            "check_starts": "max_check_starts",
+            "loop_rounds": "max_loop_rounds",
+            "debate_rounds": "max_debate_rounds",
+            "wall_seconds": "max_wall_seconds",
+            "artifact_bytes": "max_artifact_bytes",
+        }
+        requested = set(capabilities)
+        for binding_id, workflow_instance in sorted(workflow_instances.items()):
+            required = {
+                capability
+                for values in workflow_instance["required_capabilities"].values()
+                for capability in values
+            }
+            missing = sorted(required - requested)
+            if missing:
+                self.diag(
+                    "/requested_capabilities",
+                    "workflow-capability-missing",
+                    f"binding {binding_id!r} workflow requires undeclared capabilities: "
+                    + ", ".join(missing),
+                    "request every compiled workflow capability explicitly",
+                )
+            envelope = workflow_instance["envelope"]
+            for envelope_key, budget_key in envelope_budget_keys.items():
+                if int(envelope[envelope_key]) > int(budgets[budget_key]):
+                    self.diag(
+                        f"/budgets/{budget_key}",
+                        "workflow-exceeds-budget",
+                        f"binding {binding_id!r} worst-case {envelope_key}="
+                        f"{envelope[envelope_key]} exceeds {budget_key}={budgets[budget_key]}",
+                        "raise the finite program budget or lower workflow bounds",
+                    )
         stops = raw.get("stop_conditions", list(STOP_CONDITIONS))
         if (
             not isinstance(stops, list) or not stops
@@ -1130,6 +1210,12 @@ def compile_program(root: Path, program: object, source: str = "program") -> dic
         "workflows": {
             slug: reference["semantic_hash"]
             for slug, reference in sorted(reference_payload["workflows"].items())
+        },
+        "workflow_instances": {
+            binding_id: reference["bundle_hash"]
+            for binding_id, reference in sorted(
+                reference_payload["workflow_instances"].items()
+            )
         },
         "rubrics": {
             slug: reference["semantic_hash"]
@@ -1551,8 +1637,12 @@ def build_program_plan(
             "workflow": {
                 "slug": binding["workflow"],
                 "schema_version": workflow_ref["document"]["schema_version"],
-                "version": workflow_ref["document"].get("version"),
-                "semantic_hash": workflow_ref["semantic_hash"],
+                "version": binding["workflow_version"],
+                "semantic_hash": binding["workflow_semantic_hash"],
+                "bundle_hash": binding["workflow_bundle_hash"],
+                "bindings": binding["with"],
+                "source_hashes": workflow_ref.get("source_hashes", {}),
+                "envelope": binding["workflow_envelope"],
             },
             "team": binding["team"],
             "rubrics": [

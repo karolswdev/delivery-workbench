@@ -34,6 +34,11 @@ is added when an external consumer asks for one.
 | Orchestration simulation | `delivery-workbench-orchestration-simulation` v1 | `orchestration.simulate_score` |
 | Program policy | `delivery-workbench-program` v1 | `programs.validate_program` |
 | Compiled program policy | `delivery-workbench-compiled-program` v1 | `programs.compile_program` |
+| Workflow policy | `delivery-workbench-workflow` v1 | `program_workflow.validate_workflow` |
+| Compiled workflow | `delivery-workbench-compiled-workflow` v1 | `program_workflow.compile_workflow` |
+| Workflow inventory | `delivery-workbench-workflow-list` v1 | `program_workflow.workflow_inventory` |
+| Workflow validation | `delivery-workbench-workflow-validation` v1 | `program_workflow.validate_workflow` |
+| Workflow simulation | `delivery-workbench-workflow-simulation` v1 | `program_workflow.simulate_workflow` |
 | Program inventory | `delivery-workbench-program-list` v1 | `programs.program_inventory` |
 | Program validation | `delivery-workbench-program-validation` v1 | `programs.validate_program` |
 | Program simulation | `delivery-workbench-program-simulation` v1 | `programs.simulate_program` |
@@ -71,6 +76,9 @@ is added when an external consumer asks for one.
 | `dw orchestration show <score> --json` | `orchestration.compile_score` | normalized runtime score, layout, analysis, semantic hash, and document hash |
 | `dw orchestration validate <score> --json` | `orchestration.validate_score` | exact-key verdict plus JSON-pointer diagnostics/remediation; exit 1 invalid |
 | `dw orchestration simulate <score> --json` | `orchestration.simulate_score` | pure scheduling waves, locks, lineage, branches, budgets, checkpoints, and terminals |
+| `dw workflow list --json` | `program_workflow.workflow_inventory` | healthy empty inventory or contained source-aware template validation plus finite envelope/hash summaries; pure |
+| `dw workflow validate <workflow> --json` | `program_workflow.validate_workflow` | closed parameters/nodes/routes, exact nested version/hash and bounded-score references, recursion/cycle/capability/envelope diagnostics; exit 1 invalid |
+| `dw workflow simulate <workflow> --json` | `program_workflow.simulate_workflow` | namespaced hierarchy, fan waves, typed route outcomes, concrete bounded rounds, per-node/route/worst-case envelopes, source provenance, and capability consumers; pure |
 | `dw program list --json` | `programs.program_inventory` | healthy empty inventory when no program is configured; otherwise contained policy validation/hashes; pure |
 | `dw program validate <program> --json` | `programs.validate_program` | exact-key policy/reference/scope/binding verdict plus source-aware diagnostics; exit 1 invalid |
 | `dw program simulate <program> --json` | `programs.simulate_program` | every roadmap candidate reason plus deterministic workflow/team/role assignment; explicitly no work/state/grant |

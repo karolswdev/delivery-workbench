@@ -1,0 +1,113 @@
+{
+  "kind": "delivery-workbench-workflow",
+  "schema_version": 1,
+  "slug": "docs-only",
+  "title": "Document and mechanically check one story",
+  "description": "One isolated documentation writer followed by one exact mechanical check.",
+  "version": "1.0.0",
+  "parameters": [
+    {
+      "id": "story-id",
+      "type": "string",
+      "required": true,
+      "max_bytes": 128
+    }
+  ],
+  "defaults": {
+    "story-id": "STORY-0-00"
+  },
+  "nodes": [
+    {
+      "id": "write-docs",
+      "type": "agent",
+      "role": "documenter",
+      "task": "Update the declared documentation for the exact story input.",
+      "workspace": "isolated-worktree",
+      "capability_ceiling": [
+        "agent:dispatch",
+        "workspace:write"
+      ],
+      "timeout_seconds": 1200,
+      "max_attempts": 2,
+      "inputs": {
+        "story": {
+          "kind": "parameter",
+          "name": "story-id"
+        }
+      },
+      "outputs": [
+        {
+          "id": "documentation",
+          "kind": "markdown",
+          "max_bytes": 100000
+        }
+      ],
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    },
+    {
+      "id": "check-docs",
+      "type": "check",
+      "needs": [
+        "write-docs"
+      ],
+      "inputs": {
+        "documentation": {
+          "kind": "artifact",
+          "name": "write-docs.documentation"
+        }
+      },
+      "runner": {
+        "kind": "builtin",
+        "name": "file-exists",
+        "path": "README.md",
+        "output_bytes": 50000
+      },
+      "expect": {
+        "exit_code": 0
+      },
+      "timeout_seconds": 300,
+      "max_attempts": 1,
+      "outputs": [
+        {
+          "id": "fact",
+          "kind": "mechanical-fact",
+          "max_bytes": 20000
+        }
+      ],
+      "on_success": {
+        "kind": "terminal",
+        "target": "complete"
+      },
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    }
+  ],
+  "terminals": [
+    {
+      "id": "complete",
+      "meaning": "complete"
+    }
+  ],
+  "layout": {
+    "nodes": {
+      "write-docs": {
+        "x": 80,
+        "y": 120
+      },
+      "check-docs": {
+        "x": 400,
+        "y": 120
+      }
+    },
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  }
+}

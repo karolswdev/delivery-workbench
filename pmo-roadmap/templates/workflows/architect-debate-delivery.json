@@ -1,0 +1,185 @@
+{
+  "kind": "delivery-workbench-workflow",
+  "schema_version": 1,
+  "slug": "architect-debate-delivery",
+  "title": "Architect, debate, deliver, and bounded audit",
+  "description": "A master architect frames the work, a finite council debates it, a reusable delivery subflow runs, and a bounded audit loop closes the route.",
+  "version": "1.0.0",
+  "parameters": [
+    {
+      "id": "story-id",
+      "type": "string",
+      "required": true,
+      "max_bytes": 128
+    }
+  ],
+  "defaults": {
+    "story-id": "STORY-0-00"
+  },
+  "nodes": [
+    {
+      "id": "architect-frame",
+      "type": "agent",
+      "role": "master-architect",
+      "task": "Frame the exact constraints, boundaries, and quality questions for this story.",
+      "workspace": "read-only",
+      "capability_ceiling": [
+        "agent:dispatch"
+      ],
+      "timeout_seconds": 1200,
+      "max_attempts": 1,
+      "inputs": {
+        "story": {
+          "kind": "parameter",
+          "name": "story-id"
+        }
+      },
+      "outputs": [
+        {
+          "id": "frame",
+          "kind": "markdown",
+          "max_bytes": 50000
+        }
+      ],
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    },
+    {
+      "id": "design-council",
+      "type": "debate",
+      "needs": [
+        "architect-frame"
+      ],
+      "inputs": {
+        "frame": {
+          "kind": "artifact",
+          "name": "architect-frame.frame"
+        }
+      },
+      "participants": [
+        "proposer",
+        "critic"
+      ],
+      "judge_role": "judge",
+      "max_rounds": 2,
+      "quorum": 2,
+      "artifact_max_bytes": 30000,
+      "round_timeout_seconds": 1800,
+      "tie_policy": "judge",
+      "dissent_policy": "preserve",
+      "on_consensus": {
+        "kind": "node",
+        "target": "delivery"
+      },
+      "on_dissent": {
+        "kind": "action",
+        "target": "checkpoint"
+      },
+      "on_exhausted": {
+        "kind": "action",
+        "target": "escalate"
+      },
+      "outputs": [
+        {
+          "id": "judgment",
+          "kind": "decision",
+          "max_bytes": 50000
+        }
+      ]
+    },
+    {
+      "id": "delivery",
+      "type": "subflow",
+      "activation": "route",
+      "workflow": "research-build-verify",
+      "version": "1.0.0",
+      "with": {
+        "story-id": {
+          "kind": "parameter",
+          "name": "story-id"
+        }
+      },
+      "capability_ceiling": [
+        "agent:dispatch",
+        "certification:verdict",
+        "check:execute",
+        "workspace:write"
+      ],
+      "on_success": {
+        "kind": "node",
+        "target": "audit-loop"
+      },
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    },
+    {
+      "id": "audit-loop",
+      "type": "loop",
+      "activation": "route",
+      "purpose": "audit",
+      "workflow": "docs-only",
+      "version": "1.0.0",
+      "with": {
+        "story-id": {
+          "kind": "parameter",
+          "name": "story-id"
+        }
+      },
+      "capability_ceiling": [
+        "agent:dispatch",
+        "check:execute",
+        "workspace:write"
+      ],
+      "max_rounds": 2,
+      "until": {
+        "kind": "artifact-valid",
+        "source": "check-docs.fact",
+        "operator": "green"
+      },
+      "carry": [],
+      "on_success": {
+        "kind": "terminal",
+        "target": "complete"
+      },
+      "on_exhausted": {
+        "kind": "action",
+        "target": "escalate"
+      }
+    }
+  ],
+  "terminals": [
+    {
+      "id": "complete",
+      "meaning": "complete"
+    }
+  ],
+  "layout": {
+    "nodes": {
+      "architect-frame": {
+        "x": 60,
+        "y": 140
+      },
+      "design-council": {
+        "x": 360,
+        "y": 140
+      },
+      "delivery": {
+        "x": 700,
+        "y": 140
+      },
+      "audit-loop": {
+        "x": 1020,
+        "y": 140
+      }
+    },
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  }
+}
