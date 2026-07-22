@@ -82,6 +82,11 @@ _REQUEST_REFUSAL_REASONS = {
     "correlation-mismatch", "invalid-response", "expired",
 }
 _REQUEST_CLOSED_STATES = {"complete", "blocked", "cancelled", "revoked"}
+_EXTERNAL_COMMIT_LEGACY_KEYS = {"previous_head", "head", "relation"}
+_EXTERNAL_COMMIT_BOUND_KEYS = _EXTERNAL_COMMIT_LEGACY_KEYS | {
+    "repository_id", "branch", "index_tree", "operation", "status_hash",
+    "story_hash", "rebindable",
+}
 _EVENT_KEYS = {
     "kind", "schema_version", "run_id", "seq", "event", "ts", "detail",
     "prev_hash", "event_hash",
@@ -135,7 +140,7 @@ _EVENT_DETAIL_KEYS = {
         "node_id", "action", "repository_id", "branch", "head",
         "index_tree", "operation", "status_hash", "story_hash",
     },
-    "external_commit_observed": {"previous_head", "head", "relation"},
+    "external_commit_observed": _EXTERNAL_COMMIT_BOUND_KEYS,
 }
 
 _RUNTIME_EVENTS = {
@@ -561,7 +566,12 @@ def _event_document(
     now: datetime,
 ) -> dict[str, object]:
     allowed = _EVENT_DETAIL_KEYS.get(event)
-    if allowed is None or set(detail) != allowed:
+    detail_keys = set(detail)
+    legacy_external = (
+        event == "external_commit_observed"
+        and detail_keys == _EXTERNAL_COMMIT_LEGACY_KEYS
+    )
+    if allowed is None or (detail_keys != allowed and not legacy_external):
         raise DwError(f"event {event!r} has non-exact detail keys")
     for key, value in detail.items():
         if isinstance(value, (dict, list)) or value is None:
@@ -1036,14 +1046,19 @@ def replay_run(
             if state != "active" or pending_checkpoint is not None:
                 raise DwError("checkpoint reached while the run cannot accept one")
             correlation = _request_correlation(event)
-            pending_checkpoint = {
+            checkpoint = {
                 "seq": offset, "correlation_id": correlation, **dict(detail),
             }
-            checkpoints.append(pending_checkpoint)
+            checkpoints.append(checkpoint)
             terminal = str(detail["terminal"])
             if terminal != "none":
+                # A terminal approval node is a completed handoff, not an
+                # unanswered request.  A later sanctioned nudge may wake the
+                # run and reach the handoff again after its bounded repair.
+                pending_checkpoint = None
                 state = terminal
             else:
+                pending_checkpoint = checkpoint
                 node = next(
                     (
                         item for item in compiled["score"]["nodes"]
@@ -1577,6 +1592,19 @@ def _validate_runtime_transition(
             raise DwError("external commit observation requires terminal handoff")
         if detail["relation"] not in {"fast-forward", "diverged", "rewritten"}:
             raise DwError("external commit relation is unsupported")
+        if set(detail) == _EXTERNAL_COMMIT_BOUND_KEYS:
+            for key in ("repository_id", "status_hash", "story_hash"):
+                if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(detail[key])):
+                    raise DwError(f"external commit {key} is malformed")
+            if not isinstance(detail["rebindable"], bool):
+                raise DwError("external commit rebindable verdict must be boolean")
+            if detail["operation"] not in {"normal", "rewrite"}:
+                raise DwError("external commit operation is unsupported")
+            if detail["rebindable"] and (
+                detail["relation"] != "fast-forward"
+                or detail["operation"] != "normal"
+            ):
+                raise DwError("external commit cannot rebind unsafe facts")
 
 
 def record_runtime_event(
@@ -1815,12 +1843,18 @@ def _grant_freshness_issues(
     """
     root = root.resolve()
     checkpoint = projection.get("fact_binding") if projection else None
-    expected = grant["repository"] if not checkpoint else {
-        "id": checkpoint["repository_id"],
-        "branch": checkpoint["branch"],
-        "head": checkpoint["head"],
-        "index_tree": checkpoint["index_tree"],
-        "operation": checkpoint["operation"],
+    external = None
+    if projection and projection.get("external_commits"):
+        latest = projection["external_commits"][-1]
+        if latest.get("rebindable") is True:
+            external = latest
+    binding = external or checkpoint
+    expected = grant["repository"] if not binding else {
+        "id": binding["repository_id"],
+        "branch": binding["branch"],
+        "head": binding["head"],
+        "index_tree": binding["index_tree"],
+        "operation": binding["operation"],
     }
     observed = {
         "id": _repository_id(root),
@@ -1836,13 +1870,13 @@ def _grant_freshness_issues(
     ]
     try:
         status_hash = _sha(_status_binding(build_status(root, str(grant["project"]))))
-        expected_status = checkpoint["status_hash"] if checkpoint else grant["status_hash"]
+        expected_status = binding["status_hash"] if binding else grant["status_hash"]
         if status_hash != expected_status:
             issues.append("Delivery Workbench status binding changed")
         story = _story_facts(root, str(grant["project"]), str(grant["story"]["id"]))  # type: ignore[index]
         story_matches = (
-            _sha(story) == checkpoint["story_hash"]
-            if checkpoint else canonical_json(story) == canonical_json(grant["story"])
+            _sha(story) == binding["story_hash"]
+            if binding else canonical_json(story) == canonical_json(grant["story"])
         )
         if not story_matches:
             issues.append("roadmap story facts changed")
@@ -1870,6 +1904,43 @@ def observed_fact_binding(
         "operation": "rewrite" if in_rewrite_state(root) else "normal",
         "status_hash": _sha(_status_binding(build_status(root, str(grant["project"])))),
         "story_hash": _sha(story),
+    }
+
+
+def observed_external_fact_binding(
+    root: Path,
+    grant: dict[str, object],
+    relation: str,
+) -> dict[str, object]:
+    """Return a closed post-operator checkpoint and its rebindability verdict."""
+    root = root.resolve()
+    story = _story_facts(
+        root, str(grant["project"]), str(grant["story"]["id"])  # type: ignore[index]
+    )
+    status = build_status(root, str(grant["project"]))
+    repository = status["repository"]  # type: ignore[index]
+    repository_id = _repository_id(root)
+    branch = current_branch(root)
+    operation = "rewrite" if in_rewrite_state(root) else "normal"
+    story_unchanged = canonical_json(story) == canonical_json(grant["story"])
+    rebindable = (
+        relation == "fast-forward"
+        and repository_id == grant["repository"]["id"]  # type: ignore[index]
+        and branch == grant["repository"]["branch"]  # type: ignore[index]
+        and operation == "normal"
+        and repository.get("clean") is True  # type: ignore[union-attr]
+        and story.get("status") == "in-progress"
+        and story_unchanged
+    )
+    return {
+        "repository_id": repository_id,
+        "branch": branch,
+        "head": head_sha(root) or "none",
+        "index_tree": write_tree(root) or "unknown",
+        "operation": operation,
+        "status_hash": _sha(_status_binding(status)),
+        "story_hash": _sha(story),
+        "rebindable": rebindable,
     }
 
 

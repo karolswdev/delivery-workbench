@@ -39,6 +39,7 @@ from .orchestration_run import (
     _sha,
     claim_node,
     maintain_outstanding_requests,
+    observed_external_fact_binding,
     observed_fact_binding,
     record_runtime_event,
     release_node_claim,
@@ -199,7 +200,38 @@ def schedule_decision(
         if node.get("activation") == "failure":
             route = _open_route_for_target(projection, node_id)
             if route is None:
-                states.append({"node_id": node_id, "state": "dormant", "attempt": 0})
+                nudged = (
+                    latest is not None
+                    and any(
+                        item.get("delivered")
+                        and str(item.get("node_id")) == node_id
+                        and int(item.get("attempt", 0)) == int(latest["attempt"])
+                        for item in projection["nudges"]
+                    )
+                )
+                if nudged:
+                    if (
+                        latest["outcome"] != "succeeded"
+                        and _route_for_failure(
+                            projection, node_id, int(latest["attempt"])
+                        ) is None
+                    ):
+                        action_needed.append({
+                            "node_id": node_id, "attempt": latest["attempt"],
+                        })
+                        states.append({
+                            "node_id": node_id, "state": "routing",
+                            "attempt": latest["attempt"],
+                        })
+                    else:
+                        states.append({
+                            "node_id": node_id, "state": latest["outcome"],
+                            "attempt": latest["attempt"],
+                        })
+                else:
+                    states.append({
+                        "node_id": node_id, "state": "dormant", "attempt": 0,
+                    })
                 continue
             target_attempt = int(route["target_attempt"])
             target_result = next(
@@ -1479,8 +1511,12 @@ def _observe_external_commit(
     if projection["state"] not in {"awaiting-certification", "complete", "blocked"}:
         return projection, False
     previous = str(
-        projection["fact_binding"]["head"]
-        if projection.get("fact_binding") else grant["repository"]["head"]
+        projection["external_commits"][-1]["head"]
+        if projection["external_commits"]
+        else (
+            projection["fact_binding"]["head"]
+            if projection.get("fact_binding") else grant["repository"]["head"]
+        )
     )
     current = head_sha(root) or "none"
     if current == previous or any(item["head"] == current for item in projection["external_commits"]):
@@ -1493,11 +1529,16 @@ def _observe_external_commit(
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         relation = "fast-forward" if ancestor.returncode == 0 else "diverged"
+    binding = observed_external_fact_binding(root, grant, relation)
     updated = record_runtime_event(
         root,
         run_id,
         "external_commit_observed",
-        {"previous_head": previous, "head": current, "relation": relation},
+        {
+            "previous_head": previous,
+            "relation": relation,
+            **binding,
+        },
         str(projection["ledger_head"]),
         now=now,
     )

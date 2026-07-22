@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 25
-- **Status:** backlog
+- **Status:** in-progress
 - **Depends on:** WLA-25-02, WLA-25-03, WLA-25-04, WLA-25-05, WLA-25-06, WLA-25-07, WLA-25-08
 - **Unblocks:** none
 - **Owner:** unassigned

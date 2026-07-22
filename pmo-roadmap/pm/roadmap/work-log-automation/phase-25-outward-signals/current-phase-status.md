@@ -82,7 +82,7 @@ discipline, re-interpreted under the consent spine.
 | WLA-25-06 | Notify the operator durably | done | [story-06-operator-notifications](./story-06-operator-notifications.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-25-07 | Drive Claude Code through the neutral seam | done | [story-07-claude-code-driver](./story-07-claude-code-driver.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-25-08 | Keep pending decisions alive across the pause | done | [story-08-typed-checkpoint-resume](./story-08-typed-checkpoint-resume.md) | [evidence-story-08](./evidence-story-08.md) |
-| WLA-25-09 | Prove the outward loop end to end | backlog | [story-09-packaged-outward-exam](./story-09-packaged-outward-exam.md) | - |
+| WLA-25-09 | Prove the outward loop end to end | in-progress | [story-09-packaged-outward-exam](./story-09-packaged-outward-exam.md) | - |
 
 ## Where we are
 
