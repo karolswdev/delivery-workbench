@@ -42,7 +42,8 @@ controls = app[app.index("function stepControlHtml"):app.index("function statusP
 apply = app[app.index("async function applyReviewedStep"):app.index("function wireStepControl")]
 panel = app[app.index("function statusPanel"):app.index("/* ── mission control")]
 overview = app[app.index("async function viewOverview"):app.index("async function viewProject")]
-run = app[app.index("function runStateBadge"):app.index("/* ── router")]
+run = app[app.index("function runStateBadge"):app.index("/* ── optional Program / Workflow Studio")]
+studio = app[app.index("optional Program / Workflow Studio"):app.index("/* ── router")]
 assert "data-argv-index" in action and "manual act" in action
 assert "<button" not in action and "JSON.stringify" not in action
 for token in ("step-review", "step-confirm", "step-apply", "step-cancel",
@@ -69,6 +70,23 @@ for token in ("live run · ledger replay", "fail checks", "failure routes",
 assert "setInterval" not in run and "driver_config" not in run and "argv:" not in run
 assert 'aria-labelledby="run-graph-title"' in run
 assert "@media (max-width: 520px)" in css and ".run-node.state-active" in css
+for token in ("design", "simulate", "validate", "json", "authority",
+              "/api/program-studio", "preview save", "preview delete",
+              "candidate-assignment", "debate-active", "verifier-failed",
+              "budget-exhausted", "phase-transition", "complete",
+              "open nested workflow", "creates no grant", "starts nothing"):
+    assert token in studio, token
+assert "setInterval" not in studio and "EventSource" not in studio
+assert 'default_route: "#/"' not in studio  # browser cannot redefine the API invariant
+assert "STUDIO_NODE_TYPES" in studio and "data-studio-node" in studio
+assert "semantic hash preserved" in studio and "layout hash preserved" in studio
+assert "data-field-id" in studio and "scrollIntoView" in studio
+for token in (".studio-node.type-loop", ".studio-node.type-debate",
+              ".studio-node.type-verifier", ".studio-node.type-meta-verifier",
+              ".studio-node.type-master-architect", ".studio-lane",
+              "@media (max-width: 600px)"):
+    assert token in css, token
+assert ".studio-workarea" in css and "overflow: auto" in css
 PY
 
 FF=""
@@ -244,7 +262,116 @@ shot() { # name geometry url
   fi
 }
 
-VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual"
+# Golden optionality state: before adopting any Phase-26 policy, entering the
+# Studio is neutral and leaves the ordinary #/ route untouched.
+shot "program-studio-empty-desktop" 1440,900 "$BASE/?snapshot=1#/program-studio"
+shot "program-studio-empty-mobile" 390,844 "$BASE/?snapshot=1#/program-studio"
+
+# Explicitly adopt rich tracked fixtures only after the empty-state capture.
+# The server reads policy live; authoring these files does not create a grant or
+# runtime state and lets the remaining captures exercise every advanced view.
+mkdir -p "$REPO/pm/workflows" "$REPO/pm/organizations" "$REPO/pm/programs" "$REPO/pm/rubrics"
+cp "$PMO_DIR/templates/workflows/"*.json "$REPO/pm/workflows/"
+cp "$PMO_DIR/templates/organizations/autonomous-story-cell.json" "$REPO/pm/organizations/"
+python3 - "$REPO" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+
+workflow = {
+    "kind": "delivery-workbench-workflow", "schema_version": 1,
+    "slug": "studio-story-flow", "title": "Implement and verify", "version": "1.0.0",
+    "parameters": [{"id": "story-id", "type": "string", "required": True, "max_bytes": 128}],
+    "defaults": {},
+    "nodes": [
+        {
+            "id": "implement", "type": "agent", "role": "implementer",
+            "task": "Implement the selected story.", "workspace": "isolated-worktree",
+            "capability_ceiling": ["agent:dispatch", "workspace:write"],
+            "timeout_seconds": 900, "max_attempts": 1,
+            "inputs": {"story": {"kind": "parameter", "name": "story-id"}},
+            "outputs": [{"id": "candidate", "kind": "git-diff", "max_bytes": 1000000}],
+            "on_failure": {"kind": "action", "target": "block"},
+        },
+        {
+            "id": "verify", "type": "verdict", "needs": ["implement"],
+            "role": "verifier", "rubric": "story-quality",
+            "subject": {"kind": "artifact", "name": "implement.candidate"},
+            "freshness_seconds": 3600, "max_rationale_bytes": 30000,
+            "results": ["pass", "fail", "abstain"],
+            "routes": {
+                "pass": {"kind": "terminal", "target": "complete"},
+                "fail": {"kind": "action", "target": "block"},
+                "abstain": {"kind": "action", "target": "checkpoint"},
+            },
+        },
+    ],
+    "terminals": [{"id": "complete", "meaning": "complete"}],
+    "layout": {"nodes": {"implement": {"x": 90, "y": 110}, "verify": {"x": 430, "y": 110}},
+               "viewport": {"x": 0, "y": 0, "zoom": 1}},
+}
+program = {
+    "kind": "delivery-workbench-program", "schema_version": 1,
+    "slug": "studio-program", "title": "Studio multi-phase organization",
+    "scope": {
+        "project": "sample", "phases": {"from": 0, "through": 0}, "stories": "all",
+        "selection": "roadmap-frontier-v1", "blocked_policy": "stop",
+    },
+    "organization": "autonomous-story-cell",
+    "bindings": [{
+        "id": "all-stories", "priority": 10,
+        "match": {"phase_from": 0, "phase_through": 0},
+        "workflow": "studio-story-flow",
+        "with": {"story-id": {"kind": "context", "name": "story.id"}},
+        "team": "story-cell", "rubrics": ["story-quality"],
+    }],
+    "phase_gates": [{
+        "id": "architecture", "when": "before-phase-complete",
+        "role": "master-architect", "rubric": "phase-architecture", "on_fail": "block",
+    }],
+    "mode_ceiling": "continuous",
+    "requested_capabilities": [
+        "agent:dispatch", "workspace:write", "certification:verdict",
+        "evidence:materialize", "integration:apply", "git:commit",
+        "roadmap:story-start", "roadmap:story-complete", "roadmap:phase-advance",
+    ],
+    "budgets": {
+        "max_phases": 1, "max_stories": 2, "max_child_runs": 8,
+        "max_agent_starts": 16, "max_check_starts": 24, "max_loop_rounds": 6,
+        "max_debate_rounds": 3, "max_repairs_per_story": 2, "max_verdicts": 8,
+        "max_integrations": 2, "max_commits": 2, "max_pushes": 1,
+        "max_nudges": 4, "max_artifact_bytes": 5000000, "max_wall_seconds": 7200,
+    },
+    "stop_conditions": [
+        "scope-complete", "checkpoint-required", "unresolved-dissent",
+        "architect-veto", "blocked-frontier", "budget-exhausted",
+        "grant-expired", "grant-revoked",
+    ],
+    "layout": {"nodes": {
+        "roadmap-scope": {"x": 70, "y": 90}, "binding:all-stories": {"x": 370, "y": 265},
+        "gate:architecture": {"x": 700, "y": 440},
+    }, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+}
+rubrics = {
+    "story-quality": "Story quality",
+    "phase-architecture": "Phase architecture",
+}
+documents = {
+    root / "pm/workflows/studio-story-flow.json": workflow,
+    root / "pm/programs/studio-program.json": program,
+}
+for slug, title in rubrics.items():
+    documents[root / f"pm/rubrics/{slug}.json"] = {
+        "kind": "delivery-workbench-rubric", "schema_version": 1,
+        "slug": slug, "title": title, "version": "1.0.0", "criteria": [],
+    }
+for path, document in documents.items():
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+PY
+
+VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-nested-design:#/program-studio/workflow/architect-debate-delivery studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-json:#/program-studio/workflow/architect-debate-delivery studio-authority:#/program-studio/program/studio-program"
 for spec in $VIEWS; do
   name="${spec%%:*}"
   route="${spec#*:}"
@@ -255,6 +382,14 @@ for spec in $VIEWS; do
     orchestration-validate) extra="&orchview=validate" ;;
     orchestration-json) extra="&orchview=json" ;;
     orchestration-run-*) extra="&orchview=run" ;;
+    studio-debate-active) extra="&studioview=simulate&studioscenario=debate-active" ;;
+    studio-budget-exhausted) extra="&studioview=simulate&studioscenario=budget-exhausted" ;;
+    studio-verifier-failed) extra="&studioview=simulate&studioscenario=verifier-failed" ;;
+    studio-phase-transition) extra="&studioview=simulate&studioscenario=phase-transition" ;;
+    studio-complete) extra="&studioview=simulate&studioscenario=complete" ;;
+    studio-validate) extra="&studioview=validate" ;;
+    studio-json) extra="&studioview=json" ;;
+    studio-authority) extra="&studioview=authority" ;;
   esac
   shot "$name-desktop" 1440,900 "$BASE/?snapshot=1$extra$route"
   shot "$name-mobile" 390,844 "$BASE/?snapshot=1$extra$route"
@@ -273,4 +408,4 @@ mv "$REPO/.githooks/pre-commit.off" "$REPO/.githooks/pre-commit"
 shot "overview-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
 shot "overview-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
 
-echo "workbench-ui-smoke.sh: ok (32 viewport renders: 14 views + attention + ambiguity, desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (52 viewport renders: 23 data views + empty Studio + attention + ambiguity, desktop+mobile)"

@@ -592,7 +592,10 @@ def main():
         for private in ("prompt", "argv", "packet", "transcript", "artifact content"):
             assert private not in serialized_summary
         app = (root / ".githooks" / "workbench" / "app.js").read_text(encoding="utf-8")
-        run_source = app[app.index("function runStateBadge"):app.index("/* ── router")]
+        run_source = app[
+            app.index("function runStateBadge"):
+            app.index("/* ── optional Program / Workflow Studio")
+        ]
         for token in ("live run · ledger replay", "fail checks", "failure routes",
                       "human checkpoints", "confirm this exact act"):
             assert token in run_source

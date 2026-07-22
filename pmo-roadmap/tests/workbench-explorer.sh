@@ -145,6 +145,7 @@ PY
 curl -s "$BASE/" | grep -q 'id="app"' || fail "index.html should serve the app shell"
 curl -s "$BASE/app.js" | grep -q "read-only" || fail "app.js should be served"
 curl -s "$BASE/" | grep -q '#/orchestration' || fail "app shell should link the orchestration editor"
+curl -s "$BASE/" | grep -q '#/program-studio' || fail "app shell should progressively disclose Program Studio"
 curl -s "$BASE/api/file?path=pm/roadmap/sample/README.md" \
   | grep -q 'Sample - Roadmap' || fail "file endpoint should serve roadmap files"
 
@@ -167,9 +168,106 @@ for _ in 1 2 3; do
   curl -s "$BASE/api/projects/sample" >/dev/null
   curl -s "$BASE/api/projects/sample/phases/0" >/dev/null
   curl -s "$BASE/api/projects/sample/stories/SMP-0-01" >/dev/null
+  curl -s "$BASE/api/program-studio" >/dev/null
 done
 AFTER="$(sum_tree)"
 [ "$BEFORE" = "$AFTER" ] || fail "repeated API loads must not modify the roadmap tree"
+
+# ── optional Program Studio API (WLA-26-06) ─────────────────────────
+curl -s "$BASE/api/program-studio" > "$TMP_ROOT/studio-empty.json"
+python3 - "$TMP_ROOT/studio-empty.json" <<'PY' \
+  || fail "no-program Studio state should be healthy, neutral, and pure"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["kind"] == "delivery-workbench-program-studio"
+assert d["healthy"] and d["empty"] and d["ordinary_workbench_ready"]
+assert d["default_route"] == "#/" and d["studio_route"] == "#/program-studio"
+assert d["empty_state"]["tone"] == "neutral"
+assert not d["empty_state"]["blocking"] and not d["empty_state"]["setup_required"]
+for key in ("starts_work", "writes_policy", "writes_roadmap", "writes_run_state",
+            "creates_grant", "background_polling", "changes_default_route"):
+    assert d[key] is False, key
+PY
+[ ! -e "$REPO/pm/programs" ] && [ ! -e "$REPO/pm/workflows" ] \
+  && [ ! -e "$REPO/pm/organizations" ] \
+  || fail "opening empty Program Studio must not create optional policy directories"
+
+python3 - "$TMP_ROOT/studio-save.json" <<'PY'
+import json, sys
+document = {
+    "kind": "delivery-workbench-workflow", "schema_version": 1,
+    "slug": "studio-fixture", "title": "Studio fixture", "version": "1.0.0",
+    "parameters": [], "defaults": {},
+    "nodes": [{
+        "id": "review", "type": "checkpoint", "prompt_id": "review",
+        "prompt": "Review this fixture.", "expires_seconds": 3600,
+        "options": [
+            {"id": "approve", "label": "Approve", "route": {"kind": "terminal", "target": "complete"}},
+            {"id": "block", "label": "Block", "route": {"kind": "action", "target": "block"}},
+        ],
+    }],
+    "terminals": [{"id": "complete", "meaning": "complete"}],
+    "layout": {"nodes": {"review": {"x": 90, "y": 110}},
+               "viewport": {"x": 0, "y": 0, "zoom": 1}},
+}
+json.dump({"family": "workflow", "action": "save", "name": "studio-fixture",
+           "document": document}, open(sys.argv[1], "w"))
+PY
+curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$TMP_ROOT/studio-save.json" \
+  "$BASE/api/program-studio/preview" > "$TMP_ROOT/studio-preview.json"
+python3 - "$TMP_ROOT/studio-preview.json" "$TMP_ROOT/studio-apply.json" <<'PY' \
+  || fail "Program Studio preview should share compiler/graph/authority and remain pure"
+import json, sys
+body = json.load(open(sys.argv[1])); d = body["data"]
+assert body["ok"] and d["applicable"] and d["valid"]
+assert d["studio"]["validation"]["valid"]
+assert d["studio"]["round_trip"]["lossless"]
+assert d["studio"]["round_trip"]["semantic_hash_preserved"]
+assert d["studio"]["round_trip"]["layout_hash_preserved"]
+assert d["studio"]["graph"]["nodes"][0]["keyboard"]
+assert d["studio"]["authority"]["creates_grant"] is False
+for key in ("starts_work", "writes_policy", "writes_roadmap", "writes_run_state",
+            "creates_grant", "starts_agent", "starts_check", "starts_observer",
+            "sends_notification", "applies_integration"):
+    assert d[key] is False, key
+request = json.load(open(sys.argv[1].replace("studio-preview", "studio-save")))
+request["fingerprint"] = d["fingerprint"]
+json.dump(request, open(sys.argv[2], "w"))
+PY
+[ ! -e "$REPO/pm/workflows/studio-fixture.json" ] \
+  || fail "Program Studio preview must not write policy"
+curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$TMP_ROOT/studio-apply.json" \
+  "$BASE/api/program-studio/apply" > "$TMP_ROOT/studio-result.json"
+python3 - "$TMP_ROOT/studio-result.json" <<'PY' \
+  || fail "Program Studio apply should report one declared policy write only"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["applied"] and d["changed"] and d["writes_policy"]
+assert d["writes_only"] == ["pm/workflows/studio-fixture.json"]
+assert not d["starts_work"] and not d["creates_grant"] and not d["writes_run_state"]
+PY
+[ -f "$REPO/pm/workflows/studio-fixture.json" ] \
+  || fail "Program Studio apply did not write its one direct-contained policy"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/studio-apply.json" "$BASE/api/program-studio/apply")" = "409" ] \
+  || fail "replayed Program Studio fingerprint must refuse stale"
+curl -s "$BASE/api/program-studio/workflow/studio-fixture" > "$TMP_ROOT/studio-detail.json"
+python3 - "$TMP_ROOT/studio-detail.json" <<'PY' \
+  || fail "Program Studio detail should preserve API/compiler/config parity"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["raw"]["slug"] == "studio-fixture" and d["validation"]["valid"]
+assert d["compiled"]["semantic_hash"] == d["round_trip"]["hashes_before"]["semantic"]
+assert d["graph"]["config"] == d["raw"]
+assert d["simulation"]["starts_work"] is False
+assert d["authority"]["grant_required"] and not d["authority"]["creates_grant"]
+PY
+[ ! -e "$REPO/.git/pmo-programs" ] && [ ! -e "$REPO/pm/program-runs" ] \
+  || fail "Studio authoring must not create runtime authority or run state"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+  -d '{"family":"workflow","action":"save","name":"../escape","document":{}}' \
+  "$BASE/api/program-studio/preview")" = "400" ] \
+  || fail "Program Studio must refuse escaped policy names"
 
 # ── rich orchestration editor API (WLA-24-03) ───────────────────────
 curl -s "$BASE/api/orchestration" > "$TMP_ROOT/orchestration-list.json"

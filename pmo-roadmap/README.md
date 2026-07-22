@@ -598,6 +598,16 @@ viewer, the guarded roadmap editor, and the rich orchestration score editor.
 The orchestration route couples an accessible typed SVG graph and complete
 inspector with compiler-owned Validate and lossless JSON views; score save and
 delete require a separate preview→diff→fingerprint apply and start no run.
+The additive `#/program-studio` route progressively discloses Phase 26 program,
+workflow, and organization policy. Its Design, Simulate, Validate, JSON, and
+Authority views share the core compilers; the accessible graph distinguishes
+nested subflows, finite loops/debates, role lanes, verifier separation,
+councils/meta-audit, architect gates, artifacts, capabilities, budgets, and
+stop routes. Graph/config round trips preserve compiler semantic/document and
+layout hashes. Its own preview→diff→fingerprint→apply pair can write or delete
+one direct-contained tracked policy and cannot create a grant, run, agent,
+check, observer, notification, integration, or roadmap act. An empty policy
+inventory is a healthy neutral state and never changes `#/` or starts polling.
 `?snapshot=1` switches the UI to synchronous loading for headless
 screenshot tools.
 
@@ -611,7 +621,8 @@ chain hops with explicit absent states, plus commit events carrying
 `PMO-Story`/`PMO-Contract-Digest` trailers merged with work-log
 entries — this endpoint IS the agent-facing JSON export),
 `/api/projects/{slug}/phases/{n}/events`, `/api/file?path=…`,
-`GET /api/orchestration[/<score>]`, and
+`GET /api/orchestration[/<score>]`,
+`GET /api/program-studio[/<program|workflow|organization>/<name>]`, and
 the write-tier workflow: `POST /api/mutations/preview` accepts
 structured mutation requests (`create_phase`, `create_story`,
 `update_story_status`, `attach_evidence`, `close_phase` — one-to-one
@@ -623,7 +634,11 @@ refuses with 409 when the source files changed after the preview;
 writes are rollback-protected and followed by revalidation. Score content has
 the parallel compiler-backed `POST /api/orchestration/preview|apply` pair,
 contained to direct `pm/orchestration/*.json` files and refusing invalid,
-stale, escaped, or unverifiable writes. Both roadmap mutation routes are
+stale, escaped, or unverifiable writes. The parallel
+`POST /api/program-studio/preview|apply` pair is contained to the selected
+direct `pm/programs|workflows|organizations/*.json` policy, returns the shared
+compiler/graph/simulation/authority model, and has the same exact-byte stale
+refusal while exposing no runtime-authority act. Both roadmap mutation routes are
 guarded while the project has validation issues, except
 for mutations whose projected issue set strictly shrinks the current
 one — a fix is never ambiguous — or requests that explicitly

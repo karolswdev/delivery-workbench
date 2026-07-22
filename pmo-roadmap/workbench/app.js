@@ -2020,6 +2020,503 @@ async function viewOrchestration(name) {
   await refreshOrchValidation();
 }
 
+/* ── optional Program / Workflow Studio (WLA-26-06) ────────────────
+ * This route is deliberately additive: the ordinary Workbench stays at #/.
+ * The browser owns interaction and layout only. Raw policy, diagnostics,
+ * graph projection, simulation, hashes, and authority explanation all arrive
+ * from /api/program-studio, which delegates to the Phase-26 compilers. */
+
+const STUDIO_FAMILIES = ["program", "workflow", "organization"];
+const STUDIO_VIEWS = ["design", "simulate", "validate", "json", "authority"];
+const STUDIO_NODE_TYPES = [
+  "agent", "check", "collect", "bounded_run", "subflow", "loop",
+  "debate", "verdict", "gate", "checkpoint", "rail",
+];
+
+let studioState = {
+  inventory: null, family: "program", name: "", exists: false,
+  document: null, model: null, compilePreview: null, view: "design",
+  selected: "", jsonDraft: "", validationTimer: null,
+  scenario: "candidate-assignment", error: "", jsonPointer: "",
+};
+
+function studioFamilyModel(family = studioState.family) {
+  return (studioState.inventory?.families || []).find((item) => item.id === family);
+}
+
+function studioCssToken(value) {
+  return String(value || "unknown").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+}
+
+function studioFieldId(pointer) {
+  return pointer ? `studio-field-${String(pointer).replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-|-$/g, "")}` : "";
+}
+
+function studioInput(label, key, value, type = "text", attrs = "", pointer = "") {
+  return `<label class="studio-field"><span>${esc(label)}</span><input ${pointer ? `id="${esc(studioFieldId(pointer))}"` : ""} data-studio-field="${esc(key)}" type="${type}" value="${esc(value ?? "")}" ${attrs}></label>`;
+}
+
+function studioArea(label, key, value, hint = "", pointer = "") {
+  return `<label class="studio-field"><span>${esc(label)}</span><textarea ${pointer ? `id="${esc(studioFieldId(pointer))}"` : ""} data-studio-field="${esc(key)}">${esc(value ?? "")}</textarea>${hint ? `<small>${esc(hint)}</small>` : ""}</label>`;
+}
+
+function studioSelect(label, key, values, selected, pointer = "") {
+  return `<label class="studio-field"><span>${esc(label)}</span><select ${pointer ? `id="${esc(studioFieldId(pointer))}"` : ""} data-studio-field="${esc(key)}">${values.map((value) => `<option value="${esc(value)}"${value === selected ? " selected" : ""}>${esc(value)}</option>`).join("")}</select></label>`;
+}
+
+function ensureStudioLayout() {
+  const document = studioState.document;
+  if (!document) return;
+  document.layout ||= {};
+  document.layout.nodes ||= {};
+  document.layout.viewport ||= { x: 0, y: 0, zoom: 1 };
+}
+
+function studioGraphNode(id) {
+  return (studioState.model?.graph?.nodes || []).find((node) => node.id === id);
+}
+
+function studioRawNode(graphNode) {
+  if (!graphNode || studioState.family !== "workflow") return null;
+  const match = String(graphNode.pointer || "").match(/^\/nodes\/(\d+)/);
+  return match ? studioState.document.nodes?.[Number(match[1])] : null;
+}
+
+function studioGraphHtml() {
+  const graph = studioState.model?.graph;
+  if (!graph) return stateHtml("Waiting for the shared graph projection…");
+  const nodes = graph.nodes || [];
+  const byId = Object.fromEntries(nodes.map((node) => [node.id, node]));
+  const maxX = Math.max(960, ...nodes.map((node) => Number(node.position?.x || 0) + 250));
+  const maxY = Math.max(560, ...nodes.map((node) => Number(node.position?.y || 0) + 155));
+  const diagnosticCounts = new Map();
+  (studioState.model.validation?.diagnostics || []).forEach((diagnostic) => {
+    const id = diagnostic.target?.node_id;
+    if (id) diagnosticCounts.set(id, (diagnosticCounts.get(id) || 0) + 1);
+  });
+  const edges = (graph.edges || []).map((edge) => {
+    const source = byId[edge.from]?.position;
+    const target = byId[edge.to]?.position;
+    if (!source || !target) return "";
+    const failure = ["route", "separation"].includes(edge.kind);
+    const x1 = Number(source.x) + 210; const y1 = Number(source.y) + 52;
+    const x2 = Number(target.x); const y2 = Number(target.y) + 52;
+    return `<path class="studio-edge kind-${studioCssToken(edge.kind)}" d="M ${x1} ${y1} C ${x1 + 40} ${y1}, ${x2 - 40} ${y2}, ${x2} ${y2}" marker-end="url(#studio-arrow-${failure ? "route" : "success"})"><title>${esc(edge.from)} → ${esc(edge.to)} · ${esc(edge.label || edge.kind)}</title></path>`;
+  }).join("");
+  return `<div class="studio-canvas-wrap" data-studio-scenario="${esc(studioState.scenario)}"><svg id="studio-canvas" class="studio-canvas" viewBox="0 0 ${maxX} ${maxY}" role="group" aria-labelledby="studio-canvas-title">
+    <title id="studio-canvas-title">${esc(studioState.family)} policy graph. Nodes are keyboard selectable and movable; compiler diagnostics link back to exact nodes and fields.</title>
+    <defs><marker id="studio-arrow-success" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z"></path></marker><marker id="studio-arrow-route" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z"></path></marker></defs>
+    ${(graph.lanes || []).map((lane, index) => `<g class="studio-lane" data-lane="${esc(lane.id)}"><rect x="8" y="${36 + index * 175}" width="${maxX - 16}" height="152" rx="7"></rect><text x="22" y="${58 + index * 175}">${esc(lane.label)}</text></g>`).join("")}
+    ${edges}
+    ${nodes.map((node) => {
+      const position = node.position || { x: 0, y: 0 };
+      const count = diagnosticCounts.get(node.id) || 0;
+      const summary = node.role || node.summary?.workflow || node.summary?.duty || node.lane || node.type;
+      const bounds = Object.entries(node.bounds || {}).map(([key, value]) => `${key.replace(/^max_/, "≤ ")}: ${value}`).join(" · ");
+      const drill = node.drilldown?.name ? ` · opens workflow ${node.drilldown.name}` : "";
+      return `<g class="studio-node type-${studioCssToken(node.type)}${node.container ? " is-container" : ""}${studioState.selected === node.id ? " selected" : ""}${count ? " has-error" : ""}" data-studio-node="${esc(node.id)}" data-layout-key="${esc(node.layout_key || node.id)}" transform="translate(${Number(position.x)},${Number(position.y)})" tabindex="0" role="button" aria-label="${esc(node.label)}, ${esc(node.type)}, lane ${esc(node.lane)}${bounds ? `, bounded ${esc(bounds)}` : ""}${count ? `, ${count} compiler issues` : ""}${esc(drill)}">
+        <title>${esc(node.label)} · ${esc(node.type)} · ${esc(summary)}${bounds ? ` · ${esc(bounds)}` : ""}${count ? ` · ${count} compiler issues` : ""}</title>
+        <rect width="210" height="104" rx="${node.container ? 3 : 10}"></rect>
+        <circle class="port input" cx="0" cy="52" r="5"></circle><circle class="port output" cx="210" cy="52" r="5"></circle>
+        <text class="node-type" x="14" y="22">${esc(node.type)}${node.container ? " · bounded container" : ""}</text>
+        <text class="node-label" x="14" y="49">${esc(String(node.label)).slice(0, 25)}</text>
+        <text class="node-detail" x="14" y="72">${esc(String(summary || "")).slice(0, 31)}</text>
+        <text class="node-bound" x="14" y="91">${esc(bounds || (node.fan_in > 1 ? `fan-in ${node.fan_in}` : node.fan_out > 1 ? `fan-out ${node.fan_out}` : node.drilldown?.name ? "drill down ↗" : "" )).slice(0, 36)}</text>
+        ${count ? `<text class="node-error" x="194" y="22" text-anchor="end">${count}!</text>` : ""}
+      </g>`;
+    }).join("")}
+  </svg></div>`;
+}
+
+function studioDocumentInspector() {
+  const document = studioState.document || {};
+  const common = `<div class="studio-inspector-head"><div><small>${esc(studioState.family)} policy</small><strong>${esc(document.slug || studioState.name)}</strong></div>${badge("tracked config", "ok")}</div>
+    <form class="studio-inspector-form" id="studio-document-form">
+      ${studioInput("slug / filename", "document.slug", document.slug, "text", 'pattern="[a-z][a-z0-9_-]*"', "/slug")}
+      ${studioInput("title", "document.title", document.title, "text", "", "/title")}
+      ${studioArea("description", "document.description", document.description || "", "reviewed tracked policy text; never provider credentials", "/description")}
+      ${studioState.family === "workflow" ? studioInput("semantic version", "document.version", document.version || "1.0.0", "text", "", "/version") : ""}
+    </form>`;
+  if (studioState.family === "program") return common + studioProgramInspector();
+  if (studioState.family === "organization") return common + studioOrganizationOverview();
+  return common + `<p class="studio-help">Select a node to inspect its exact role, artifacts, bounds, routes, and shared-compiler diagnostics.</p>`;
+}
+
+function studioProgramInspector() {
+  const document = studioState.document;
+  const scope = document.scope || {};
+  const phases = scope.phases || {};
+  const stories = scope.stories === "all" ? "" : (scope.stories?.include || []).join("\n");
+  const workCaps = ["agent:dispatch", "check:execute", "workspace:write", "nudge:deliver", "notification:send", "certification:verdict"];
+  const deliveryCaps = ["evidence:materialize", "integration:apply", "contract:generate", "certification:objective", "git:commit", "git:push", "roadmap:story-start", "roadmap:story-complete", "roadmap:phase-advance"];
+  const stops = ["scope-complete", "checkpoint-required", "unresolved-dissent", "architect-veto", "blocked-frontier", "budget-exhausted", "grant-expired", "grant-revoked"];
+  return `<form id="studio-program-form" class="studio-inspector-form studio-program-form">
+    <fieldset><legend>roadmap scope</legend>${studioInput("project", "program.project", scope.project || "", "text", "", "/scope/project")}${studioInput("phase from", "program.phase_from", phases.from ?? "", "number", 'min="0"', "/scope/phases/from")}${studioInput("phase through", "program.phase_through", phases.through ?? "", "number", 'min="0"', "/scope/phases/through")}${studioArea("exact story ids", "program.stories", stories, "empty means every story inside the phase scope", "/scope/stories")}</fieldset>
+    <fieldset><legend>organization and autonomy ceiling</legend>${studioInput("organization", "program.organization", document.organization || "", "text", "", "/organization")}${studioSelect("mode ceiling", "program.mode_ceiling", ["advisory", "checkpointed", "continuous"], document.mode_ceiling || "advisory", "/mode_ceiling")}</fieldset>
+    <fieldset><legend>work / verdict capability requests</legend><div class="studio-checkgrid">${workCaps.map((cap) => `<label><input type="checkbox" data-studio-capability="${cap}"${(document.requested_capabilities || []).includes(cap) ? " checked" : ""}>${cap}</label>`).join("")}</div></fieldset>
+    <fieldset><legend>delivery rail requests</legend><div class="studio-checkgrid">${deliveryCaps.map((cap) => `<label><input type="checkbox" data-studio-capability="${cap}"${(document.requested_capabilities || []).includes(cap) ? " checked" : ""}>${cap}</label>`).join("")}</div></fieldset>
+    <fieldset><legend>finite budgets</legend><div class="studio-budget-grid">${Object.entries(document.budgets || {}).map(([key, value]) => `<label><span>${esc(key)}</span><input type="number" min="1" data-studio-budget="${esc(key)}" value="${esc(value)}"></label>`).join("")}</div></fieldset>
+    <fieldset><legend>stop and escalation policy</legend><div class="studio-checkgrid">${stops.map((stop) => `<label><input type="checkbox" data-studio-stop="${stop}"${(document.stop_conditions || []).includes(stop) ? " checked" : ""}>${stop}</label>`).join("")}</div></fieldset>
+    <details><summary>binding rules and phase gates</summary><div class="studio-rule-list">${(document.bindings || []).map((rule, index) => `<button type="button" data-studio-select="binding:${esc(rule.id)}"><strong>${esc(rule.id)}</strong><span>priority ${esc(rule.priority)} · ${esc(rule.workflow)} · ${esc(rule.team)}</span><small>${esc(JSON.stringify(rule.match))}</small></button>`).join("") || '<p class="hint">No story binding rule yet; author one in lossless JSON.</p>'}${(document.phase_gates || []).map((gate) => `<button type="button" data-studio-select="gate:${esc(gate.id)}"><strong>${esc(gate.id)}</strong><span>${esc(gate.role)} · ${esc(gate.rubric)}</span><small>${esc(gate.when)} → ${esc(gate.on_fail)}</small></button>`).join("")}</div></details>
+  </form>`;
+}
+
+function studioOrganizationOverview() {
+  const document = studioState.document;
+  return `<div class="studio-org-overview"><h3>team / verifier topology</h3>${(document.teams || []).map((team) => `<section><strong>${esc(team.id)}</strong><div>${(team.roles || []).map((role) => `${badge(`${role.duty} · ${role.cardinality}`, role.duty === "verifier" || role.duty === "meta-verifier" ? "ok" : "")} `).join("")}</div><small>${(team.roles || []).filter((role) => (role.independent_from || []).length).map((role) => `${role.id} independent from ${role.independent_from.join(", ")}`).join(" · ") || "No separation edge declared."}</small></section>`).join("") || '<p class="hint">No team policy yet; author agents, pools, teams, and councils in JSON.</p>'}<h3>councils / meta-verification</h3>${(document.councils || []).map((council) => `<section><strong>${esc(council.id)}</strong><span>${esc((council.members || []).join(" + "))}</span><small>judge ${esc(council.judge)} · quorum ${esc(council.quorum)} · meta ${esc(council.meta_verifier || "none")} · ${esc(council.decision?.method || "declared default")}</small></section>`).join("") || '<p class="hint">No council declared.</p>'}</div>`;
+}
+
+function studioNodeInspector(node) {
+  if (!node) return studioDocumentInspector();
+  const raw = studioRawNode(node);
+  const diagnostics = (studioState.model.validation?.diagnostics || []).filter((item) => item.target?.node_id === node.id);
+  const drilldown = node.drilldown?.name ? `<a class="studio-drilldown" href="#/program-studio/workflow/${encodeURIComponent(node.drilldown.name)}">open nested workflow ${esc(node.drilldown.name)} ↗</a>` : "";
+  return `<div class="studio-inspector-head"><div><small>${esc(node.type)} · ${esc(node.lane)}</small><strong>${esc(node.label)}</strong></div>${badge(node.container ? "finite container" : "graph node", node.container ? "warn" : "")}</div>
+    ${diagnostics.length ? `<div class="studio-node-errors">${diagnostics.map((item) => `<button type="button" data-studio-diagnostic="${esc(item.pointer)}" data-node-id="${esc(item.target?.node_id || "")}" data-field-id="${esc(item.target?.field_id || "")}"><code>${esc(item.pointer)}</code>${esc(item.message)}</button>`).join("")}</div>` : ""}
+    ${raw ? `<form id="studio-node-form" class="studio-inspector-form">
+      ${studioInput("node id", "node.id", raw.id, "text", "", `${node.pointer}/id`)}
+      ${studioInput("title", "node.title", raw.title || "", "text", "", `${node.pointer}/title`)}
+      ${studioArea("description", "node.description", raw.description || "", "", `${node.pointer}/description`)}
+      ${raw.role !== undefined ? studioInput("assigned role", "node.role", raw.role || "", "text", "", `${node.pointer}/role`) : ""}
+      ${raw.workflow !== undefined ? studioInput("nested workflow", "node.workflow", raw.workflow || "", "text", "", `${node.pointer}/workflow`) : ""}
+      ${raw.max_rounds !== undefined ? studioInput("maximum rounds", "node.max_rounds", raw.max_rounds, "number", 'min="1"', `${node.pointer}/max_rounds`) : ""}
+      ${raw.quorum !== undefined ? studioInput("quorum", "node.quorum", raw.quorum, "number", 'min="1"', `${node.pointer}/quorum`) : ""}
+      ${raw.capability_ceiling !== undefined ? studioArea("capability ceiling", "node.capability_ceiling", (raw.capability_ceiling || []).join("\n"), "one exact capability per line", `${node.pointer}/capability_ceiling`) : ""}
+      ${raw.participants !== undefined ? studioArea("debate speakers", "node.participants", (raw.participants || []).join("\n"), "judge remains a separate role", `${node.pointer}/participants`) : ""}
+    </form><div class="studio-inspector-actions"><button type="button" id="studio-duplicate-node">duplicate node</button><button type="button" class="danger" id="studio-delete-node">delete node</button></div>` : ""}
+    ${drilldown}
+    <details open><summary>exact governed fields</summary><pre>${esc(JSON.stringify(raw || node.summary || node, null, 2))}</pre></details>`;
+}
+
+function studioDesignView() {
+  const node = studioGraphNode(studioState.selected);
+  const palette = studioState.family === "workflow" ? `<div class="studio-palette" aria-label="hierarchical workflow node palette"><button type="button" data-studio-settings>workflow settings</button>${STUDIO_NODE_TYPES.map((type) => `<button type="button" data-studio-add="${type}">+ ${type.replace("_", " ")}</button>`).join("")}</div>` : `<div class="studio-palette"><button type="button" data-studio-settings>${esc(studioState.family)} settings</button><span>Graph positions are document-only layout; every contract field remains available in JSON.</span></div>`;
+  return `<div class="studio-design">${palette}<div class="studio-workarea">${studioGraphHtml()}</div><aside class="studio-inspector" aria-label="${esc(studioState.family)} policy inspector">${node ? studioNodeInspector(node) : studioDocumentInspector()}</aside></div>`;
+}
+
+function studioScenarioSummary(scenario) {
+  const simulation = studioState.model?.simulation || {};
+  const graph = studioState.model?.graph || {};
+  if (scenario === "candidate-assignment") {
+    const selection = simulation.selection || {};
+    return `<div class="studio-scenario-summary"><strong>${esc(selection.story || "No eligible story selected")}</strong><span>${esc(selection.reason || "The shared planner explains every scoped candidate.")}</span>${simulation.assignment ? `<small>${esc(simulation.assignment.implementer?.profile || "implementer")} → independent verifier ${esc(simulation.assignment.verifier?.profile || "unresolved")}</small>` : ""}</div>`;
+  }
+  const active = (graph.nodes || []).filter((node) => {
+    if (scenario === "debate-active") return node.type === "debate" || node.type === "council";
+    if (scenario === "verifier-failed") return ["verdict", "verifier", "meta-verifier"].includes(node.type);
+    if (scenario === "budget-exhausted") return node.container || node.type === "scope";
+    if (scenario === "phase-transition") return node.type === "architect-gate" || node.type === "master-architect";
+    if (scenario === "nested") return ["subflow", "loop"].includes(node.type);
+    return false;
+  });
+  return `<div class="studio-scenario-summary"><strong>${esc(scenario.replaceAll("-", " "))}</strong><span>${active.length ? `${active.length} governed graph element${active.length === 1 ? "" : "s"} highlighted` : "Route is not present in this policy."}</span><small>Synthetic inspection state only—simulation starts nothing and creates no grant.</small></div>`;
+}
+
+function studioSimulationDetails() {
+  const simulation = studioState.model?.simulation;
+  if (!simulation) return `<p class="hint">Resolve compiler diagnostics to obtain a pure scheduling simulation.</p>`;
+  if (studioState.family === "program") return `<div class="studio-sim-grid"><section><h3>roadmap candidates</h3>${(simulation.candidates || []).map((candidate) => `<div class="studio-candidate"><code>${esc(candidate.story)}</code>${badge(candidate.reason, candidate.eligible ? "ok" : "")}<span>${esc(candidate.phase)}</span></div>`).join("") || '<p class="hint">No scoped candidates.</p>'}</section><section><h3>preassigned organization</h3><pre>${esc(JSON.stringify(simulation.assignment || simulation.issues || {}, null, 2))}</pre></section></div>`;
+  if (studioState.family === "workflow") return `<div class="studio-sim-grid"><section><h3>finite scheduling waves</h3>${(simulation.waves || []).map((wave, index) => `<div class="studio-wave"><strong>wave ${esc(wave.wave ?? index + 1)}</strong><span>${esc((wave.scheduled || wave).join?.(", ") || JSON.stringify(wave))}</span></div>`).join("")}</section><section><h3>worst-case envelope</h3>${Object.entries(simulation.envelopes?.worst_case || {}).map(([key, value]) => `<div class="kv"><div class="k">${esc(key)}</div><div class="v">${esc(value)}</div></div>`).join("")}</section><section><h3>loops / debate routes</h3><pre>${esc(JSON.stringify({ loops: simulation.loops || [], debates: simulation.debates || [], routes: simulation.routes || [] }, null, 2))}</pre></section></div>`;
+  return `<div class="studio-sim-grid"><section><h3>team concurrency and separation</h3><pre>${esc(JSON.stringify(simulation.teams || [], null, 2))}</pre></section><section><h3>councils, quorum, meta-audit</h3><pre>${esc(JSON.stringify(simulation.councils || [], null, 2))}</pre></section></div>`;
+}
+
+function studioSimulateView() {
+  const scenarios = studioState.model?.simulation_scenarios || [];
+  const current = scenarios.find((item) => item.id === studioState.scenario) || scenarios.find((item) => item.available) || scenarios[0];
+  if (current) studioState.scenario = current.id;
+  return `<div class="studio-simulation" data-scenario="${esc(studioState.scenario)}"><header><div><span class="orch-eyebrow">pure route simulator</span><h2>Inspect assignment, bounds, and red/green routes before any grant</h2></div>${badge("starts nothing", "ok")}</header><div class="studio-scenario-tabs" role="tablist" aria-label="simulation states">${scenarios.map((scenario) => `<button type="button" role="tab" data-studio-scenario="${esc(scenario.id)}" aria-selected="${scenario.id === studioState.scenario}"${scenario.available ? "" : " disabled"}>${esc(scenario.label)}</button>`).join("")}</div>${studioScenarioSummary(studioState.scenario)}${studioSimulationDetails()}</div>`;
+}
+
+function studioValidateView() {
+  const model = studioState.model;
+  if (!model) return stateHtml("Waiting for shared compiler diagnostics…");
+  const validation = model.validation || { valid: false, diagnostics: [] };
+  const diagnostics = validation.diagnostics || [];
+  const hashes = model.round_trip?.hashes_before || {};
+  return `<div class="studio-validation ${validation.valid ? "valid" : "invalid"}"><header><div><span class="orch-eyebrow">shared compiler</span><h2>${validation.valid ? "Policy is valid" : `Compiler refused ${diagnostics.length} field${diagnostics.length === 1 ? "" : "s"}`}</h2></div>${badge(validation.valid ? "valid" : "refused", validation.valid ? "ok" : "issue")}</header>
+    <div class="studio-hashes"><div><span>semantic</span><code>${esc(hashes.semantic || "unavailable until valid")}</code></div><div><span>document</span><code>${esc(hashes.document || "unavailable until valid")}</code></div><div><span>layout</span><code>${esc(hashes.layout)}</code></div></div>
+    <section class="studio-roundtrip"><strong>graph ⇄ config</strong>${badge(model.round_trip?.lossless ? "lossless" : "mismatch", model.round_trip?.lossless ? "ok" : "issue")} ${badge(model.round_trip?.semantic_hash_preserved ? "semantic hash preserved" : "semantic unavailable", model.round_trip?.semantic_hash_preserved ? "ok" : "")} ${badge(model.round_trip?.layout_hash_preserved ? "layout hash preserved" : "layout mismatch", model.round_trip?.layout_hash_preserved ? "ok" : "issue")}</section>
+    ${diagnostics.length ? `<ol class="studio-diagnostics">${diagnostics.map((item) => `<li><button type="button" data-studio-diagnostic="${esc(item.pointer)}" data-node-id="${esc(item.target?.node_id || "")}" data-field-id="${esc(item.target?.field_id || "")}"><code>${esc(item.pointer)}</code><strong>${esc(item.code)}</strong><span>${esc(item.message)}</span><small>${esc(item.remediation)}</small></button></li>`).join("")}</ol>` : '<p class="studio-green">The exact config compiled through the same core used by CLI and runtime planning.</p>'}
+  </div>`;
+}
+
+function studioJsonView() {
+  const value = studioState.jsonDraft || JSON.stringify(studioState.document, null, 2);
+  return `<div class="studio-json"><header><div><span class="orch-eyebrow">lossless configuration</span><h2>Every contract field, portable and reviewable</h2></div>${badge("same compiler", "ok")}</header>${studioState.jsonPointer ? `<div class="studio-json-target"><span>compiler target</span><code>${esc(studioState.jsonPointer)}</code></div>` : ""}<div class="studio-json-actions"><button type="button" id="studio-json-apply">apply JSON to graph</button><label class="filebtn">import JSON<input type="file" id="studio-json-import" accept="application/json,.json"></label></div><div id="studio-json-error" class="guard" hidden></div><label><span>${esc(studioState.family)} JSON</span><textarea id="studio-json-text" spellcheck="false">${esc(value)}</textarea></label></div>`;
+}
+
+function studioAuthorityView() {
+  const authority = studioState.model?.authority;
+  if (!authority) return stateHtml("Waiting for authority explanation…");
+  return `<div class="studio-authority"><header><div><span class="orch-eyebrow">policy request ≠ runtime authority</span><h2>What a later exact grant could—and could not—authorize</h2></div>${badge("creates no grant", "ok")}</header><div class="studio-mode-grid">${authority.modes.map((mode) => `<article class="${mode.within_ceiling ? "within" : "denied"}"><span>${esc(mode.id)}</span><strong>${esc(mode.label)}</strong><p>${esc(mode.meaning)}</p><small>${mode.within_ceiling ? "within authored ceiling" : "above authored ceiling"} · ${mode.dispatch ? "bounded dispatch possible only after grant" : "no dispatch"}</small></article>`).join("")}</div><div class="studio-capability-groups">${authority.groups.map((group) => `<section><h3>${esc(group.label)}</h3>${group.capabilities.map((capability) => `<div class="studio-capability ${capability.requested ? "requested" : "absent"}"><code>${esc(capability.id)}</code>${badge(capability.requested ? "requested in policy" : "not requested", capability.requested ? "warn" : "")}</div>`).join("")}</section>`).join("")}</div><div class="studio-authority-foot"><section><h3>finite budgets</h3><pre>${esc(JSON.stringify(authority.budgets || {}, null, 2))}</pre></section><section><h3>declared stops</h3><p>${(authority.stop_conditions || []).map((stop) => badge(stop)).join(" ") || "None on this policy family."}</p></section></div><p class="studio-no-grant">This is an inspection-only preview. Save writes tracked policy only; neither view nor Save grants a capability, starts work, creates a run, or advances the roadmap.</p></div>`;
+}
+
+function studioBody() {
+  if (studioState.view === "simulate") return studioSimulateView();
+  if (studioState.view === "validate") return studioValidateView();
+  if (studioState.view === "json") return studioJsonView();
+  if (studioState.view === "authority") return studioAuthorityView();
+  return studioDesignView();
+}
+
+function renderProgramStudio() {
+  const family = studioFamilyModel();
+  const items = family?.items || [];
+  const document = studioState.document || family?.draft || {};
+  const validation = studioState.model?.validation;
+  const empty = studioState.inventory?.empty;
+  app.innerHTML = `<div class="program-studio" data-family="${esc(studioState.family)}" data-policy="${esc(studioState.name)}">
+    ${empty ? `<section class="studio-empty-neutral"><div><span class="orch-eyebrow">optional advanced workspace</span><h2>${esc(studioState.inventory.empty_state.title)}</h2><p>${esc(studioState.inventory.empty_state.detail)}</p></div><a href="#/">ordinary Workbench overview</a></section>` : ""}
+    <header class="studio-toolbar"><div><span class="orch-eyebrow">optional autonomous delivery policy</span><h1>${esc(document.title || document.slug || "Program Studio")}</h1><code>pm/${esc(family?.plural || `${studioState.family}s`)}/${esc(document.slug || studioState.name)}.json</code><p>Designing, validating, simulating, and saving start nothing.</p></div><div class="studio-policy-actions"><label>family<select id="studio-family-select">${STUDIO_FAMILIES.map((id) => `<option value="${id}"${id === studioState.family ? " selected" : ""}>${esc(studioFamilyModel(id)?.label || id)}</option>`).join("")}</select></label><label>policy<select id="studio-policy-select"><option value="">new unsaved ${esc(studioState.family)}</option>${items.map((item) => `<option value="${esc(item.name)}"${item.name === studioState.name && studioState.exists ? " selected" : ""}>${esc(item.slug || item.name)}${item.valid ? "" : " (invalid)"}</option>`).join("")}</select></label><button type="button" id="studio-new">new</button><button type="button" id="studio-duplicate">duplicate</button><button type="button" id="studio-preview-save">preview save</button><button type="button" id="studio-preview-delete" class="danger"${studioState.exists ? "" : " disabled"}>preview delete</button></div></header>
+    <nav class="studio-tabs" aria-label="Program Studio views">${STUDIO_VIEWS.map((id) => `<button type="button" data-studio-view="${id}" class="${studioState.view === id ? "active" : ""}">${id[0].toUpperCase() + id.slice(1)}${id === "validate" && validation && !validation.valid ? ` (${validation.diagnostics.length})` : ""}</button>`).join("")}</nav>
+    ${studioState.error ? `<div class="studio-error" role="alert">${esc(studioState.error)}</div>` : ""}<div id="studio-save-panel" aria-live="polite"></div><div id="studio-view">${studioBody()}</div>
+  </div>`;
+  wireProgramStudio();
+}
+
+function queueStudioModel() {
+  clearTimeout(studioState.validationTimer);
+  studioState.validationTimer = setTimeout(() => refreshStudioModel(), SNAPSHOT_MODE ? 0 : 220);
+}
+
+async function refreshStudioModel() {
+  if (!studioState.document) return;
+  studioState.error = "";
+  const request = { family: studioState.family, action: "save", name: studioState.document.slug || studioState.name, document: studioState.document };
+  const { status, body } = await postJson("/api/program-studio/preview", request);
+  if (status >= 400 || body.ok === false || !body.data?.studio) {
+    studioState.error = (body.issues && body.issues[0]) || `compiler preview failed (${status})`;
+  } else {
+    studioState.compilePreview = body.data;
+    studioState.model = body.data.studio;
+    studioState.document = clone(body.data.studio.raw);
+  }
+  renderProgramStudio();
+}
+
+function setStudioField(key, value) {
+  const document = studioState.document;
+  if (key === "document.slug") { document.slug = value.trim(); if (!studioState.exists) studioState.name = document.slug; }
+  else if (key === "document.title") document.title = value;
+  else if (key === "document.description") setOptional(document, "description", value.trim());
+  else if (key === "document.version") document.version = value.trim();
+  else if (key.startsWith("program.")) {
+    document.scope ||= {};
+    document.scope.phases ||= { from: 1, through: 1 };
+    if (key === "program.project") document.scope.project = value.trim();
+    if (key === "program.phase_from") document.scope.phases.from = maybeNumber(value);
+    if (key === "program.phase_through") document.scope.phases.through = maybeNumber(value);
+    if (key === "program.stories") document.scope.stories = splitLines(value).length ? { include: splitLines(value) } : "all";
+    if (key === "program.organization") document.organization = value.trim();
+    if (key === "program.mode_ceiling") document.mode_ceiling = value;
+  } else if (key.startsWith("node.")) {
+    const graphNode = studioGraphNode(studioState.selected);
+    const node = studioRawNode(graphNode);
+    if (!node) return;
+    const field = key.slice(5);
+    if (field === "id") {
+      const old = node.id; const next = value.trim(); node.id = next;
+      (document.nodes || []).forEach((candidate) => {
+        candidate.needs = (candidate.needs || []).map((need) => need === old ? next : need);
+        Object.values(candidate.routes || {}).forEach((route) => { if (route?.kind === "node" && route.target === old) route.target = next; });
+        ["on_success", "on_failure", "on_exhausted", "on_consensus", "on_repair", "on_dissent", "on_quorum_lost"].forEach((routeKey) => { if (candidate[routeKey]?.kind === "node" && candidate[routeKey].target === old) candidate[routeKey].target = next; });
+      });
+      ensureStudioLayout(); if (document.layout.nodes[old]) { document.layout.nodes[next] = document.layout.nodes[old]; delete document.layout.nodes[old]; }
+      studioState.selected = next;
+    } else if (["max_rounds", "quorum"].includes(field)) node[field] = maybeNumber(value);
+    else if (["capability_ceiling", "participants"].includes(field)) node[field] = splitLines(value);
+    else setOptional(node, field, value.trim());
+  }
+  studioState.jsonDraft = "";
+  studioState.jsonPointer = "";
+  queueStudioModel();
+}
+
+function nextStudioNodeId(type) {
+  const base = type.replace("_", "-");
+  const used = new Set((studioState.document.nodes || []).map((node) => node.id));
+  let index = 1; while (used.has(`${base}-${index}`)) index += 1;
+  return `${base}-${index}`;
+}
+
+function defaultStudioNode(type) {
+  const id = nextStudioNodeId(type);
+  const common = { id, type, needs: [], resource_groups: [], inputs: {}, outputs: [] };
+  const action = { kind: "action", target: "block" };
+  const complete = { kind: "terminal", target: "complete" };
+  if (type === "agent") return { ...common, role: "implementer", task: "Perform the exact bounded role task.", workspace: "isolated-worktree", capability_ceiling: ["agent:dispatch", "workspace:write"], timeout_seconds: 900, max_attempts: 1, on_failure: action };
+  if (type === "check") return { ...common, runner: { kind: "builtin", name: "file-exists", path: "README.md", output_bytes: 30000 }, expect: { exit_code: 0 }, timeout_seconds: 300, max_attempts: 1, on_failure: action };
+  if (type === "collect") return { ...common, producers: [], on_failure: action };
+  if (type === "bounded_run") return { ...common, score: "score", expected_terminal: "awaiting-certification", capability_ceiling: ["agent:dispatch", "check:execute", "workspace:write"], budgets: { max_agent_starts: 8, max_check_starts: 16, max_wall_seconds: 3600, max_artifact_bytes: 1000000 }, on_failure: action };
+  if (type === "subflow") return { ...common, workflow: "workflow", version: "1.0.0", with: {}, capability_ceiling: ["agent:dispatch"], on_success: complete, on_failure: action };
+  if (type === "loop") return { ...common, purpose: "repair", workflow: "workflow", version: "1.0.0", with: {}, capability_ceiling: ["agent:dispatch"], max_rounds: 2, until: { kind: "artifact-valid", source: "child.fact", operator: "green" }, carry: [], on_success: complete, on_exhausted: action };
+  if (type === "debate") return { ...common, participants: ["proposer", "critic"], judge_role: "judge", max_rounds: 2, quorum: 2, artifact_max_bytes: 30000, artifact_max_tokens: 4000, round_timeout_seconds: 1800, tie_policy: "judge", dissent_policy: "preserve", on_consensus: complete, on_repair: action, on_dissent: { kind: "action", target: "checkpoint" }, on_quorum_lost: { kind: "action", target: "escalate" }, on_exhausted: { kind: "action", target: "escalate" } };
+  if (type === "verdict") return { ...common, role: "verifier", rubric: "quality", subject: { kind: "literal", value: "subject" }, freshness_seconds: 3600, max_rationale_bytes: 30000, results: ["pass", "fail"], routes: { pass: complete, fail: action } };
+  if (type === "gate") return { ...common, facts: ["check.fact"], verdicts: [], operator: "all", missing_policy: "block", dissent_policy: "preserve", routes: { pass: complete, fail: action, missing: action, dissent: { kind: "action", target: "checkpoint" } } };
+  if (type === "checkpoint") return { ...common, prompt_id: id, prompt: "Review this declared decision port.", expires_seconds: 86400, options: [{ id: "approve", label: "Approve", route: complete }, { id: "block", label: "Block", route: action }] };
+  if (type === "rail") return { ...common, action: "evidence-materialize", capability: "evidence:materialize", timeout_seconds: 300, on_failure: action };
+  return common;
+}
+
+function addStudioNode(type) {
+  const node = defaultStudioNode(type);
+  studioState.document.nodes ||= [];
+  studioState.document.nodes.push(node);
+  ensureStudioLayout();
+  const index = studioState.document.nodes.length - 1;
+  studioState.document.layout.nodes[node.id] = { x: 80 + (index % 4) * 270, y: 90 + Math.floor(index / 4) * 160 };
+  studioState.selected = node.id; studioState.jsonDraft = "";
+  refreshStudioModel();
+}
+
+function removeStudioNode() {
+  const graphNode = studioGraphNode(studioState.selected);
+  const node = studioRawNode(graphNode); if (!node) return;
+  studioState.document.nodes = studioState.document.nodes.filter((item) => item !== node);
+  studioState.document.nodes.forEach((candidate) => { candidate.needs = (candidate.needs || []).filter((need) => need !== node.id); });
+  ensureStudioLayout(); delete studioState.document.layout.nodes[node.id];
+  studioState.selected = ""; studioState.jsonDraft = ""; refreshStudioModel();
+}
+
+function duplicateStudioNode() {
+  const node = studioRawNode(studioGraphNode(studioState.selected)); if (!node) return;
+  const copy = clone(node); copy.id = nextStudioNodeId(node.type);
+  studioState.document.nodes.push(copy); ensureStudioLayout();
+  const old = studioState.document.layout.nodes[node.id] || { x: 80, y: 80 };
+  studioState.document.layout.nodes[copy.id] = { x: Number(old.x) + 35, y: Number(old.y) + 125 };
+  studioState.selected = copy.id; studioState.jsonDraft = ""; refreshStudioModel();
+}
+
+function moveStudioNode(id, x, y) {
+  const graphNode = studioGraphNode(id); if (!graphNode) return;
+  ensureStudioLayout();
+  const position = { x: Math.max(10, Math.round(x)), y: Math.max(10, Math.round(y)) };
+  studioState.document.layout.nodes[graphNode.layout_key || id] = position;
+  graphNode.position = position;
+  studioState.jsonDraft = "";
+}
+
+function wireStudioCanvas() {
+  const svg = document.getElementById("studio-canvas"); if (!svg) return;
+  let drag = null;
+  const point = (event) => { const p = svg.createSVGPoint(); p.x = event.clientX; p.y = event.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); };
+  document.querySelectorAll("[data-studio-node]").forEach((group) => {
+    group.addEventListener("click", () => { studioState.selected = group.dataset.studioNode; renderProgramStudio(); });
+    group.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); studioState.selected = group.dataset.studioNode; renderProgramStudio(); return; }
+      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault(); const node = studioGraphNode(group.dataset.studioNode); const step = event.shiftKey ? 20 : 5;
+      const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+      const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+      moveStudioNode(node.id, Number(node.position.x) + dx, Number(node.position.y) + dy); renderProgramStudio(); queueStudioModel();
+    });
+    group.addEventListener("pointerdown", (event) => { if (event.button !== 0) return; const node = studioGraphNode(group.dataset.studioNode); const p = point(event); drag = { group, node, dx: p.x - node.position.x, dy: p.y - node.position.y }; group.setPointerCapture(event.pointerId); });
+    group.addEventListener("pointermove", (event) => { if (!drag || drag.group !== group) return; const p = point(event); moveStudioNode(drag.node.id, p.x - drag.dx, p.y - drag.dy); group.setAttribute("transform", `translate(${drag.node.position.x},${drag.node.position.y})`); });
+    group.addEventListener("pointerup", () => { if (!drag) return; drag = null; queueStudioModel(); });
+  });
+}
+
+function renderStudioSavePreview(preview, request) {
+  const slot = document.getElementById("studio-save-panel"); if (!slot) return;
+  slot.innerHTML = `<section class="studio-save-preview ${preview.applicable ? "" : "refused"}"><div class="studio-preview-head"><strong>${esc(preview.action)} ${esc(preview.path)}</strong>${badge(preview.applicable ? "compiler-valid" : "refused", preview.applicable ? "ok" : "issue")}<code>${esc(preview.fingerprint)}</code></div>${preview.diff ? `<pre class="diff">${diffHtml(preview.diff)}</pre>` : '<p class="hint">No content change.</p>'}<p>Preview writes nothing, starts nothing, and grants nothing. Apply is bound to these exact source bytes and desired content.</p><div class="studio-preview-actions">${preview.applicable ? '<button type="button" id="studio-confirm-apply">apply this exact tracked-policy change</button>' : ""}<button type="button" id="studio-close-preview">close preview</button></div></section>`;
+  document.getElementById("studio-close-preview")?.addEventListener("click", () => { slot.innerHTML = ""; });
+  document.getElementById("studio-confirm-apply")?.addEventListener("click", () => applyStudioAction(preview, request));
+}
+
+async function previewStudioAction(action) {
+  const request = { family: studioState.family, action, name: studioState.document.slug || studioState.name, ...(action === "save" ? { document: studioState.document } : {}) };
+  const { status, body } = await postJson("/api/program-studio/preview", request);
+  if (status >= 400 || body.ok === false) { studioState.error = (body.issues && body.issues[0]) || `preview failed (${status})`; renderProgramStudio(); return; }
+  if (body.data.studio) { studioState.model = body.data.studio; studioState.compilePreview = body.data; }
+  renderProgramStudio(); renderStudioSavePreview(body.data, request);
+}
+
+async function applyStudioAction(preview, request) {
+  const button = document.getElementById("studio-confirm-apply"); if (button) { button.disabled = true; button.textContent = "applying exact policy…"; }
+  const { status, body } = await postJson("/api/program-studio/apply", { ...request, fingerprint: preview.fingerprint });
+  if (status === 409) { studioState.error = "Stale Program Studio preview refused; policy bytes or desired content changed. Nothing was written."; renderProgramStudio(); return; }
+  if (status >= 400 || body.ok === false) { studioState.error = (body.issues && body.issues[0]) || `apply failed (${status})`; renderProgramStudio(); return; }
+  const family = studioState.family;
+  if (request.action === "delete") { location.hash = `#/program-studio/${family}`; await viewProgramStudio(family); return; }
+  studioState.exists = true; studioState.name = request.name;
+  location.hash = `#/program-studio/${family}/${encodeURIComponent(request.name)}`;
+  await viewProgramStudio(family, request.name);
+}
+
+function wireProgramStudio() {
+  document.querySelectorAll("[data-studio-view]").forEach((button) => button.addEventListener("click", () => { studioState.view = button.dataset.studioView; renderProgramStudio(); }));
+  document.getElementById("studio-family-select")?.addEventListener("change", (event) => { location.hash = `#/program-studio/${event.target.value}`; });
+  document.getElementById("studio-policy-select")?.addEventListener("change", (event) => { location.hash = event.target.value ? `#/program-studio/${studioState.family}/${encodeURIComponent(event.target.value)}` : `#/program-studio/${studioState.family}`; });
+  document.getElementById("studio-new")?.addEventListener("click", () => {
+    const family = studioFamilyModel(); const used = new Set((family.items || []).map((item) => item.name)); let slug = `new-${studioState.family}`; let index = 2; while (used.has(slug)) slug = `new-${studioState.family}-${index++}`;
+    studioState.document = clone(family.draft); studioState.document.slug = slug; studioState.name = slug; studioState.exists = false; studioState.selected = ""; studioState.model = null; studioState.error = ""; refreshStudioModel();
+  });
+  document.getElementById("studio-duplicate")?.addEventListener("click", () => {
+    const used = new Set((studioFamilyModel().items || []).map((item) => item.name)); let slug = `${studioState.document.slug}-copy`; let index = 2; while (used.has(slug)) slug = `${studioState.document.slug}-copy-${index++}`;
+    studioState.document = clone(studioState.document); studioState.document.slug = slug; studioState.document.title = `${studioState.document.title} copy`; studioState.name = slug; studioState.exists = false; studioState.selected = ""; refreshStudioModel();
+  });
+  document.getElementById("studio-preview-save")?.addEventListener("click", () => previewStudioAction("save"));
+  document.getElementById("studio-preview-delete")?.addEventListener("click", () => previewStudioAction("delete"));
+  document.querySelectorAll("[data-studio-settings]").forEach((button) => button.addEventListener("click", () => { studioState.selected = ""; renderProgramStudio(); }));
+  document.querySelectorAll("[data-studio-select]").forEach((button) => button.addEventListener("click", () => { studioState.selected = button.dataset.studioSelect; renderProgramStudio(); }));
+  document.querySelectorAll("[data-studio-add]").forEach((button) => button.addEventListener("click", () => addStudioNode(button.dataset.studioAdd)));
+  document.querySelectorAll("[data-studio-field]").forEach((field) => field.addEventListener("change", () => setStudioField(field.dataset.studioField, field.value)));
+  document.querySelectorAll("[data-studio-capability]").forEach((field) => field.addEventListener("change", () => { const values = [...document.querySelectorAll("[data-studio-capability]:checked")].map((item) => item.dataset.studioCapability); studioState.document.requested_capabilities = values.sort(); studioState.jsonDraft = ""; queueStudioModel(); }));
+  document.querySelectorAll("[data-studio-stop]").forEach((field) => field.addEventListener("change", () => { studioState.document.stop_conditions = [...document.querySelectorAll("[data-studio-stop]:checked")].map((item) => item.dataset.studioStop); studioState.jsonDraft = ""; queueStudioModel(); }));
+  document.querySelectorAll("[data-studio-budget]").forEach((field) => field.addEventListener("change", () => { studioState.document.budgets[field.dataset.studioBudget] = maybeNumber(field.value); studioState.jsonDraft = ""; queueStudioModel(); }));
+  document.getElementById("studio-delete-node")?.addEventListener("click", removeStudioNode);
+  document.getElementById("studio-duplicate-node")?.addEventListener("click", duplicateStudioNode);
+  document.querySelectorAll("[data-studio-diagnostic]").forEach((button) => button.addEventListener("click", () => {
+    const diagnostic = (studioState.model.validation.diagnostics || []).find((item) => item.pointer === button.dataset.studioDiagnostic);
+    const id = button.dataset.nodeId || diagnostic?.target?.node_id;
+    const fieldId = button.dataset.fieldId || diagnostic?.target?.field_id;
+    studioState.jsonPointer = button.dataset.studioDiagnostic;
+    if (id) { studioState.selected = id; studioState.view = "design"; } else studioState.view = "json";
+    renderProgramStudio();
+    requestAnimationFrame(() => {
+      const direct = fieldId ? document.getElementById(fieldId) : null;
+      if (direct) { direct.focus(); direct.scrollIntoView({ block: "center" }); return; }
+      if (studioState.view !== "json") { studioState.view = "json"; renderProgramStudio(); }
+      const text = document.getElementById("studio-json-text");
+      if (!text) return;
+      const field = String(studioState.jsonPointer).split("/").filter(Boolean).pop();
+      const offset = text.value.indexOf(`"${field}"`);
+      if (offset >= 0) text.setSelectionRange(offset, offset + field.length + 2);
+      text.focus(); text.scrollIntoView({ block: "center" });
+    });
+  }));
+  document.querySelectorAll("[data-studio-scenario]").forEach((button) => button.addEventListener("click", () => { studioState.scenario = button.dataset.studioScenario; renderProgramStudio(); }));
+  wireStudioCanvas();
+  const jsonText = document.getElementById("studio-json-text");
+  jsonText?.addEventListener("input", () => { studioState.jsonDraft = jsonText.value; });
+  document.getElementById("studio-json-apply")?.addEventListener("click", () => {
+    const error = document.getElementById("studio-json-error");
+    try { const parsed = JSON.parse(jsonText.value); studioState.document = parsed; studioState.name = parsed.slug || studioState.name; studioState.selected = ""; studioState.jsonDraft = ""; studioState.jsonPointer = ""; studioState.view = "design"; refreshStudioModel(); }
+    catch (err) { error.hidden = false; error.textContent = `JSON refused: ${err.message}`; }
+  });
+  document.getElementById("studio-json-import")?.addEventListener("change", async (event) => { const file = event.target.files[0]; if (!file) return; jsonText.value = await file.text(); studioState.jsonDraft = jsonText.value; });
+}
+
+async function viewProgramStudio(family = "program", name) {
+  family = STUDIO_FAMILIES.includes(family) ? family : "program";
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "program studio", href: "#/program-studio" }, { label: family }, ...(name ? [{ label: name }] : [])]);
+  studioState.inventory = (await api("/api/program-studio")).data;
+  studioState.family = family; studioState.error = ""; studioState.selected = ""; studioState.jsonDraft = ""; studioState.jsonPointer = "";
+  const familyModel = studioFamilyModel(family);
+  const chosen = name || familyModel.items?.[0]?.name;
+  if (chosen) {
+    const detail = (await api(`/api/program-studio/${encodeURIComponent(family)}/${encodeURIComponent(chosen)}`)).data;
+    studioState.name = detail.name; studioState.document = clone(detail.raw); studioState.model = detail; studioState.exists = true;
+  } else {
+    studioState.document = clone(familyModel.draft); studioState.name = studioState.document.slug; studioState.model = null; studioState.exists = false;
+  }
+  const requestedView = new URLSearchParams(location.search).get("studioview");
+  if (STUDIO_VIEWS.includes(requestedView)) studioState.view = requestedView;
+  const requestedScenario = new URLSearchParams(location.search).get("studioscenario");
+  if (requestedScenario) studioState.scenario = requestedScenario;
+  if (studioState.model) renderProgramStudio(); else { renderProgramStudio(); await refreshStudioModel(); }
+}
+
 /* ── router ─────────────────────────────────────────────────────────── */
 
 async function route() {
@@ -2037,6 +2534,7 @@ async function route() {
     if (parts[0] === "wl") return await viewWorklog(parts.slice(1).join("/"));
     if (parts[0] === "board") return await viewBoard(parts[1]);
     if (parts[0] === "orchestration") return await viewOrchestration(parts[1]);
+    if (parts[0] === "program-studio") return await viewProgramStudio(parts[1], parts[2]);
     if (parts[0] === "edit") return await viewEdit(parts[1]);
     if (parts[0] === "health") return await viewHealth();
     if (parts[0] === "mc") return await viewMissionControl();
