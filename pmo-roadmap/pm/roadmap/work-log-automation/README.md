@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-22 (Phase 25 closed 9/9 with the fresh-wheel outward loop proven; Phase 26 open 0/12 and WLA-26-01 contracting optional autonomous delivery programs without changing vanilla usage).
-**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (0/12).
-**Status:** complete through Phase 25 — vanilla Delivery Workbench remains the default and bounded orchestration is an independent opt-in; Phase 26's additional program layer is contracted and in progress.
+**Last updated:** 2026-07-22 (Phase 26 open 1/12: the optional autonomous-program trust contract is evidence-backed; WLA-26-02 is implementing pure multi-phase selection).
+**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (1/12).
+**Status:** WLA-26-01 is done without changing vanilla or bounded-run defaults; the pure program compiler/planner is in progress.
 
 ## Vision
 
@@ -109,8 +109,9 @@ score, run, program, or grant. Phase 24/25 bounded orchestration remains a
 separate optional capability for one exact score and run grant; it is not
 silently wrapped in a program.
 
-When explicitly configured and granted, Phase 26 adds a program conductor
-above individual orchestration runs. A program scopes multiple roadmap
+When explicitly configured and granted, Phase 26 adds a
+[program conductor](../../../../docs/programs.md) above individual
+orchestration runs. A program scopes multiple roadmap
 phases/stories, deterministically assigns the next eligible work to a reusable
 hierarchical workflow and specialist team, obtains only the declared grant,
 and conducts the whole organization. Every autonomously completed story has a

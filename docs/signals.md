@@ -27,6 +27,10 @@ explicit grant, **can nudge** the right agent back to work. It does not claim
 that observation should run everywhere, and a recorded fact is never, by
 itself, authority to act.
 
+The optional Phase 26 [program contract](./programs.md) may consume these facts
+by hash under a separate program grant. That composition does not make signal
+observation mandatory and does not broaden an existing nudge or run grant.
+
 ## Why this layer exists now
 
 Phase 24 delivered the inward loop: a granted run schedules its own agents,

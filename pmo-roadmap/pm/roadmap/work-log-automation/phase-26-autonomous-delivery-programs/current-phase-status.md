@@ -39,7 +39,7 @@ roadmap-advancement acts.
 
 ## Exit criteria (evidence required)
 
-- [ ] `docs/programs.md` contracts the autonomous organization, program/
+- [x] `docs/programs.md` contracts the autonomous organization, program/
   workflow/grant split, multi-phase scope, trust and authority model, bounded
   loop semantics, verdict taxonomy, event/refusal vocabulary, and threat table
   before runtime work begins, while pinning vanilla and Phase 24/25 bounded
@@ -97,8 +97,8 @@ roadmap-advancement acts.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-26-01 | Contract autonomous delivery programs and trust | in-progress | [story-01-contract-autonomous-delivery-programs-and-trust](./story-01-contract-autonomous-delivery-programs-and-trust.md) | - |
-| WLA-26-02 | Select work across a governed roadmap scope | backlog | [story-02-select-work-across-a-governed-roadmap-scope](./story-02-select-work-across-a-governed-roadmap-scope.md) | - |
+| WLA-26-01 | Contract autonomous delivery programs and trust | done | [story-01-contract-autonomous-delivery-programs-and-trust](./story-01-contract-autonomous-delivery-programs-and-trust.md) | [evidence-story-01](./evidence-story-01.md) |
+| WLA-26-02 | Select work across a governed roadmap scope | in-progress | [story-02-select-work-across-a-governed-roadmap-scope](./story-02-select-work-across-a-governed-roadmap-scope.md) | - |
 | WLA-26-03 | Compile reusable hierarchical workflows and bounded loops | backlog | [story-03-compile-reusable-hierarchical-workflows-and-bounded-loops](./story-03-compile-reusable-hierarchical-workflows-and-bounded-loops.md) | - |
 | WLA-26-04 | Model agent roles, teams, and separation of duties | backlog | [story-04-model-agent-roles-teams-and-separation-of-duties](./story-04-model-agent-roles-teams-and-separation-of-duties.md) | - |
 | WLA-26-05 | Run debates, councils, and meta-verification | backlog | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | - |
@@ -112,18 +112,16 @@ roadmap-advancement acts.
 
 ## Where we are
 
-Phase open 0/12. Phase 25 is closed with the outward signal/nudge/request loop
-proven on a fresh wheel. The owner clarified the destination on 2026-07-22:
-Delivery Workbench should let a person visually or declaratively design an
-autonomous delivery organization that operates across multiple phases, not
-merely apply one fixed pipeline to the next story. Each autonomous story has a
-specific independent verifier; workflows may contain finite debate corners,
-repair/review loops, verifier-of-verifier audits, and master-architect passes.
-The owner then sharpened the boundary: this is an optional layer, not a new
-definition of Delivery Workbench. Vanilla usage remains complete and the Phase
-24/25 bounded score/run remains independently opt-in. WLA-26-01 is in progress:
-freeze the capability ladder, compatibility invariant, program/workflow/
-organization/trust model, and fail-closed semantics before extending runtime.
+Phase open 1/12. WLA-26-01 is done: `docs/programs.md` freezes the optional
+capability ladder; separate program/workflow/organization/rubric kinds; pure
+multi-phase frontier selection; typed finite subflow/loop/debate semantics;
+principal-level implementer/verifier separation; mechanical, agent, council,
+and meta verdict types; fifteen independent capabilities; finite program
+grants/budgets; replay/claim/integration rails; thirty-two refusal codes; and a
+twenty-three-row-plus threat matrix. Six structural tests pin the trust
+boundaries, and the captured matrix is green at 344/344 on both Python floors.
+WLA-26-02 is in progress: implement the pure program compiler and explainable
+roadmap-scope planner without creating policy, state, grants, or work.
 
 ## Active risks
 
@@ -150,6 +148,17 @@ organization/trust model, and fail-closed semantics before extending runtime.
   replacing the existing Workbench front door - “can be autonomous” does not
   mean “should be autonomous,” and discovery cannot become mandatory setup -
   owner clarification.
+- 2026-07-22 - Keep `delivery-workbench-orchestration@1` frozen as one bounded
+  run and introduce separate program/workflow/organization/rubric schemas that
+  compile into one hash-bound bundle - prevents existing scores from acquiring
+  program behavior by upgrade - WLA-26-01.
+- 2026-07-22 - Use `roadmap-frontier-v1` for deterministic selection: resume
+  active scoped work, otherwise take the earliest eligible scoped phase/story,
+  and stop rather than silently skip held, failed, vetoed, or dissenting work -
+  WLA-26-01.
+- 2026-07-22 - Treat capabilities as independent granted bits with explicit
+  prerequisites, not implication shortcuts; agent dispatch never inherits
+  evidence, integration, certification, Git, or roadmap authority - WLA-26-01.
 - 2026-07-22 - Model the product as an autonomous delivery organization, not a
   linear autopilot - the desired workflow spans stories and phases and lets
   specialist implementers, verifiers, meta-verifiers, architects, researchers,

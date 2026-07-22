@@ -8721,6 +8721,163 @@ class AgentHooksTest(unittest.TestCase):
         self.assertEqual(line["event"], "Stop")
 
 
+class ProgramContractTest(unittest.TestCase):
+    """WLA-26-01: pin the optional program and trust contract."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.path = TESTS_DIR.parent.parent / "docs" / "programs.md"
+        cls.doc = cls.path.read_text(encoding="utf-8")
+
+    @classmethod
+    def _section(cls, heading):
+        marker = f"## {heading}\n"
+        if marker not in cls.doc:
+            raise AssertionError(f"missing contract section: {heading}")
+        body = cls.doc.split(marker, 1)[1]
+        return body.split("\n## ", 1)[0]
+
+    @staticmethod
+    def _backtick_first_column(section):
+        values = set()
+        for line in section.splitlines():
+            if not line.startswith("| `"):
+                continue
+            cell = line.split("|", 2)[1].strip()
+            if cell.startswith("`") and cell.endswith("`"):
+                values.add(cell[1:-1])
+        return values
+
+    def test_required_contract_sections_are_present(self):
+        headings = {
+            "Capability ladder and default invariant",
+            "Composition and sources of truth",
+            "Tracked policy family",
+            "Roadmap scope and deterministic selection",
+            "Hierarchical workflow semantics",
+            "Organization, assignment, and separation of duties",
+            "Verdict taxonomy and quality gates",
+            "Autonomy modes and capability lattice",
+            "Program plan and grant",
+            "Budgets, ceilings, and exhaustion",
+            "Program state, ledger, and recovery",
+            "Integration and exact roadmap advancement",
+            "Outward facts, nudges, and decision ports",
+            "Surfaces and progressive disclosure",
+            "Storage, privacy, and content boundaries",
+            "Refusal taxonomy",
+            "Threat model and exact fail checks",
+            "Phase 26 proof standard",
+        }
+        found = {
+            line[3:] for line in self.doc.splitlines()
+            if line.startswith("## ")
+        }
+        self.assertTrue(headings <= found, headings - found)
+
+    def test_default_mode_and_policy_family_are_explicit(self):
+        section = self._section("Capability ladder and default invariant")
+        normalized = " ".join(section.split())
+        for phrase in (
+            "no program configuration is healthy ordinary state",
+            "never auto-wrapped in, imported into, or interpreted as a program",
+            "install and update create no program instance",
+            "never the ordinary Workbench front door",
+        ):
+            self.assertIn(phrase, normalized)
+        for kind in (
+            "delivery-workbench-program@1",
+            "delivery-workbench-workflow@1",
+            "delivery-workbench-organization@1",
+            "delivery-workbench-rubric@1",
+        ):
+            self.assertIn(kind, self.doc)
+        sample = self.doc.split("```json\n", 1)[1].split("\n```", 1)[0]
+        parsed = json.loads(sample)
+        self.assertEqual(parsed["kind"], "delivery-workbench-program")
+        self.assertEqual(parsed["schema_version"], 1)
+        self.assertEqual(parsed["scope"]["selection"], "roadmap-frontier-v1")
+
+    def test_workflow_separation_and_verdict_types_are_closed(self):
+        workflow = self._section("Hierarchical workflow semantics")
+        for node_type in (
+            "`agent`", "`check`", "`collect`", "`bounded_run`",
+            "`subflow`", "`loop`", "`debate`", "`verdict`",
+            "`gate`", "`checkpoint`", "`rail`",
+        ):
+            self.assertIn(f"| {node_type} |", workflow)
+        self.assertIn("General graph cycles and recursive subflow references are invalid", workflow)
+        separation = self._section("Organization, assignment, and separation of duties")
+        self.assertIn("rendezvous-sha256-v1", separation)
+        self.assertIn("different from the implementer principal", separation)
+        self.assertIn("verifier assignment fixed before implementation dispatch", separation)
+        verdicts = self._section("Verdict taxonomy and quality gates")
+        for verdict_type in (
+            "`mechanical-fact`", "`agent-verdict`", "`council-verdict`",
+            "`meta-verdict`",
+        ):
+            self.assertIn(f"| {verdict_type} |", verdicts)
+        self.assertIn("Only the check/rail adapter can create `mechanical-fact`", verdicts)
+
+    def test_capability_vocabulary_is_exact(self):
+        section = self._section("Autonomy modes and capability lattice")
+        capability_table = section.split(
+            "The Phase 26 capability vocabulary is closed:", 1
+        )[1].split("\n\nCapabilities are independent bits", 1)[0]
+        actual = self._backtick_first_column(capability_table)
+        expected = {
+            "agent:dispatch", "check:execute", "workspace:write",
+            "nudge:deliver", "notification:send", "evidence:materialize",
+            "integration:apply", "contract:generate",
+            "certification:objective", "certification:verdict", "git:commit",
+            "git:push", "roadmap:story-start", "roadmap:story-complete",
+            "roadmap:phase-advance",
+        }
+        self.assertEqual(actual, expected)
+        self.assertIn("Capabilities are independent bits with prerequisites", section)
+        for exclusion in ("`git:merge`", "release creation", "deployment", "publication"):
+            self.assertIn(exclusion, section)
+
+    def test_refusal_vocabulary_is_exact(self):
+        section = self._section("Refusal taxonomy")
+        actual = self._backtick_first_column(section)
+        expected = {
+            "program-not-found", "program-invalid", "program-stale",
+            "roadmap-stale", "repository-stale", "grant-required",
+            "grant-expired", "grant-revoked", "mode-denied",
+            "capability-denied", "budget-exhausted", "scope-violation",
+            "frontier-blocked", "dependency-incomplete", "binding-missing",
+            "binding-ambiguous", "workflow-unbounded", "workflow-recursive",
+            "role-unavailable", "separation-violation", "quorum-lost",
+            "dissent-unresolved", "verdict-stale", "verdict-insufficient",
+            "architect-veto", "checkpoint-required", "claim-conflict",
+            "ledger-corrupt", "integration-conflict", "remote-diverged",
+            "content-refused", "permanent-exclusion",
+        }
+        self.assertEqual(actual, expected)
+        self.assertIn("ordinary no-program use is not an error", section)
+
+    def test_threat_table_pins_default_authority_and_quality_failures(self):
+        section = self._section("Threat model and exact fail checks")
+        rows = [
+            line for line in section.splitlines()
+            if line.startswith("| ") and not line.startswith("| Threat")
+            and not line.startswith("|---")
+        ]
+        self.assertGreaterEqual(len(rows), 23)
+        for threat in (
+            "Default-mode creep makes programs mandatory",
+            "Install, save, or open becomes ambient authority",
+            "A bounded score silently becomes a program",
+            "Implementer verifies itself",
+            "Agent prose counterfeits a test fact",
+            "Debate/retry/repair loops forever",
+            "Crash duplicates an expensive/destructive act",
+            "UI/config/runtime interpret policy differently",
+        ):
+            self.assertIn(threat, section)
+
+
 class SignalsTest(unittest.TestCase):
     """WLA-25-02: the authority-free SCM observer (docs/signals.md)."""
 
