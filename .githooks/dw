@@ -65,6 +65,7 @@ try:
         find_organization_path,
         find_workflow_path,
         find_program_path,
+        find_rubric_path,
         find_root,
         get_phase,
         get_project,
@@ -111,12 +112,14 @@ try:
         validate_workflow,
         load_score,
         program_inventory,
+        rubric_inventory,
         organization_inventory,
         workflow_inventory,
         simulate_organization,
         simulate_program,
         validate_organization,
         validate_program_path,
+        validate_rubric,
         write_agent_docs,
         write_contract,
     )
@@ -352,6 +355,47 @@ def command_organization_simulate(args: argparse.Namespace) -> int:
         )
     print("starts-work\tfalse")
     return 0
+
+
+def command_rubric_list(args: argparse.Namespace) -> int:
+    inventory = rubric_inventory(args.root)
+    if args.json:
+        print(json.dumps(inventory, sort_keys=True))
+        return 0
+    rubrics = inventory["rubrics"]
+    if not rubrics:
+        print("dw rubric list: no rubric policies configured (ordinary mode is healthy)")
+        return 0
+    for rubric in rubrics:
+        state = "valid" if rubric["valid"] else "invalid"
+        print(
+            f"{rubric.get('slug') or rubric['name']}\t{state}"
+            f"\t{rubric['path']}\t{rubric.get('version') or '-'}"
+            f"\t{rubric.get('semantic_hash', '-')}"
+        )
+    return 0
+
+
+def command_rubric_validate(args: argparse.Namespace) -> int:
+    path = find_rubric_path(args.root, args.rubric)
+    document = validate_rubric(args.root, path)
+    if args.json:
+        print(json.dumps(document, sort_keys=True))
+    elif document["valid"]:
+        compiled = document["compiled"]
+        print(
+            f"valid\t{path.relative_to(args.root)}"
+            f"\t{compiled['rubric']['slug']}@{compiled['rubric']['version']}"
+            f"\t{compiled['semantic_hash']}"
+        )
+    else:
+        for diagnostic in document["diagnostics"]:
+            print(
+                f"ERROR {diagnostic['source']}:{diagnostic['pointer']} "
+                f"[{diagnostic['code']}] {diagnostic['message']}; "
+                f"{diagnostic['remediation']}"
+            )
+    return 0 if document["valid"] else 1
 
 
 def command_workflow_list(args: argparse.Namespace) -> int:
@@ -1533,6 +1577,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="emit the pure organization simulation"
     )
     organization_simulate.set_defaults(func=command_organization_simulate)
+
+    rubric = sub.add_parser(
+        "rubric",
+        help="compile governed judgment criteria (pure; starts no work)",
+    )
+    rubric_sub = rubric.add_subparsers(dest="rubric_command", required=True)
+    rubric_list = rubric_sub.add_parser(
+        "list", help="list tracked rubric policies; an empty library is healthy"
+    )
+    rubric_list.add_argument(
+        "--json", action="store_true", help="emit the stamped rubric inventory"
+    )
+    rubric_list.set_defaults(func=command_rubric_list)
+    rubric_validate = rubric_sub.add_parser(
+        "validate", help="validate criteria, evidence, freshness, and aggregation"
+    )
+    rubric_validate.add_argument(
+        "rubric", help="rubric slug or filename stem"
+    )
+    rubric_validate.add_argument(
+        "--json", action="store_true", help="emit source-aware diagnostics"
+    )
+    rubric_validate.set_defaults(func=command_rubric_validate)
 
     workflow = sub.add_parser(
         "workflow",

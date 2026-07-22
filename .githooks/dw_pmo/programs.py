@@ -38,6 +38,11 @@ from .program_organization import (
     validate_workflow_team,
 )
 from .program_workflow import WorkflowValidationError, compile_workflow
+from .program_verdict import (
+    RUBRIC_KIND,
+    RubricValidationError,
+    compile_rubric,
+)
 from .parse import (
     discover_phases,
     discover_projects,
@@ -53,7 +58,6 @@ from .validate import check_project, project_warnings
 PROGRAM_KIND = "delivery-workbench-program"
 PROGRAM_SCHEMA_VERSION = 1
 WORKFLOW_KIND = "delivery-workbench-workflow"
-RUBRIC_KIND = "delivery-workbench-rubric"
 
 VALIDATION_KIND = "delivery-workbench-program-validation"
 COMPILED_KIND = "delivery-workbench-compiled-program"
@@ -512,6 +516,35 @@ class _Compiler:
             "document_hash": _sha(raw),
         }
 
+    def load_rubric_reference(
+        self,
+        slug: str,
+        pointer: str,
+    ) -> dict[str, object] | None:
+        reference = self.load_reference(
+            "rubrics", slug, RUBRIC_KIND, _RUBRIC_KEYS, pointer,
+        )
+        if reference is None:
+            return None
+        try:
+            compiled = compile_rubric(
+                self.root,
+                reference["document"],
+                str(reference["path"]),
+            )
+        except RubricValidationError as exc:
+            self.diagnostics.extend(exc.diagnostics)
+            return None
+        reference.update({
+            "semantic_document": compiled["rubric"],
+            "semantic_hash": compiled["semantic_hash"],
+            "document_hash": compiled["document_hash"],
+            "version": compiled["rubric"]["version"],
+            "subject_type": compiled["rubric"]["subject_type"],
+            "compiled": compiled,
+        })
+        return reference
+
     def normalize_organization(self, slug: str) -> dict[str, object]:
         found = _reference_by_slug(self.root, "organizations", slug)
         if found is None:
@@ -702,9 +735,8 @@ class _Compiler:
                 self.diag(f"{pointer}/rubrics", "invalid-rubrics", "rubrics must be a unique non-empty slug list", "declare verifier rubric references")
                 rubrics_raw = []
             for rubric in rubrics_raw:
-                rubric_ref = self.load_reference(
-                    "rubrics", rubric, RUBRIC_KIND, _RUBRIC_KEYS,
-                    f"{pointer}/rubrics",
+                rubric_ref = self.load_rubric_reference(
+                    rubric, f"{pointer}/rubrics",
                 )
                 if rubric_ref is not None:
                     self.references["rubrics"][rubric] = rubric_ref  # type: ignore[index]
@@ -803,9 +835,8 @@ class _Compiler:
             if role not in role_duties:
                 self.diag(f"{pointer}/role", "dangling-role-reference", f"organization has no {role!r} duty", "declare that role duty in a team")
             rubric = self.string(raw.get("rubric"), f"{pointer}/rubric", pattern=_SAFE_ID_RE)
-            rubric_ref = self.load_reference(
-                "rubrics", rubric, RUBRIC_KIND, _RUBRIC_KEYS,
-                f"{pointer}/rubric",
+            rubric_ref = self.load_rubric_reference(
+                rubric, f"{pointer}/rubric",
             )
             if rubric_ref is not None:
                 self.references["rubrics"][rubric] = rubric_ref  # type: ignore[index]

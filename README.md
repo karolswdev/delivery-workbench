@@ -242,14 +242,32 @@ Programs show roadmap scope, binding rules, phase gates, requested
 capabilities, finite budgets, and stops; workflows show accessible role lanes,
 nested subflows, fan-in/out, typed loop/debate containers, verdicts, artifacts,
 and exhaustion routes; organizations show implementer/verifier separation,
-councils, meta-verifiers, architects, replacement, and audit bounds. Design,
-Simulate, Validate, JSON, and Authority are projections of the same Python
-compilers. Graph/config round trips preserve semantic and layout hashes, and
+independent review panels, deliberative councils with explicit rule/decider/
+checkpoint authority, meta-verifiers, architects, replacement, and audit
+bounds. The runtime contract separately binds each resolved seat's logical
+profile, harness, provider/router, model, principal/workspace/session identity,
+and carried decision obligations; the later control-room slice will expose
+those live bindings. Design, Simulate, Validate, JSON, and Authority are
+projections of the same Python compilers. Graph/config round trips preserve
+semantic and layout hashes, and
 save/delete uses one stale-safe preview→diff→fingerprint→apply boundary scoped
 to the selected tracked policy. Saving starts no work and grants no authority.
 With no `pm/programs`, `pm/workflows`, or `pm/organizations`, the Studio is a
 neutral optional empty state: `#/` remains ordinary Delivery Workbench, with
 no setup prompt, background poller, or runtime state.
+
+Tracked `pm/rubrics/*.json` policies use the same optional boundary.
+`dw rubric list|validate` compiles exact criteria, evidence/citation rules,
+mechanical versus judgment types, aggregation/veto policy, and freshness; the
+wheel's example is never installed as project policy. The shared pure verdict
+engine accepts mechanical facts only from typed check/rail receipts, binds
+agent/meta/architect judgments to independently assigned read-only principals,
+preserves independent-panel dissent and superseded verdicts, and emits a
+pass/fail/pending/refused gate proof. Replay-derived council decisions remain a
+separate input: rule outcomes name no agent decider, judge outcomes bind the
+preassigned seat and full execution provenance, and every decision carries an
+explicit obligations list. A green proof still starts nothing and grants no
+integration, evidence, Git, or roadmap authority.
 
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 

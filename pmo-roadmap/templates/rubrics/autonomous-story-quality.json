@@ -1,0 +1,95 @@
+{
+  "aggregation": {
+    "method": "all",
+    "on_abstain": "escalate",
+    "on_fail": "needs-repair",
+    "on_inconclusive": "needs-repair",
+    "on_pass": "pass",
+    "threshold": 3
+  },
+  "criteria": [
+    {
+      "allowed_results": [
+        "pass",
+        "fail",
+        "abstain",
+        "inconclusive"
+      ],
+      "evaluation": {
+        "fact": "required-checks",
+        "kind": "mechanical-fact"
+      },
+      "id": "required-checks",
+      "min_citations": 0,
+      "question": "Did every exact required verification command pass for this subject?",
+      "rationale_max_bytes": 256,
+      "required_evidence_kinds": [],
+      "veto": true
+    },
+    {
+      "allowed_results": [
+        "pass",
+        "fail",
+        "abstain",
+        "inconclusive"
+      ],
+      "evaluation": {
+        "fact": null,
+        "kind": "agent-judgment"
+      },
+      "id": "intent",
+      "min_citations": 1,
+      "question": "Does the exact candidate solve the contracted story problem without scope drift?",
+      "rationale_max_bytes": 2000,
+      "required_evidence_kinds": [
+        "git-diff"
+      ],
+      "veto": true
+    },
+    {
+      "allowed_results": [
+        "pass",
+        "fail",
+        "abstain",
+        "inconclusive"
+      ],
+      "evaluation": {
+        "fact": null,
+        "kind": "agent-judgment"
+      },
+      "id": "quality",
+      "min_citations": 1,
+      "question": "Is the implementation clear, maintainable, and consistent with the architecture?",
+      "rationale_max_bytes": 2000,
+      "required_evidence_kinds": [
+        "git-diff"
+      ],
+      "veto": false
+    }
+  ],
+  "description": "Example story rubric separating an exact check receipt from cited independent judgment.",
+  "freshness": {
+    "bind": [
+      "subject",
+      "repository",
+      "program",
+      "assignment",
+      "rubric",
+      "ledger"
+    ],
+    "max_age_seconds": 3600
+  },
+  "kind": "delivery-workbench-rubric",
+  "layout": {},
+  "result_vocabulary": [
+    "pass",
+    "fail",
+    "needs-repair",
+    "escalate"
+  ],
+  "schema_version": 1,
+  "slug": "autonomous-story-quality",
+  "subject_type": "diff",
+  "title": "Autonomous story quality",
+  "version": "1.0.0"
+}

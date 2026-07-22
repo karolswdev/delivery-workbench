@@ -63,6 +63,24 @@ The product records concise declared artifacts and verdict rationale, not hidden
 reasoning traces. “Debate” is a workflow protocol with evidence, not a demand
 for chain-of-thought.
 
+Owner clarification after delivery: a council is specifically a deliberative
+group of assigned seats with different declared backgrounds/perspectives that
+discusses a shared matter and comes together on a decision. It is not a synonym
+for a non-interacting review panel or N-of-M verdict aggregation. Each terminal
+council decision must also declare its backlog, technical debt, risk, research
+and follow-up obligations—even when the exact list is empty—and those
+obligations must remain carried until completed, superseded, explicitly waived
+or escalated. WLA-26-07 owns the typed decision/verdict/obligation records;
+WLA-26-09 owns durable carry-forward, and WLA-26-10 owns separately authorized
+roadmap materialization.
+
+Decision authority is also explicit: majority/weighted/unanimous councils are
+decided by their compiled rule, while judge-mode names a preassigned
+`decider_seat` whose exact assignment generation and execution provenance are
+bound before discussion. A judge can choose only a policy-computed allowed
+outcome; it cannot self-select, silently delegate, or override quorum/veto
+facts. A human checkpoint is a different typed authority port.
+
 ## Delivered
 
 - Added an authority-neutral `program_deliberation` compiler/simulator and

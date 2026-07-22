@@ -25,7 +25,8 @@ turning “can write code” into ambient repository authority.
   certification; gated commit with exact trailers; fast-forward push to bound
   remote/branch; observe/rebind; story done/next start; phase close/current
   pointer transition; idempotency/reconciliation; capability/budget/refusal
-  boundaries.
+  boundaries; council-obligation disposition and separately authorized,
+  deduplicated backlog/technical-debt story materialization.
 - **Out:** merge, rebase/conflict auto-resolution, force push, release/deploy/
   publication, arbitrary commit messages, unsigned subjective attestation not
   authorized by policy, cross-repository transaction.
@@ -50,12 +51,20 @@ turning “can write code” into ambient repository authority.
   transition and subsequent planning use the canonical roadmap mutation/step
   cores with fresh leases and atomic validation—never direct ad-hoc Markdown
   edits.
+- [ ] An open blocking council obligation prevents story/phase advancement.
+  Non-blocking obligations remain ledger-visible without forcing roadmap
+  mutation; an exact preview may create/update one traced roadmap story only
+  with separate `roadmap:write` authority, stable source-decision/obligation
+  ids and deduplication. Completion, supersession, waiver or escalation retains
+  the original obligation and accountable disposition receipt.
 - [ ] Crash/restart at every integration boundary reconciles existing evidence,
   status, contract archive, commit and remote ref before retry, producing zero
   duplicate evidence blocks, status flips, phase summaries, commits or pushes.
 - [ ] Red cases cover manual-only rubric, verifier dissent, missing meta-audit,
   stale proof, dirty tree, changed diff, gate refusal, hook failure, remote
-  divergence, capability/budget exhaustion, revocation and phase dependency.
+  divergence, open blocking debt, duplicate obligation materialization,
+  unauthorized waiver, capability/budget exhaustion, revocation and phase
+  dependency.
 
 ## Test plan
 

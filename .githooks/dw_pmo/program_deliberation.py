@@ -35,6 +35,7 @@ DELIBERATION_SCHEMA_VERSION = 1
 COUNCIL_VERDICT_KIND = "delivery-workbench-council-verdict"
 META_VERDICT_KIND = "delivery-workbench-meta-verdict"
 ARCHITECT_VERDICT_KIND = "delivery-workbench-architecture-verdict"
+COUNCIL_DECISION_KIND = "delivery-workbench-decision"
 
 ROUND_STAGES = ("proposal", "critique", "rebuttal", "judgment")
 VOTES = ("advance", "repair", "abstain")
@@ -59,14 +60,15 @@ _EVENT_DETAIL_KEYS = {
     },
     "speaker_claimed": {
         "claim_id", "idempotency_key", "address", "round", "stage",
-        "slot", "role", "principal_fingerprint", "assignment_generation",
-        "packet",
+        "slot", "role", "seat_address", "agent", "profile", "principal_fingerprint",
+        "assignment_generation", "workspace_domain", "session_binding_key",
+        "execution", "packet",
     },
     "artifact_recorded": {
         "claim_id", "address", "artifact_kind", "content_hash",
         "content_ref", "bytes", "tokens", "citations", "vote",
-        "submitted_result", "result", "rationale", "aggregation", "route",
-        "receipt_hash",
+        "submitted_result", "result", "rationale", "obligations",
+        "aggregation", "route", "receipt_hash",
     },
     "member_replaced": {
         "binding_key", "role", "slot", "reason", "old", "new",
@@ -79,10 +81,56 @@ _EVENT_DETAIL_KEYS = {
 }
 _SUBMISSION_KEYS = {
     "kind", "content_hash", "content_ref", "bytes", "tokens", "citations",
-    "vote", "result", "rationale",
+    "vote", "result", "rationale", "obligations",
 }
+_OBLIGATION_KEYS = {
+    "id", "kind", "statement", "priority", "blocking",
+    "accountable_role", "target", "citations", "acceptance", "state",
+}
+OBLIGATION_KINDS = (
+    "backlog", "technical-debt", "risk", "research", "follow-up",
+)
+OBLIGATION_PRIORITIES = ("critical", "high", "medium", "low")
 _ARCHITECT_KEYS = {"boundary", "rubric", "evidence", "routes"}
 _ARCHITECT_ROUTE_KEYS = {"approve", "repair", "escalate", "veto"}
+_EXECUTION_KEYS = {
+    "harness", "adapter", "adapter_version", "router", "provider",
+    "model_vendor", "model_family", "model", "model_revision",
+    "model_binding", "auth_domain_fingerprint", "capability_fingerprint",
+}
+_DECISION_KEYS = {
+    "kind", "schema_version", "decision_type", "status", "protocol_id",
+    "plan_hash", "assignment_hash", "program_run_id", "phase", "story",
+    "workflow_address", "council_id", "charter_hash", "subject", "rubric",
+    "round", "authority", "chair_seat", "participants",
+    "source_receipt_hashes", "result", "rationale", "citations",
+    "alternatives", "accepted_risks", "dissent", "obligations", "route",
+    "issued_at", "protocol_ledger_head", "starts_work", "writes_state",
+    "writes_repository", "writes_roadmap", "creates_grant", "payload_hash",
+    "decision_hash",
+}
+_DECISION_AUTHORITY_KEYS = {
+    "kind", "basis", "rule", "decider_seat", "decider",
+    "checkpoint_port", "assignment_hash",
+}
+_DECIDER_KEYS = {
+    "address", "role", "duty", "slot", "agent", "profile",
+    "principal_fingerprint", "assignment_generation", "session_binding_key",
+    "workspace_domain", "execution",
+}
+_PARTICIPANT_KEYS = {
+    "address", "role", "slot", "agent", "profile",
+    "principal_fingerprint", "assignment_generation", "workspace_domain",
+    "session_binding_key", "execution",
+}
+_DECISION_DISSENT_KEYS = {
+    "role", "slot", "principal_fingerprint", "vote", "receipt_hash",
+}
+_QUALITY_SUBJECT_KEYS = {
+    "kind", "hash", "repository_hash", "program_hash", "program_run_id",
+    "phase", "story", "workflow_address", "assignment_hash",
+    "assignment_generation", "ledger_head", "implementer_principals",
+}
 _MUTATING_CAPABILITIES = {
     "workspace:write", "integration:apply", "contract:generate",
     "evidence:materialize", "git:commit", "git:push",
@@ -135,6 +183,67 @@ def _timestamp(value: object, label: str = "timestamp") -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def _bounded_text(value: object, label: str, maximum: int) -> str:
+    _require(
+        isinstance(value, str)
+        and 0 < len(value.encode("utf-8")) <= maximum
+        and "\x00" not in value,
+        "invalid-text", f"{label} must be non-empty and at most {maximum} bytes",
+    )
+    return value
+
+
+def _obligations(value: object) -> list[dict[str, object]]:
+    _require(
+        isinstance(value, list) and len(value) <= 64,
+        "obligations-invalid",
+        "council judgment must carry an explicit bounded obligations array",
+    )
+    result: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for index, candidate in enumerate(value):
+        label = f"obligations[{index}]"
+        raw = _exact(candidate, _OBLIGATION_KEYS, label)
+        _require(set(raw) == _OBLIGATION_KEYS, "obligations-invalid", f"{label} must use exact keys")
+        obligation_id = _safe_string(raw.get("id"), f"{label}.id")
+        _require(obligation_id not in seen, "obligations-invalid", "obligation ids must be unique")
+        seen.add(obligation_id)
+        kind = raw.get("kind")
+        priority = raw.get("priority")
+        _require(kind in OBLIGATION_KINDS, "obligations-invalid", f"{label}.kind is unsupported")
+        _require(priority in OBLIGATION_PRIORITIES, "obligations-invalid", f"{label}.priority is unsupported")
+        blocking = raw.get("blocking")
+        _require(isinstance(blocking, bool), "obligations-invalid", f"{label}.blocking must be boolean")
+        target = raw.get("target")
+        _require(
+            target is None or (
+                isinstance(target, str) and bool(_REF_RE.fullmatch(target))
+            ),
+            "obligations-invalid", f"{label}.target must be null or a safe reference",
+        )
+        citations = raw.get("citations")
+        _require(
+            isinstance(citations, list) and 0 < len(citations) <= 32
+            and all(isinstance(item, str) and _REF_RE.fullmatch(item) for item in citations)
+            and len(set(citations)) == len(citations),
+            "obligations-invalid", f"{label}.citations must be non-empty unique references",
+        )
+        _require(raw.get("state") == "open", "obligations-invalid", f"{label}.state must start open")
+        result.append({
+            "id": obligation_id,
+            "kind": kind,
+            "statement": _bounded_text(raw.get("statement"), f"{label}.statement", 2_000),
+            "priority": priority,
+            "blocking": blocking,
+            "accountable_role": _safe_string(raw.get("accountable_role"), f"{label}.accountable_role"),
+            "target": target,
+            "citations": list(citations),
+            "acceptance": _bounded_text(raw.get("acceptance"), f"{label}.acceptance", 2_000),
+            "state": "open",
+        })
+    return result
+
+
 def _rubric(value: object, label: str) -> dict[str, object]:
     mapping = _exact(value, {"slug", "semantic_hash", "criteria"}, label)
     slug = _safe_string(mapping.get("slug"), f"{label}.slug")
@@ -149,12 +258,45 @@ def _rubric(value: object, label: str) -> dict[str, object]:
     return {"slug": slug, "semantic_hash": semantic_hash, "criteria": list(criteria)}
 
 
-def _subject(value: object) -> dict[str, str]:
-    mapping = _exact(value, {"kind", "hash"}, "subject")
-    return {
+def _subject(value: object) -> dict[str, object]:
+    mapping = _exact(value, _QUALITY_SUBJECT_KEYS, "subject")
+    _require(
+        set(mapping) in ({"kind", "hash"}, _QUALITY_SUBJECT_KEYS),
+        "invalid-subject",
+        "subject must be the exact minimal or freshness-bound form",
+    )
+    result: dict[str, object] = {
         "kind": _safe_string(mapping.get("kind"), "subject.kind"),
         "hash": _hash(mapping.get("hash"), "subject.hash"),
     }
+    if set(mapping) == {"kind", "hash"}:
+        return result
+    phase = mapping.get("phase")
+    generation = mapping.get("assignment_generation")
+    _require(isinstance(phase, int) and not isinstance(phase, bool) and phase > 0, "invalid-subject", "subject.phase must be positive")
+    _require(isinstance(generation, int) and not isinstance(generation, bool) and generation > 0, "invalid-subject", "subject.assignment_generation must be positive")
+    principals = mapping.get("implementer_principals")
+    _require(
+        isinstance(principals, list) and principals
+        and len(principals) <= 128 and len(set(principals)) == len(principals),
+        "invalid-subject", "subject implementer principals must be non-empty and unique",
+    )
+    result.update({
+        "repository_hash": _hash(mapping.get("repository_hash"), "subject.repository_hash"),
+        "program_hash": _hash(mapping.get("program_hash"), "subject.program_hash"),
+        "program_run_id": _safe_string(mapping.get("program_run_id"), "subject.program_run_id", reference=True),
+        "phase": phase,
+        "story": _safe_string(mapping.get("story"), "subject.story"),
+        "workflow_address": _safe_string(mapping.get("workflow_address"), "subject.workflow_address", reference=True),
+        "assignment_hash": _hash(mapping.get("assignment_hash"), "subject.assignment_hash"),
+        "assignment_generation": generation,
+        "ledger_head": _hash(mapping.get("ledger_head"), "subject.ledger_head"),
+        "implementer_principals": [
+            _hash(item, f"subject.implementer_principals[{index}]")
+            for index, item in enumerate(principals)
+        ],
+    })
+    return result
 
 
 def _evidence(value: object, label: str = "evidence") -> list[dict[str, str]]:
@@ -185,6 +327,65 @@ def _route(value: object, label: str) -> dict[str, str]:
     }
 
 
+def _execution(value: object, label: str = "execution") -> dict[str, object]:
+    raw = _exact(value, _EXECUTION_KEYS, label)
+    binding = raw.get("model_binding")
+    _require(
+        binding in {
+            "exact-revision", "requested-alias",
+            "adapter-default-unresolved",
+        },
+        "execution-invalid", f"{label}.model_binding is unsupported",
+    )
+    model = raw.get("model")
+    revision = raw.get("model_revision")
+    _require(
+        model is None or (
+            isinstance(model, str) and 0 < len(model.encode("utf-8")) <= 200
+        ),
+        "execution-invalid", f"{label}.model must be null or bounded",
+    )
+    _require(
+        revision is None or (
+            isinstance(revision, str)
+            and 0 < len(revision.encode("utf-8")) <= 200
+        ),
+        "execution-invalid", f"{label}.model_revision must be null or bounded",
+    )
+    if binding == "exact-revision":
+        _require(model is not None and revision is not None, "execution-invalid", f"{label} exact revision is incomplete")
+    elif binding == "requested-alias":
+        _require(model is not None, "execution-invalid", f"{label} alias binding has no requested model")
+    else:
+        _require(model is None and revision is None, "execution-invalid", f"{label} unresolved binding names a model")
+    return {
+        "harness": _safe_string(raw.get("harness"), f"{label}.harness"),
+        "adapter": _safe_string(raw.get("adapter"), f"{label}.adapter"),
+        "adapter_version": _safe_string(
+            raw.get("adapter_version"), f"{label}.adapter_version"
+        ),
+        "router": _safe_string(raw.get("router"), f"{label}.router"),
+        "provider": _safe_string(raw.get("provider"), f"{label}.provider"),
+        "model_vendor": _safe_string(
+            raw.get("model_vendor"), f"{label}.model_vendor"
+        ),
+        "model_family": _safe_string(
+            raw.get("model_family"), f"{label}.model_family"
+        ),
+        "model": model,
+        "model_revision": revision,
+        "model_binding": binding,
+        "auth_domain_fingerprint": _hash(
+            raw.get("auth_domain_fingerprint"),
+            f"{label}.auth_domain_fingerprint",
+        ),
+        "capability_fingerprint": _hash(
+            raw.get("capability_fingerprint"),
+            f"{label}.capability_fingerprint",
+        ),
+    }
+
+
 def _member(role: dict[str, object], raw: dict[str, object]) -> dict[str, object]:
     packet = role.get("packet_policy")
     _require(isinstance(packet, dict), "assignment-invalid", f"role {role.get('role')!r} has no packet policy")
@@ -201,6 +402,7 @@ def _member(role: dict[str, object], raw: dict[str, object]) -> dict[str, object
         "address": raw["address"],
         "agent": raw["agent"],
         "profile": raw["profile"],
+        "execution": _execution(raw.get("execution")),
         "principal_fingerprint": _hash(raw.get("principal_fingerprint"), "principal_fingerprint"),
         "assignment_generation": raw["assignment_generation"],
         "session_binding_key": _hash(raw.get("session_binding_key"), "session_binding_key"),
@@ -304,6 +506,7 @@ def compile_deliberation_plan(
     _safe_string(story, "story")
 
     debate = _find_debate(workflow, debate_address)
+    workflow_address = str(debate["address"])
     councils = assignment.get("councils")
     _require(isinstance(councils, list), "assignment-invalid", "assignment councils are absent")
     matches = [item for item in councils if item.get("id") == council_id]
@@ -353,6 +556,12 @@ def compile_deliberation_plan(
     architect_policy, architect_member = _architect_policy(assignment, architect)
     normalized_rubric = _rubric(rubric, "rubric")
     normalized_subject = _subject(subject)
+    if set(normalized_subject) == _QUALITY_SUBJECT_KEYS:
+        _require(normalized_subject["program_run_id"] == program_run_id, "subject-mismatch", "quality subject program run differs from the deliberation")
+        _require(normalized_subject["phase"] == phase, "subject-mismatch", "quality subject phase differs from the deliberation")
+        _require(normalized_subject["story"] == story, "subject-mismatch", "quality subject story differs from the deliberation")
+        _require(normalized_subject["workflow_address"] == workflow_address, "subject-mismatch", "quality subject workflow differs from the deliberation")
+        _require(normalized_subject["assignment_hash"] == assignment["assignment_hash"], "subject-mismatch", "quality subject assignment differs from the deliberation")
     normalized_evidence = _evidence(evidence)
 
     maximum_rounds = int(debate["max_rounds"])
@@ -388,6 +597,48 @@ def compile_deliberation_plan(
     _require(isinstance(decision, dict), "council-invalid", "compiled council decision policy is absent")
     for role_id in decision.get("veto_roles", []):
         _require(role_id in council_roles, "council-invalid", f"veto role {role_id!r} is not a member")
+    primary_authority = (
+        {
+            "kind": "judge",
+            "rule": None,
+            "decider_seat": judge["address"],
+        }
+        if decision["method"] == "judge"
+        else {
+            "kind": "rule",
+            "rule": decision["method"],
+            "decider_seat": None,
+        }
+    )
+    tie_authority = {
+        "judge": {
+            "kind": "judge", "rule": None,
+            "decider_seat": judge["address"],
+        },
+        "checkpoint": {
+            "kind": "checkpoint", "rule": None,
+            "decider_seat": None,
+        },
+        "dissent": {
+            "kind": "rule", "rule": "dissent",
+            "decider_seat": None,
+        },
+    }[str(debate["tie_policy"])]
+    authority_charter = {
+        "primary": primary_authority,
+        "tie": tie_authority,
+        "chair_seat": judge["address"],
+        "possible_agent_decider": (
+            judge
+            if primary_authority["kind"] == "judge"
+            or tie_authority["kind"] == "judge"
+            else None
+        ),
+        "checkpoint_port": (
+            "program-decision-checkpoint"
+            if tie_authority["kind"] == "checkpoint" else None
+        ),
+    }
 
     verdict_routes = debate.get("verdict_routes")
     _require(isinstance(verdict_routes, dict), "workflow-invalid", "compiled debate verdict routes are absent")
@@ -397,7 +648,6 @@ def compile_deliberation_plan(
     }
     routes["checkpoint"] = {"kind": "action", "target": "checkpoint"}
 
-    workflow_address = str(debate["address"])
     schedule: list[dict[str, object]] = []
     for round_number in range(1, maximum_rounds + 1):
         for stage in ROUND_STAGES[:-1]:
@@ -435,6 +685,7 @@ def compile_deliberation_plan(
             "workflow_quorum_floor": debate["quorum"],
             "distinct_principals": True,
             "decision": decision,
+            "decision_authority": authority_charter,
             "audit": audit,
         },
         "debate": {
@@ -503,6 +754,7 @@ def simulate_deliberation(plan: dict[str, object]) -> dict[str, object]:
         "limits": plan["limits"],
         "quorum": plan["council"]["quorum"],
         "decision": plan["council"]["decision"],
+        "decision_authority": plan["council"]["decision_authority"],
         "audit": plan["council"]["audit"],
         "routes": plan["debate"]["routes"],
         "proof": plan["proof"],
@@ -651,6 +903,12 @@ def _packet(plan: dict[str, object], state: dict[str, Any], spec: dict[str, obje
             + ([state["meta_verdict"]["receipt_hash"]] if state["meta_verdict"] else []),
             "authority": plan["architect"]["authority"],
         })
+    elif spec["stage"] == "judgment":
+        common.update({
+            "decision_authority": plan["council"]["decision_authority"],
+            "obligations_required": True,
+            "allowed_obligation_kinds": list(OBLIGATION_KINDS),
+        })
     common["packet_hash"] = _sha(common)
     return common
 
@@ -715,9 +973,64 @@ def _claim_detail(plan: dict[str, object], state: dict[str, Any], spec: dict[str
         "stage": spec["stage"],
         "slot": spec["slot"],
         "role": spec["role"],
+        "seat_address": member["address"],
+        "agent": member["agent"],
+        "profile": member["profile"],
         "principal_fingerprint": member["principal_fingerprint"],
         "assignment_generation": member["assignment_generation"],
+        "workspace_domain": member["workspace_domain"],
+        "session_binding_key": member["session_binding_key"],
+        "execution": member["execution"],
         "packet": packet,
+    }
+
+
+def _decision_authority(
+    plan: dict[str, object],
+    state: dict[str, Any],
+    basis: str,
+) -> dict[str, object]:
+    judge = state["members"][str(plan["judge"]["binding_key"])]
+    if basis in {"judge", "tie-judge", "judge-veto"}:
+        decider = {
+            key: judge[key]
+            for key in (
+                "address", "role", "duty", "slot", "agent", "profile",
+                "principal_fingerprint", "assignment_generation",
+                "session_binding_key", "workspace_domain", "execution",
+            )
+        }
+        return {
+            "kind": "judge",
+            "basis": basis,
+            "rule": None,
+            "decider_seat": judge["address"],
+            "decider": decider,
+            "checkpoint_port": None,
+            "assignment_hash": plan["assignment_hash"],
+        }
+    if basis == "tie-checkpoint":
+        return {
+            "kind": "checkpoint",
+            "basis": basis,
+            "rule": None,
+            "decider_seat": None,
+            "decider": None,
+            "checkpoint_port": "program-decision-checkpoint",
+            "assignment_hash": plan["assignment_hash"],
+        }
+    return {
+        "kind": "rule",
+        "basis": basis,
+        "rule": (
+            plan["council"]["decision"]["method"]
+            if basis in {"majority", "weighted", "unanimous"}
+            else basis
+        ),
+        "decider_seat": None,
+        "decider": None,
+        "checkpoint_port": None,
+        "assignment_hash": plan["assignment_hash"],
     }
 
 
@@ -844,6 +1157,7 @@ def _judgment_analysis(
         "excluded": excluded,
         "veto_receipts": [item["receipt_hash"] for item in vetoes],
         "basis": basis,
+        "decision_authority": _decision_authority(plan, state, basis),
         "allowed_results": sorted(allowed),
         "dissent": dissent,
     }
@@ -885,6 +1199,7 @@ def _normalize_submission(
     vote = mapping.get("vote")
     submitted_result = mapping.get("result")
     rationale = mapping.get("rationale")
+    obligations: list[dict[str, object]] | None = None
     if stage == "rebuttal":
         _require(vote in VOTES, "vote-invalid", "rebuttal must carry advance, repair, or abstain vote")
     else:
@@ -901,6 +1216,11 @@ def _normalize_submission(
         _require(isinstance(rationale, str) and 0 < len(rationale.encode("utf-8")) <= min(int(size), 20_000), "rationale-invalid", "verdict rationale must be concise and bounded by artifact bytes")
     else:
         _require(submitted_result is None and rationale is None, "unknown-content", "result/rationale is legal only on a governed verdict")
+    if stage == "judgment":
+        _require("obligations" in mapping, "obligations-invalid", "council judgment omitted its obligations assertion")
+        obligations = _obligations(mapping.get("obligations"))
+    else:
+        _require(mapping.get("obligations") is None, "unknown-content", "obligations are legal only on a council judgment")
     return {
         "artifact_kind": expected_kind,
         "content_hash": content_hash,
@@ -911,6 +1231,7 @@ def _normalize_submission(
         "vote": vote,
         "submitted_result": submitted_result,
         "rationale": rationale,
+        "obligations": obligations,
     }
 
 
@@ -927,6 +1248,15 @@ def _artifact_detail(
     if stage == "judgment":
         result, aggregation, route = _judgment_analysis(
             plan, state, int(claim["round"]), str(normalized["submitted_result"]),
+        )
+        _require(
+            result != "advance"
+            or not any(
+                bool(item["blocking"])
+                for item in normalized["obligations"]
+            ),
+            "blocking-obligation",
+            "an advance decision cannot carry an open blocking obligation",
         )
     elif stage == "meta-audit":
         result = normalized["submitted_result"]
@@ -970,8 +1300,264 @@ def _artifact_detail(
     return {**unsigned, "receipt_hash": _sha(unsigned)}
 
 
+def _council_decision(
+    plan: dict[str, object],
+    state: dict[str, Any],
+    events: list[dict[str, object]],
+) -> dict[str, object] | None:
+    judgment = _final_judgment(state)
+    if judgment is None or judgment["result"] == "redeliberate":
+        return None
+    decision_event_index = next(
+        (
+            index for index, event in enumerate(events)
+            if event["event"] == "artifact_recorded"
+            and event["detail"]["receipt_hash"] == judgment["receipt_hash"]
+        ),
+        None,
+    )
+    _require(decision_event_index is not None, "ledger-corrupt", "council judgment has no ledger event")
+    source_receipts = [
+        str(event["detail"]["receipt_hash"])
+        for event in events[: decision_event_index + 1]
+        if event["event"] == "artifact_recorded"
+        and event["detail"]["artifact_kind"] in {
+            "proposal", "critique", "rebuttal", COUNCIL_VERDICT_KIND,
+        }
+    ]
+    participant_map: dict[tuple[str, int, int], dict[str, object]] = {}
+    for item in state["submissions"]:
+        if item["receipt_hash"] not in source_receipts:
+            continue
+        key = (
+            str(item["role"]), int(item["slot"]),
+            int(item["assignment_generation"]),
+        )
+        participant_map[key] = {
+            field: item[field]
+            for field in (
+                "role", "slot", "agent", "profile", "principal_fingerprint",
+                "assignment_generation", "workspace_domain",
+                "session_binding_key", "execution",
+            )
+        }
+        participant_map[key]["address"] = item["seat_address"]
+    participants = [
+        participant_map[key] for key in sorted(participant_map)
+    ]
+    authority = judgment["aggregation"]["decision_authority"]
+    alternatives = [
+        item for item in judgment["aggregation"]["allowed_results"]
+        if item != judgment["result"]
+    ]
+    obligations = list(judgment["obligations"])
+    payload: dict[str, object] = {
+        "kind": COUNCIL_DECISION_KIND,
+        "schema_version": DELIBERATION_SCHEMA_VERSION,
+        "decision_type": "council",
+        "status": (
+            "checkpoint-required"
+            if judgment["result"] == "checkpoint" else "decided"
+        ),
+        "protocol_id": plan["protocol_id"],
+        "plan_hash": plan["plan_hash"],
+        "assignment_hash": plan["assignment_hash"],
+        "program_run_id": plan["program_run_id"],
+        "phase": plan["phase"],
+        "story": plan["story"],
+        "workflow_address": plan["workflow_address"],
+        "council_id": plan["council_id"],
+        "charter_hash": _sha({
+            "council": plan["council"],
+            "debate": plan["debate"],
+            "rubric": plan["rubric"],
+            "subject": plan["subject"],
+        }),
+        "subject": plan["subject"],
+        "rubric": plan["rubric"],
+        "round": judgment["round"],
+        "authority": authority,
+        "chair_seat": plan["judge"]["address"],
+        "participants": participants,
+        "source_receipt_hashes": source_receipts,
+        "result": judgment["result"],
+        "rationale": judgment["rationale"],
+        "citations": judgment["citations"],
+        "alternatives": alternatives,
+        "accepted_risks": [
+            item["id"] for item in obligations if item["kind"] == "risk"
+        ],
+        "dissent": judgment["aggregation"]["dissent"],
+        "obligations": obligations,
+        "route": judgment["route"],
+        "issued_at": judgment["issued_at"],
+        "protocol_ledger_head": events[decision_event_index]["event_hash"],
+        "starts_work": False,
+        "writes_state": False,
+        "writes_repository": False,
+        "writes_roadmap": False,
+        "creates_grant": False,
+    }
+    payload_hash = _sha(payload)
+    stamped = {**payload, "payload_hash": payload_hash}
+    return validate_council_decision(
+        {**stamped, "decision_hash": _sha(stamped)}
+    )
+
+
+def validate_council_decision(value: object) -> dict[str, object]:
+    """Validate one immutable decision emitted by a completed council round."""
+    decision = _exact(value, _DECISION_KEYS, "decision")
+    _require(set(decision) == _DECISION_KEYS, "decision-invalid", "decision must use exact keys")
+    _require(decision.get("kind") == COUNCIL_DECISION_KIND, "decision-invalid", "decision kind is invalid")
+    _require(decision.get("schema_version") == DELIBERATION_SCHEMA_VERSION, "decision-invalid", "decision schema is invalid")
+    _require(decision.get("decision_type") == "council", "decision-invalid", "decision type is invalid")
+    _require(decision.get("status") in {"decided", "checkpoint-required"}, "decision-invalid", "decision status is invalid")
+    for field in (
+        "protocol_id", "program_run_id", "workflow_address", "council_id",
+    ):
+        _safe_string(decision.get(field), f"decision.{field}", reference=True)
+    for field in (
+        "plan_hash", "assignment_hash", "charter_hash",
+        "protocol_ledger_head", "payload_hash", "decision_hash",
+    ):
+        _hash(decision.get(field), f"decision.{field}")
+    phase = decision.get("phase")
+    round_number = decision.get("round")
+    _require(isinstance(phase, int) and not isinstance(phase, bool) and phase > 0, "decision-invalid", "decision phase must be positive")
+    _require(isinstance(round_number, int) and not isinstance(round_number, bool) and round_number > 0, "decision-invalid", "decision round must be positive")
+    _safe_string(decision.get("story"), "decision.story")
+    _subject(decision.get("subject"))
+    _rubric(decision.get("rubric"), "decision.rubric")
+    _safe_string(decision.get("chair_seat"), "decision.chair_seat", reference=True)
+
+    authority = _exact(decision.get("authority"), _DECISION_AUTHORITY_KEYS, "decision.authority")
+    _require(set(authority) == _DECISION_AUTHORITY_KEYS, "decision-invalid", "decision authority must use exact keys")
+    authority_kind = authority.get("kind")
+    _require(authority_kind in {"rule", "judge", "checkpoint"}, "decision-invalid", "decision authority kind is invalid")
+    _safe_string(authority.get("basis"), "decision.authority.basis")
+    _require(authority.get("assignment_hash") == decision.get("assignment_hash"), "decision-invalid", "decision authority assignment is stale")
+    rule = authority.get("rule")
+    if rule is not None:
+        _safe_string(rule, "decision.authority.rule")
+    checkpoint = authority.get("checkpoint_port")
+    if checkpoint is not None:
+        _safe_string(checkpoint, "decision.authority.checkpoint_port")
+
+    raw_participants = decision.get("participants")
+    _require(isinstance(raw_participants, list) and 0 < len(raw_participants) <= 128, "decision-invalid", "decision participants must be non-empty and bounded")
+    participants: list[dict[str, object]] = []
+    participant_keys: set[tuple[str, int, int]] = set()
+    for index, raw in enumerate(raw_participants):
+        label = f"decision.participants[{index}]"
+        participant = _exact(raw, _PARTICIPANT_KEYS, label)
+        _require(set(participant) == _PARTICIPANT_KEYS, "decision-invalid", f"{label} must use exact keys")
+        normalized = {
+            "address": _safe_string(participant.get("address"), f"{label}.address", reference=True),
+            "role": _safe_string(participant.get("role"), f"{label}.role"),
+            "slot": participant.get("slot"),
+            "agent": _safe_string(participant.get("agent"), f"{label}.agent"),
+            "profile": _safe_string(participant.get("profile"), f"{label}.profile"),
+            "principal_fingerprint": _hash(participant.get("principal_fingerprint"), f"{label}.principal_fingerprint"),
+            "assignment_generation": participant.get("assignment_generation"),
+            "workspace_domain": _safe_string(participant.get("workspace_domain"), f"{label}.workspace_domain"),
+            "session_binding_key": _hash(participant.get("session_binding_key"), f"{label}.session_binding_key"),
+            "execution": _execution(participant.get("execution"), f"{label}.execution"),
+        }
+        _require(isinstance(normalized["slot"], int) and not isinstance(normalized["slot"], bool) and int(normalized["slot"]) > 0, "decision-invalid", f"{label}.slot must be positive")
+        _require(isinstance(normalized["assignment_generation"], int) and not isinstance(normalized["assignment_generation"], bool) and int(normalized["assignment_generation"]) > 0, "decision-invalid", f"{label}.assignment_generation must be positive")
+        key = (str(normalized["role"]), int(normalized["slot"]), int(normalized["assignment_generation"]))
+        _require(key not in participant_keys, "decision-invalid", "decision repeats a participant generation")
+        participant_keys.add(key)
+        participants.append(normalized)
+
+    decider = authority.get("decider")
+    decider_seat = authority.get("decider_seat")
+    if authority_kind == "judge":
+        _safe_string(decider_seat, "decision.authority.decider_seat", reference=True)
+        raw_decider = _exact(decider, _DECIDER_KEYS, "decision.authority.decider")
+        _require(set(raw_decider) == _DECIDER_KEYS, "decision-invalid", "decision decider must use exact keys")
+        _require(raw_decider.get("address") == decider_seat, "decision-invalid", "decider seat and decider address differ")
+        normalized_decider = {
+            "address": _safe_string(raw_decider.get("address"), "decision.authority.decider.address", reference=True),
+            "role": _safe_string(raw_decider.get("role"), "decision.authority.decider.role"),
+            "duty": _safe_string(raw_decider.get("duty"), "decision.authority.decider.duty"),
+            "slot": raw_decider.get("slot"),
+            "agent": _safe_string(raw_decider.get("agent"), "decision.authority.decider.agent"),
+            "profile": _safe_string(raw_decider.get("profile"), "decision.authority.decider.profile"),
+            "principal_fingerprint": _hash(raw_decider.get("principal_fingerprint"), "decision.authority.decider.principal_fingerprint"),
+            "assignment_generation": raw_decider.get("assignment_generation"),
+            "session_binding_key": _hash(raw_decider.get("session_binding_key"), "decision.authority.decider.session_binding_key"),
+            "workspace_domain": _safe_string(raw_decider.get("workspace_domain"), "decision.authority.decider.workspace_domain"),
+            "execution": _execution(raw_decider.get("execution"), "decision.authority.decider.execution"),
+        }
+        _require(isinstance(normalized_decider["slot"], int) and int(normalized_decider["slot"]) > 0, "decision-invalid", "decider slot must be positive")
+        _require(isinstance(normalized_decider["assignment_generation"], int) and int(normalized_decider["assignment_generation"]) > 0, "decision-invalid", "decider generation must be positive")
+        matching = [
+            item for item in participants
+            if all(item[field] == normalized_decider[field] for field in _PARTICIPANT_KEYS)
+        ]
+        _require(len(matching) == 1, "decision-invalid", "decider is not the exact preassigned council participant")
+        _require(rule is None and checkpoint is None, "decision-invalid", "judge authority cannot also be a rule or checkpoint")
+    elif authority_kind == "checkpoint":
+        _require(decider is None and decider_seat is None and rule is None and checkpoint is not None, "decision-invalid", "checkpoint authority has an agent decider")
+    else:
+        _require(decider is None and decider_seat is None and rule is not None and checkpoint is None, "decision-invalid", "rule authority has an agent decider")
+
+    receipts = decision.get("source_receipt_hashes")
+    _require(isinstance(receipts, list) and receipts and len(receipts) <= 1_000 and len(set(receipts)) == len(receipts), "decision-invalid", "decision source receipts must be non-empty and unique")
+    for index, receipt in enumerate(receipts):
+        _hash(receipt, f"decision.source_receipt_hashes[{index}]")
+    result = decision.get("result")
+    _require(result in set(JUDGMENT_RESULTS) | {"exhausted"}, "decision-invalid", "decision result is unsupported")
+    _bounded_text(decision.get("rationale"), "decision.rationale", 20_000)
+    citations = decision.get("citations")
+    _require(isinstance(citations, list) and citations and len(citations) <= 32 and len(set(citations)) == len(citations), "decision-invalid", "decision citations must be non-empty and unique")
+    for index, citation in enumerate(citations):
+        _safe_string(citation, f"decision.citations[{index}]", reference=True)
+    alternatives = decision.get("alternatives")
+    _require(isinstance(alternatives, list) and len(alternatives) <= len(JUDGMENT_RESULTS) and len(set(alternatives)) == len(alternatives), "decision-invalid", "decision alternatives are invalid")
+    _require(all(item in set(JUDGMENT_RESULTS) | {"exhausted"} and item != result for item in alternatives), "decision-invalid", "decision alternatives contain an invalid result")
+    obligations = _obligations(decision.get("obligations"))
+    risk_ids = {item["id"] for item in obligations if item["kind"] == "risk"}
+    accepted_risks = decision.get("accepted_risks")
+    _require(isinstance(accepted_risks, list) and len(set(accepted_risks)) == len(accepted_risks) and set(accepted_risks) == risk_ids, "decision-invalid", "accepted risks differ from risk obligations")
+    if result == "advance":
+        _require(not any(bool(item["blocking"]) for item in obligations), "blocking-obligation", "advance decision carries a blocking obligation")
+    dissent = decision.get("dissent")
+    _require(isinstance(dissent, list) and len(dissent) <= 128, "decision-invalid", "decision dissent must be bounded")
+    for index, raw in enumerate(dissent):
+        item = _exact(raw, _DECISION_DISSENT_KEYS, f"decision.dissent[{index}]")
+        _require(set(item) == _DECISION_DISSENT_KEYS, "decision-invalid", "decision dissent must use exact keys")
+        _safe_string(item.get("role"), f"decision.dissent[{index}].role")
+        _require(isinstance(item.get("slot"), int) and int(item["slot"]) > 0, "decision-invalid", "dissent slot must be positive")
+        _hash(item.get("principal_fingerprint"), f"decision.dissent[{index}].principal_fingerprint")
+        _require(item.get("vote") in VOTES, "decision-invalid", "dissent vote is invalid")
+        _hash(item.get("receipt_hash"), f"decision.dissent[{index}].receipt_hash")
+    _route(decision.get("route"), "decision.route")
+    _timestamp(decision.get("issued_at"), "decision.issued_at")
+    _require(
+        decision.get("status") == ("checkpoint-required" if result == "checkpoint" else "decided"),
+        "decision-invalid", "decision status and result differ",
+    )
+    for field in (
+        "starts_work", "writes_state", "writes_repository",
+        "writes_roadmap", "creates_grant",
+    ):
+        _require(decision.get(field) is False, "decision-invalid", f"decision cannot set {field}")
+    payload = {
+        key: item for key, item in decision.items()
+        if key not in {"payload_hash", "decision_hash"}
+    }
+    _require(_sha(payload) == decision["payload_hash"], "decision-invalid", "decision payload hash does not match")
+    stamped = {**payload, "payload_hash": decision["payload_hash"]}
+    _require(_sha(stamped) == decision["decision_hash"], "decision-invalid", "decision hash does not match")
+    return dict(decision)
+
+
 def _projection(plan: dict[str, object], state: dict[str, Any], events: list[dict[str, object]]) -> dict[str, object]:
     judgment = _final_judgment(state)
+    decision = _council_decision(plan, state, events)
     next_spec = None if state["active"] is not None else _next_spec(plan, state)
     final_route = None
     final_result = None
@@ -1012,7 +1598,15 @@ def _projection(plan: dict[str, object], state: dict[str, Any], events: list[dic
             }
             for number in sorted({item["round"] for item in state["submissions"]})
         ],
-        "council_verdicts": list(state["judgments"]),
+        "round_judgments": list(state["judgments"]),
+        "council_decision": decision,
+        "carried_obligations": (
+            [
+                {**item, "source_decision_hash": decision["decision_hash"]}
+                for item in decision["obligations"]
+            ]
+            if decision is not None else []
+        ),
         "meta_verdict": state["meta_verdict"],
         "architect_verdict": state["architect_verdict"],
         "dissent": list(state["dissent"]),
@@ -1095,6 +1689,7 @@ def replay_deliberation(
                 key: detail[key] for key in (
                     "artifact_kind", "content_hash", "content_ref", "bytes", "tokens",
                     "citations", "vote", "submitted_result", "rationale",
+                    "obligations",
                 )
             }
             expected = _artifact_detail(plan, state, claim, normalized)
@@ -1104,8 +1699,14 @@ def replay_deliberation(
                 **dict(detail),
                 "round": claim["round"], "stage": claim["stage"],
                 "role": claim["role"], "slot": claim["slot"],
+                "seat_address": claim["seat_address"],
+                "agent": claim["agent"], "profile": claim["profile"],
                 "principal_fingerprint": claim["principal_fingerprint"],
                 "assignment_generation": member["assignment_generation"],
+                "workspace_domain": claim["workspace_domain"],
+                "session_binding_key": claim["session_binding_key"],
+                "execution": claim["execution"],
+                "issued_at": event["ts"],
             }
             state["submissions"].append(stored)
             state["completed_addresses"].add(claim["address"])
@@ -1349,6 +1950,7 @@ def record_deliberation_replacement(
         **old,
         "agent": new_source["agent"],
         "profile": new_source["profile"],
+        "execution": _execution(new_source.get("execution"), "replacement execution"),
         "principal_fingerprint": _hash(new_source.get("principal_fingerprint"), "replacement principal"),
         "assignment_generation": new_source["assignment_generation"],
         "session_binding_key": _hash(new_source.get("session_binding_key"), "replacement session binding"),

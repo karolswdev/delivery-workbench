@@ -9,9 +9,11 @@ Delivery Workbench can additionally run a governed autonomous delivery
 organization across an explicit roadmap scope: visually or declaratively
 authored hierarchical workflows assign specialist implementers, independent
 verifiers, verifier-of-verifier and master-architect roles; bounded debate,
-review, repair, and escalation loops drive each story and phase; and a finite
-revocable program grant permits only the declared quality, integration, and
-roadmap-advancement acts.
+review, repair, and escalation loops drive each story and phase; deliberative
+councils use an explicit rule, preassigned decider seat, or external checkpoint
+and carry every resulting obligation forward; and a finite revocable program
+grant permits only the declared quality, integration, and roadmap-advancement
+acts.
 
 ## Scope
 
@@ -22,12 +24,14 @@ roadmap-advancement acts.
   reusable hierarchical workflows; typed subflows plus bounded iteration,
   debate, review, repair, audit, and escalation loops; specialist role/team
   topology with mandatory implementer/verifier separation on autonomous story
-  completion and configurable meta-verifier/master-architect councils; typed
-  mechanical and agent-judgment verdicts with rubrics, citations, quorum, and
-  dissent; a rich visual studio and lossless configuration files over one
-  compiler; finite program grants, budgets, ledger, recovery, signals, and
-  exact integration/roadmap acts; CLI/MCP/HTTP/Workbench parity; fresh-wheel
-  multi-phase proof.
+  completion and configurable review panels, deliberative councils,
+  meta-verifiers, master architects, and decision authority; exact logical
+  seat, harness, provider/router, model, auth-domain, principal, workspace, and
+  session provenance; typed mechanical and agent-judgment verdicts with
+  rubrics, citations, quorum, dissent, and carried obligations; a rich visual
+  studio and lossless configuration files over one compiler; finite program
+  grants, budgets, ledger, recovery, signals, and exact integration/roadmap
+  acts; CLI/MCP/HTTP/Workbench parity; fresh-wheel multi-phase proof.
 - **Out:** making program setup, state, runtime, or UI ceremony mandatory for
   vanilla or bounded-run usage; ambient program activation on install/update;
   unbounded or data-dependent recursion without a declared ceiling;
@@ -65,22 +69,32 @@ roadmap-advancement acts.
   lossless graph/config round trips, live compiler diagnostics/simulation, and
   guarded saves that start nothing; progressive disclosure preserves the
   existing Workbench as the no-program front door (WLA-26-06).
-- [ ] Quality/evidence evaluation distinguishes hard mechanical facts from
+- [x] Quality/evidence evaluation distinguishes hard mechanical facts from
   declared agent judgments; typed verifier verdicts require exact rubrics and
-  evidence/citations, can require quorum/meta-review, preserve dissent, and
-  cannot counterfeit a mechanical receipt (WLA-26-07).
+  evidence/citations, can require independent-panel quorum/meta-review,
+  preserve dissent, and cannot counterfeit a mechanical receipt; a completed
+  deliberative-council decision separately proves its declared outcome
+  authority (`rule`, preassigned `decider_seat`, or external checkpoint), exact
+  execution provenance, and an explicit carried-obligations list (WLA-26-07).
 - [ ] Advisory, checkpointed, and continuous modes are exact profiles of one
   finite, expiring, revocable program grant with story/phase/round/agent/check/
   nudge/integration/wall budgets and separately named evidence, certification,
-  commit, push, and roadmap capabilities (WLA-26-08).
+  commit, push, obligation-disposition, and roadmap capabilities; the grant is
+  bound to the complete resolved seat/provider/model/auth roster and becomes
+  stale when that roster changes (WLA-26-08).
 - [ ] One replayable hierarchical program tick conducts child workflows and
-  phase-level architect/audit loops, reconciles outward facts, and recovers
-  across crash with no duplicate agent round, verdict, integration act, story
-  start, or phase transition (WLA-26-09).
+  phase-level architect/audit/council loops, dispatches only registered closed
+  driver adapters, honors the declared decider source, carries decision
+  obligations, reconciles outward facts, and recovers across crash with no
+  duplicate agent round, verdict, decision, integration act, story start, or
+  phase transition (WLA-26-09).
 - [ ] A fresh green governed verdict can drive only the exact separately
   granted evidence, contract, integration, commit, push, story, and phase rails;
-  stale, divergent, dissenting, exhausted, or under-authorized state stops
-  without partial advancement (WLA-26-10).
+  blocking obligations stop advancement while non-blocking backlog, technical
+  debt, risk, research, and follow-up obligations remain durable until completed,
+  superseded, escalated, or explicitly waived; stale, divergent, dissenting,
+  exhausted, or under-authorized state stops without partial advancement
+  (WLA-26-10).
 - [ ] CLI/MCP/HTTP/Workbench expose one byte-equivalent program model and a
   control room explaining why this story/team/workflow/verdict/state is current,
   what each agent is doing, which loops remain, and what authority/budget can
@@ -103,7 +117,7 @@ roadmap-advancement acts.
 | WLA-26-04 | Model agent roles, teams, and separation of duties | done | [story-04-model-agent-roles-teams-and-separation-of-duties](./story-04-model-agent-roles-teams-and-separation-of-duties.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-26-05 | Run debates, councils, and meta-verification | done | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-26-06 | Build the visual program and workflow studio | done | [story-06-build-the-visual-program-and-workflow-studio](./story-06-build-the-visual-program-and-workflow-studio.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-26-07 | Turn quality and evidence into governed verdicts | in-progress | [story-07-turn-quality-and-evidence-into-governed-verdicts](./story-07-turn-quality-and-evidence-into-governed-verdicts.md) | - |
+| WLA-26-07 | Turn quality and evidence into governed verdicts | done | [story-07-turn-quality-and-evidence-into-governed-verdicts](./story-07-turn-quality-and-evidence-into-governed-verdicts.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-26-08 | Grant continuous program authority explicitly | backlog | [story-08-grant-continuous-program-authority-explicitly](./story-08-grant-continuous-program-authority-explicitly.md) | - |
 | WLA-26-09 | Conduct and recover hierarchical multi-phase programs | backlog | [story-09-conduct-and-recover-hierarchical-multi-phase-programs](./story-09-conduct-and-recover-hierarchical-multi-phase-programs.md) | - |
 | WLA-26-10 | Integrate work and advance exact roadmap rails | backlog | [story-10-integrate-work-and-advance-exact-roadmap-rails](./story-10-integrate-work-and-advance-exact-roadmap-rails.md) | - |
@@ -112,21 +126,28 @@ roadmap-advancement acts.
 
 ## Where we are
 
-Phase open 6/12. Optional planning, finite workflow hierarchy, independent
-organization topology, deliberation, and visual authoring are evidence-backed.
-WLA-26-06 is done: the additive `#/program-studio` workspace authors programs,
-workflows, and organizations through Design/Simulate/Validate/JSON/Authority
-views over the shared compilers. Graph/config round trips preserve exact config
-and semantic/document/layout hashes; direct node placement changes no authority.
-Nested subflows, bounded loops/debates, role separation, councils, meta-review,
-architect gates, scope, artifacts, verdicts, capabilities, budgets, stops, and
-seven scenario states are accessible across desktop and mobile. Guarded
-preview/fingerprint/apply changes one declared tracked policy while starting no
-runtime act or grant. Empty inventory remains healthy, `#/` remains the default,
-and the fresh wheel creates no program machinery. The matrix passed 395/395 on
-both Python floors, fresh-wheel package smoke, explorer coverage, and 52
-viewport renders. WLA-26-07 is in progress: make mechanical facts and governed
-agent judgments compose into honest, typed, freshness-bound verdict proofs.
+Phase open 7/12. Optional planning, finite workflow hierarchy, independent
+organization topology, deliberation, visual authoring, and governed quality
+decisions are evidence-backed. WLA-26-07 is done: mechanical facts and declared
+agent judgments are closed, distinct types; rubric-bound verifier verdicts carry
+exact work, evidence, assignment, and execution provenance; independent votes
+compose only as `panel-verdict`; and a deliberative council emits a separately
+validated replay-derived `delivery-workbench-decision@1`. Every council charter
+declares its final authority before discussion. A clear rule outcome has no
+agent decider, judge mode binds one preassigned stable seat plus its assignment
+generation and complete provider/model/auth execution stack, and checkpoint
+mode names the external decision port. Every decision carries an explicit
+obligations array; blocking obligations refuse green while non-blocking backlog,
+technical-debt, risk, research, and follow-up work carries the source decision
+hash. Router/provider/model/auth resolution now participates in capability,
+roster, and assignment freshness, so runtime drift invalidates old authority.
+The pure quality gate preserves superseded red history, dissent, meta-review,
+architect veto, citations, repair/exhaustion routes, and exact proof lineage
+while starting and writing nothing. The slice passes 40/40 focused tests and
+416/416 on both Python floors; fresh-wheel packaging and canon/docs/parity
+checks pass. WLA-26-08 is next: bind these exact seats, decisions, obligations,
+quality proofs, and separately named mutation rails into a finite revocable
+program grant.
 
 ## Active risks
 
@@ -137,6 +158,9 @@ agent judgments compose into honest, typed, freshness-bound verdict proofs.
 | Workflow expressiveness becomes an unbounded agent loop | high | Typed loop/subflow primitives require max rounds, budget, stop predicate, and exhaustion route at compile time | A cycle can compile without a finite proof |
 | Verifiers become rubber stamps or self-review | high | Separate assignment/capability identity, exact rubric, cited evidence, dissent and optional meta-verification | The implementer can supply its own independent verdict |
 | Councils become expensive opaque chat | high | Typed round artifacts, speaker roles, quorum/judge rule, per-round receipts, hard token/start/time ceilings | Replay cannot explain how a debate outcome was derived |
+| Independent review is mislabeled as a council or hides the ultimate decider | high | Keep `panel-verdict` separate from `council-decision`; require `rule`, a preassigned stable `decider_seat`, or an authorized external checkpoint in every council charter | A runtime participant self-elects, silently changes, or invents the final outcome authority |
+| Provider/model aliases create false diversity or silent decision drift | high | Bind each seat to resolved harness, router/provider, model identifier/revision or honest alias, auth-domain fingerprint, principal, workspace, and session; include all execution inputs in roster/grant freshness | A model/provider change leaves the same authorized roster fingerprint, or two aliases are counted as independent providers |
+| Council backlog or technical debt disappears after the headline decision | high | Require every decision to emit an explicit typed obligations array and keep each item on the program frontier until completed, superseded, escalated, or separately authorized waiver | A decision advances while a blocking obligation is open, or a non-blocking obligation has no durable lineage |
 | Agent judgment is mislabeled as objective truth | high | Mechanical receipts and governed judgments are different types and rendered differently on every surface | Model prose satisfies a mechanical predicate |
 | Multi-phase advancement skips difficult work | high | Stable eligibility, explicit scope/dependency rules, and candidate/refusal explanations | A failed story is silently bypassed for an easier phase |
 | Crash/retry duplicates destructive acts | high | Claim before dispatch, deterministic idempotency keys, reconcile before retry | Restart duplicates a verdict, status flip, commit, or push |
@@ -268,6 +292,34 @@ agent judgments compose into honest, typed, freshness-bound verdict proofs.
 - 2026-07-22 - Keep policy, program authority, and provider credentials
   separate - tracked workflows name logical roles/capabilities while local
   driver configuration owns executable/auth resolution - consent spine.
+- 2026-07-22 - Define a council as governed deliberation among declared seats
+  with different roles, perspectives, and optionally execution stacks; keep an
+  independent review panel as a separate primitive whose member verdicts are
+  composed without inter-member deliberation - owner clarification.
+- 2026-07-22 - Declare final outcome authority before a council starts: either
+  a closed deterministic rule computes the result, a stable hierarchical
+  `decider_seat` issues one of the charter's allowed outcomes, or an explicitly
+  authorized external checkpoint decides. A participant cannot self-elect,
+  swap the decider silently, override quorum/veto, or invent a continuation;
+  replacement creates a new assignment generation and invalidates unfinished
+  decision work - owner clarification and replay boundary.
+- 2026-07-22 - Identify a decider by stable seat address plus assignment
+  generation and complete resolved execution provenance—not by a display name:
+  logical profile, registered harness/adapter, router/provider, model
+  vendor/family/identifier/revision or honest alias, auth-domain fingerprint,
+  principal, workspace, and session all belong to the decision proof - identity
+  and freshness boundary.
+- 2026-07-22 - Require every council decision to carry an explicit obligations
+  array, even when empty. Backlog, technical debt, risk, research, and follow-up
+  items remain durable program-frontier work until completion, supersession,
+  escalation, or separately authorized waiver; creating roadmap stories from
+  those obligations is a distinct granted write act - owner clarification.
+- 2026-07-22 - Treat execution selection as exact, portable, or constrained
+  policy resolved through versioned named adapters. Tracked policy may request
+  Claude CLI/Sonnet, Pi/OpenRouter/Kimi, or another registered stack, but never
+  embeds provider credentials or arbitrary argv; the resolved model/provider
+  inputs must participate in roster and grant fingerprints - portability and
+  command-safety boundary.
 
 ## Decisions deferred
 

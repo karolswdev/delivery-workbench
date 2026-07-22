@@ -21,10 +21,13 @@ a hard story by selecting an easier one.
 
 - **In:** one deterministic `tick_program`; hierarchical scheduler and stable
   addresses; story/phase selection; workflow instantiation; role assignment and
-  strict child grants; fan-out/in; bounded loop/debate/council/verifier/meta/
-  architect scheduling; artifact/verdict/gate reconciliation; outward signal/
-  nudge integration; retry/repair/escalation; program supervision; claim-before-
-  dispatch, poll/reconcile-before-retry, ledger replay and recovery.
+  strict child grants; versioned driver-plugin discovery and exact execution-
+  port resolution for CLI/API harnesses (including Codex, Claude and pi/
+  OpenRouter fixtures); fan-out/in; bounded loop/debate/panel/council/verifier/
+  decider/meta/architect scheduling; artifact/verdict/decision/obligation/gate
+  reconciliation; outward signal/nudge integration; retry/repair/escalation;
+  program supervision; claim-before-dispatch, poll/reconcile-before-retry,
+  ledger replay and recovery.
 - **Out:** a second scheduler per surface; hidden background daemon; infinite
   loops; parallel integration of multiple stories; automatic graph/rubric/
   authority changes; conflict resolution.
@@ -35,11 +38,24 @@ a hard story by selecting an easier one.
   a stable eligible set within concurrency/resource/budget bounds, claims each
   exact next act, dispatches or polls it, records outcomes/routes, and stops.
 - [ ] Hierarchical lineage addresses program→phase→story→workflow/subflow→loop
-  round→node/role/attempt so every artifact, verdict, nudge and failure route is
-  attributable and replay-stable without flattening away organizational meaning.
+  round→council/seat→node/role/attempt so every artifact, verdict, decision,
+  obligation, nudge and failure route is attributable and replay-stable without
+  flattening away organizational meaning.
 - [ ] The conductor enforces implementer/verifier separation and declared
-  council/meta/architect order; failed or dissenting verdicts can only retry,
-  repair, re-debate, escalate, pause or abort along finite compiled routes.
+  panel/council/decider/meta/architect order; a rule-decided council has no
+  override agent, a judge-mode council dispatches only its preassigned
+  `decider_seat`, and failed or dissenting verdicts can only retry, repair,
+  re-debate, escalate, pause or abort along finite compiled routes.
+- [ ] Named driver adapters expose closed versioned configuration and safe argv
+  rendering for their harness; resolution records requested/reported model,
+  provider/router and opaque auth-domain fingerprints, refuses unavailable or
+  version-skewed exact bindings, and never accepts arbitrary tracked commands,
+  flags or credentials. The resolved model participates in roster/grant
+  freshness.
+- [ ] Council obligations are appended idempotently to the program ledger;
+  blocking items stop advancement and non-blocking items remain in the durable
+  frontier across story/phase transition, replacement and restart until an
+  authorized terminal disposition is recorded.
 - [ ] Bounded supervision merely repeats the same tick until a declared
   terminal/poll/checkpoint/budget/time ceiling; it cannot auto-start, elevate
   authority, swallow refusal, or spin when no progress is possible.
@@ -47,16 +63,18 @@ a hard story by selecting an easier one.
   with zero duplicate agent/check/nudge/debate speaker/verdict/gate/story-start
   events and with external operations reconciled before retry.
 - [ ] Unknown/blocked activity, unavailable required role, quorum loss, repair
-  exhaustion, architect veto, stale facts and budget exhaustion stop distinctly;
-  none causes the scheduler to skip the story or phase silently.
+  exhaustion, missing/changed provider-model binding, decider loss, architect
+  veto, stale facts, open blocking obligation and budget exhaustion stop
+  distinctly; none causes the scheduler to skip the story or phase silently.
 
 ## Test plan
 
 - **Unit:** scheduler eligibility, hierarchy, loop, route, claim, recovery and
   bounded-supervisor tests on both Python floors.
 - **Integration:** fixture program spans at least two stories, nested fan-out,
-  verifier repair, debate/meta-audit and phase architect review across multiple
-  process restarts.
+  verifier repair, a heterogeneous provider/model council with explicit
+  decider, obligation carry-forward, meta-audit and phase architect review
+  across multiple process restarts.
 - **Manual / device:** inspect replay explanation at active, debate, repair,
   phase-boundary and stopped states.
 

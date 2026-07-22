@@ -62,6 +62,8 @@ _PROFILE_KEYS = {
     "adapter", "capabilities", "workspace_modes", "command", "model",
     "network", "max_context_bytes", "max_stream_bytes", "timeout_ceiling",
     "principal", "available", "adapter_version", "max_concurrency",
+    "router", "provider", "model_vendor", "model_family",
+    "model_revision", "model_binding", "auth_domain",
 }
 _PACKET_KEYS = {
     "kind", "schema_version", "packet_hash", "run_id", "node_id", "attempt",
@@ -182,6 +184,64 @@ def validate_driver_config(value: object) -> dict[str, object]:
         principal = raw.get("principal", name)
         if not isinstance(principal, str) or not _SAFE_ID_RE.fullmatch(principal):
             raise DwError(f"driver profile {name!r} principal must be a safe local identity")
+        provider_default = {
+            "fixture": "fixture",
+            "codex-exec": "openai",
+            "claude-exec": "anthropic",
+        }[str(adapter)]
+        execution_ids: dict[str, str] = {}
+        for field, default in (
+            ("router", "direct"),
+            ("provider", provider_default),
+            ("model_vendor", "unresolved"),
+            ("model_family", "unresolved"),
+            ("auth_domain", str(principal)),
+        ):
+            candidate = raw.get(field, default)
+            if not isinstance(candidate, str) or not _SAFE_ID_RE.fullmatch(candidate):
+                raise DwError(
+                    f"driver profile {name!r} {field} must be a safe local identity"
+                )
+            execution_ids[field] = candidate
+        model_revision = raw.get("model_revision")
+        if model_revision is not None and (
+            not isinstance(model_revision, str)
+            or not model_revision
+            or len(model_revision.encode("utf-8")) > 200
+        ):
+            raise DwError(
+                f"driver profile {name!r} model_revision must be bounded"
+            )
+        model_binding = raw.get(
+            "model_binding",
+            (
+                "exact-revision" if model_revision is not None
+                else "requested-alias" if model is not None
+                else "adapter-default-unresolved"
+            ),
+        )
+        if model_binding not in {
+            "exact-revision", "requested-alias", "adapter-default-unresolved",
+        }:
+            raise DwError(
+                f"driver profile {name!r} model_binding is unsupported"
+            )
+        if model_binding == "exact-revision" and (
+            model is None or model_revision is None
+        ):
+            raise DwError(
+                f"driver profile {name!r} exact-revision binding requires model and model_revision"
+            )
+        if model_binding == "requested-alias" and model is None:
+            raise DwError(
+                f"driver profile {name!r} requested-alias binding requires model"
+            )
+        if model_binding == "adapter-default-unresolved" and (
+            model is not None or model_revision is not None
+        ):
+            raise DwError(
+                f"driver profile {name!r} adapter-default-unresolved binding cannot name a model or revision"
+            )
         available = raw.get("available", True)
         if not isinstance(available, bool):
             raise DwError(f"driver profile {name!r} available must be boolean")
@@ -236,9 +296,13 @@ def validate_driver_config(value: object) -> dict[str, object]:
             "available": available,
             "adapter_version": adapter_version,
             "max_concurrency": max_concurrency,
+            **execution_ids,
+            "model_binding": model_binding,
         }
         if model is not None:
             normalized_profile["model"] = model
+        if model_revision is not None:
+            normalized_profile["model_revision"] = model_revision
         normalized[str(name)] = normalized_profile
     return {
         "kind": DRIVER_CONFIG_KIND,
@@ -292,6 +356,21 @@ def driver_capability(config: dict[str, object], profile: str) -> dict[str, obje
         "profile": profile,
         "adapter": raw["adapter"],
         "adapter_version": raw["adapter_version"],
+        # A configured model is an authority- and quality-relevant execution
+        # input.  Exposing the requested value here makes it part of the
+        # capability/roster fingerprint; omitting it would let a profile move
+        # to a different model while retaining an old assignment or grant.
+        # The adapter can only prove that it requested this identifier, so the
+        # public contract deliberately calls it an alias rather than claiming
+        # a provider-side immutable revision.
+        "harness": raw["adapter"],
+        "router": raw["router"],
+        "provider": raw["provider"],
+        "model_vendor": raw["model_vendor"],
+        "model_family": raw["model_family"],
+        "model": raw.get("model"),
+        "model_revision": raw.get("model_revision"),
+        "model_binding": raw["model_binding"],
         "principal": raw["principal"],
         "available": raw["available"],
         "max_concurrency": raw["max_concurrency"],
@@ -305,6 +384,14 @@ def driver_capability(config: dict[str, object], profile: str) -> dict[str, obje
         "timeout_ceiling": raw["timeout_ceiling"],
         "stores_credentials": False,
     }
+    public["auth_domain_fingerprint"] = "sha256:" + hashlib.sha256(
+        canonical_json({
+            "auth_domain": raw["auth_domain"],
+            "harness": public["harness"],
+            "router": public["router"],
+            "provider": public["provider"],
+        }).encode("utf-8")
+    ).hexdigest()
     public["principal_fingerprint"] = "sha256:" + hashlib.sha256(
         canonical_json({
             "principal": public["principal"],

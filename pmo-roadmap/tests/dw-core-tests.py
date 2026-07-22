@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 from importlib.machinery import SourceFileLoader
+import hashlib
 import io
 import json
 import os
@@ -5591,6 +5592,24 @@ class OrchestrationDriverTest(unittest.TestCase):
         self.assertRegex(
             capability["capability_fingerprint"], r"^sha256:[0-9a-f]{64}$"
         )
+        self.assertIsNone(capability["model"])
+        self.assertEqual(
+            capability["model_binding"], "adapter-default-unresolved"
+        )
+        modeled = json.loads(json.dumps(self.config))
+        modeled["profiles"]["research-readonly"]["model"] = "fixture/model-v2"
+        modeled_capability = drivers.driver_capability(
+            drivers.load_driver_config(self.root, modeled),
+            "research-readonly",
+        )
+        self.assertEqual(modeled_capability["model"], "fixture/model-v2")
+        self.assertEqual(
+            modeled_capability["model_binding"], "requested-alias"
+        )
+        self.assertNotEqual(
+            capability["capability_fingerprint"],
+            modeled_capability["capability_fingerprint"],
+        )
         self.assertFalse(capability["stores_credentials"])
         poisoned = json.loads(json.dumps(self.config))
         poisoned["profiles"]["research-readonly"]["api_token"] = "secret"
@@ -8827,8 +8846,8 @@ class ProgramContractTest(unittest.TestCase):
         self.assertIn("verifier assignment fixed before implementation dispatch", separation)
         verdicts = self._section("Verdict taxonomy and quality gates")
         for verdict_type in (
-            "`mechanical-fact`", "`agent-verdict`", "`council-verdict`",
-            "`meta-verdict`",
+            "`mechanical-fact`", "`agent-verdict`", "`panel-verdict`",
+            "`council-verdict`", "`meta-verdict`",
         ):
             self.assertIn(f"| {verdict_type} |", verdicts)
         self.assertIn("Only the check/rail adapter can create `mechanical-fact`", verdicts)
@@ -9093,7 +9112,41 @@ class ProgramPlannerTest(unittest.TestCase):
                 "slug": slug,
                 "title": slug.replace("-", " ").title(),
                 "version": "1.0.0",
-                "criteria": [],
+                "subject_type": (
+                    "diff" if slug == "story-quality" else "phase-snapshot"
+                ),
+                "result_vocabulary": [
+                    "pass", "fail", "needs-repair", "escalate",
+                ],
+                "freshness": {
+                    "max_age_seconds": 3_600,
+                    "bind": [
+                        "subject", "repository", "program", "assignment",
+                        "rubric", "ledger",
+                    ],
+                },
+                "criteria": [{
+                    "id": "quality",
+                    "question": "Does the exact subject satisfy its contract?",
+                    "evaluation": {"kind": "agent-judgment", "fact": None},
+                    "required_evidence_kinds": [
+                        "git-diff" if slug == "story-quality" else "markdown"
+                    ],
+                    "min_citations": 1,
+                    "allowed_results": [
+                        "pass", "fail", "abstain", "inconclusive",
+                    ],
+                    "veto": True,
+                    "rationale_max_bytes": 2_000,
+                }],
+                "aggregation": {
+                    "method": "all",
+                    "threshold": 1,
+                    "on_pass": "pass",
+                    "on_fail": "needs-repair",
+                    "on_abstain": "escalate",
+                    "on_inconclusive": "needs-repair",
+                },
             })
 
         def fixture_agent(agent_id, profile, duties, *, writer=False):
@@ -9616,6 +9669,13 @@ class ProgramOrganizationTest(unittest.TestCase):
                 "workspace_modes": (
                     ["isolated-worktree"] if writer else ["read-only"]
                 ),
+                "router": "fixture-router",
+                "provider": "fixture-provider",
+                "model_vendor": "fixture-vendor",
+                "model_family": "fixture-family",
+                "model": f"fixture/{agent['profile']}",
+                "model_binding": "requested-alias",
+                "auth_domain": f"auth-{agent['profile']}",
             }
         return {
             "kind": "delivery-workbench-driver-config",
@@ -9696,12 +9756,23 @@ class ProgramOrganizationTest(unittest.TestCase):
         self.assertNotIn("candidate-diff", roles["critic"]["packet_policy"]["context"]["allow"])
         self.assertIn("roadmap", roles["master-architect"]["packet_policy"]["context"]["allow"])
         serialized = json.dumps(assignment).lower()
-        for forbidden in ('"command"', '"model"', "api_token", "password", "credential"):
+        for forbidden in ('"command"', "api_token", "password", "credential"):
             self.assertNotIn(forbidden, serialized)
         for role in assignment["roles"]:
             for member in role["members"]:
                 self.assertRegex(
                     member["adapter_capability_fingerprint"],
+                    r"^sha256:[0-9a-f]{64}$",
+                )
+                self.assertEqual(member["execution"]["harness"], "fixture")
+                self.assertEqual(
+                    member["execution"]["provider"], "fixture-provider"
+                )
+                self.assertEqual(
+                    member["execution"]["model_binding"], "requested-alias"
+                )
+                self.assertRegex(
+                    member["execution"]["auth_domain_fingerprint"],
                     r"^sha256:[0-9a-f]{64}$",
                 )
 
@@ -9730,6 +9801,24 @@ class ProgramOrganizationTest(unittest.TestCase):
         self.assertIn(
             "separation-violation", {item["code"] for item in refused["issues"]}
         )
+
+    def test_provider_or_model_drift_changes_roster_and_assignment_authority(self):
+        baseline = self.assign()
+        changed_config = self.config()
+        changed_config["profiles"]["judge"]["provider"] = "other-provider"
+        changed_config["profiles"]["judge"]["model"] = "fixture/judge-v2"
+        changed = self.assign(changed_config)
+        self.assertTrue(changed["applicable"], changed["issues"])
+        self.assertNotEqual(baseline["roster_hash"], changed["roster_hash"])
+        self.assertNotEqual(
+            baseline["assignment_hash"], changed["assignment_hash"]
+        )
+        judge = next(
+            role["selected"] for role in changed["roles"]
+            if role["role"] == "judge"
+        )
+        self.assertEqual(judge["execution"]["provider"], "other-provider")
+        self.assertEqual(judge["execution"]["model"], "fixture/judge-v2")
 
     def test_colliding_principals_and_capability_downgrade_refuse(self):
         collision = self.config()
@@ -10211,6 +10300,13 @@ class ProgramDeliberationTest(unittest.TestCase):
                 "workspace_modes": (
                     ["isolated-worktree"] if writer else ["read-only"]
                 ),
+                "router": "fixture-router",
+                "provider": "fixture-provider",
+                "model_vendor": "fixture-vendor",
+                "model_family": "fixture-family",
+                "model": f"fixture/{agent['profile']}",
+                "model_binding": "requested-alias",
+                "auth_domain": f"auth-{agent['profile']}",
             }
         return {
             "kind": "delivery-workbench-driver-config",
@@ -10256,25 +10352,52 @@ class ProgramDeliberationTest(unittest.TestCase):
             },
         }
 
-    def plan(self, organization=None, workflow=None, *, architect=False):
+    def plan(
+        self, organization=None, workflow=None, *, architect=False,
+        rubric=None, freshness_bound=False,
+    ):
         assignment = self.assignment(organization)
         self.assertTrue(assignment["applicable"], assignment["issues"])
+        selected_workflow = workflow or self.workflow
+        debate = next(
+            item for item in selected_workflow["debates"]
+            if str(item["address"]).endswith("/design-council")
+            or item["address"] == "design-council"
+        )
+        subject = {
+            "kind": "story-design",
+            "hash": "sha256:" + "2" * 64,
+        }
+        if freshness_bound:
+            subject = {
+                "kind": "diff",
+                "hash": "sha256:" + "2" * 64,
+                "repository_hash": "sha256:" + "6" * 64,
+                "program_hash": "sha256:" + "7" * 64,
+                "program_run_id": "program-fixture",
+                "phase": 1,
+                "story": "DM-1-02",
+                "workflow_address": debate["address"],
+                "assignment_hash": assignment["assignment_hash"],
+                "assignment_generation": 1,
+                "ledger_head": "sha256:" + "8" * 64,
+                "implementer_principals": [
+                    assignment["implementer"]["principal_fingerprint"]
+                ],
+            }
         plan = self.core.compile_deliberation_plan(
-            workflow or self.workflow,
+            selected_workflow,
             assignment,
             council_id="debate-council",
             program_run_id="program-fixture",
             phase=1,
             story="DM-1-02",
-            rubric={
+            rubric=rubric or {
                 "slug": "design-quality",
                 "semantic_hash": "sha256:" + "1" * 64,
                 "criteria": ["coherent", "bounded", "evidenced"],
             },
-            subject={
-                "kind": "story-design",
-                "hash": "sha256:" + "2" * 64,
-            },
+            subject=subject,
             evidence=[{
                 "kind": "markdown",
                 "hash": "sha256:" + "3" * 64,
@@ -10285,7 +10408,9 @@ class ProgramDeliberationTest(unittest.TestCase):
         )
         return plan, assignment
 
-    def submission(self, claim, ordinal, *, vote=None, result=None):
+    def submission(
+        self, claim, ordinal, *, vote=None, result=None, obligations=None,
+    ):
         stage = claim["stage"]
         kind = {
             "proposal": "proposal",
@@ -10308,6 +10433,9 @@ class ProgramDeliberationTest(unittest.TestCase):
                 f"Bounded governed rationale for {result}."
                 if result is not None else None
             ),
+            "obligations": (
+                list(obligations or []) if stage == "judgment" else None
+            ),
         }
 
     def drive(
@@ -10319,6 +10447,7 @@ class ProgramDeliberationTest(unittest.TestCase):
         judgments,
         meta="uphold",
         architect="approve",
+        obligations=None,
     ):
         vote_offsets = {}
         ordinal = len(events)
@@ -10352,7 +10481,10 @@ class ProgramDeliberationTest(unittest.TestCase):
                 plan,
                 events,
                 claim["claim_id"],
-                self.submission(claim, ordinal, vote=vote, result=result),
+                self.submission(
+                    claim, ordinal, vote=vote, result=result,
+                    obligations=(obligations or {}).get(claim["round"], []),
+                ),
                 "2026-07-22T00:01:00Z",
             )
             events = recorded["events"]
@@ -10371,6 +10503,15 @@ class ProgramDeliberationTest(unittest.TestCase):
         self.assertEqual(simulation["maximum"]["wall_seconds"], 7200)
         self.assertEqual(simulation["quorum"], 3)
         self.assertEqual(simulation["decision"]["method"], "majority")
+        self.assertEqual(
+            simulation["decision_authority"]["primary"]["kind"], "rule"
+        )
+        self.assertIsNone(
+            simulation["decision_authority"]["primary"]["decider_seat"]
+        )
+        self.assertEqual(
+            simulation["decision_authority"]["tie"]["kind"], "judge"
+        )
         self.assertEqual(
             simulation["proof"]["verdict_effects"]["repair"],
             "follows-declared-repair-route",
@@ -10405,7 +10546,7 @@ class ProgramDeliberationTest(unittest.TestCase):
         events = restarted
         vote_offset = 0
         ordinal = len(events)
-        while not self.core.replay_deliberation(plan, events)["council_verdicts"]:
+        while not self.core.replay_deliberation(plan, events)["round_judgments"]:
             projection = self.core.replay_deliberation(plan, events)
             if projection["active_claim"] is None:
                 claimed = self.core.claim_next_deliberation(
@@ -10452,11 +10593,19 @@ class ProgramDeliberationTest(unittest.TestCase):
             architect="repair",
         )
         self.assertEqual(len(projection["rounds"]), 2)
-        self.assertEqual(projection["council_verdicts"][0]["result"], "redeliberate")
-        self.assertEqual(projection["council_verdicts"][1]["result"], "advance")
+        self.assertEqual(projection["round_judgments"][0]["result"], "redeliberate")
+        self.assertEqual(projection["round_judgments"][1]["result"], "advance")
         self.assertEqual(len(projection["dissent"]), 1)
         self.assertEqual(len(projection["abstentions"]), 1)
         self.assertEqual(projection["meta_verdict"]["result"], "uphold")
+        decision = projection["council_decision"]
+        self.assertEqual(decision["kind"], self.core.COUNCIL_DECISION_KIND)
+        self.assertEqual(decision["authority"]["kind"], "rule")
+        self.assertIsNone(decision["authority"]["decider_seat"])
+        self.assertIsNone(decision["authority"]["decider"])
+        self.assertEqual(decision["chair_seat"], plan["judge"]["address"])
+        self.assertEqual(decision["obligations"], [])
+        self.assertEqual(projection["carried_obligations"], [])
         self.assertTrue(
             projection["meta_verdict"]["aggregation"]["original_verdict_preserved"]
         )
@@ -10477,6 +10626,233 @@ class ProgramDeliberationTest(unittest.TestCase):
             projection,
         )
 
+    def test_judge_mode_names_the_preassigned_decider_and_exact_execution(self):
+        governed = self.clone(self.organization)
+        governed["councils"][0]["decision"].update({
+            "method": "judge", "threshold": 1, "veto_roles": [],
+        })
+        governed["councils"][0]["audit"].update({
+            "mode": "none", "sample_size": 0,
+        })
+        plan, _assignment = self.plan(governed)
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        _events, projection = self.drive(
+            plan,
+            events,
+            votes={1: ["advance", "repair", "abstain"]},
+            judgments={1: "advance"},
+        )
+        decision = projection["council_decision"]
+        authority = decision["authority"]
+        self.assertEqual(authority["kind"], "judge")
+        self.assertEqual(authority["basis"], "judge")
+        self.assertEqual(authority["decider_seat"], plan["judge"]["address"])
+        self.assertEqual(authority["assignment_hash"], plan["assignment_hash"])
+        self.assertEqual(authority["decider"]["role"], "judge")
+        self.assertEqual(authority["decider"]["assignment_generation"], 1)
+        self.assertEqual(
+            authority["decider"]["execution"]["provider"],
+            "fixture-provider",
+        )
+        self.assertEqual(
+            authority["decider"]["execution"]["model"], "fixture/judge"
+        )
+        self.assertEqual(
+            authority["decider"]["execution"]["model_binding"],
+            "requested-alias",
+        )
+        self.assertRegex(
+            authority["decider"]["execution"]["auth_domain_fingerprint"],
+            r"^sha256:[0-9a-f]{64}$",
+        )
+
+    def test_decision_carries_obligations_and_blocks_green_debt(self):
+        no_audit = self.clone(self.organization)
+        no_audit["councils"][0]["audit"].update({
+            "mode": "none", "sample_size": 0,
+        })
+        debt = {
+            "id": "document-fallback",
+            "kind": "technical-debt",
+            "statement": "Document the provider fallback before expansion.",
+            "priority": "medium",
+            "blocking": False,
+            "accountable_role": "master-architect",
+            "target": "phase:26",
+            "citations": ["evidence:architect-frame"],
+            "acceptance": "The fallback contract has an evidence-backed story.",
+            "state": "open",
+        }
+        plan, _assignment = self.plan(no_audit)
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        _events, projection = self.drive(
+            plan,
+            events,
+            votes={1: ["advance", "advance", "repair"]},
+            judgments={1: "advance"},
+            obligations={1: [debt]},
+        )
+        decision = projection["council_decision"]
+        self.assertEqual(decision["obligations"], [debt])
+        self.assertEqual(
+            projection["carried_obligations"][0]["source_decision_hash"],
+            decision["decision_hash"],
+        )
+        self.assertFalse(projection["writes_roadmap"])
+
+        omitted = self.submission(
+            {"stage": "judgment"}, 1, result="advance"
+        )
+        del omitted["obligations"]
+        with self.assertRaises(self.core.DeliberationError) as missing:
+            self.core._normalize_submission(
+                plan, {"stage": "judgment"}, omitted
+            )
+        self.assertIn("obligations-invalid", str(missing.exception))
+
+        blocking = self.clone(debt)
+        blocking.update({"id": "security-stop", "blocking": True})
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        with self.assertRaises(self.core.DeliberationError) as stopped:
+            self.drive(
+                plan,
+                events,
+                votes={1: ["advance", "advance", "repair"]},
+                judgments={1: "advance"},
+                obligations={1: [blocking]},
+            )
+        self.assertIn("blocking-obligation", str(stopped.exception))
+
+    def test_completed_council_decision_is_a_distinct_fresh_quality_input(self):
+        import dw_pmo.program_verdict as verdict_core
+
+        rubric = {
+            "kind": "delivery-workbench-rubric",
+            "schema_version": 1,
+            "slug": "design-quality",
+            "title": "Design quality",
+            "description": "Governed council quality fixture.",
+            "version": "1.0.0",
+            "subject_type": "diff",
+            "result_vocabulary": [
+                "pass", "fail", "needs-repair", "escalate",
+            ],
+            "freshness": {
+                "max_age_seconds": 3600,
+                "bind": [
+                    "subject", "repository", "program", "assignment",
+                    "rubric", "ledger",
+                ],
+            },
+            "criteria": [{
+                "id": "coherent",
+                "question": "Is the proposed design coherent?",
+                "evaluation": {"kind": "agent-judgment", "fact": None},
+                "required_evidence_kinds": ["markdown"],
+                "min_citations": 1,
+                "allowed_results": [
+                    "pass", "fail", "abstain", "inconclusive",
+                ],
+                "veto": True,
+                "rationale_max_bytes": 2000,
+            }],
+            "aggregation": {
+                "method": "all", "threshold": 1,
+                "on_pass": "pass", "on_fail": "needs-repair",
+                "on_abstain": "escalate",
+                "on_inconclusive": "needs-repair",
+            },
+            "layout": {},
+        }
+        compiled = verdict_core.compile_rubric(self.root, rubric)
+        no_audit = self.clone(self.organization)
+        no_audit["councils"][0]["audit"].update({
+            "mode": "none", "sample_size": 0,
+        })
+        plan, _assignment = self.plan(
+            no_audit,
+            rubric={
+                "slug": "design-quality",
+                "semantic_hash": compiled["semantic_hash"],
+                "criteria": ["coherent"],
+            },
+            freshness_bound=True,
+        )
+        events = self.core.start_deliberation(plan, "2026-07-22T00:00:00Z")
+        _events, projection = self.drive(
+            plan,
+            events,
+            votes={1: ["advance", "advance", "repair"]},
+            judgments={1: "advance"},
+        )
+        decision = projection["council_decision"]
+        gate = {
+            "kind": "delivery-workbench-quality-gate",
+            "schema_version": 1,
+            "id": "council-quality",
+            "subject_type": "diff",
+            "mechanical_facts": [],
+            "requirements": [{
+                "id": "deliberated-design",
+                "kind": "council",
+                "rubric": "design-quality",
+                "roles": ["debate-council"],
+                "method": "at_least",
+                "threshold": 1,
+                "veto_roles": [],
+                "meta_audit": {
+                    "mode": "none", "sample_size": 0,
+                    "rubric": None, "role": None,
+                },
+            }],
+            "operator": "all",
+            "threshold": 1,
+            "dissent_policy": "preserve",
+            "routes": {
+                "pass": "advance", "fail": "repair",
+                "pending": "wait", "refused": "block",
+            },
+            "repair": {"max_rounds": 2, "on_exhausted": "escalate"},
+        }
+        proof = verdict_core.evaluate_quality_gate(
+            self.root,
+            gate,
+            plan["subject"],
+            {"design-quality": rubric},
+            [],
+            [],
+            council_decisions=[decision],
+            now="2026-07-22T00:02:00Z",
+        )
+        self.assertEqual(proof["result"], "pass", proof["issues"])
+        self.assertEqual(
+            proof["evidence_preview"]["decision_hashes"],
+            [decision["decision_hash"]],
+        )
+        self.assertEqual(proof["evidence_preview"]["verdict_hashes"], [])
+        self.assertEqual(
+            proof["requirements"][0]["contributors"][0]["authority"]["kind"],
+            "rule",
+        )
+
+        changed = self.clone(plan["subject"])
+        changed["ledger_head"] = "sha256:" + "9" * 64
+        stale = verdict_core.evaluate_quality_gate(
+            self.root,
+            gate,
+            changed,
+            {"design-quality": rubric},
+            [],
+            [],
+            council_decisions=[decision],
+            now="2026-07-22T00:02:00Z",
+        )
+        self.assertEqual(stale["result"], "fail")
+        self.assertTrue(any(
+            reason["code"] == "decision-stale"
+            for reason in stale["requirements"][0]["non_contributors"][0]["reasons"]
+        ))
+
     def test_weighted_vote_and_veto_are_deterministic_and_keep_minorities(self):
         weighted = self.clone(self.organization)
         decision = weighted["councils"][0]["decision"]
@@ -10495,7 +10871,7 @@ class ProgramDeliberationTest(unittest.TestCase):
             votes={1: ["advance", "repair", "repair"]},
             judgments={1: "advance"},
         )
-        verdict = projection["council_verdicts"][0]
+        verdict = projection["round_judgments"][0]
         self.assertEqual(verdict["aggregation"]["advance_weight"], 3)
         self.assertEqual(verdict["aggregation"]["repair_weight"], 2)
         self.assertEqual(len(verdict["aggregation"]["dissent"]), 2)
@@ -10512,7 +10888,7 @@ class ProgramDeliberationTest(unittest.TestCase):
             judgments={1: "repair"},
         )
         self.assertEqual(
-            projection["council_verdicts"][0]["aggregation"]["basis"], "veto"
+            projection["round_judgments"][0]["aggregation"]["basis"], "veto"
         )
         self.assertEqual(
             projection["route"], {"kind": "action", "target": "block"}
@@ -10549,7 +10925,7 @@ class ProgramDeliberationTest(unittest.TestCase):
         self.assertEqual(lost["final_result"], "quorum-lost")
         self.assertEqual(lost["route"], {"kind": "action", "target": "escalate"})
         self.assertEqual(
-            lost["council_verdicts"][0]["aggregation"]["quorum_observed"], 1
+            lost["round_judgments"][0]["aggregation"]["quorum_observed"], 1
         )
 
     def test_meta_overturn_never_rewrites_the_original_council_verdict(self):
@@ -10562,7 +10938,7 @@ class ProgramDeliberationTest(unittest.TestCase):
             judgments={1: "advance"},
             meta="overturn",
         )
-        self.assertEqual(projection["council_verdicts"][0]["result"], "advance")
+        self.assertEqual(projection["round_judgments"][0]["result"], "advance")
         self.assertEqual(projection["meta_verdict"]["result"], "overturn")
         self.assertTrue(
             projection["meta_verdict"]["aggregation"]["original_verdict_preserved"]
@@ -10622,7 +10998,7 @@ class ProgramDeliberationTest(unittest.TestCase):
         vote_offset = 0
         while True:
             projection = self.core.replay_deliberation(plan, events)
-            if projection["council_verdicts"]:
+            if projection["round_judgments"]:
                 break
             claimed = self.core.claim_next_deliberation(
                 plan, events, "2026-07-22T00:01:00Z"
@@ -10742,6 +11118,903 @@ class ProgramDeliberationTest(unittest.TestCase):
         with self.assertRaises(self.core.DeliberationError) as refused:
             self.plan(too_small)
         self.assertIn("council-budget-exceeded", str(refused.exception))
+
+
+class ProgramVerdictTest(unittest.TestCase):
+    """WLA-26-07: honest mechanical facts and governed judgment proofs."""
+
+    def setUp(self):
+        import dw_pmo.program_verdict as verdict_core
+
+        self.core = verdict_core
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-verdict-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        (self.root / "pm/rubrics").mkdir(parents=True)
+        self.subject = {
+            "kind": "diff",
+            "hash": self.h("1"),
+            "repository_hash": self.h("2"),
+            "program_hash": self.h("3"),
+            "program_run_id": "program-run-001",
+            "phase": 26,
+            "story": "WLA-26-07",
+            "workflow_address": "program/story-quality",
+            "assignment_hash": self.h("4"),
+            "assignment_generation": 1,
+            "ledger_head": self.h("5"),
+            "implementer_principals": [self.h("a")],
+        }
+        self.story_rubric = self.rubric(
+            "story-quality", "diff",
+            [
+                self.criterion(
+                    "tests", "Did the exact verification command pass?",
+                    evaluation={"kind": "mechanical-fact", "fact": "tests"},
+                    evidence=(), citations=0, veto=True,
+                ),
+                self.criterion(
+                    "intent", "Does the candidate satisfy the story intent?",
+                    evidence=("git-diff",), citations=1, veto=True,
+                ),
+            ],
+        )
+        self.meta_rubric = self.rubric(
+            "verdict-audit", "verdict-set",
+            [self.criterion(
+                "procedure", "Is the underlying verdict valid and fresh?",
+                evidence=("verdict",), citations=1, veto=True,
+            )],
+            vocabulary=("pass", "fail", "uphold", "overturn", "escalate"),
+            outcomes={
+                "on_pass": "uphold", "on_fail": "overturn",
+                "on_abstain": "escalate", "on_inconclusive": "escalate",
+            },
+        )
+        self.architect_rubric = self.rubric(
+            "architecture", "phase-snapshot",
+            [self.criterion(
+                "coherence", "Is the phase architecture coherent?",
+                evidence=("markdown",), citations=1, veto=True,
+            )],
+            vocabulary=("pass", "fail", "approve", "veto", "escalate"),
+            outcomes={
+                "on_pass": "approve", "on_fail": "veto",
+                "on_abstain": "escalate", "on_inconclusive": "escalate",
+            },
+        )
+
+    @staticmethod
+    def h(character):
+        return "sha256:" + character * 64
+
+    def execution(self, role, principal):
+        return {
+            "harness": "fixture",
+            "adapter": "fixture",
+            "adapter_version": "fixture-verdict-v1",
+            "router": "fixture-router",
+            "provider": "fixture-provider",
+            "model_vendor": "fixture-vendor",
+            "model_family": "fixture-family",
+            "model": f"fixture/{role}-{principal}",
+            "model_revision": None,
+            "model_binding": "requested-alias",
+            "auth_domain_fingerprint": self.h(
+                {"a": "1", "b": "2", "c": "3", "0": "4"}.get(
+                    principal, "5"
+                )
+            ),
+            "capability_fingerprint": self.h(
+                {"a": "6", "b": "7", "c": "8", "0": "9"}.get(
+                    principal, "0"
+                )
+            ),
+        }
+
+    def criterion(
+        self, criterion_id, question, *, evaluation=None,
+        evidence=(), citations=1, veto=False,
+    ):
+        return {
+            "id": criterion_id,
+            "question": question,
+            "evaluation": evaluation or {"kind": "agent-judgment", "fact": None},
+            "required_evidence_kinds": list(evidence),
+            "min_citations": citations,
+            "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+            "veto": veto,
+            "rationale_max_bytes": 2_000,
+        }
+
+    def rubric(
+        self, slug, subject_type, criteria, *,
+        vocabulary=("pass", "fail", "needs-repair", "escalate"),
+        outcomes=None,
+    ):
+        outcomes = outcomes or {
+            "on_pass": "pass", "on_fail": "needs-repair",
+            "on_abstain": "escalate", "on_inconclusive": "needs-repair",
+        }
+        return {
+            "kind": "delivery-workbench-rubric",
+            "schema_version": 1,
+            "slug": slug,
+            "title": slug.replace("-", " ").title(),
+            "description": "Fixture rubric with explicit evidence and freshness.",
+            "version": "1.0.0",
+            "subject_type": subject_type,
+            "result_vocabulary": list(vocabulary),
+            "freshness": {
+                "max_age_seconds": 3_600,
+                "bind": [
+                    "subject", "repository", "program", "assignment",
+                    "rubric", "ledger",
+                ],
+            },
+            "criteria": criteria,
+            "aggregation": {
+                "method": "all",
+                "threshold": len(criteria),
+                **outcomes,
+            },
+            "layout": {},
+        }
+
+    def assignment(self, role="verifier", duty="verifier", principal="b"):
+        independent = [{
+            "role": "implementer",
+            "address": f"{self.subject['workflow_address']}/role/implementer/slot/1",
+            "principal_fingerprint": self.h("a"),
+            "workspace_domain": "implementer-a",
+            "session_binding_key": self.h("d"),
+        }]
+        if duty == "meta-verifier":
+            independent.append({
+                "role": "verifier",
+                "address": f"{self.subject['workflow_address']}/role/verifier/slot/1",
+                "principal_fingerprint": self.h("b"),
+                "workspace_domain": "verifier-b",
+                "session_binding_key": self.h("e"),
+            })
+        return {
+            "kind": "delivery-workbench-verdict-assignment",
+            "schema_version": 1,
+            "assignment_hash": self.subject["assignment_hash"],
+            "story": self.subject["story"],
+            "workflow_address": self.subject["workflow_address"],
+            "role": role,
+            "duty": duty,
+            "address": f"{self.subject['workflow_address']}/role/{role}/slot/1",
+            "assignment_generation": self.subject["assignment_generation"],
+            "principal_fingerprint": self.h(principal),
+            "workspace_domain": f"{role}-{principal}",
+            "session_binding_key": self.h({"a": "d", "b": "e", "c": "f"}[principal]),
+            "packet_policy_hash": self.h("9"),
+            "execution": self.execution(role, principal),
+            "independent_from": independent,
+        }
+
+    def fact(self, *, subject=None, passed=True, fact_id="tests"):
+        receipt = {
+            "kind": "delivery-workbench-mechanical-receipt",
+            "schema_version": 1,
+            "adapter_kind": "check-adapter",
+            "adapter_id": "local-checks",
+            "adapter_fingerprint": self.h("6"),
+            "capability": "check:execute",
+            "predicate": "verification-command",
+            "passed": passed,
+            "receipt_hash": self.h("7" if passed else "8"),
+            "observation_ref": "checks/program-verdict",
+            "observation_hash": self.h("c"),
+            "observation_bytes": 80,
+            "command": {
+                "argv": ["python3", "-m", "unittest"],
+                "cwd": ".",
+                "exit_code": 0 if passed else 1,
+            },
+            "issued_at": "2026-07-22T12:00:00Z",
+        }
+        return self.core.build_mechanical_fact(
+            fact_id, receipt, subject or self.subject
+        )
+
+    def judgment_result(self, fact, *, result="pass", intent="pass"):
+        return [
+            {
+                "id": "tests",
+                "result": result,
+                "evidence": [],
+                "citations": [],
+                "rationale": None,
+                "mechanical_fact_hash": fact["fact_hash"],
+            },
+            {
+                "id": "intent",
+                "result": intent,
+                "evidence": [{
+                    "id": "candidate",
+                    "kind": "git-diff",
+                    "hash": self.subject["hash"],
+                    "ref": "artifacts/candidate.diff",
+                }],
+                "citations": [{
+                    "id": "intent-citation",
+                    "evidence_id": "candidate",
+                    "locator": "candidate.diff#L1",
+                    "hash": self.h("d"),
+                }],
+                "rationale": "The exact candidate satisfies the contracted story intent.",
+                "mechanical_fact_hash": None,
+            },
+        ]
+
+    def verdict(
+        self, *, assignment=None, subject=None, fact=None,
+        intent="pass", verdict_type="agent-verdict", rubric=None,
+        source_verdicts=None, superseded=None, key="verdict-1",
+        issued_at="2026-07-22T12:10:00Z",
+    ):
+        subject = subject or self.subject
+        fact = fact or self.fact(subject=subject)
+        rubric = rubric or self.story_rubric
+        if rubric["slug"] == "story-quality":
+            criteria = self.judgment_result(
+                fact, result=fact["result"], intent=intent
+            )
+            mechanical = [fact]
+        else:
+            evidence_kind = (
+                "verdict" if rubric["subject_type"] == "verdict-set"
+                else "markdown"
+            )
+            criteria = [{
+                "id": rubric["criteria"][0]["id"],
+                "result": intent,
+                "evidence": [{
+                    "id": "review-source",
+                    "kind": evidence_kind,
+                    "hash": subject["hash"],
+                    "ref": "artifacts/review-source.json",
+                }],
+                "citations": [{
+                    "id": "review-citation",
+                    "evidence_id": "review-source",
+                    "locator": "review-source.json#criterion",
+                    "hash": self.h("e"),
+                }],
+                "rationale": "The declared evidence supports this governed judgment.",
+                "mechanical_fact_hash": None,
+            }]
+            mechanical = []
+        return self.core.issue_agent_verdict(
+            self.root,
+            rubric,
+            assignment or self.assignment(),
+            subject,
+            criteria,
+            issued_at=issued_at,
+            idempotency_key=key,
+            attestation_receipt_hash=self.h("f"),
+            verdict_type=verdict_type,
+            mechanical_facts=mechanical,
+            source_verdicts=source_verdicts,
+            superseded_verdicts=superseded,
+        )
+
+    def gate(self, *, kind="independent", rubric="story-quality", roles=None,
+             meta=None, subject_type="diff", dissent="block"):
+        return {
+            "kind": "delivery-workbench-quality-gate",
+            "schema_version": 1,
+            "id": "story-gate",
+            "subject_type": subject_type,
+            "mechanical_facts": (
+                [{"id": "tests", "max_age_seconds": 3_600}]
+                if subject_type == "diff" else []
+            ),
+            "requirements": [{
+                "id": "governed-review",
+                "kind": kind,
+                "rubric": rubric,
+                "roles": roles or (["architect"] if kind == "architect" else ["verifier"]),
+                "method": "at_least",
+                "threshold": 1,
+                "veto_roles": roles or (["architect"] if kind == "architect" else ["verifier"]),
+                "meta_audit": meta or {
+                    "mode": "none", "sample_size": 0,
+                    "rubric": None, "role": None,
+                },
+            }],
+            "operator": "all",
+            "threshold": 1,
+            "dissent_policy": dissent,
+            "routes": {
+                "pass": "advance", "fail": "repair",
+                "pending": "wait", "refused": "block",
+            },
+            "repair": {"max_rounds": 2, "on_exhausted": "escalate"},
+        }
+
+    def evaluate(self, facts, verdicts, *, gate=None, subject=None,
+                 rubrics=None, repair_round=0):
+        return self.core.evaluate_quality_gate(
+            self.root,
+            gate or self.gate(),
+            subject or self.subject,
+            rubrics or {"story-quality": self.story_rubric},
+            facts,
+            verdicts,
+            now="2026-07-22T12:20:00Z",
+            repair_round=repair_round,
+        )
+
+    def test_rubric_compiler_is_closed_hashed_and_layout_neutral(self):
+        compiled = self.core.compile_rubric(self.root, self.story_rubric)
+        moved = json.loads(json.dumps(self.story_rubric))
+        moved["layout"] = {"criteria": {"intent": {"x": 900, "y": 12}}}
+        after = self.core.compile_rubric(self.root, moved)
+        self.assertEqual(compiled["semantic_hash"], after["semantic_hash"])
+        self.assertNotEqual(compiled["document_hash"], after["document_hash"])
+        broken = json.loads(json.dumps(self.story_rubric))
+        broken["criteria"][0]["private_prompt"] = "hidden"
+        validation = self.core.validate_rubric(self.root, broken)
+        self.assertFalse(validation["valid"])
+        self.assertEqual(validation["diagnostics"][0]["code"], "unknown-key")
+
+    def test_malformed_or_escaping_rubric_is_diagnosed_without_work(self):
+        malformed = self.root / "pm/rubrics/broken.json"
+        malformed.write_text('{"kind":', encoding="utf-8")
+        self.assertEqual(
+            self.core.find_rubric_path(self.root, "broken"), malformed
+        )
+        validation = self.core.validate_rubric(self.root, malformed)
+        self.assertFalse(validation["valid"])
+        self.assertEqual(validation["diagnostics"][0]["code"], "parse-error")
+        inventory = self.core.rubric_inventory(self.root)
+        self.assertFalse(inventory["healthy"])
+        self.assertFalse(inventory["starts_work"])
+        self.assertFalse(inventory["writes_state"])
+
+        outside = self.root.parent / "outside-rubric.json"
+        outside.write_text(
+            json.dumps(self.story_rubric), encoding="utf-8"
+        )
+        self.addCleanup(outside.unlink, missing_ok=True)
+        refused = self.core.validate_rubric(self.root, outside)
+        self.assertFalse(refused["valid"])
+        self.assertEqual(
+            refused["diagnostics"][0]["code"], "path-outside-policy"
+        )
+
+    def test_mechanical_fact_and_independent_verdict_pass_pure_gate(self):
+        fact = self.fact()
+        verdict = self.verdict(fact=fact)
+        proof = self.evaluate([fact], [verdict])
+        self.assertEqual(proof["result"], "pass", proof["issues"])
+        self.assertEqual(proof["route"], "advance")
+        self.assertEqual(proof["mechanical"][0]["status"], "pass")
+        self.assertTrue(verdict["judgment_not_mechanical"])
+        self.assertRegex(proof["proof_hash"], r"^sha256:[0-9a-f]{64}$")
+        for flag in (
+            "starts_work", "writes_state", "writes_repository",
+            "writes_roadmap", "materializes_evidence", "creates_grant",
+        ):
+            self.assertFalse(proof[flag])
+
+    def test_forged_fact_and_agent_prose_as_mechanical_evidence_refuse(self):
+        fact = self.fact()
+        forged = json.loads(json.dumps(fact))
+        forged["result"] = "fail"
+        proof = self.evaluate([forged], [])
+        self.assertEqual(proof["result"], "refused")
+        self.assertIn(
+            proof["issues"][0]["code"], {"receipt-forged", "receipt-conflict"}
+        )
+
+        criteria = self.judgment_result(fact)
+        criteria[0]["rationale"] = "I think the tests passed."
+        with self.assertRaises(self.core.VerdictError) as raised:
+            self.core.issue_agent_verdict(
+                self.root, self.story_rubric, self.assignment(), self.subject,
+                criteria, issued_at="2026-07-22T12:10:00Z",
+                idempotency_key="counterfeit", attestation_receipt_hash=self.h("f"),
+                mechanical_facts=[fact],
+            )
+        self.assertEqual(raised.exception.code, "mechanical-counterfeit")
+
+    def test_self_verification_and_colluding_panel_principals_refuse(self):
+        fact = self.fact()
+        with self.assertRaises(self.core.VerdictError) as raised:
+            self.verdict(assignment=self.assignment(principal="a"), fact=fact)
+        self.assertEqual(raised.exception.code, "separation-violation")
+
+        unproven = self.assignment()
+        unproven["independent_from"] = []
+        with self.assertRaises(self.core.VerdictError) as missing_proof:
+            self.verdict(assignment=unproven, fact=fact)
+        self.assertEqual(missing_proof.exception.code, "separation-violation")
+
+        first = self.verdict(fact=fact, key="member-1")
+        second = self.verdict(
+            assignment=self.assignment(role="reviewer", duty="reviewer", principal="b"),
+            fact=fact, key="member-2",
+        )
+        with self.assertRaises(self.core.VerdictError) as panel:
+            self.core.compose_panel_verdict(
+                self.root, self.story_rubric, self.subject, [first, second],
+                {
+                    "id": "quality-panel", "method": "at_least",
+                    "threshold": 2, "quorum": 2, "veto_roles": [],
+                    "dissent_policy": "preserve",
+                },
+                issued_at="2026-07-22T12:15:00Z",
+                idempotency_key="panel-1",
+            )
+        self.assertEqual(panel.exception.code, "separation-violation")
+
+    def test_missing_citations_and_content_leakage_refuse(self):
+        fact = self.fact()
+        criteria = self.judgment_result(fact)
+        criteria[1]["citations"] = []
+        with self.assertRaises(self.core.VerdictError) as raised:
+            self.core.issue_agent_verdict(
+                self.root, self.story_rubric, self.assignment(), self.subject,
+                criteria, issued_at="2026-07-22T12:10:00Z",
+                idempotency_key="missing-citation",
+                attestation_receipt_hash=self.h("f"), mechanical_facts=[fact],
+            )
+        self.assertEqual(raised.exception.code, "citation-missing")
+
+        leaked = self.verdict(fact=fact)
+        leaked["private_reasoning"] = "never durable"
+        proof = self.evaluate([fact], [leaked])
+        self.assertEqual(proof["result"], "refused")
+        self.assertEqual(proof["issues"][0]["code"], "unknown-key")
+
+    def test_rubric_diff_and_ledger_freshness_invalidate_green_verdict(self):
+        fact = self.fact()
+        verdict = self.verdict(fact=fact)
+        drifted = json.loads(json.dumps(self.story_rubric))
+        drifted["criteria"][1]["question"] = "Did it solve the exact user problem?"
+        proof = self.evaluate(
+            [fact], [verdict], rubrics={"story-quality": drifted}
+        )
+        self.assertEqual(proof["result"], "fail")
+        self.assertTrue(any(
+            reason["message"] == "rubric semantic hash changed"
+            for reason in proof["requirements"][0]["non_contributors"][0]["reasons"]
+        ))
+
+        changed = json.loads(json.dumps(self.subject))
+        changed["hash"] = self.h("0")
+        changed["ledger_head"] = self.h("8")
+        changed_fact = self.fact(subject=changed)
+        proof = self.evaluate(
+            [changed_fact], [verdict], subject=changed
+        )
+        self.assertEqual(proof["result"], "fail")
+        messages = {
+            reason["message"]
+            for reason in proof["requirements"][0]["non_contributors"][0]["reasons"]
+        }
+        self.assertTrue({"subject kind or hash changed", "ledger_head changed"} <= messages)
+
+        reassigned = json.loads(json.dumps(self.subject))
+        reassigned["implementer_principals"] = [self.h("0")]
+        reassigned_fact = self.fact(subject=reassigned)
+        proof = self.evaluate(
+            [reassigned_fact], [verdict], subject=reassigned
+        )
+        self.assertEqual(proof["result"], "fail")
+        self.assertTrue(any(
+            reason["message"] == "implementer_principals changed"
+            for reason in proof["requirements"][0]["non_contributors"][0]["reasons"]
+        ))
+
+    def test_supersession_keeps_red_history_and_uses_fresh_repair_verdict(self):
+        old_subject = json.loads(json.dumps(self.subject))
+        old_subject["hash"] = self.h("0")
+        old_fact = self.fact(subject=old_subject, passed=False)
+        old = self.verdict(
+            subject=old_subject, fact=old_fact, intent="fail", key="old-red",
+            issued_at="2026-07-22T12:05:00Z",
+        )
+        fact = self.fact()
+        fresh = self.verdict(
+            fact=fact, superseded=[old], key="fresh-green"
+        )
+        proof = self.evaluate([fact], [old, fresh])
+        self.assertEqual(proof["result"], "pass", proof["issues"])
+        history = {item["verdict_hash"]: item for item in proof["history"]}
+        self.assertFalse(history[old["verdict_hash"]]["active"])
+        self.assertEqual(
+            history[old["verdict_hash"]]["superseded_by"], fresh["verdict_hash"]
+        )
+        self.assertTrue(history[fresh["verdict_hash"]]["active"])
+
+    def test_panel_preserves_dissent_quorum_and_veto(self):
+        fact = self.fact()
+        green = self.verdict(fact=fact, key="green-member")
+        red = self.verdict(
+            assignment=self.assignment(
+                role="reviewer", duty="reviewer", principal="c"
+            ),
+            fact=fact, intent="fail", key="red-member",
+        )
+        panel = self.core.compose_panel_verdict(
+            self.root, self.story_rubric, self.subject, [green, red],
+            {
+                "id": "quality-panel", "method": "at_least",
+                "threshold": 1, "quorum": 2, "veto_roles": ["reviewer"],
+                "dissent_policy": "preserve",
+            },
+            issued_at="2026-07-22T12:15:00Z",
+            idempotency_key="panel-veto",
+        )
+        self.assertEqual(panel["result"], "needs-repair")
+        self.assertTrue(panel["composition"]["vetoed"])
+        self.assertTrue(panel["composition"]["original_verdicts_preserved"])
+        self.assertEqual(len(panel["dissent"]), 1)
+
+        abstaining = self.verdict(
+            assignment=self.assignment(
+                role="reviewer", duty="reviewer", principal="c"
+            ),
+            fact=fact, intent="abstain", key="abstaining-member",
+        )
+        quorum_lost = self.core.compose_panel_verdict(
+            self.root, self.story_rubric, self.subject, [green, abstaining],
+            {
+                "id": "quality-panel", "method": "at_least",
+                "threshold": 1, "quorum": 2, "veto_roles": [],
+                "dissent_policy": "preserve",
+            },
+            issued_at="2026-07-22T12:15:00Z",
+            idempotency_key="panel-quorum",
+        )
+        self.assertEqual(quorum_lost["composition"]["quorum_observed"], 1)
+        self.assertEqual(quorum_lost["result"], "needs-repair")
+
+    def test_panel_gate_is_order_independent_and_requires_source_lineage(self):
+        fact = self.fact()
+        first = self.verdict(fact=fact, key="council-green-1")
+        second = self.verdict(
+            assignment=self.assignment(
+                role="reviewer", duty="reviewer", principal="c"
+            ),
+            fact=fact,
+            key="council-green-2",
+        )
+        policy = {
+            "id": "quality-panel", "method": "at_least",
+            "threshold": 2, "quorum": 2, "veto_roles": [],
+            "dissent_policy": "preserve",
+        }
+        panel = self.core.compose_panel_verdict(
+            self.root, self.story_rubric, self.subject, [first, second],
+            policy, issued_at="2026-07-22T12:15:00Z",
+            idempotency_key="deterministic-panel",
+        )
+        reversed_panel = self.core.compose_panel_verdict(
+            self.root, self.story_rubric, self.subject, [second, first],
+            policy, issued_at="2026-07-22T12:15:00Z",
+            idempotency_key="deterministic-panel",
+        )
+        self.assertEqual(panel["verdict_hash"], reversed_panel["verdict_hash"])
+        gate = self.gate(
+            kind="panel", roles=["quality-panel"]
+        )
+        proof = self.evaluate(
+            [fact], [first, second, panel], gate=gate
+        )
+        self.assertEqual(proof["result"], "pass", proof["issues"])
+        self.assertEqual(
+            proof["evidence_preview"]["verdict_hashes"],
+            [panel["verdict_hash"]],
+        )
+        self.assertEqual(
+            set(proof["evidence_preview"]["source_verdict_hashes"]),
+            {first["verdict_hash"], second["verdict_hash"]},
+        )
+
+        missing_sources = self.evaluate([fact], [panel], gate=gate)
+        self.assertEqual(missing_sources["result"], "refused")
+        self.assertEqual(
+            missing_sources["issues"][0]["code"], "invalid-lineage"
+        )
+
+    def test_full_meta_audit_overturns_without_erasing_source(self):
+        fact = self.fact()
+        source = self.verdict(fact=fact)
+        meta_subject = self.core.build_verdict_set_subject(
+            self.subject, [source]
+        )
+        meta = self.verdict(
+            assignment=self.assignment(
+                role="meta", duty="meta-verifier", principal="c"
+            ),
+            subject=meta_subject,
+            rubric=self.meta_rubric,
+            verdict_type="meta-verdict",
+            source_verdicts=[source],
+            intent="fail",
+            key="meta-overturn",
+        )
+        gate = self.gate(meta={
+            "mode": "full", "sample_size": 0,
+            "rubric": "verdict-audit", "role": "meta",
+        })
+        proof = self.evaluate(
+            [fact], [source, meta], gate=gate,
+            rubrics={
+                "story-quality": self.story_rubric,
+                "verdict-audit": self.meta_rubric,
+            },
+        )
+        self.assertEqual(proof["result"], "fail", proof["issues"])
+        audit = proof["requirements"][0]["meta_audit"][0]
+        self.assertEqual(audit["status"], "fail")
+        self.assertTrue(audit["original_verdict_preserved"])
+        self.assertIn(source["verdict_hash"], {
+            item["verdict_hash"] for item in proof["history"]
+        })
+
+    def test_architect_veto_and_bounded_repair_exhaustion_route(self):
+        phase_subject = json.loads(json.dumps(self.subject))
+        phase_subject.update({
+            "kind": "phase-snapshot", "hash": self.h("0"), "story": None,
+        })
+        architect_assignment = self.assignment(
+            role="architect", duty="master-architect", principal="c"
+        )
+        architect_assignment["story"] = None
+        architect = self.verdict(
+            assignment=architect_assignment,
+            subject=phase_subject,
+            rubric=self.architect_rubric,
+            verdict_type="architect-verdict",
+            intent="fail",
+            key="architect-veto",
+        )
+        proof = self.evaluate(
+            [], [architect],
+            gate=self.gate(
+                kind="architect", rubric="architecture", roles=["architect"],
+                subject_type="phase-snapshot",
+            ),
+            subject=phase_subject,
+            rubrics={"architecture": self.architect_rubric},
+            repair_round=2,
+        )
+        self.assertEqual(proof["result"], "fail", proof["issues"])
+        self.assertEqual(proof["route"], "escalate")
+        self.assertTrue(any(item["code"] == "budget-exhausted" for item in proof["issues"]))
+
+    def test_conflicting_active_verdicts_preserve_dissent_and_fail_closed(self):
+        fact = self.fact()
+        green = self.verdict(fact=fact, key="conflict-green")
+        red = self.verdict(
+            assignment=self.assignment(
+                role="reviewer", duty="reviewer", principal="c"
+            ),
+            fact=fact, intent="fail", key="conflict-red",
+        )
+        gate = self.gate(roles=["verifier", "reviewer"], dissent="block")
+        proof = self.evaluate([fact], [green, red], gate=gate)
+        self.assertEqual(proof["result"], "fail")
+        self.assertEqual(proof["route"], "repair")
+        self.assertTrue(any(
+            item["result"] == "conflict" for item in proof["dissent"]
+        ))
+        self.assertEqual(len(proof["requirements"][0]["contributors"]), 2)
+
+    def test_random_meta_sample_is_deterministic_and_exact(self):
+        fact = self.fact()
+        first = self.verdict(fact=fact, key="random-source-1")
+        second = self.verdict(
+            assignment=self.assignment(
+                role="reviewer", duty="reviewer", principal="c"
+            ),
+            fact=fact, key="random-source-2",
+        )
+        gate = self.gate(
+            roles=["verifier", "reviewer"],
+            meta={
+                "mode": "random", "sample_size": 1,
+                "rubric": "verdict-audit", "role": "meta",
+            },
+            dissent="preserve",
+        )
+        gate["requirements"][0]["threshold"] = 2
+        rubrics = {
+            "story-quality": self.story_rubric,
+            "verdict-audit": self.meta_rubric,
+        }
+        pending = self.evaluate(
+            [fact], [first, second], gate=gate, rubrics=rubrics
+        )
+        self.assertEqual(pending["result"], "pending")
+        selected_hash = pending["requirements"][0]["meta_audit"][0]["sources"][0]
+        self.assertEqual(
+            selected_hash,
+            self.evaluate(
+                [fact], [second, first], gate=gate, rubrics=rubrics
+            )["requirements"][0]["meta_audit"][0]["sources"][0],
+        )
+        source = next(
+            item for item in (first, second)
+            if item["verdict_hash"] == selected_hash
+        )
+        meta_assignment = self.assignment(
+            role="meta", duty="meta-verifier", principal="b"
+        )
+        meta_assignment.update({
+            "principal_fingerprint": self.h("0"),
+            "workspace_domain": "meta-zero",
+            "session_binding_key": self.h("1"),
+        })
+        implementer_independence = {
+            "role": "implementer",
+            "address": f"{self.subject['workflow_address']}/role/implementer/slot/1",
+            "principal_fingerprint": self.h("a"),
+            "workspace_domain": "implementer-a",
+            "session_binding_key": self.h("d"),
+        }
+        meta_assignment["independent_from"] = [
+            implementer_independence,
+            *[{
+                "role": item["issuer"]["role"],
+                "address": item["issuer"]["address"],
+                "principal_fingerprint": item["issuer"]["principal_fingerprint"],
+                "workspace_domain": item["assignment"]["workspace_domain"],
+                "session_binding_key": item["assignment"]["session_binding_key"],
+            }
+            for item in (first, second)],
+        ]
+        meta_subject = self.core.build_verdict_set_subject(
+            self.subject, [source]
+        )
+        meta = self.verdict(
+            assignment=meta_assignment,
+            subject=meta_subject,
+            rubric=self.meta_rubric,
+            verdict_type="meta-verdict",
+            source_verdicts=[source],
+            key="random-meta",
+        )
+        passed = self.evaluate(
+            [fact], [first, second, meta], gate=gate, rubrics=rubrics
+        )
+        self.assertEqual(passed["result"], "pass", passed["issues"])
+        self.assertEqual(
+            passed["requirements"][0]["meta_audit"][0]["sources"],
+            [selected_hash],
+        )
+
+    def test_missing_verdict_is_pending_and_proves_no_implicit_action(self):
+        fact = self.fact()
+        proof = self.evaluate([fact], [])
+        self.assertEqual(proof["result"], "pending")
+        self.assertEqual(proof["route"], "wait")
+        self.assertRegex(proof["proof_hash"], r"^sha256:[0-9a-f]{64}$")
+        self.assertFalse(proof["authority"]["may_advance"])
+        self.assertFalse(proof["authority"]["may_repair"])
+
+    def test_rubric_cli_inventory_and_validation_share_the_core(self):
+        path = self.root / "pm/rubrics/story-quality.json"
+        path.write_text(
+            json.dumps(self.story_rubric, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        command = [
+            sys.executable, str(TESTS_DIR.parent / "bin/dw"),
+            "--root", str(self.root), "rubric",
+        ]
+        listed = subprocess.run(
+            command + ["list", "--json"], text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        inventory = json.loads(listed.stdout)
+        self.assertTrue(inventory["healthy"])
+        self.assertEqual(inventory["rubrics"][0]["slug"], "story-quality")
+        validated = subprocess.run(
+            command + ["validate", "story-quality", "--json"], text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+        document = json.loads(validated.stdout)
+        self.assertTrue(document["valid"])
+        self.assertEqual(
+            document["compiled"]["semantic_hash"],
+            inventory["rubrics"][0]["semantic_hash"],
+        )
+
+    def test_team_assignment_projects_an_exact_read_only_verdict_packet(self):
+        def member(role, principal, workspace, session):
+            return {
+                "slot": 1,
+                "address": (
+                    f"{self.subject['workflow_address']}/role/{role}/slot/1"
+                ),
+                "assignment_generation": 1,
+                "principal_fingerprint": self.h(principal),
+                "workspace_domain": workspace,
+                "session_binding_key": self.h(session),
+                "execution": self.execution(role, principal),
+            }
+
+        implementer = member("implementer", "a", "implementer-a", "d")
+        verifier = member("verifier", "b", "verifier-b", "e")
+        assignment = {
+            "kind": "delivery-workbench-team-assignment",
+            "schema_version": 1,
+            "applicable": True,
+            "story": self.subject["story"],
+            "workflow_address": self.subject["workflow_address"],
+            "roles": [
+                {
+                    "role": "implementer",
+                    "duty": "implementer",
+                    "members": [implementer],
+                    "independent_from": [],
+                    "packet_policy": {
+                        "workspace": "isolated-worktree",
+                        "verdict_schema": None,
+                        "effective_capability_ceiling": ["workspace:write"],
+                    },
+                },
+                {
+                    "role": "verifier",
+                    "duty": "verifier",
+                    "members": [verifier],
+                    "independent_from": ["implementer"],
+                    "packet_policy": {
+                        "workspace": "read-only",
+                        "verdict_schema": "delivery-workbench-verdict@1",
+                        "effective_capability_ceiling": [
+                            "certification:verdict"
+                        ],
+                    },
+                },
+            ],
+        }
+        assignment["assignment_hash"] = "sha256:" + hashlib.sha256(
+            self.core.canonical_json(assignment).encode("utf-8")
+        ).hexdigest()
+        self.subject["assignment_hash"] = assignment["assignment_hash"]
+        packet = self.core.build_verdict_assignment(
+            assignment, "verifier"
+        )
+        self.assertEqual(packet["principal_fingerprint"], self.h("b"))
+        self.assertEqual(packet["duty"], "verifier")
+        self.assertEqual(len(packet["independent_from"]), 1)
+        self.assertEqual(
+            packet["independent_from"][0]["principal_fingerprint"], self.h("a")
+        )
+        self.assertEqual(
+            set(self.core.MECHANICAL_PREDICATES),
+            {
+                "check-receipt", "artifact-conformance",
+                "schema-conformance", "citation-conformance", "diff-scope",
+                "roadmap-health", "contract-health", "signal-state",
+                "history-condition", "verification-command",
+            },
+        )
+
+        colluding = json.loads(json.dumps(assignment))
+        colluding["roles"][1]["members"][0]["principal_fingerprint"] = self.h("a")
+        colluding["assignment_hash"] = "sha256:" + hashlib.sha256(
+            self.core.canonical_json({
+                key: value for key, value in colluding.items()
+                if key != "assignment_hash"
+            }).encode("utf-8")
+        ).hexdigest()
+        with self.assertRaises(self.core.VerdictError) as raised:
+            self.core.build_verdict_assignment(colluding, "verifier")
+        self.assertEqual(raised.exception.code, "separation-violation")
 
 
 class ProgramWorkflowTest(unittest.TestCase):

@@ -468,9 +468,14 @@ argv.
 
 Operator-local `.git/pmo-orchestration/drivers.json` configuration maps logical
 profiles such as `research-readonly` or `worker-write` to installed adapters,
-capabilities, workspace modes, and optional local model/executable choices. It
-rejects credential/token/password/secret fields; authentication stays with the
-harness. The adapter reports supported capabilities and its actual sandbox/
+capabilities, workspace modes, named router/provider, model vendor/family/id,
+revision-or-alias policy, opaque auth domain, and optional local executable
+choice. Public capability documents expose only the auth-domain fingerprint,
+never credentials. The complete resolved execution binding participates in
+the capability and roster fingerprint, so changing a provider or configured
+model makes an old assignment/grant stale. Configuration rejects credential/
+token/password/secret fields; authentication stays with the harness. The
+adapter reports supported capabilities and its actual sandbox/
 interrupt claims; a mismatch returns a content-free non-started refusal.
 Network access, model choice, filesystem sandboxing, and tool approval remain
 enforceable by the harness/adapter, not falsely claimed by Delivery Workbench.
