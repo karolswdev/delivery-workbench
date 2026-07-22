@@ -77,6 +77,9 @@ PAYLOAD_WORKFLOWS="$WHEEL_TREE/dw_pmo/_payload/templates/workflows"
 PAYLOAD_ORGANIZATIONS="$WHEEL_TREE/dw_pmo/_payload/templates/organizations"
 [ "$(find "$PAYLOAD_ORGANIZATIONS" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')" -eq 1 ] \
   || fail "wheel did not ship the optional autonomous organization template"
+PAYLOAD_RUBRICS="$WHEEL_TREE/dw_pmo/_payload/templates/rubrics"
+[ "$(find "$PAYLOAD_RUBRICS" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')" -eq 1 ] \
+  || fail "wheel did not ship the optional governed story rubric template"
 
 # ── install the wheel: pipx preferred, venv+pip fallback ───────────
 DW=""
@@ -127,6 +130,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_organization.py" ] || fail "wheel omitted the pure organization and assignment compiler"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_deliberation.py" ] || fail "wheel omitted the replayable deliberation protocol core"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_studio.py" ] || fail "wheel omitted the pure Program Studio model/edit core"
+[ -f "$FIXTURE/.githooks/dw_pmo/program_verdict.py" ] || fail "wheel omitted the governed verdict and quality-gate core"
 [ -f "$FIXTURE/pm/orchestration/research-build-review.json" ] \
   || fail "install did not seed the ordinary orchestration preset"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
@@ -143,6 +147,9 @@ PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
   'from pathlib import Path; from dw_pmo import STUDIO_KIND, apply_studio_mutation, build_program_studio, build_studio_document, build_studio_graph, build_studio_mutation_plan, graph_config_round_trip, new_studio_document, studio_graph_to_config, studio_mutation_preview; from dw_pmo.workbench import handle_api, handle_mutation; root=Path("'$FIXTURE'"); model=build_program_studio(root); assert STUDIO_KIND == "delivery-workbench-program-studio" and model["empty"] and model["healthy"] and model["ordinary_workbench_ready"] and model["default_route"] == "#/" and not model["starts_work"] and not model["creates_grant"] and not model["background_polling"]; draft=new_studio_document("workflow", "packaged-studio"); rt=graph_config_round_trip(root, "workflow", draft); assert rt["lossless"] and rt["semantic_hash_preserved"] and rt["layout_hash_preserved"]; plan=build_studio_mutation_plan(root, "workflow", "save", "packaged-studio", draft); preview=studio_mutation_preview(plan); assert preview["applicable"] and preview["studio"]["graph"]["nodes"][0]["keyboard"] and not preview["writes_policy"] and not preview["starts_work"] and not preview["creates_grant"]; assert handle_api(root, "/api/program-studio", {})[1]["data"] == model; assert all(callable(item) for item in (apply_studio_mutation, build_studio_document, build_studio_graph, studio_graph_to_config, handle_mutation))' \
   || fail "packaged core does not expose pure optional Program Studio parity"
+PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
+  'from dw_pmo import COUNCIL_DECISION_KIND, MECHANICAL_FACT_KIND, QUALITY_PROOF_KIND, RUBRIC_SCHEMA_VERSION, VERDICT_KIND, build_mechanical_fact, build_verdict_assignment, build_verdict_set_subject, compile_rubric, compose_panel_verdict, council_decision_freshness_issues, evaluate_quality_gate, issue_agent_verdict, rubric_inventory, validate_council_decision, validate_mechanical_fact, validate_rubric, validate_verdict_document, verdict_freshness_issues; assert COUNCIL_DECISION_KIND == "delivery-workbench-decision" and MECHANICAL_FACT_KIND == "delivery-workbench-mechanical-fact" and QUALITY_PROOF_KIND == "delivery-workbench-quality-proof" and RUBRIC_SCHEMA_VERSION == 1 and VERDICT_KIND == "delivery-workbench-verdict"; assert all(callable(item) for item in (build_mechanical_fact, build_verdict_assignment, build_verdict_set_subject, compile_rubric, compose_panel_verdict, council_decision_freshness_issues, evaluate_quality_gate, issue_agent_verdict, rubric_inventory, validate_council_decision, validate_mechanical_fact, validate_rubric, validate_verdict_document, verdict_freshness_issues))' \
+  || fail "packaged core does not expose governed fact, verdict, and gate parity"
 (cd "$FIXTURE" && ./.githooks/dw orchestration validate research-build-review --json) \
   | grep -q '"valid": true' \
   || fail "packaged orchestration preset did not validate"
@@ -155,6 +162,8 @@ PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
   || fail "packaged install created optional organization policy without an explicit user act"
 [ ! -e "$FIXTURE/pm/programs" ] \
   || fail "packaged install created optional program policy without an explicit user act"
+[ ! -e "$FIXTURE/pm/rubrics" ] \
+  || fail "packaged install created optional rubric policy without an explicit user act"
 (cd "$FIXTURE" && ./.githooks/dw organization list --json) \
   | grep -q '"healthy": true.*"organizations": \[\].*"starts_work": false' \
   || fail "packaged no-organization inventory was not healthy and pure"
@@ -169,6 +178,17 @@ cp "$PAYLOAD_ORGANIZATIONS"/*.json "$FIXTURE/pm/organizations/"
 (cd "$FIXTURE" && ./.githooks/dw organization --help) \
   | grep -q 'list,validate,simulate' \
   || fail "packaged pure organization CLI is incomplete"
+(cd "$FIXTURE" && ./.githooks/dw rubric list --json) \
+  | grep -q '"healthy": true.*"rubrics": \[\].*"starts_work": false' \
+  || fail "packaged no-rubric inventory was not healthy and pure"
+mkdir -p "$FIXTURE/pm/rubrics"
+cp "$PAYLOAD_RUBRICS"/*.json "$FIXTURE/pm/rubrics/"
+(cd "$FIXTURE" && ./.githooks/dw rubric validate autonomous-story-quality --json) \
+  | grep -q '"creates_grant": false.*"semantic_hash":.*"valid": true.*"writes_state": false' \
+  || fail "packaged autonomous story rubric did not compile purely"
+(cd "$FIXTURE" && ./.githooks/dw rubric --help) \
+  | grep -q 'list,validate' \
+  || fail "packaged pure rubric CLI is incomplete"
 (cd "$FIXTURE" && ./.githooks/dw workflow list --json) \
   | grep -q '"healthy": true.*"starts_work": false.*"workflows": \[\]' \
   || fail "packaged no-workflow inventory was not healthy and pure"

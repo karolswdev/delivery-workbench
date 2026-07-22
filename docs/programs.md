@@ -1,7 +1,9 @@
 # Optional autonomous delivery programs
 
-**Status:** Phase 26 contract. Runtime implementation begins only after this
-trust and semantics document is pinned by tests.
+**Status:** Phase 26 contract and incremental implementation. Planning,
+workflow, organization, deliberation, Studio, and governed quality-decision
+cores are pinned by tests; program grant, conductor, advancement, and control
+room slices remain explicit later stories.
 **Product claim:** Delivery Workbench **can run** a governed delivery program
 across an explicit roadmap scope when tracked policy has compiled and an
 operator has issued a separate finite program grant. Delivery Workbench is not
@@ -255,6 +257,54 @@ profiles to one execution identity; they contain no credential. Resolution
 that cannot prove the requested capability or separation refuses before
 assignment.
 
+### Council seats and execution bindings
+
+A council seat and the model process filling it are separate objects. The seat
+declares its durable mandate, expertise, perspective and permitted context—for
+example security skeptic, product advocate, domain veteran, maintainability
+custodian or pragmatic delivery lead. An agent profile declares reusable
+background/capability facts. Neither is inferred from a model name, and using
+one model for two perspectives does not by itself prove independent judgment.
+
+Tracked policy may leave execution portable, pin an exact execution port, or
+select from a closed allowed set with explicit fallback. Local untracked
+resolution maps that request to a harness-owned adapter and authentication
+binding. The resolved assignment and every contribution/verdict record these
+axes independently:
+
+| Axis | Example | Why it remains separate |
+|---|---|---|
+| council seat | `architecture-conservative` | deliberative mandate and perspective |
+| logical agent/profile | `critic-a` / `sonnet-review` | reusable candidate and capability policy |
+| harness/adapter | `claude-cli`, `codex-cli`, `pi-cli` | versioned invocation and sandbox behavior |
+| inference router/provider | Anthropic direct, OpenAI direct, OpenRouter | routing, availability, cost and trust boundary |
+| model vendor/family/id | Anthropic / Claude / Sonnet 5; Moonshot / Kimi / `kimi/k3` | cognitive/model diversity and exact selection |
+| authentication domain | opaque local fingerprint | account isolation without storing credentials |
+| principal/workspace/session | local execution fingerprints | technical separation of duties |
+
+Provider diversity, router diversity, model-family diversity and principal
+independence are different claims. Claude reached directly and Claude reached
+through OpenRouter may be router-diverse but not model-family-diverse. Policies
+may require distinct values across any declared axes, minimum distinct counts,
+or exact seat-to-profile assignments. A failed exact binding refuses; fallback
+never substitutes a harness/provider/model unless the tracked policy allowed
+it. Replacement increments assignment generation and invalidates affected
+claims, discussion artifacts and verdicts.
+
+The roster/grant fingerprint includes the requested and resolved adapter
+version, harness, provider/router, model vendor/family/id and revision or alias
+policy, authentication-domain fingerprint, principal, capabilities, workspace
+and concurrency limits. If a harness cannot report a concrete model revision,
+the receipt says that only the requested alias was observed; Delivery
+Workbench never upgrades an alias claim into a revision pin. Changing any
+quality- or authority-relevant execution binding makes the roster/grant stale.
+
+Credentials remain in the selected CLI/provider's own local store. A local
+profile may name an opaque authentication binding, but neither tracked policy
+nor durable receipts contain tokens. Extensibility uses versioned named driver
+adapters with closed configuration, capability discovery and safe argv
+rendering—not arbitrary tracked shell commands or caller-supplied flags.
+
 ### Rubric document
 
 A rubric contains `kind`, `schema_version`, `slug`, `title`, `subject_type`,
@@ -272,6 +322,15 @@ A rubric never names a model, hidden confidence threshold, executable, or
 credential. Changing any question, required evidence, aggregation, freshness,
 or veto rule changes the rubric semantic hash and invalidates an unstarted
 grant.
+
+`dw rubric list|validate` is the pure configuration surface. No `pm/rubrics/`
+directory is a healthy empty library. The wheel carries an
+`autonomous-story-quality` example as optional payload but install/update never
+copies it into tracked policy. Compilation requires semantic version, exact
+subject kind, a result vocabulary, all six freshness bindings (`subject`,
+`repository`, `program`, `assignment`, `rubric`, and `ledger`), at least one
+criterion, and deterministic `all | any | at_least` result mapping. Layout is
+document-hashed but excluded from the rubric semantic hash.
 
 ### Closed schemas, hashes, and layout
 
@@ -569,6 +628,46 @@ is an explicit policy act, just like adopting a workflow or program.
 
 ## Bounded deliberation protocol
 
+### Councils are deliberative; panels are independent composition
+
+A **council** is a governed group of assigned seats that sees a shared matter,
+exchanges declared artifacts through bounded discussion, and comes together on
+a decision. Its members may have different expertise, perspectives, harnesses,
+providers and models. A **review panel** contains independent reviewers who do
+not deliberate with one another; their separately issued verdicts are combined
+by quorum/threshold/veto policy. A **debate corner** is one possible council
+protocol. These terms are not interchangeable in schema, UI or audit output.
+
+Council policy declares the question/charter, seats and perspectives, evidence
+packet, discussion protocol, decision rule, dissent treatment and consequence
+policy before dispatch. Provider/model diversity can strengthen a council but
+does not replace distinct-principal, workspace and session checks. A model may
+play a declared adversarial perspective without counting as a second
+independent principal.
+
+Decision authority is explicit and closed:
+
+- `rule` means majority, weighted threshold or unanimity computes the terminal
+  outcome. No agent is the ultimate decider; a chair may synthesize the record
+  but cannot override the computed result.
+- `judge` names one `decider_seat` in the compiled council. That seat is
+  resolved and assigned before discussion, and its agent may select only from
+  the outcomes mechanically allowed by the charter, quorum, veto, evidence and
+  budget facts. It must emit cited rationale and obligations.
+- `checkpoint` routes the decision to a separately authorized human/external
+  principal through a typed request. An agent cannot impersonate that port.
+
+A judge is identified by the stable hierarchical seat address
+`program/phase/story/workflow/council/role/slot`, assignment generation and
+assignment hash—not by display name or model label. Its decision receipt also
+binds logical agent/profile, principal, adapter/harness, provider/router,
+model, authentication domain, workspace and session. A judge cannot elect
+itself, change its profile/model during deliberation, or delegate the final
+choice. Declared replacement creates a new generation, preserves the old
+judge/artifacts/dissent and invalidates any incomplete terminal decision.
+Meta-verifier and architect review are separate downstream gates; neither is a
+hidden rewrite of who decided the council matter.
+
 ### Delivered council execution core (WLA-26-05)
 
 `compile_deliberation_plan` now intersects one compiled workflow debate with
@@ -606,6 +705,18 @@ transcripts, and private reasoning are neither accepted nor required state.
 Replacement keeps old/new generations, invalidated claim, earlier verdict
 lineage, and dissent.
 
+The WLA-26-07 refinement makes outcome authority machine-readable rather than
+leaving it implicit in the judgment stage. The compiled plan exposes the
+primary and tie authority. Each completed `delivery-workbench-decision@1`
+records the actual `rule | judge | checkpoint` source. A clear rule result has
+`decider_seat: null` even though the assigned chair records the terminal
+artifact; judge mode and judge tie-breaking bind the exact preassigned seat,
+assignment generation, adapter/harness, router/provider, model binding,
+auth-domain fingerprint, principal, workspace and session. The projection now
+calls intermediate artifacts `round_judgments` and exposes one distinct
+`council_decision`, preventing independent aggregation or a chair from being
+mistaken for the ultimate decider.
+
 Council aggregation is closed to `majority | weighted | unanimous | judge`.
 The judge can choose only a computed allowed result; a tie can invoke the
 declared judge, dissent, or checkpoint policy; redeliberation consumes one
@@ -624,6 +735,34 @@ cross-boundary artifacts and emits `approve | repair | escalate | veto`. Its
 packet explicitly denies implementation, integration, commit, push, and
 roadmap authority; `approve` merely retains the already-governed route.
 
+### Decisions and carried obligations
+
+Every terminal council result emits an immutable
+`delivery-workbench-decision@1`, not only a vote label. It binds the charter,
+subject, participants and their resolved execution provenance, source
+artifacts/verdicts, chosen result, concise rationale/citations, alternatives,
+accepted risks, dissent, and an explicit `obligations` array. The array is
+required even when empty so absence is an auditable assertion rather than a
+forgotten field.
+
+Each obligation has a stable id and source-decision hash plus a closed kind
+(`backlog`, `technical-debt`, `risk`, `research`, or `follow-up`), statement,
+severity/priority, blocking flag, accountable role, target story/phase or
+trigger, citations, acceptance condition and initial state. The immutable
+decision is never edited; hash-chained ledger events move an obligation through
+`open | in-progress | completed | superseded | waived | escalated`, retaining
+actor, authority, reason and replacement lineage.
+
+Blocking obligations prevent the decision's green route. Non-blocking
+obligations enter the program's durable planning frontier and remain visible
+across ticks, stories, phases, replacement and restart until explicitly
+disposed. They cannot disappear merely because the council ended or a phase
+advanced. Materializing an obligation as a roadmap story is a separate
+previewed, deduplicated `roadmap:write` act under the program grant; without
+that authority it remains a ledgered obligation rather than causing an ad-hoc
+Markdown edit. Waiver likewise requires named authority and never erases the
+original debt, risk or dissent.
+
 ## Verdict taxonomy and quality gates
 
 ### Mechanical facts are not agent judgments
@@ -632,10 +771,14 @@ roadmap authority; `approve` merely retains the already-governed route.
 |---|---|---|---|
 | `mechanical-fact` | Trusted local check/rail adapter | exact argv/predicate, exit/result, hashes, bounded output reference, observed facts | design quality, intent fidelity, subjective confidence |
 | `agent-verdict` | One assigned independent principal | rubric criterion judgments over cited evidence | that prose is a test receipt or that uncited work happened |
-| `council-verdict` | Deterministic aggregation of member verdicts | quorum result, judge result, member hashes, dissent | unanimity when dissent exists or mechanical truth |
+| `panel-verdict` | Deterministic composition of non-deliberating member verdicts | quorum/threshold result, member hashes and dissent | a discussion occurred or judgment became mechanical truth |
+| `council-verdict` | One council round's governed judgment artifact | policy-computed allowed result, discussion-artifact lineage, rationale and dissent | act as an independent-panel aggregate or silently become a decision by itself |
+| `council-decision` | One immutable terminal `delivery-workbench-decision@1` derived from the replayed council | actual rule/judge/checkpoint authority, resolved participants, source receipts, rationale, dissent and obligations | hide the decider source, omit consequences, or claim mechanical truth |
 | `meta-verdict` | Assigned independent auditor | validity/procedure/freshness of underlying verdicts; uphold, overturn, or escalate | rewrite history, erase dissent, or convert judgment into fact |
 
-All verdicts use `delivery-workbench-verdict@1` and bind:
+Quality verdicts use logical schema `delivery-workbench-verdict@1` (`kind` plus
+`schema_version: 1`); council decisions use the separate immutable decision
+schema above. Verdicts bind:
 
 - program/run, phase, story, workflow address, assignment generation, and
   issuer principal/role;
@@ -644,7 +787,10 @@ All verdicts use `delivery-workbench-verdict@1` and bind:
 - rubric slug and semantic hash;
 - ordered criterion results with evidence/citation references and bounded
   rationales;
-- overall `pass | fail | abstain | inconclusive`;
+- one rubric-derived overall result, including the policy's exact
+  `pass | fail | repair | needs-repair | abstain | inconclusive | escalate` mapping
+  (meta and architect rubrics may map green/red to `uphold | overturn` or
+  `approve | veto`);
 - dissent/veto records and source-verdict hashes when applicable;
 - issued time, freshness facts, ledger head, and idempotency key.
 
@@ -653,11 +799,49 @@ passing test produces an assertion until a matching mechanical receipt exists.
 Only the assigned principal can create its verdict, and the conductor validates
 the subject/rubric/assignment/freshness before recording it.
 
+The mechanical predicate vocabulary is closed: check receipt, artifact/schema/
+citation conformance, diff scope, roadmap/contract health, signal state,
+history condition, and exact verification command. A fact binds trusted adapter
+kind, capability/fingerprint, receipt hash, bounded observation reference,
+subject, exact argv/exit where applicable, issue time, payload hash, and fact
+hash. It contains no agent rationale. A mechanical criterion is computed from
+that matching current fact; the verdict author cannot select a conflicting
+result or replace it with prose.
+
+Verdict issuance projects one preassigned read-only organization member into a
+hash-bound packet. Principal, workspace domain, and session binding must all be
+independent from the implementer (and a meta-verifier from every audited
+author). Criterion evidence and citations are references with hashes—not
+embedded third-party bodies or private reasoning. The overall result is
+recomputed from the rubric; a driver receipt attests the exact payload.
+
+Panel composition de-duplicates principals, applies declared quorum,
+threshold/unanimity and veto roles deterministically, and retains every source
+verdict plus dissent. A council round judgment binds the completed deliberation
+protocol; its separate decision binds actual authority and the obligation
+record. Independent votes alone cannot counterfeit either. Random meta-audit is
+deterministic sampling from the gate hash and source-verdict hashes; full audit
+binds the entire selected set.
+An overturn never rewrites the original. A newer verdict may explicitly
+supersede an older verdict in the same role/rubric/story lineage, but the
+quality proof keeps both hashes and marks the older record inactive rather than
+deleting it.
+
 A quality `gate` is a closed expression over named facts and verdicts using
 `all`, `any`, `at_least`, and explicit veto rules. Missing, stale, abstaining,
 inconclusive, quorum-lost, meta-overturned, or unresolved dissent inputs take
 their declared red/escalation route; they never default to pass. Every surface
 renders facts and judgments with different labels and provenance.
+
+Pure gate evaluation returns `delivery-workbench-quality-proof@1` with exactly
+`pass | fail | pending | refused`, the declared route, contributing and rejected
+inputs, freshness reasons, dissent, complete supersession history, remediation,
+and an evidence-materialization preview. Repair is a named route with a finite
+round ceiling and explicit exhaustion route. It accepts a council requirement
+only from a replay-derived, fully freshness-bound council decision; a panel
+verdict cannot satisfy that slot. The proof sets every work, state, repository,
+roadmap, evidence, and grant effect to false; green selects no act and conveys
+no authority by itself.
 
 ## Autonomy modes and capability lattice
 

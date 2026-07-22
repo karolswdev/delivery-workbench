@@ -23,12 +23,13 @@ must not become a second consent or scheduler path.
   `program list|show|validate|simulate|plan|start|preview|tick|supervise|request|
   pause|resume|revoke|cancel|tail`; MCP/HTTP exact adapters; Workbench control
   room; live SSE ledger tail; nested graph/org chart; candidate/team/role/
-  activity, artifacts, verdicts/dissent, councils/rounds, gates, child runs,
-  integrations, phase progress, budgets and timeline; typed notifications and
-  request ports; bounded stream opens.
-- **Out:** arbitrary prompt/argv/provider configuration over remote adapters;
-  generic terminal; mutation through SSE; auto-starting daemon; hidden browser
-  polling as authority; hosted runner.
+  activity, artifacts, verdicts/dissent, panels, councils/seats/rounds/decider,
+  execution profiles and diversity constraints, decision obligations/debt,
+  gates, child runs, integrations, phase progress, budgets and timeline; typed
+  notifications and request ports; bounded stream opens.
+- **Out:** raw credentials, arbitrary prompt/argv/flags or unregistered remote
+  adapters; generic terminal; mutation through SSE; auto-starting daemon;
+  hidden browser polling as authority; hosted runner.
 
 ## Acceptance criteria
 
@@ -40,9 +41,15 @@ must not become a second consent or scheduler path.
   Workbench behavior remains compatible, and no stream, poller, notification,
   process, or program store starts merely because a surface opens.
 - [ ] The control room answers: why this story/phase, why this workflow/team,
-  who implements/verifies/meta-verifies/architects, which loop/round is active,
-  which evidence/verdict/dissent gates progress, and what next action/refusal is
-  derivable from the ledger.
+  who implements/verifies/deliberates/decides/meta-verifies/architects, which
+  exact harness/provider/model/auth domain filled each seat, which loop/round
+  is active, which evidence/verdict/dissent/obligation gates progress, and what
+  next action/refusal is derivable from the ledger.
+- [ ] Program Studio authors portable, exact or constrained execution ports;
+  council seats/perspectives, rule-versus-judge decision authority, provider/
+  model/principal diversity, explicit fallback and obligation policy. It shows
+  resolved local availability/fingerprints without exposing credentials or
+  accepting arbitrary commands.
 - [ ] Applying routes accept only program/run ids, bounded reasons or closed
   typed decisions and fresh exact tokens; no adapter accepts policy documents,
   role assignments, prompts, rubrics, checks, capabilities, credentials,
@@ -51,9 +58,9 @@ must not become a second consent or scheduler path.
   explicit local invocation, stops on checkpoint/no-progress/terminal/budget/
   duration, and exposes every tick rather than creating a hidden scheduler.
 - [ ] Notifications cover required intervention, verifier/council disagreement,
-  architect veto, budget/exhaustion, integration refusal and program completion;
-  phone responses remain typed request documents and transport never equals
-  authority.
+  decider/provider loss, architect veto, new/blocking/overdue obligations,
+  budget/exhaustion, integration refusal and program completion; phone responses
+  remain typed request documents and transport never equals authority.
 - [ ] Desktop/mobile states cover planning, team assignment, nested execution,
   active debate, verifier repair, meta-overturn, phase transition, revocation,
   budget stop and complete, with accessible labels and content-safe streams.

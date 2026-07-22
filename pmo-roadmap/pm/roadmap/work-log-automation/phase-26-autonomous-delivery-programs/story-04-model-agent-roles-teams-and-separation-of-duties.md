@@ -62,6 +62,16 @@ critic, judge, reviewer, and repairer without hard-coding providers.
 identity, context lane, and duty—not a claim that two models are statistically
 independent. The UI and ledger must use that precise language.
 
+Owner clarification after delivery: the logical-profile and principal seam is
+the foundation, not the complete provider contract. A seat must ultimately be
+able to pin or constrain harness, inference provider/router, exact model or
+alias policy, and an opaque local authentication domain, with diversity tested
+independently across those axes. The resolved roster/grant must fingerprint all
+of them. WLA-26-07 owns verdict provenance, WLA-26-08 the grant binding,
+WLA-26-09 driver resolution/execution, and WLA-26-11 the authoring/control-room
+surface; this clarification does not retroactively claim those follow-ons were
+delivered here.
+
 ## Delivered
 
 - Added one pure, closed organization compiler and `dw organization

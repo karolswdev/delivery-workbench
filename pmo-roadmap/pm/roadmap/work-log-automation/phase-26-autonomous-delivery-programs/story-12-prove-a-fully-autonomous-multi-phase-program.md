@@ -47,9 +47,11 @@ and activates no program machinery.
   evidence, integrates, certifies under recorded program provenance, commits,
   pushes and advances exactly once.
 - [ ] Story B runs a bounded propose/critique/rebuttal debate with preserved
-  dissent, reaches its declared council/judge result, passes a verifier-of-
-  verifier audit and a master-architect phase gate, then completes the phase
-  and moves the authoritative roadmap into the next granted phase.
+  dissent across council seats resolved to at least two distinct provider/model
+  families, reaches its declared rule or preassigned-decider result, emits one
+  carried non-blocking technical-debt obligation, passes a verifier-of-verifier
+  audit and a master-architect phase gate, then completes the phase and moves
+  the authoritative roadmap into the next granted phase.
 - [ ] Story C in the next phase is selected and at least begins/completes its
   declared workflow without a new human act, proving the program—not a
   hand-scripted two-story test—owns continuation.
@@ -59,9 +61,11 @@ and activates no program machinery.
   exact ledger/stream replay.
 - [ ] Red cases prove unbounded loop, self-verifier, impossible separation,
   forged mechanical fact, stale/dissenting verdict, quorum loss, architect veto,
-  no grant/capability, exhausted story/phase/round/integration budget, revoke,
-  blocked/unknown agent, dirty/divergent remote, stale roadmap and authority-
-  free stream all refuse without unintended side effects.
+  decider self-selection, missing/changed model fingerprint, undeclared provider
+  fallback, open blocking obligation, no grant/capability, exhausted story/
+  phase/round/integration budget, revoke, blocked/unknown agent, dirty/divergent
+  remote, stale roadmap and authority-free stream all refuse without unintended
+  side effects.
 - [ ] CLI/MCP/HTTP/Workbench projections agree; visual screenshots make the
   nested organization/loops/verdicts/authority legible; core tests pass on both
   Python floors; package/docs/canon/Telegram/Workbench/interop/range/history
@@ -72,8 +76,11 @@ and activates no program machinery.
   no program store, process, observer, notification, network call, default UI
   detour, or required setup appears.
 - [ ] Phase exit and final summary distinguish deterministic fixture proof from
-  any optional authenticated live model specimen and make no claim that an
-  untested provider or hosted deployment is autonomous.
+  any optional authenticated live model specimen; the fixture proves Claude-
+  CLI/Sonnet-like and pi/OpenRouter/Kimi-like execution bindings without real
+  credentials, while optional live specimens are named exactly and make no
+  claim that an untested provider, model alias or hosted deployment is
+  autonomous.
 
 ## Test plan
 

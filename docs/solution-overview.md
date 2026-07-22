@@ -505,9 +505,15 @@ layer above bounded runs: deterministic multi-phase selection, reusable
 hierarchical workflows, logical delivery organizations, independent per-story
 verification, and now a replayable bounded council protocol for typed
 propose→critique→rebut→judge rounds, distinct-principal quorum, preserved
-dissent, meta-review, and read-only architect verdicts. The remaining program
-grant/conductor slices will place that protocol behind separately granted
-integration and roadmap advancement.
+dissent, meta-review, and read-only architect verdicts. Independent review
+panels remain a different primitive: they compose separately issued verdicts
+without deliberation. A council declares before dispatch whether its outcome
+comes from a deterministic rule, a preassigned decider seat, or an authorized
+external checkpoint; every terminal decision binds the resolved execution
+stack and carries an explicit backlog/technical-debt/risk/follow-up obligation
+list. The remaining program grant/conductor slices will place that protocol,
+obligation lifecycle, and any resulting integration or roadmap act behind
+separately granted authority.
 
 This does not redefine the product's ordinary mode. Vanilla Delivery Workbench
 remains complete with no program configured, and a Phase 24 score remains an

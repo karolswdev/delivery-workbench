@@ -25,12 +25,15 @@ program store, program observer, or implicit program authority.
 
 - **In:** pure start plan; exact approval; immutable grant binding repository,
   roadmap/program/workflow/organization/rubric hashes and driver capability
-  fingerprints; modes; child-run authority ceiling; capabilities for selection,
-  work, verdict, evidence, diff integration, objective/agent-authorized
-  certification, commit, push, story/phase advancement; budgets for phases,
-  stories, rounds, councils, agents, checks, nudges, repairs, verdicts,
-  integrations, bytes and wall time; expiry/pause/resume/revoke/cancel;
-  append-only program ledger, claims and replay.
+  fingerprints plus each resolved seat's harness/provider/router/model/alias/
+  auth-domain identity; modes; child-run authority ceiling; capabilities for
+  selection, work, verdict, decision obligations, evidence, diff integration,
+  objective/agent-authorized certification, commit, push, obligation
+  materialization/disposition and story/phase advancement; budgets for phases,
+  stories, rounds, councils, agents, provider/model starts, checks, nudges,
+  repairs, verdicts, obligations, integrations, bytes, tokens/cost where
+  observable, and wall time; expiry/pause/resume/revoke/cancel; append-only
+  program ledger, claims and replay.
 - **Out:** policy as consent; perpetual grants; merge/release/deploy/publication;
   provider credentials; caller-supplied commands; capability elevation in place.
 
@@ -38,7 +41,9 @@ program store, program observer, or implicit program authority.
 
 - [ ] Preview states exact scope, candidate/team/workflow derivation, worst-case
   bounds, requested capabilities, exclusions, stop conditions, mode, expiry and
-  accountable operator while writing and starting nothing.
+  accountable operator while writing and starting nothing; it names every
+  council/decider seat's requested and resolved execution binding and says
+  honestly when a model is only alias-bound rather than revision-pinned.
 - [ ] No program mode is auto-selected and no program grant is implied by
   install/update, shipped templates, the presence or execution of a bounded
   score, opening Workbench, or invoking ordinary `status`, `next`, `step`, or
@@ -50,6 +55,10 @@ program store, program observer, or implicit program authority.
 - [ ] Child workflow/run grants are mechanically strict subsets of program,
   role, story, repository and remaining-budget authority; no child can certify,
   integrate, commit, push or advance merely because it can write code or judge.
+- [ ] The grant binds the complete resolved roster fingerprint; changing
+  adapter version, harness, provider/router, model selection/alias policy,
+  authentication domain, principal, workspace or capability makes an unstarted
+  plan stale and prevents silent provider/model substitution in a live run.
 - [ ] Ledger-first exclusive claims and hash-chained events cover selection,
   assignment, child grants, rounds, verdicts, gates, repairs, integration,
   roadmap transitions, controls and exhaustion; replay is the authority and

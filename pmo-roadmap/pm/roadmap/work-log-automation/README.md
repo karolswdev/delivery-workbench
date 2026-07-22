@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-22 (Phase 26 open 5/12: optional planning, finite workflows, independent teams, and replayable bounded councils are evidence-backed; WLA-26-06 is building the visual studio).
-**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (5/12).
-**Status:** Vanilla and bounded-run defaults remain unchanged; the optional program policy and bounded deliberation cores are shipped, and the lossless visual Program/Workflow Studio is in progress.
+**Last updated:** 2026-07-22 (Phase 26 open 7/12: optional planning, finite workflows, independent teams, bounded councils, visual authoring, and governed quality decisions are evidence-backed; WLA-26-08 is next).
+**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (7/12).
+**Status:** Vanilla and bounded-run defaults remain unchanged; the optional program policy, visual Studio, council-decision, and governed quality-proof cores are shipped, and finite revocable program authority is next.
 
 ## Vision
 

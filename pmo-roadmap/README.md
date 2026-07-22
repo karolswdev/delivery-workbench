@@ -359,11 +359,29 @@ controls for certification or commit.
 `organization list|validate|simulate` is the pure agent-organization surface.
 It closes tracked logical pools, role cardinality and packet visibility,
 program/driver capability ceilings, workspace/principal independence,
-councils, resource conflicts, and finite history-preserving replacement.
+councils, explicit decision authority, resource conflicts, and finite
+history-preserving replacement. A council using an agent decider identifies it
+by a preassigned stable seat plus assignment generation and resolved
+harness/provider/model/auth/principal/workspace/session provenance;
+rule-decided councils have no ultimate agent decider.
 Program planning resolves those roles against non-secret local principal and
 adapter-capability fingerprints before any work can start. No
 `pm/organizations/` directory is a healthy state; the wheel-shipped
 `autonomous-story-cell` example is never copied into policy by install/update.
+
+`rubric list|validate` is the pure governed-quality policy surface. It compiles
+closed criteria, required evidence/citations, mechanical-fact versus
+agent-judgment evaluation, exact result aggregation, vetoes, and all subject/
+repository/program/assignment/rubric/ledger freshness bindings. No
+`pm/rubrics/` directory is healthy; the wheel-shipped
+`autonomous-story-quality` example is payload only. The shared verdict core
+then binds trusted adapter receipts or preassigned read-only judgment roles,
+preserves independent-panel dissent and superseded history, runs deterministic
+random/full meta-audit and architect gates, and emits a pure
+pass/fail/pending/refused proof that grants and performs nothing. A completed
+deliberative council is a separate decision proof with discussion lineage,
+declared `rule | judge | checkpoint` authority, and an explicit carried
+obligations list.
 
 `workflow list|validate|simulate` is the pure reusable-hierarchy surface.
 Tracked templates resolve exact version/hash subflows and explicit bounded
