@@ -1,7 +1,8 @@
 # Visual orchestration contract
 
-**Status:** Phase 24 delivered and evidence-backed: visual editor, compiler,
-grant, ledger, drivers, conductor, interoperable Run view, and packaged exam.
+**Status:** Phase 24 delivered the bounded inward loop; Phase 25 extends the
+same grant/ledger spine through outward facts, standing-rule nudges, durable
+typed requests, and the wheel-installed outward-loop exam.
 **Product claim:** Delivery Workbench **can coordinate** a bounded multi-agent
 delivery run when an operator has configured an exact orchestration score and
 authorized a grant over that score. It does not claim that every repository
@@ -399,7 +400,24 @@ stateDiagram-v2
   running --> expired: time or budget exhausted
   waiting_agent --> interrupted: driver lost / cancellation timeout
   awaiting_certification --> awaiting_certification: external commit observed (no shipped claim)
+  awaiting_certification --> running: covered outward nudge (bounded repair only)
 ```
+
+An external operator commit is always observation first. The ledger records
+its relation plus a closed repository/status/story fact checkpoint. It may
+refresh dispatch freshness only when it is a clean fast-forward on the
+grant's same repository and branch while the bound story remains unchanged
+and `in-progress`; the event is then explicitly marked `rebindable`. Dirty,
+diverged, rewritten, cross-branch, or roadmap-changing commits remain visible
+but cannot refresh authority. This is not certification or push authority—it
+only lets an already granted standing nudge run its bounded repair against
+the operator's new fact boundary.
+
+A terminal approval node is a historical handoff, not an outstanding human
+request. If a covered nudge wakes the run, a repaired or re-routed run may
+reach that terminal handoff again. Only nonterminal checkpoints enter
+`awaiting-approval`, derive a request correlation, and wait for a typed
+decision.
 
 The conductor derives the current projection from an append-only ledger. One
 reconciliation tick:

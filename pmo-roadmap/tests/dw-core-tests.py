@@ -6464,6 +6464,11 @@ class OrchestrationConductorTest(unittest.TestCase):
         import dw_pmo.signals as sig
 
         nodes, responses = self._nudge_nodes()
+        nodes.append({
+            "id": "handoff", "type": "approval", "needs": ["worker"],
+            "prompt": "Inspect the bounded work.",
+            "terminal": "awaiting-certification",
+        })
         self._write_score("nudge-loop", nodes, nudges=[
             {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
              "max_total": 3, "expectation": "make the pushed branch green"},
@@ -6478,6 +6483,10 @@ class OrchestrationConductorTest(unittest.TestCase):
         result = self._run_to_terminal(run_id, fixture)
         self.assertEqual(result["state"], "awaiting-certification")
 
+        (self.root / "operator-integration.txt").write_text(
+            "operator-owned integration before outward observation\n"
+        )
+        self._commit("operator integrates before outward signal")
         self._seed_signal()
         chan = sig.replay_channel(self.root, "origin", "feature-x")
         check_fact = next(
@@ -6487,6 +6496,17 @@ class OrchestrationConductorTest(unittest.TestCase):
         result = self._run_to_terminal(run_id, fixture)
         self.assertEqual(result["state"], "awaiting-certification")
         final = runs.replay_run(self.root, run_id, now=self.now)
+        self.assertEqual(final["external_commits"][-1]["relation"], "fast-forward")
+        self.assertTrue(final["external_commits"][-1]["rebindable"])
+        self.assertIsNone(final["pending_checkpoint"])
+        self.assertEqual(
+            [item["node_id"] for item in final["checkpoints"]],
+            ["handoff", "handoff"],
+        )
+        self.assertEqual(
+            final["external_commits"][-1]["head"],
+            self._cmd("git", "rev-parse", "HEAD").stdout.strip(),
+        )
         delivered = [item for item in final["nudges"] if item["delivered"]]
         self.assertEqual(len(delivered), 1)
         self.assertEqual(delivered[0]["signal_hash"], check_fact["event_hash"])
@@ -6818,6 +6838,37 @@ class OrchestrationConductorTest(unittest.TestCase):
             if item["node_id"] == "repair"
         ]
         self.assertEqual(len(repaired), 1)
+
+    def test_failed_nudge_attempt_runs_its_named_approval_policy(self):
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+
+        nodes, responses = self._nudge_nodes()
+        nodes[1]["on_failure"] = {
+            "action": "approval", "checkpoint": "repair-review",
+        }
+        responses["repair"].update({
+            "state": "failed", "exit_code": 1, "polls": 0,
+        })
+        self._write_score("nudge-failure-approval", nodes, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 2},
+        ])
+        started = self._start(
+            "nudge-failure-approval",
+            standing_nudges=["ci-failed=repair"],
+            signal_channel="origin/failure-approval",
+        )
+        fixture = drivers.FixtureDriver(responses)
+        self._run_to_terminal(started["run_id"], fixture)
+        self._seed_signal(branch="failure-approval", name="ci-review")
+        result = self._run_to_terminal(started["run_id"], fixture)
+        self.assertEqual(result["state"], "awaiting-approval")
+        waiting = runs.replay_run(self.root, started["run_id"], now=self.now)
+        self.assertEqual(
+            waiting["pending_checkpoint"]["checkpoint"], "repair-review"
+        )
+        self.assertEqual(waiting["routes"][-1]["action"], "approval")
 
     def _serve_workbench(self):
         import dw_pmo.workbench as wb
@@ -8209,9 +8260,31 @@ class OrchestrationConductorTest(unittest.TestCase):
         self.assertEqual(observed["state"], "awaiting-certification")
         replayed = runs.replay_run(self.root, projection["run_id"])
         self.assertEqual(replayed["external_commits"][-1]["relation"], "fast-forward")
+        self.assertTrue(replayed["external_commits"][-1]["rebindable"])
         self.assertNotEqual(
             replayed["external_commits"][-1]["previous_head"],
             replayed["external_commits"][-1]["head"],
+        )
+
+        # A related commit on another branch is still observable, but never
+        # becomes a dispatch checkpoint for the original branch-bound grant.
+        self._cmd("git", "switch", "-q", "-c", "operator-other-branch")
+        (self.root / "other-branch-note.txt").write_text("wrong branch\n")
+        self._commit("external commit on another branch")
+        conductor.tick_run(self.root, projection["run_id"])
+        cross_branch = runs.replay_run(self.root, projection["run_id"])
+        self.assertEqual(
+            cross_branch["external_commits"][-1]["relation"], "fast-forward"
+        )
+        self.assertFalse(cross_branch["external_commits"][-1]["rebindable"])
+        _path, grant, _compiled = runs._load_run_documents(  # noqa: protected-access
+            self.root, projection["run_id"]
+        )
+        self.assertIn(
+            "repository branch changed",
+            runs._grant_freshness_issues(  # noqa: protected-access
+                self.root, grant, cross_branch
+            ),
         )
 
     def test_run_interop_compiler_plan_projection_and_preview_are_exact(self):

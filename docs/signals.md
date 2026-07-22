@@ -205,6 +205,20 @@ A nudge exists only when all four layers agree:
    hash, and remaining budgets. Delivery is at-most-once per signal per
    rule, held across crash and restart.
 
+The operator-push boundary is closed rather than waived. On the first tick
+after a terminal handoff, an external commit is ledgered with its relation
+and post-commit repository/status/story hashes. Only a clean fast-forward on
+the grant's original repository and branch, with the exact bound story still
+`in-progress`, is marked `rebindable` and may become the freshness checkpoint
+for standing-nudge work. Any dirty tree, branch change, rewrite, divergence,
+or roadmap drift stays observable but makes dispatch stale. Certification,
+commit, and push remain ring-5 acts throughout.
+
+Failure-activated nodes started by a nudge retain their declared failure
+policy. A failed repair can therefore retry, route, pause, abort, or open its
+named approval checkpoint exactly as if an inward failure route had started
+it; a nudge never creates an implicit policy branch.
+
 A matched nudge with no covering standing rule becomes an outstanding
 request (see request ports): the operator applies it with a fresh exact
 token or lets it expire. Refusals are first-class and distinct: no grant,
