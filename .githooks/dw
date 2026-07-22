@@ -54,6 +54,7 @@ try:
         build_status,
         build_step,
         build_run_plan,
+        build_program_plan,
         build_run_act_preview,
         build_run_view,
         contract_digest,
@@ -61,6 +62,7 @@ try:
         discover_phases,
         discover_projects,
         find_score_path,
+        find_program_path,
         find_root,
         get_phase,
         get_project,
@@ -104,6 +106,9 @@ try:
         run_inventory,
         validate_score,
         load_score,
+        program_inventory,
+        simulate_program,
+        validate_program_path,
         write_agent_docs,
         write_contract,
     )
@@ -271,6 +276,101 @@ def command_orchestration_simulate(args: argparse.Namespace) -> int:
         print(f"failure\t{branch['source']}\t{branch['action']}\t{detail}")
     for terminal in simulation["terminals"]:
         print(f"terminal\t{terminal['node']}\t{terminal['meaning']}")
+    return 0
+
+
+def command_program_list(args: argparse.Namespace) -> int:
+    inventory = program_inventory(args.root)
+    if args.json:
+        print(json.dumps(inventory, sort_keys=True))
+        return 0
+    programs = inventory["programs"]
+    if not programs:
+        print("dw program list: no programs configured (ordinary mode is healthy)")
+        return 0
+    for program in programs:
+        state = "valid" if program["valid"] else "invalid"
+        print(
+            f"{program['slug'] or program['name']}\t{state}\t{program['path']}"
+            f"\t{program.get('semantic_hash', '-')}\t{program['title'] or '-'}"
+        )
+    return 0
+
+
+def command_program_validate(args: argparse.Namespace) -> int:
+    path = find_program_path(args.root, args.program)
+    document = validate_program_path(args.root, path)
+    if args.json:
+        print(json.dumps(document, sort_keys=True))
+    elif document["valid"]:
+        print(f"valid\t{path.relative_to(args.root)}")
+    else:
+        for diagnostic in document["diagnostics"]:
+            print(
+                f"ERROR {diagnostic['source']}:{diagnostic['pointer']} "
+                f"[{diagnostic['code']}] {diagnostic['message']}; "
+                f"{diagnostic['remediation']}"
+            )
+    return 0 if document["valid"] else 1
+
+
+def _render_program_selection(document: dict[str, object]) -> str:
+    lines = [
+        f"program\t{document['program']['slug']}\t{document['program']['semantic_hash']}",
+        f"applicable\t{str(document.get('applicable', document.get('selection') is not None)).lower()}",
+    ]
+    selection = document.get("selection")
+    if selection:
+        lines.append(
+            f"selected\t{selection['story']}\tphase={selection['phase']}"
+            f"\t{selection['reason']}\tworkflow={selection['workflow']['slug']}"
+            f"\tteam={selection['team']}"
+        )
+    else:
+        lines.append("selected\t-")
+    for candidate in document["candidates"]:
+        blockers = ",".join(candidate["dependency_blockers"]) or "-"
+        lines.append(
+            f"candidate\t{candidate['story']}\tphase={candidate['phase']}"
+            f"\tstatus={candidate['status']}\treason={candidate['reason']}"
+            f"\tdependencies={blockers}"
+        )
+    assignment = document.get("assignment")
+    if assignment:
+        for role in assignment["roles"]:
+            selected = role["selected"]
+            agent = selected["agent"] if selected else "-"
+            profile = selected["profile"] if selected else "-"
+            lines.append(
+                f"assignment\t{role['role']}\t{role['duty']}\t{agent}\t{profile}"
+            )
+    for issue in document["issues"]:
+        lines.append(f"REFUSE\t{issue['code']}\t{issue['message']}")
+    lines.extend([
+        "starts-work\tfalse",
+        "writes-policy\tfalse",
+        "writes-roadmap\tfalse",
+        "writes-run-state\tfalse",
+        "creates-grant\tfalse",
+    ])
+    return "\n".join(lines) + "\n"
+
+
+def command_program_simulate(args: argparse.Namespace) -> int:
+    document = simulate_program(args.root, args.program)
+    if args.json:
+        print(json.dumps(document, sort_keys=True))
+    else:
+        print(_render_program_selection(document), end="")
+    return 0
+
+
+def command_program_plan(args: argparse.Namespace) -> int:
+    document = build_program_plan(args.root, args.program)
+    if args.json:
+        print(json.dumps(document, sort_keys=True))
+    else:
+        print(_render_program_selection(document), end="")
     return 0
 
 
@@ -1232,6 +1332,35 @@ def build_parser() -> argparse.ArgumentParser:
     orchestration_simulate.add_argument("score", help="score slug or filename stem")
     orchestration_simulate.add_argument("--json", action="store_true", help="emit the stamped simulation")
     orchestration_simulate.set_defaults(func=command_orchestration_simulate)
+
+    program = sub.add_parser(
+        "program",
+        help="validate and plan optional multi-phase programs (pure; starts no work)",
+    )
+    program_sub = program.add_subparsers(dest="program_command", required=True)
+    program_list = program_sub.add_parser(
+        "list", help="list optional programs; an empty inventory is healthy"
+    )
+    program_list.add_argument("--json", action="store_true", help="emit the stamped inventory")
+    program_list.set_defaults(func=command_program_list)
+    program_validate = program_sub.add_parser(
+        "validate", help="validate one program, references, scope, and bindings"
+    )
+    program_validate.add_argument("program", help="program slug or filename stem")
+    program_validate.add_argument("--json", action="store_true", help="emit validation diagnostics")
+    program_validate.set_defaults(func=command_program_validate)
+    program_simulate = program_sub.add_parser(
+        "simulate", help="explain every roadmap candidate and deterministic assignment"
+    )
+    program_simulate.add_argument("program", help="program slug or filename stem")
+    program_simulate.add_argument("--json", action="store_true", help="emit the pure simulation")
+    program_simulate.set_defaults(func=command_program_simulate)
+    program_plan = program_sub.add_parser(
+        "plan", help="bind one pure selection to repository, roadmap, policy, and roster facts"
+    )
+    program_plan.add_argument("program", help="program slug or filename stem")
+    program_plan.add_argument("--json", action="store_true", help="emit the pure program plan")
+    program_plan.set_defaults(func=command_program_plan)
 
     run = sub.add_parser(
         "run",

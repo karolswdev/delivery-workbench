@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 26
-- **Status:** in-progress
+- **Status:** done
   <!-- status vocabulary: roadmap-builder.md §2.3 -->
 - **Depends on:** WLA-26-01
 - **Unblocks:** WLA-26-03, WLA-26-04, WLA-26-06, WLA-26-08, WLA-26-09
@@ -28,20 +28,20 @@ explainable before it may start an agent.
 
 ## Acceptance criteria
 
-- [ ] The compiler rejects unknown keys, duplicate ids, invalid phase ranges,
+- [x] The compiler rejects unknown keys, duplicate ids, invalid phase ranges,
   dangling workflow/role/rubric references, ambiguous equal-priority matches,
   unsupported status, and scope that can never select work.
-- [ ] The pure planner chooses an already-in-progress eligible story first,
+- [x] The pure planner chooses an already-in-progress eligible story first,
   otherwise a stable declared order, and explains paused/on-hold/blocked,
   dependency-incomplete, out-of-scope, closed, already-active, and no-work
   candidates distinctly.
-- [ ] One result binds repository HEAD/index/operation, roadmap snapshot and
+- [x] One result binds repository HEAD/index/operation, roadmap snapshot and
   health, program hash, scope, story, workflow/template version, implementer,
   required independent verifier, optional council/meta-verifier/architect
   policy, and a human-readable “why this assignment” derivation.
-- [ ] Repeated planning is byte-equivalent at one observation time and starts
+- [x] Repeated planning is byte-equivalent at one observation time and starts
   no work, writes no policy/roadmap/run state, and creates no grant.
-- [ ] CLI/core parity and red fixtures cover multiple phases, dependency
+- [x] CLI/core parity and red fixtures cover multiple phases, dependency
   boundaries, holds, active-story resumption, exhausted scope, and an
   intentionally ambiguous rule set.
 
@@ -58,3 +58,10 @@ explainable before it may start an agent.
 Phase 26 uses declared stable policy, not an LLM ranking stories. An architect
 agent may recommend roadmap changes inside a workflow, but selection authority
 continues to come from the compiled program.
+
+Delivered `dw program list|validate|simulate|plan` as a pure optional surface.
+The compiler resolves one tracked program/workflow/organization/rubric family,
+keeps layout-only edits outside semantic authority, and requires both a writer
+and an independently resolved read-only verifier. The planner binds Git,
+roadmap, policy, workflow/rubric versions, and local roster facts; explains all
+five fixture stories; and stamps every write/start/grant effect false.

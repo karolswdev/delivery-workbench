@@ -356,6 +356,15 @@ step. The confirmation shows the token and tokenized argv, sends only
 `project` + `expect`, refreshes on success or stale conflict, and never offers
 controls for certification or commit.
 
+`program list|validate|simulate|plan` is the optional Phase 26 read surface.
+With no program configured, `list` returns a healthy empty inventory and
+creates nothing. Validation resolves the tracked program, workflow,
+organization, and rubric family; simulation explains every in/out-of-scope,
+held, blocked, dependency-bound, active, and completed roadmap candidate; plan
+adds current repository, roadmap, and local driver-roster facts plus one stable
+workflow/team assignment. All four operations stamp `starts_work: false`; they
+create no grant, run state, program store, observer, or roadmap write.
+
 `run plan` is the separate orchestration consent preview: it binds the
 compiled score to current local Git/status/story facts, exact requested
 profiles/capabilities/workspaces, all finite budgets, expiry, and permanent

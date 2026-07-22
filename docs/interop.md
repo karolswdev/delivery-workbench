@@ -32,6 +32,12 @@ is added when an external consumer asks for one.
 | Compiled orchestration | `delivery-workbench-compiled-orchestration` v1 | `orchestration.compile_score` |
 | Orchestration validation | `delivery-workbench-orchestration-validation` v1 | `orchestration.validate_score` |
 | Orchestration simulation | `delivery-workbench-orchestration-simulation` v1 | `orchestration.simulate_score` |
+| Program policy | `delivery-workbench-program` v1 | `programs.validate_program` |
+| Compiled program policy | `delivery-workbench-compiled-program` v1 | `programs.compile_program` |
+| Program inventory | `delivery-workbench-program-list` v1 | `programs.program_inventory` |
+| Program validation | `delivery-workbench-program-validation` v1 | `programs.validate_program` |
+| Program simulation | `delivery-workbench-program-simulation` v1 | `programs.simulate_program` |
+| Pure program plan | `delivery-workbench-program-plan` v1 | `programs.build_program_plan` |
 | Orchestration run plan | `delivery-workbench-run-plan` v1 | `orchestration_run.build_run_plan` |
 | Orchestration run grant | `delivery-workbench-run-grant` v1 | `orchestration_run.start_run` |
 | Orchestration run event | `delivery-workbench-run-event` v1 | `orchestration_run` ledger |
@@ -65,6 +71,10 @@ is added when an external consumer asks for one.
 | `dw orchestration show <score> --json` | `orchestration.compile_score` | normalized runtime score, layout, analysis, semantic hash, and document hash |
 | `dw orchestration validate <score> --json` | `orchestration.validate_score` | exact-key verdict plus JSON-pointer diagnostics/remediation; exit 1 invalid |
 | `dw orchestration simulate <score> --json` | `orchestration.simulate_score` | pure scheduling waves, locks, lineage, branches, budgets, checkpoints, and terminals |
+| `dw program list --json` | `programs.program_inventory` | healthy empty inventory when no program is configured; otherwise contained policy validation/hashes; pure |
+| `dw program validate <program> --json` | `programs.validate_program` | exact-key policy/reference/scope/binding verdict plus source-aware diagnostics; exit 1 invalid |
+| `dw program simulate <program> --json` | `programs.simulate_program` | every roadmap candidate reason plus deterministic workflow/team/role assignment; explicitly no work/state/grant |
+| `dw program plan <program> --json` | `programs.build_program_plan` | repository HEAD/index/operation, roadmap snapshot/health, policy/roster hashes, selected story, workflow/rubrics, independent verifier, optional meta/architect/council policy, and complete derivation; pure |
 | `dw notifications list --json` | `notifications.build_notifications` | derived operator notifications (pending/republished/expired requests, terminals, blocked stops, opt-in branch signals) with unread and delivery state; pure (exit 2 when none) |
 | `dw notifications ack <id>` | `notifications.acknowledge_notification` | idempotent, receipted acknowledgement in the local ack log |
 | `dw notifications delivered <id> [--channel C] [--failed reason]` | `notifications.record_delivery` | one recorded delivery-attempt outcome for a channel consumer (ceiling-bounded retries) |
