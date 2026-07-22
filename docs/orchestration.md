@@ -2,7 +2,10 @@
 
 **Status:** Phase 24 delivered the bounded inward loop; Phase 25 extends the
 same grant/ledger spine through outward facts, standing-rule nudges, durable
-typed requests, and the wheel-installed outward-loop exam.
+typed requests, and the wheel-installed outward-loop exam. Phase 26 is now
+contracting the higher-level autonomous delivery organization—multi-phase
+programs, hierarchical workflows, independent verifiers, bounded councils and
+loops—without retroactively broadening any existing run grant.
 **Product claim:** Delivery Workbench **can coordinate** a bounded multi-agent
 delivery run when an operator has configured an exact orchestration score and
 authorized a grant over that score. It does not claim that every repository

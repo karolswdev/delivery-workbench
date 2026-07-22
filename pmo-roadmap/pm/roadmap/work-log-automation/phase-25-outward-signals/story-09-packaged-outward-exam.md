@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 25
-- **Status:** in-progress
+- **Status:** done
 - **Depends on:** WLA-25-02, WLA-25-03, WLA-25-04, WLA-25-05, WLA-25-06, WLA-25-07, WLA-25-08
 - **Unblocks:** none
 - **Owner:** unassigned
@@ -43,22 +43,22 @@ real forge become the CI oracle.
 
 ## Acceptance criteria
 
-- [ ] The fresh-wheel scenario passes end to end with every act, signal,
+- [x] The fresh-wheel scenario passes end to end with every act, signal,
   nudge, refusal, republish, and decision present in the ledger and
   reproduced identically by stream replay.
-- [ ] Every red case produces its exact contracted refusal with a
+- [x] Every red case produces its exact contracted refusal with a
   recorded reason, and no red case leaves a side effect on the forge
   fixture, the operator tree, or any workspace.
-- [ ] At-most-once holds under the planted mid-loop crash: zero
+- [x] At-most-once holds under the planted mid-loop crash: zero
   duplicate node starts, zero duplicate nudges, exactly one republished
   request per outstanding decision.
-- [ ] Certification and commit remain operator acts: the exam proves the
+- [x] Certification and commit remain operator acts: the exam proves the
   run cannot flip a contract box, and the terminal state remains
   `awaiting-certification` until the fixture operator certifies.
-- [ ] One authenticated live specimen exercises the outward seam with a
+- [x] One authenticated live specimen exercises the outward seam with a
   real harness (WLA-25-07 driver receiving one real nudge round-trip),
   recorded as evidence outside CI.
-- [ ] Phase exit: all Phase-25 exit criteria check against captured
+- [x] Phase exit: all Phase-25 exit criteria check against captured
   evidence, `dw check` and `dw verify` are clean, and the phase status
   and roadmap README tell the finished story.
 
@@ -67,9 +67,11 @@ real forge become the CI oracle.
 - **Unit:** n/a (this story composes; units live in WLA-25-02..08).
 - **Integration:** the packaged scenario and red-case suite, run on the
   supported OS matrix.
-- **Manual / device:** the live specimen, captured with
-  `dw evidence capture`; one phone-side checkpoint answer over the
-  consented Telegram surface.
+- **Manual / device:** the authenticated harness specimen is captured in
+  WLA-25-07. A real owner-bound phone request was staged for this story and
+  remained pending; on 2026-07-22 the owner explicitly waived the device leg
+  for phase close. The run was revoked, expiring the outstanding request. The
+  phone interaction is recorded as unperformed, not passed.
 
 ## Notes / open questions
 
@@ -77,3 +79,7 @@ The exam deliberately includes the operator's integration push as a
 manual step in the script narrative: the outward loop begins where run
 authority ended, and the exam must show that boundary rather than blur
 it.
+
+The packaged exam is the authoritative product proof. The separately requested
+phone specimen was a confidence supplement rather than a CI oracle; its owner
+waiver does not change any claim about per-person pairing or Telegram delivery.

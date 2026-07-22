@@ -1,6 +1,6 @@
 # Outward signals and bounded nudges contract
 
-**Status:** Phase 25 contract. Delivered so far: the authority-free
+**Status:** Phase 25 delivered and evidence-complete: the authority-free
 observer (WLA-25-02: `dw signals`, MCP `dw_signals`, `GET /api/signals`),
 driver activity states with the receptivity table (WLA-25-03), the
 bounded nudge engine (WLA-25-04: score `nudges` rules, grant standing
@@ -16,7 +16,11 @@ the second real driver (WLA-25-07: `ClaudeCodeExecDriver` over
 non-interactive `claude -p`, least-privilege tool allowlists, version-
 pinned discovery, honest `active`/`exited`/`unknown` activity), and durable
 typed request ports (WLA-25-08: ledger-derived correlation, restart/resume
-republish, exact response/refusal, expiry, and inspect-only lineage).
+republish, exact response/refusal, expiry, and inspect-only lineage), plus the
+fresh-wheel whole-loop exam (WLA-25-09: operator push and closed rebind, CI and
+review nudges, repair and named failure policy, crash-safe request republish,
+typed decision, notification parity, stream replay, revocation and the complete
+refusal matrix).
 **Product claim:** Delivery Workbench **can observe** facts from outside a
 run — CI verdicts, review state, mergeability, agent activity — and, under an
 explicit grant, **can nudge** the right agent back to work. It does not claim
@@ -356,12 +360,16 @@ fails; the signal records; a standing-rule nudge delivers to a receptive
 session; repair runs in an isolated worktree and rechecks green; a
 `changes-requested` signal routes a second nudge; a checkpoint pends
 through a planted crash and resume with exactly-once republish; the typed
-decision arrives phone-side; notifications deliver and acknowledge — with
+decision crosses the generic exact-token request boundary; notifications
+deliver and acknowledge — with
 every refusal class exercised by name, at-most-once held under the crash,
 stream replay byte-equal to the ledger, and certification and commit
 performed by the fixture operator alone. A separately provisioned live
 specimen proves the real driver seam without making model output the CI
-oracle.
+oracle. The owner explicitly waived the additional phone-device confidence
+supplement at close; a real outstanding request was revoked/expired without a
+decision, recorded as unperformed rather than passed. Telegram's shared
+request core and transport remain covered by their deterministic suites.
 
 ## Deliberate authority boundaries and possible later extensions
 
