@@ -48,7 +48,7 @@ roadmap-advancement acts.
   next eligible story, workflow, implementer, independent verifier, optional
   council/meta-verifier, and architect policy across the granted roadmap scope
   while starting and writing nothing (WLA-26-02).
-- [ ] Reusable, parameterized, hierarchical workflows compile subflows,
+- [x] Reusable, parameterized, hierarchical workflows compile subflows,
   fan-out/fan-in, bounded retry/repair/debate/audit loops, convergence/stop
   conditions, and exact story bindings without smuggling capability or
   accepting an unbounded cycle (WLA-26-03).
@@ -99,8 +99,8 @@ roadmap-advancement acts.
 |---|---|---|---|---|
 | WLA-26-01 | Contract autonomous delivery programs and trust | done | [story-01-contract-autonomous-delivery-programs-and-trust](./story-01-contract-autonomous-delivery-programs-and-trust.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-26-02 | Select work across a governed roadmap scope | done | [story-02-select-work-across-a-governed-roadmap-scope](./story-02-select-work-across-a-governed-roadmap-scope.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-26-03 | Compile reusable hierarchical workflows and bounded loops | in-progress | [story-03-compile-reusable-hierarchical-workflows-and-bounded-loops](./story-03-compile-reusable-hierarchical-workflows-and-bounded-loops.md) | - |
-| WLA-26-04 | Model agent roles, teams, and separation of duties | backlog | [story-04-model-agent-roles-teams-and-separation-of-duties](./story-04-model-agent-roles-teams-and-separation-of-duties.md) | - |
+| WLA-26-03 | Compile reusable hierarchical workflows and bounded loops | done | [story-03-compile-reusable-hierarchical-workflows-and-bounded-loops](./story-03-compile-reusable-hierarchical-workflows-and-bounded-loops.md) | [evidence-story-03](./evidence-story-03.md) |
+| WLA-26-04 | Model agent roles, teams, and separation of duties | in-progress | [story-04-model-agent-roles-teams-and-separation-of-duties](./story-04-model-agent-roles-teams-and-separation-of-duties.md) | - |
 | WLA-26-05 | Run debates, councils, and meta-verification | backlog | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | - |
 | WLA-26-06 | Build the visual program and workflow studio | backlog | [story-06-build-the-visual-program-and-workflow-studio](./story-06-build-the-visual-program-and-workflow-studio.md) | - |
 | WLA-26-07 | Turn quality and evidence into governed verdicts | backlog | [story-07-turn-quality-and-evidence-into-governed-verdicts](./story-07-turn-quality-and-evidence-into-governed-verdicts.md) | - |
@@ -112,19 +112,19 @@ roadmap-advancement acts.
 
 ## Where we are
 
-Phase open 2/12. WLA-26-01 froze the optional capability/trust contract.
-WLA-26-02 is done: the closed program compiler and deterministic
-`roadmap-frontier-v1` planner resolve tracked policy references, explicit
-multi-phase scope, stable bindings, workflow/rubric versions, and the local
-driver roster; resume the only eligible active story or select the earliest
-eligible scoped frontier; assign a required writer and independent read-only
-verifier plus optional meta/architect/council roles; explain every included or
-excluded candidate; and bind Git/roadmap/policy/roster hashes while explicitly
-starting and writing nothing. Layout-only changes alter document hashes but
-not program authority. Twelve planner tests plus six contract tests are green,
-and the captured full matrix passed 356/356 on both Python floors and the fresh
-wheel. WLA-26-03 is in progress: compile reusable hierarchy and statically
-bounded subflow, fan-out, repair, review, debate, audit, and escalation loops.
+Phase open 3/12. WLA-26-01 froze the optional capability/trust contract, and
+WLA-26-02 delivered pure deterministic multi-phase selection and assignment.
+WLA-26-03 is done: the pure workflow compiler resolves typed bindings and
+hash-pinned subflows; emits stable hierarchical node, artifact, and role
+lineage; schedules deterministic fan-out/fan-in waves; and statically proves a
+finite envelope for typed loops, debates, checks, agents, bounded Phase 24
+runs, artifacts, rail acts, and time. It refuses recursion, backward routes,
+unbounded predicates, capability smuggling, and program-budget overflow.
+Layout changes do not alter executable instance hashes, and three optional
+templates ship without creating consumer workflow policy. Twelve workflow,
+thirteen planner, and six contract tests are green; the captured full matrix
+passed 369/369 on both Python floors and the fresh wheel. WLA-26-04 is in
+progress: model the organization and enforce role/team separation of duties.
 
 ## Active risks
 
@@ -171,6 +171,22 @@ bounded subflow, fan-out, repair, review, debate, audit, and escalation loops.
   editor layout changes the former but not the executable bundle or assignment
   authority - visual authoring cannot invalidate or expand a program merely by
   moving nodes - WLA-26-02.
+- 2026-07-22 - Compile reusable workflows through a separate pure compiler and
+  embed Phase 24 orchestration only as an explicit bounded-run leaf with exact
+  score provenance - existing scores keep their independent semantics and
+  never acquire program behavior by inference - WLA-26-03.
+- 2026-07-22 - Admit only typed forward routes and statically bounded loop and
+  debate primitives; reject general graph cycles, recursive subflows, and
+  predicates that do not resolve to exact typed child results - every accepted
+  workflow has a conservative finite execution envelope - WLA-26-03.
+- 2026-07-22 - Ship template payloads in the package but never seed
+  `pm/workflows/` during install/update - examples are discoverable while
+  explicit adoption remains the boundary between vanilla and program policy -
+  WLA-26-03.
+- 2026-07-22 - Separate document, semantic, source, and bound-instance hashes,
+  and intersect child capabilities and envelopes with the enclosing program -
+  visual layout cannot change authority and hierarchy cannot smuggle a
+  capability or exceed the program budget - WLA-26-03.
 - 2026-07-22 - Treat capabilities as independent granted bits with explicit
   prerequisites, not implication shortcuts; agent dispatch never inherits
   evidence, integration, certification, Git, or roadmap authority - WLA-26-01.

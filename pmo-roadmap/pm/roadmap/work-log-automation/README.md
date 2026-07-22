@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-22 (Phase 26 open 2/12: the optional contract and pure multi-phase compiler/planner are evidence-backed; WLA-26-03 is compiling reusable bounded hierarchy).
-**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (2/12).
-**Status:** Vanilla and bounded-run defaults remain unchanged; pure deterministic program selection is shipped, and hierarchical workflow compilation is in progress.
+**Last updated:** 2026-07-22 (Phase 26 open 3/12: optional program selection and finite hierarchical workflow compilation are evidence-backed; WLA-26-04 is modeling the agent organization).
+**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (3/12).
+**Status:** Vanilla and bounded-run defaults remain unchanged; pure program planning and reusable bounded workflow compilation are shipped, and role/team separation is in progress.
 
 ## Vision
 

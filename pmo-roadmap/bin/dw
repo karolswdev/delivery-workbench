@@ -62,6 +62,7 @@ try:
         discover_phases,
         discover_projects,
         find_score_path,
+        find_workflow_path,
         find_program_path,
         find_root,
         get_phase,
@@ -101,12 +102,15 @@ try:
         story_num_from_file,
         score_inventory,
         simulate_score,
+        simulate_workflow,
         start_run,
         supervise_run,
         run_inventory,
         validate_score,
+        validate_workflow,
         load_score,
         program_inventory,
+        workflow_inventory,
         simulate_program,
         validate_program_path,
         write_agent_docs,
@@ -276,6 +280,84 @@ def command_orchestration_simulate(args: argparse.Namespace) -> int:
         print(f"failure\t{branch['source']}\t{branch['action']}\t{detail}")
     for terminal in simulation["terminals"]:
         print(f"terminal\t{terminal['node']}\t{terminal['meaning']}")
+    return 0
+
+
+def command_workflow_list(args: argparse.Namespace) -> int:
+    inventory = workflow_inventory(args.root)
+    if args.json:
+        print(json.dumps(inventory, sort_keys=True))
+        return 0
+    workflows = inventory["workflows"]
+    if not workflows:
+        print("dw workflow list: no workflow policies configured")
+        return 0
+    for workflow in workflows:
+        state = "valid" if workflow["valid"] else "invalid"
+        print(
+            f"{workflow.get('slug') or workflow['name']}\t{state}"
+            f"\t{workflow['path']}\t{workflow.get('version') or '-'}"
+            f"\t{workflow.get('bundle_hash', '-')}"
+        )
+    return 0
+
+
+def command_workflow_validate(args: argparse.Namespace) -> int:
+    document = validate_workflow(args.root, args.workflow)
+    if args.json:
+        print(json.dumps(document, sort_keys=True))
+    elif document["valid"]:
+        compiled = document["compiled"]
+        print(
+            f"valid\t{compiled['source']}\t{compiled['slug']}@{compiled['version']}"
+            f"\t{compiled['bundle_hash']}"
+        )
+    else:
+        for diagnostic in document["diagnostics"]:
+            print(
+                f"ERROR {diagnostic['source']}:{diagnostic['pointer']} "
+                f"[{diagnostic['code']}] {diagnostic['message']}; "
+                f"{diagnostic['remediation']}"
+            )
+    return 0 if document["valid"] else 1
+
+
+def command_workflow_simulate(args: argparse.Namespace) -> int:
+    find_workflow_path(args.root, args.workflow)
+    simulation = simulate_workflow(args.root, args.workflow)
+    if args.json:
+        print(json.dumps(simulation, sort_keys=True))
+        return 0
+    workflow = simulation["workflow"]
+    print(
+        f"workflow\t{workflow['slug']}@{workflow['version']}"
+        f"\t{workflow['bundle_hash']}"
+    )
+    for index, wave in enumerate(simulation["waves"]):
+        print(f"wave\t{index}\t{','.join(wave)}")
+    for child in simulation["children"]:
+        print(
+            f"child\t{child['address']}\t{child['slug']}@{child['version']}"
+            f"\t{child['bundle_hash']}"
+        )
+    for loop in simulation["loops"]:
+        print(
+            f"loop\t{loop['address']}\t{loop['purpose']}"
+            f"\tmax_rounds={loop['max_rounds']}"
+        )
+    for debate in simulation["debates"]:
+        print(
+            f"debate\t{debate['address']}\tmax_rounds={debate['max_rounds']}"
+            f"\tjudge={debate['judge_role']}"
+        )
+    for route in simulation["routes"]:
+        print(
+            f"route\t{route['source']}\t{route['outcome']}"
+            f"\t{route['kind']}:{route['target']}"
+        )
+    for name, value in simulation["envelopes"]["worst_case"].items():
+        print(f"envelope\t{name}\t{value}")
+    print("starts-work\tfalse")
     return 0
 
 
@@ -1332,6 +1414,29 @@ def build_parser() -> argparse.ArgumentParser:
     orchestration_simulate.add_argument("score", help="score slug or filename stem")
     orchestration_simulate.add_argument("--json", action="store_true", help="emit the stamped simulation")
     orchestration_simulate.set_defaults(func=command_orchestration_simulate)
+
+    workflow = sub.add_parser(
+        "workflow",
+        help="compile reusable hierarchical workflow policy (pure; starts no work)",
+    )
+    workflow_sub = workflow.add_subparsers(dest="workflow_command", required=True)
+    workflow_list = workflow_sub.add_parser(
+        "list", help="list tracked workflow policies; an empty library is healthy"
+    )
+    workflow_list.add_argument("--json", action="store_true", help="emit the stamped inventory")
+    workflow_list.set_defaults(func=command_workflow_list)
+    workflow_validate = workflow_sub.add_parser(
+        "validate", help="validate hierarchy, references, routes, and finite bounds"
+    )
+    workflow_validate.add_argument("workflow", help="workflow slug or filename stem")
+    workflow_validate.add_argument("--json", action="store_true", help="emit source-aware diagnostics")
+    workflow_validate.set_defaults(func=command_workflow_validate)
+    workflow_simulate = workflow_sub.add_parser(
+        "simulate", help="expand hierarchy, all routes, rounds, and finite envelopes"
+    )
+    workflow_simulate.add_argument("workflow", help="workflow slug or filename stem")
+    workflow_simulate.add_argument("--json", action="store_true", help="emit the pure simulation")
+    workflow_simulate.set_defaults(func=command_workflow_simulate)
 
     program = sub.add_parser(
         "program",

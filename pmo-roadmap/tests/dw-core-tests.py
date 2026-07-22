@@ -9043,7 +9043,34 @@ class ProgramPlannerTest(unittest.TestCase):
                 "slug": slug,
                 "title": "Story work",
                 "version": "1.0.0",
-                "nodes": [],
+                "parameters": [{
+                    "id": "story-id",
+                    "type": "string",
+                    "required": True,
+                    "max_bytes": 128,
+                }],
+                "defaults": {},
+                "nodes": [{
+                    "id": "implement",
+                    "type": "agent",
+                    "role": "implementer",
+                    "task": "Implement the exact selected story.",
+                    "workspace": "isolated-worktree",
+                    "capability_ceiling": ["agent:dispatch", "workspace:write"],
+                    "timeout_seconds": 900,
+                    "max_attempts": 1,
+                    "inputs": {
+                        "story": {"kind": "parameter", "name": "story-id"},
+                    },
+                    "outputs": [{
+                        "id": "candidate",
+                        "kind": "git-diff",
+                        "max_bytes": 1000000,
+                    }],
+                    "on_success": {"kind": "terminal", "target": "complete"},
+                    "on_failure": {"kind": "action", "target": "block"},
+                }],
+                "terminals": [{"id": "complete", "meaning": "complete"}],
             })
         for slug in ("story-quality", "phase-architecture"):
             self._write_json(f"pm/rubrics/{slug}.json", {
@@ -9103,8 +9130,8 @@ class ProgramPlannerTest(unittest.TestCase):
             },
             "organization": "delivery-core",
             "bindings": [
-                {"id": "alpha", "priority": 10, "match": {"phase_from": 1, "phase_through": 1}, "workflow": "story-work", "team": "story-cell", "rubrics": ["story-quality"]},
-                {"id": "beta", "priority": 20, "match": {"phase_from": 2, "phase_through": 2}, "workflow": "story-work", "team": "story-cell", "rubrics": ["story-quality"]},
+                {"id": "alpha", "priority": 10, "match": {"phase_from": 1, "phase_through": 1}, "workflow": "story-work", "with": {"story-id": {"kind": "context", "name": "story.id"}}, "team": "story-cell", "rubrics": ["story-quality"]},
+                {"id": "beta", "priority": 20, "match": {"phase_from": 2, "phase_through": 2}, "workflow": "story-work", "with": {"story-id": {"kind": "context", "name": "story.id"}}, "team": "story-cell", "rubrics": ["story-quality"]},
             ],
             "phase_gates": [{
                 "id": "architecture-gate",
@@ -9114,7 +9141,7 @@ class ProgramPlannerTest(unittest.TestCase):
                 "on_fail": "block",
             }],
             "mode_ceiling": "continuous",
-            "requested_capabilities": ["agent:dispatch", "check:execute"],
+            "requested_capabilities": ["agent:dispatch", "check:execute", "workspace:write"],
             "budgets": {"max_phases": 2, "max_stories": 3},
             "stop_conditions": ["scope-complete", "blocked-frontier", "budget-exhausted"],
         }
@@ -9172,6 +9199,14 @@ class ProgramPlannerTest(unittest.TestCase):
             compiled["reference_hashes"]["workflows"]["story-work"],
             compiled["references"]["workflows"]["story-work"]["semantic_hash"],
         )
+        self.assertRegex(
+            compiled["reference_hashes"]["workflow_instances"]["alpha"],
+            r"^sha256:[0-9a-f]{64}$",
+        )
+        self.assertEqual(
+            compiled["program"]["bindings"][0]["with"]["story-id"],
+            {"kind": "context", "name": "story.id"},
+        )
 
     def test_layout_changes_document_hashes_but_not_program_authority(self):
         core = self.programs_core
@@ -9185,7 +9220,14 @@ class ProgramPlannerTest(unittest.TestCase):
         ):
             path = self.root / relative
             document = json.loads(path.read_text(encoding="utf-8"))
-            document["layout"] = {"nodes": {"fixture": {"x": 10, "y": 20}}}
+            document["layout"] = (
+                {
+                    "nodes": {"implement": {"x": 10, "y": 20}},
+                    "viewport": {"x": 0, "y": 0, "zoom": 1},
+                }
+                if "/workflows/" in relative
+                else {"nodes": {"fixture": {"x": 10, "y": 20}}}
+            )
             self._write_json(relative, document)
         moved = core.compile_program(self.root, with_layout)
         self.assertEqual(baseline["semantic_hash"], moved["semantic_hash"])
@@ -9208,7 +9250,7 @@ class ProgramPlannerTest(unittest.TestCase):
         self.assertEqual(plan["selection"]["rubrics"][0]["version"], "1.0.0")
         self.assertEqual(
             plan["program"]["requested_capabilities"],
-            ["agent:dispatch", "check:execute"],
+            ["agent:dispatch", "check:execute", "workspace:write"],
         )
         self.assertIn("organization", plan["program"]["reference_hashes"])
         assignment = plan["assignment"]
@@ -9335,6 +9377,37 @@ class ProgramPlannerTest(unittest.TestCase):
             validation["diagnostics"],
         )
 
+    def test_program_binding_cannot_smuggle_capability_or_exceed_budget(self):
+        core = self.programs_core
+        path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(path.read_text(encoding="utf-8"))
+        capability_workflow = json.loads(json.dumps(workflow))
+        del capability_workflow["nodes"][0]["on_success"]
+        capability_workflow["nodes"].append({
+            "id": "verify",
+            "type": "verdict",
+            "needs": ["implement"],
+            "role": "verifier",
+            "rubric": "story-quality",
+            "subject": {"kind": "artifact", "name": "implement.candidate"},
+            "freshness_seconds": 3600,
+            "max_rationale_bytes": 20000,
+            "results": ["pass", "fail"],
+            "routes": {
+                "pass": {"kind": "terminal", "target": "complete"},
+                "fail": {"kind": "action", "target": "block"},
+            },
+        })
+        self._write_json("pm/workflows/story-work.json", capability_workflow)
+        validation = core.validate_program(self.root, self.program)
+        self.assertIn("workflow-capability-missing", self.codes(validation))
+
+        workflow["nodes"][0]["timeout_seconds"] = 86400
+        workflow["nodes"][0]["max_attempts"] = 20
+        self._write_json("pm/workflows/story-work.json", workflow)
+        validation = core.validate_program(self.root, self.program)
+        self.assertIn("workflow-exceeds-budget", self.codes(validation))
+
     def test_unsupported_roadmap_status_and_empty_scope_refuse(self):
         core = self.programs_core
         self._set_story_status("DM-1-02", "in-progress", "mysterious")
@@ -9412,6 +9485,283 @@ class ProgramPlannerTest(unittest.TestCase):
         self.assertEqual(inventory["programs"], [])
         self.assertTrue(inventory["healthy"])
         self.assertEqual(before, list(empty_root.rglob("*")))
+
+
+class ProgramWorkflowTest(unittest.TestCase):
+    """WLA-26-03: reusable hierarchy and statically finite workflow loops."""
+
+    def setUp(self):
+        import dw_pmo.program_workflow as workflow_core
+
+        self.core = workflow_core
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-workflow-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        workflow_dir = self.root / "pm/workflows"
+        score_dir = self.root / "pm/orchestration"
+        workflow_dir.mkdir(parents=True)
+        score_dir.mkdir(parents=True)
+        template_dir = TESTS_DIR.parent / "templates/workflows"
+        for source in template_dir.glob("*.json"):
+            shutil.copy2(source, workflow_dir / source.name)
+        shutil.copy2(
+            TESTS_DIR.parent / "templates/orchestration/research-build-review.json",
+            score_dir / "research-build-review.json",
+        )
+        self.docs_path = workflow_dir / "docs-only.json"
+        self.research_path = workflow_dir / "research-build-verify.json"
+        self.architect_path = workflow_dir / "architect-debate-delivery.json"
+
+    @staticmethod
+    def diagnostic_codes(exc):
+        return {item["code"] for item in exc.exception.diagnostics}
+
+    @staticmethod
+    def clone(value):
+        return json.loads(json.dumps(value))
+
+    def load(self, path):
+        return self.core.load_workflow(path)
+
+    def cli(self, *args):
+        return subprocess.run(
+            [
+                sys.executable,
+                str(TESTS_DIR.parent / "bin/dw"),
+                "--root",
+                str(self.root),
+                "workflow",
+                *args,
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def test_three_shipped_templates_compile_with_finite_envelopes(self):
+        inventory = self.core.workflow_inventory(self.root)
+        self.assertTrue(inventory["healthy"], inventory["workflows"])
+        self.assertEqual(
+            {item["slug"] for item in inventory["workflows"]},
+            {"docs-only", "research-build-verify", "architect-debate-delivery"},
+        )
+        compiled = self.core.compile_workflow(self.root, "architect-debate-delivery")
+        self.assertEqual(compiled["kind"], self.core.COMPILED_WORKFLOW_KIND)
+        self.assertEqual(set(compiled["source_hashes"]), {
+            "architect-debate-delivery@1.0.0",
+            "docs-only@1.0.0",
+            "research-build-verify@1.0.0",
+        })
+        self.assertGreater(compiled["envelope"]["agent_starts"], 0)
+        self.assertEqual(len(compiled["loops"]), 1)
+        self.assertEqual(len(compiled["debates"]), 1)
+
+    def test_layout_changes_document_hash_only(self):
+        workflow = self.load(self.docs_path)
+        baseline = self.core.compile_workflow(self.root, workflow)
+        moved = self.clone(workflow)
+        moved["layout"]["nodes"]["write-docs"] = {"x": 999, "y": -400}
+        after = self.core.compile_workflow(self.root, moved)
+        self.assertEqual(baseline["semantic_hash"], after["semantic_hash"])
+        self.assertEqual(baseline["bundle_hash"], after["bundle_hash"])
+        self.assertNotEqual(baseline["document_hash"], after["document_hash"])
+
+        nested_before = self.core.compile_workflow(self.root, "architect-debate-delivery")
+        child = self.load(self.docs_path)
+        child["layout"]["nodes"]["check-docs"] = {"x": -500, "y": 700}
+        self.docs_path.write_text(
+            json.dumps(child, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        nested_after = self.core.compile_workflow(self.root, "architect-debate-delivery")
+        self.assertEqual(nested_before["bundle_hash"], nested_after["bundle_hash"])
+        self.assertNotEqual(
+            nested_before["sources"]["docs-only@1.0.0"]["document_hash"],
+            nested_after["sources"]["docs-only@1.0.0"]["document_hash"],
+        )
+
+    def test_parameter_bindings_are_typed_data_not_substitution(self):
+        workflow = self.load(self.docs_path)
+        compiled = self.core.compile_workflow(
+            self.root,
+            workflow,
+            bindings={"story-id": {"kind": "context", "name": "story.id"}},
+            require_bound=True,
+        )
+        self.assertEqual(compiled["bindings"]["story-id"]["kind"], "context")
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(
+                self.root,
+                workflow,
+                bindings={"story-id": "${invent-a-node}"},
+                require_bound=True,
+            )
+        self.assertIn("unsafe-binding", self.diagnostic_codes(raised))
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(
+                self.root,
+                workflow,
+                bindings={"story-id": {"kind": "context", "name": "phase.number"}},
+                require_bound=True,
+            )
+        self.assertIn("parameter-type", self.diagnostic_codes(raised))
+
+    def test_subflow_provenance_and_expanded_addresses_are_stable(self):
+        first = self.core.simulate_workflow(self.root, "architect-debate-delivery")
+        second = self.core.simulate_workflow(self.root, "architect-debate-delivery")
+        self.assertEqual(self.core.canonical_json(first), self.core.canonical_json(second))
+        addresses = {item["address"] for item in first["expanded_nodes"]}
+        self.assertIn("architect-debate-delivery/delivery/research-build-verify/research-code", addresses)
+        self.assertTrue(any("round/{round}/docs-only/write-docs" in item for item in addresses))
+        artifact_addresses = {item["address"] for item in first["expanded_artifacts"]}
+        self.assertIn(
+            "architect-debate-delivery/delivery/research-build-verify/"
+            "bounded-build/artifact/candidate",
+            artifact_addresses,
+        )
+        self.assertTrue(any(item["role"] == "verifier" for item in first["role_lanes"]))
+        self.assertTrue(any(item["duty"] == "debate-judge" for item in first["role_lanes"]))
+        self.assertEqual(len(first["loops"][0]["iterations"]), 2)
+
+    def test_recursive_subflow_reference_refuses(self):
+        workflow = self.load(self.docs_path)
+        workflow["nodes"] = [{
+            "id": "recurse",
+            "type": "subflow",
+            "workflow": "docs-only",
+            "version": "1.0.0",
+            "with": {},
+            "capability_ceiling": [],
+            "on_success": {"kind": "terminal", "target": "complete"},
+            "on_failure": {"kind": "action", "target": "block"},
+        }]
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, workflow)
+        self.assertIn("workflow-recursive", self.diagnostic_codes(raised))
+
+    def test_general_dependency_and_route_cycles_refuse(self):
+        workflow = self.load(self.docs_path)
+        workflow["nodes"][0]["needs"] = ["check-docs"]
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, workflow)
+        self.assertIn("workflow-cycle", self.diagnostic_codes(raised))
+
+        routed = self.load(self.architect_path)
+        routed["nodes"][3]["on_success"] = {"kind": "node", "target": "delivery"}
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, routed)
+        self.assertIn("workflow-cycle", self.diagnostic_codes(raised))
+
+    def test_loop_requires_explicit_bound_predicate_and_exhaustion(self):
+        workflow = self.load(self.architect_path)
+        loop = workflow["nodes"][3]
+        del loop["max_rounds"]
+        del loop["until"]
+        del loop["on_exhausted"]
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, workflow)
+        self.assertTrue(
+            {"missing-bound", "wrong-type"} <= self.diagnostic_codes(raised),
+            raised.exception.diagnostics,
+        )
+
+        non_decreasing = self.load(self.architect_path)
+        non_decreasing["nodes"][3]["until"]["source"] = "invented.result"
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, non_decreasing)
+        self.assertIn("non-decreasing-loop", self.diagnostic_codes(raised))
+
+    def test_exact_subflow_version_and_bounded_score_are_proven(self):
+        research = self.core.compile_workflow(self.root, "research-build-verify")
+        bounded = next(
+            node for node in research["workflow"]["nodes"]
+            if node["type"] == "bounded_run"
+        )
+        self.assertRegex(bounded["score_reference"]["semantic_hash"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual(research["envelope"]["child_runs"], 1)
+
+        architect = self.load(self.architect_path)
+        architect["nodes"][2]["version"] = "9.9.9"
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, architect)
+        self.assertIn("workflow-version-mismatch", self.diagnostic_codes(raised))
+
+        smuggled = self.load(self.architect_path)
+        smuggled["nodes"][2]["capability_ceiling"].remove("certification:verdict")
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, smuggled)
+        self.assertIn("capability-smuggling", self.diagnostic_codes(raised))
+
+    def test_complete_route_simulation_is_pure_and_explainable(self):
+        before = {
+            str(path.relative_to(self.root)): path.read_bytes()
+            for path in self.root.rglob("*") if path.is_file()
+        }
+        simulation = self.core.simulate_workflow(self.root, "architect-debate-delivery")
+        after = {
+            str(path.relative_to(self.root)): path.read_bytes()
+            for path in self.root.rglob("*") if path.is_file()
+        }
+        self.assertEqual(before, after)
+        outcomes = {item["outcome"] for item in simulation["routes"]}
+        self.assertTrue({"consensus", "dissent", "exhausted", "success", "failure"} <= outcomes)
+        self.assertTrue(all("envelope" in item for item in simulation["routes"]))
+        self.assertFalse(simulation["starts_work"])
+        self.assertFalse(simulation["writes_policy"])
+        self.assertFalse(simulation["writes_run_state"])
+        self.assertFalse(simulation["creates_grant"])
+
+    def test_fanout_fanin_quorum_and_result_routes_are_proven(self):
+        research = self.core.simulate_workflow(self.root, "research-build-verify")
+        self.assertEqual(research["waves"][0], ["research-code", "research-risk"])
+        self.assertEqual(research["waves"][1], ["collect-brief"])
+
+        debate = self.load(self.architect_path)
+        debate["nodes"][1]["quorum"] = 3
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, debate)
+        self.assertIn("impossible-quorum", self.diagnostic_codes(raised))
+
+        verdict = self.load(self.research_path)
+        del verdict["nodes"][4]["routes"]["inconclusive"]
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, verdict)
+        self.assertIn("wrong-type", self.diagnostic_codes(raised))
+
+    def test_invalid_route_and_dangling_artifact_are_source_aware(self):
+        workflow = self.load(self.docs_path)
+        workflow["nodes"][1]["inputs"]["documentation"]["name"] = "missing.output"
+        workflow["nodes"][1]["on_success"]["target"] = "missing-terminal"
+        with self.assertRaises(self.core.WorkflowValidationError) as raised:
+            self.core.compile_workflow(self.root, workflow)
+        codes = self.diagnostic_codes(raised)
+        self.assertIn("dangling-artifact-reference", codes)
+        self.assertIn("dangling-terminal", codes)
+        self.assertTrue(all(item["source"] for item in raised.exception.diagnostics))
+
+    def test_cli_inventory_validation_and_simulation_share_pure_core(self):
+        listed = self.cli("list", "--json")
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertEqual(json.loads(listed.stdout), self.core.workflow_inventory(self.root))
+        validated = self.cli("validate", "docs-only", "--json")
+        self.assertEqual(validated.returncode, 0, validated.stderr)
+        self.assertEqual(
+            json.loads(validated.stdout),
+            self.core.validate_workflow(self.root, "docs-only"),
+        )
+        simulated = self.cli("simulate", "architect-debate-delivery", "--json")
+        self.assertEqual(simulated.returncode, 0, simulated.stderr)
+        self.assertEqual(
+            json.loads(simulated.stdout),
+            self.core.simulate_workflow(self.root, "architect-debate-delivery"),
+        )
+
+        empty = self.tmp / "empty"
+        empty.mkdir()
+        before = list(empty.rglob("*"))
+        inventory = self.core.workflow_inventory(empty)
+        self.assertEqual(inventory["workflows"], [])
+        self.assertTrue(inventory["healthy"])
+        self.assertEqual(before, list(empty.rglob("*")))
 
 
 class SignalsTest(unittest.TestCase):

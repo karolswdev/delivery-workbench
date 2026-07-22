@@ -1,0 +1,230 @@
+{
+  "kind": "delivery-workbench-workflow",
+  "schema_version": 1,
+  "slug": "research-build-verify",
+  "title": "Research, bounded build, and independent verification",
+  "description": "Parallel read-only research fans into an explicit Phase 24 bounded run and a governed verifier verdict.",
+  "version": "1.0.0",
+  "parameters": [
+    {
+      "id": "story-id",
+      "type": "string",
+      "required": true,
+      "max_bytes": 128
+    }
+  ],
+  "defaults": {
+    "story-id": "STORY-0-00"
+  },
+  "nodes": [
+    {
+      "id": "research-code",
+      "type": "agent",
+      "role": "researcher-code",
+      "task": "Inspect the repository and produce cited implementation constraints.",
+      "workspace": "read-only",
+      "capability_ceiling": [
+        "agent:dispatch"
+      ],
+      "timeout_seconds": 900,
+      "max_attempts": 2,
+      "inputs": {
+        "story": {
+          "kind": "parameter",
+          "name": "story-id"
+        }
+      },
+      "outputs": [
+        {
+          "id": "code-findings",
+          "kind": "markdown",
+          "max_bytes": 50000
+        }
+      ],
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    },
+    {
+      "id": "research-risk",
+      "type": "agent",
+      "role": "researcher-risk",
+      "task": "Identify trust, regression, and delivery risks for the exact story.",
+      "workspace": "read-only",
+      "capability_ceiling": [
+        "agent:dispatch"
+      ],
+      "timeout_seconds": 900,
+      "max_attempts": 2,
+      "inputs": {
+        "story": {
+          "kind": "parameter",
+          "name": "story-id"
+        }
+      },
+      "outputs": [
+        {
+          "id": "risk-findings",
+          "kind": "json",
+          "max_bytes": 50000
+        }
+      ],
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    },
+    {
+      "id": "collect-brief",
+      "type": "collect",
+      "needs": [
+        "research-code",
+        "research-risk"
+      ],
+      "producers": [
+        "research-code",
+        "research-risk"
+      ],
+      "inputs": {
+        "code": {
+          "kind": "artifact",
+          "name": "research-code.code-findings"
+        },
+        "risk": {
+          "kind": "artifact",
+          "name": "research-risk.risk-findings"
+        }
+      },
+      "outputs": [
+        {
+          "id": "implementation-brief",
+          "kind": "markdown",
+          "max_bytes": 100000
+        }
+      ],
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    },
+    {
+      "id": "bounded-build",
+      "type": "bounded_run",
+      "needs": [
+        "collect-brief"
+      ],
+      "inputs": {
+        "brief": {
+          "kind": "artifact",
+          "name": "collect-brief.implementation-brief"
+        }
+      },
+      "score": "research-build-review",
+      "expected_terminal": "awaiting-certification",
+      "capability_ceiling": [
+        "agent:dispatch",
+        "check:execute",
+        "workspace:write"
+      ],
+      "budgets": {
+        "max_agent_starts": 12,
+        "max_check_starts": 24,
+        "max_wall_seconds": 7200,
+        "max_artifact_bytes": 5000000
+      },
+      "outputs": [
+        {
+          "id": "candidate",
+          "kind": "git-diff",
+          "max_bytes": 2000000
+        }
+      ],
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    },
+    {
+      "id": "verify-candidate",
+      "type": "verdict",
+      "needs": [
+        "bounded-build"
+      ],
+      "role": "verifier",
+      "rubric": "story-quality",
+      "subject": {
+        "kind": "artifact",
+        "name": "bounded-build.candidate"
+      },
+      "freshness_seconds": 3600,
+      "max_rationale_bytes": 30000,
+      "results": [
+        "pass",
+        "fail",
+        "abstain",
+        "inconclusive"
+      ],
+      "routes": {
+        "pass": {
+          "kind": "terminal",
+          "target": "complete"
+        },
+        "fail": {
+          "kind": "action",
+          "target": "block"
+        },
+        "abstain": {
+          "kind": "action",
+          "target": "checkpoint"
+        },
+        "inconclusive": {
+          "kind": "action",
+          "target": "block"
+        }
+      },
+      "outputs": [
+        {
+          "id": "verdict",
+          "kind": "verdict",
+          "max_bytes": 50000
+        }
+      ]
+    }
+  ],
+  "terminals": [
+    {
+      "id": "complete",
+      "meaning": "complete"
+    }
+  ],
+  "layout": {
+    "nodes": {
+      "research-code": {
+        "x": 80,
+        "y": 40
+      },
+      "research-risk": {
+        "x": 80,
+        "y": 220
+      },
+      "collect-brief": {
+        "x": 400,
+        "y": 130
+      },
+      "bounded-build": {
+        "x": 720,
+        "y": 130
+      },
+      "verify-candidate": {
+        "x": 1040,
+        "y": 130
+      }
+    },
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  }
+}

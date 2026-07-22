@@ -137,6 +137,7 @@ A representative program policy is:
       "priority": 10,
       "match": {"phase_from": 26, "phase_through": 26},
       "workflow": "build-verify-integrate",
+      "with": {"story-id": {"kind": "context", "name": "story.id"}},
       "team": "story-cell",
       "rubrics": ["story-quality"]
     },
@@ -145,6 +146,7 @@ A representative program policy is:
       "priority": 100,
       "match": {"phase_from": 27, "phase_through": 27},
       "workflow": "build-verify-integrate",
+      "with": {"story-id": {"kind": "context", "name": "story.id"}},
       "team": "story-cell",
       "rubrics": ["story-quality"]
     }
@@ -348,8 +350,10 @@ also stamp `writes_policy: false`, `writes_roadmap: false`,
 observation are canonical-byte identical. No command creates
 `.git/pmo-programs`, and none accepts a mode, capability, assignment, or route
 override from the caller. Full hierarchical workflow compilation and the
-expanded organization/replacement model remain WLA-26-03 and WLA-26-04,
-respectively.
+expanded organization/replacement model were deliberately separate follow-on
+slices; WLA-26-03 now supplies the workflow bundle/envelope pinned by each
+program binding, while the richer organization/replacement model remains
+WLA-26-04.
 
 ## Hierarchical workflow semantics
 
@@ -417,6 +421,71 @@ unknown node, unhandled verdict, impossible quorum, unsatisfied role,
 non-decreasing loop budget, recursive subflow, ambiguous binding, or workflow
 whose worst case exceeds program policy. “The model will stop” is never a
 finite proof.
+
+### Delivered workflow compiler surface (WLA-26-03)
+
+`dw workflow list|validate|simulate` now owns the reusable workflow registry
+under `pm/workflows/*.json`. An absent registry is a healthy empty inventory;
+all commands are pure and create no policy, run state, grant, process, or work.
+Validation resolves every subflow and explicit `bounded_run` score, while
+simulation emits namespaced hierarchy, symbolic and concrete bounded-round
+addresses, fan-out/fan-in waves, every outcome route, per-node/per-route and
+whole-workflow envelopes, terminal meanings, source provenance, and the exact
+capability consumers.
+
+Parameters use the closed types `string | integer | boolean | string-list` and
+may declare required/default/enum/numeric/byte bounds. A binding is always one
+typed data expression, never interpolation:
+
+```json
+{"kind":"literal","value":"WLA-26-03"}
+{"kind":"parameter","name":"story-id"}
+{"kind":"context","name":"story.id"}
+{"kind":"artifact","name":"research.findings"}
+```
+
+Only node inputs may consume artifact expressions. Program and subflow
+parameters accept literals plus type-compatible declared context/parent
+parameters; they cannot bind artifacts or arbitrary context names. No syntax
+substitutes into a node, id, route, argv, path, capability, bound, provider, or
+workflow reference. The compiler normalizes bound values separately and hashes
+them into the workflow instance bundle.
+
+Every route is exactly `{"kind":"node|terminal|action","target":"..."}`.
+Node routes are forward-only and target `activation: "route"` nodes; general
+dependency and route cycles refuse. `action` targets are closed to
+`block | escalate | checkpoint | abort`. Verdict nodes route every declared
+`pass | fail | abstain | inconclusive` result. Gates route pass, fail, missing,
+and dissent. Checkpoint options are a closed id/label/route set. Success sinks
+and every declared terminal must have a real route, so “fall off the graph” is
+not a terminal meaning.
+
+`subflow` pins `workflow`, semantic `version`, typed `with` bindings, and a
+capability ceiling. A child capability outside that ceiling is
+`capability-smuggling`. `loop` adds a named purpose, explicit `max_rounds`,
+typed `until`, exact carried artifacts, success route, and exhaustion route;
+its body is a separate acyclic subflow. `debate` declares distinct speaker and
+judge roles, round ceiling, quorum, artifact/time bounds, tie/dissent policy,
+and consensus/dissent/exhaustion routes. Missing bounds, reference recursion,
+backward routes, impossible quorum, and a finite envelope above compiler or
+program ceilings refuse before a plan exists.
+
+The conservative worst-case envelope has the closed counters `node_visits`,
+`agent_starts`, `check_starts`, `child_runs`, `loop_rounds`, `debate_rounds`,
+`rail_acts`, `wall_seconds`, and `artifact_bytes`. Program compilation pins one
+workflow bundle per binding and rejects missing requested capabilities or any
+single workflow envelope already larger than the program budget. Layout is
+carried by `document_hash`; it is excluded from source semantic and instance
+bundle hashes.
+
+Three wheel-shipped examples live under
+`pmo-roadmap/templates/workflows/`: `docs-only`, `research-build-verify`, and
+`architect-debate-delivery`. The second embeds the unchanged Phase 24
+`research-build-review` score only through an explicit finite `bounded_run`;
+the third pins nested subflows, a bounded propose→critique→rebut→judge debate,
+and a finite audit loop. Install/update intentionally does not copy these into
+`pm/workflows`: templates become project policy only after an explicit user
+copy/save action, preserving the healthy no-workflow and no-program defaults.
 
 ## Organization, assignment, and separation of duties
 

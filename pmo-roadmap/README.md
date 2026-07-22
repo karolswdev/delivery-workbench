@@ -356,6 +356,14 @@ step. The confirmation shows the token and tokenized argv, sends only
 `project` + `expect`, refreshes on success or stale conflict, and never offers
 controls for certification or commit.
 
+`workflow list|validate|simulate` is the pure reusable-hierarchy surface.
+Tracked templates resolve exact version/hash subflows and explicit bounded
+Phase 24 leaves, reject general cycles and undeclared capability flow, and
+expand typed loop/debate rounds plus every route into finite per-node and
+worst-case envelopes. No `pm/workflows/` directory is a healthy state; the
+three wheel-shipped examples are not copied into project policy by install or
+update.
+
 `program list|validate|simulate|plan` is the optional Phase 26 read surface.
 With no program configured, `list` returns a healthy empty inventory and
 creates nothing. Validation resolves the tracked program, workflow,
