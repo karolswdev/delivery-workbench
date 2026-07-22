@@ -330,6 +330,27 @@ optional council/meta-verifier/architect policy, requested acts, and the reason
 for every excluded candidate. Repeating at one observation time is
 byte-equivalent and creates no state.
 
+### Delivered pure planning surface (WLA-26-02)
+
+`dw program list|validate|simulate|plan` now implements this read boundary.
+`list` treats an absent `pm/programs/` directory as a healthy empty inventory.
+`validate` closes program keys, references, scope, budgets, bindings, minimum
+organization/team shape, and ambiguous equal-priority matches. `simulate`
+returns every candidate reason plus the selected workflow/team/role derivation.
+`plan` additionally binds repository root/branch/HEAD/index/operation, roadmap
+health and file snapshot, policy/reference hashes, local driver-roster
+capabilities, stable role assignments, verifier separation, and phase-gate
+policy.
+
+All four documents explicitly stamp `starts_work: false`; the planning forms
+also stamp `writes_policy: false`, `writes_roadmap: false`,
+`writes_run_state: false`, and `creates_grant: false`. Repeated plans at one
+observation are canonical-byte identical. No command creates
+`.git/pmo-programs`, and none accepts a mode, capability, assignment, or route
+override from the caller. Full hierarchical workflow compilation and the
+expanded organization/replacement model remain WLA-26-03 and WLA-26-04,
+respectively.
+
 ## Hierarchical workflow semantics
 
 ### Closed node types

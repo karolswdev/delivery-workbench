@@ -8878,6 +8878,542 @@ class ProgramContractTest(unittest.TestCase):
             self.assertIn(threat, section)
 
 
+class ProgramPlannerTest(unittest.TestCase):
+    """WLA-26-02: pure multi-phase program compilation and selection."""
+
+    def setUp(self):
+        import dw_pmo.programs as programs
+        from dw_pmo.orchestration_driver import write_driver_config
+
+        self.programs_core = programs
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-program-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.root.mkdir()
+        self._git("init", "-q", "-b", "main")
+        self._git("config", "user.name", "Program Fixture")
+        self._git("config", "user.email", "program@example.test")
+        self._write_roadmap()
+        self._write_policy_family()
+        self._git("add", ".")
+        self._git("commit", "-qm", "fixture")
+        self.driver_config = write_driver_config(self.root, {
+            "kind": "delivery-workbench-driver-config",
+            "schema_version": 1,
+            "workspace_root": None,
+            "profiles": {
+                "builder-a": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read", "repository-write"],
+                    "workspace_modes": ["isolated-worktree"],
+                },
+                "builder-b": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read", "repository-write"],
+                    "workspace_modes": ["isolated-worktree"],
+                },
+                "verifier-a": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read"],
+                    "workspace_modes": ["read-only"],
+                },
+                "meta-a": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read"],
+                    "workspace_modes": ["read-only"],
+                },
+                "architect-a": {
+                    "adapter": "fixture",
+                    "capabilities": ["repository-read"],
+                    "workspace_modes": ["read-only"],
+                },
+            },
+        })
+
+    def _git(self, *args):
+        return subprocess.run(
+            ["git", "-C", str(self.root), *args],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def _write(self, relative, content):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def _story(self, story_id, title, status, depends="none"):
+        return (
+            f"# {story_id} - {title}\n\n"
+            "- **Project:** demo\n"
+            f"- **Phase:** {story_id.split('-')[1]}\n"
+            f"- **Status:** {status}\n"
+            f"- **Depends on:** {depends}\n"
+            "- **Owner:** unassigned\n\n"
+            "## Problem\n\nFixture story.\n"
+        )
+
+    def _write_roadmap(self):
+        project = Path("pm/roadmap/demo")
+        self._write(project / "README.md", """# Demo - Roadmap
+
+**Last updated:** 2026-07-22.
+**Current phase:** [Phase 1 - Alpha](./phase-1-alpha/current-phase-status.md).
+**Status:** active.
+
+## Phase index
+
+| Phase | Goal (one line) | Status | Folder |
+|---|---|---|---|
+| 1 | Alpha | in-progress | [phase-1-alpha](./phase-1-alpha/) |
+| 2 | Beta | planned | [phase-2-beta](./phase-2-beta/) |
+
+## Project metadata
+
+- **Slug:** `demo`
+- **Story ID prefix:** DM
+""")
+        phase1 = project / "phase-1-alpha"
+        phase2 = project / "phase-2-beta"
+        self._write(phase1 / "current-phase-status.md", """# Phase 1 - Alpha
+
+**Last updated:** 2026-07-22.
+
+## Story status
+
+| ID | Story | Status | Story file | Evidence |
+|---|---|---|---|---|
+| DM-1-01 | Foundation | done | [story-01-foundation](./story-01-foundation.md) | [evidence-story-01](./evidence-story-01.md) |
+| DM-1-02 | Active build | in-progress | [story-02-active-build](./story-02-active-build.md) | - |
+| DM-1-03 | Parked experiment | on-hold (later) | [story-03-parked-experiment](./story-03-parked-experiment.md) | - |
+""")
+        self._write(phase2 / "current-phase-status.md", """# Phase 2 - Beta
+
+**Last updated:** 2026-07-22.
+
+## Story status
+
+| ID | Story | Status | Story file | Evidence |
+|---|---|---|---|---|
+| DM-2-01 | Dependent beta | backlog | [story-01-dependent-beta](./story-01-dependent-beta.md) | - |
+| DM-2-02 | Blocked beta | blocked (external fixture) | [story-02-blocked-beta](./story-02-blocked-beta.md) | - |
+""")
+        self._write(
+            phase1 / "story-01-foundation.md",
+            self._story("DM-1-01", "Foundation", "done"),
+        )
+        self._write(
+            phase1 / "story-02-active-build.md",
+            self._story("DM-1-02", "Active build", "in-progress", "DM-1-01"),
+        )
+        self._write(
+            phase1 / "story-03-parked-experiment.md",
+            self._story("DM-1-03", "Parked experiment", "on-hold", "DM-1-02"),
+        )
+        self._write(
+            phase2 / "story-01-dependent-beta.md",
+            self._story("DM-2-01", "Dependent beta", "backlog", "DM-1-02"),
+        )
+        self._write(
+            phase2 / "story-02-blocked-beta.md",
+            self._story("DM-2-02", "Blocked beta", "blocked", "DM-2-01"),
+        )
+        self._write(phase1 / "evidence-story-01.md", """# Evidence - DM-1-01
+
+- **Story:** DM-1-01 - Foundation
+- **Status:** done
+- **Date:** 2026-07-22
+
+## Proof
+
+- fixture proof
+""")
+
+    def _write_json(self, relative, value):
+        return self._write(relative, json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+    def _write_policy_family(self):
+        for slug in ("story-work",):
+            self._write_json(f"pm/workflows/{slug}.json", {
+                "kind": "delivery-workbench-workflow",
+                "schema_version": 1,
+                "slug": slug,
+                "title": "Story work",
+                "version": "1.0.0",
+                "nodes": [],
+            })
+        for slug in ("story-quality", "phase-architecture"):
+            self._write_json(f"pm/rubrics/{slug}.json", {
+                "kind": "delivery-workbench-rubric",
+                "schema_version": 1,
+                "slug": slug,
+                "title": slug.replace("-", " ").title(),
+                "version": "1.0.0",
+                "criteria": [],
+            })
+        self._write_json("pm/organizations/delivery-core.json", {
+            "kind": "delivery-workbench-organization",
+            "schema_version": 1,
+            "slug": "delivery-core",
+            "title": "Delivery core",
+            "agents": [
+                {"id": "builder-a", "profile": "builder-a", "duties": ["implementer", "repairer"], "workspace_domain": "builder-a", "weight": 1},
+                {"id": "builder-b", "profile": "builder-b", "duties": ["implementer", "repairer"], "workspace_domain": "builder-b", "weight": 1},
+                {"id": "verifier-a", "profile": "verifier-a", "duties": ["verifier", "judge"], "workspace_domain": "verifier-a", "weight": 1},
+                {"id": "meta-a", "profile": "meta-a", "duties": ["meta-verifier"], "workspace_domain": "meta-a", "weight": 1},
+                {"id": "architect-a", "profile": "architect-a", "duties": ["master-architect"], "workspace_domain": "architect-a", "weight": 1},
+            ],
+            "pools": [
+                {"id": "builders", "agents": ["builder-a", "builder-b"]},
+                {"id": "verifiers", "agents": ["verifier-a"]},
+                {"id": "auditors", "agents": ["meta-a"]},
+                {"id": "architects", "agents": ["architect-a"]},
+            ],
+            "teams": [{
+                "id": "story-cell",
+                "roles": [
+                    {"id": "implementer", "duty": "implementer", "pool": "builders", "required": True, "independent_from": []},
+                    {"id": "verifier", "duty": "verifier", "pool": "verifiers", "required": True, "independent_from": ["implementer"]},
+                    {"id": "meta", "duty": "meta-verifier", "pool": "auditors", "required": False, "independent_from": ["implementer", "verifier"]},
+                    {"id": "architect", "duty": "master-architect", "pool": "architects", "required": False, "independent_from": ["implementer", "verifier"]},
+                ],
+            }],
+            "councils": [{
+                "id": "quality-council",
+                "members": ["verifier", "meta"],
+                "judge": "verifier",
+                "quorum": 1,
+                "meta_verifier": "meta",
+            }],
+        })
+        self.program = {
+            "kind": "delivery-workbench-program",
+            "schema_version": 1,
+            "slug": "demo-program",
+            "title": "Demo program",
+            "scope": {
+                "project": "demo",
+                "phases": {"from": 1, "through": 2},
+                "stories": {"include": ["DM-1-01", "DM-1-02", "DM-2-01"]},
+                "selection": "roadmap-frontier-v1",
+                "blocked_policy": "stop",
+            },
+            "organization": "delivery-core",
+            "bindings": [
+                {"id": "alpha", "priority": 10, "match": {"phase_from": 1, "phase_through": 1}, "workflow": "story-work", "team": "story-cell", "rubrics": ["story-quality"]},
+                {"id": "beta", "priority": 20, "match": {"phase_from": 2, "phase_through": 2}, "workflow": "story-work", "team": "story-cell", "rubrics": ["story-quality"]},
+            ],
+            "phase_gates": [{
+                "id": "architecture-gate",
+                "when": "before-phase-complete",
+                "role": "master-architect",
+                "rubric": "phase-architecture",
+                "on_fail": "block",
+            }],
+            "mode_ceiling": "continuous",
+            "requested_capabilities": ["agent:dispatch", "check:execute"],
+            "budgets": {"max_phases": 2, "max_stories": 3},
+            "stop_conditions": ["scope-complete", "blocked-frontier", "budget-exhausted"],
+        }
+        self.program_path = self._write_json(
+            "pm/programs/demo-program.json", self.program
+        )
+
+    @staticmethod
+    def codes(document):
+        return {item["code"] for item in document["diagnostics"]}
+
+    def _set_story_status(self, story_id, old, new):
+        phase = int(story_id.split("-")[1])
+        phase_path = (
+            self.root / "pm/roadmap/demo" /
+            ("phase-1-alpha" if phase == 1 else "phase-2-beta")
+        )
+        status_path = phase_path / "current-phase-status.md"
+        text = status_path.read_text(encoding="utf-8")
+        line = next(line for line in text.splitlines() if f"| {story_id} |" in line)
+        status_path.write_text(text.replace(line, line.replace(f"| {old} |", f"| {new} |")), encoding="utf-8")
+        story_file = next(path for path in phase_path.glob("story-*.md") if story_id in path.read_text(encoding="utf-8").splitlines()[0])
+        story_file.write_text(
+            story_file.read_text(encoding="utf-8").replace(
+                f"- **Status:** {old}\n", f"- **Status:** {new}\n"
+            ),
+            encoding="utf-8",
+        )
+
+    def cli(self, *args):
+        return subprocess.run(
+            [sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+             "--root", str(self.root), "program", *args],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    def test_program_compiles_policy_references_scope_and_hashes(self):
+        core = self.programs_core
+        compiled = core.compile_program_path(self.root, self.program_path)
+        self.assertEqual(compiled["kind"], core.COMPILED_KIND)
+        self.assertRegex(compiled["semantic_hash"], r"^sha256:[0-9a-f]{64}$")
+        self.assertRegex(compiled["policy_bundle_hash"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual(compiled["program"]["scope"]["phases"], [1, 2])
+        self.assertEqual(compiled["analysis"]["binding_by_story"]["DM-1-02"], "alpha")
+        self.assertIn("story-work", compiled["references"]["workflows"])
+        self.assertIn("story-quality", compiled["references"]["rubrics"])
+        self.assertEqual(compiled["references"]["organization"]["slug"], "delivery-core")
+        self.assertRegex(
+            compiled["references"]["organization"]["document_hash"],
+            r"^sha256:[0-9a-f]{64}$",
+        )
+        self.assertEqual(
+            compiled["reference_hashes"]["workflows"]["story-work"],
+            compiled["references"]["workflows"]["story-work"]["semantic_hash"],
+        )
+
+    def test_layout_changes_document_hashes_but_not_program_authority(self):
+        core = self.programs_core
+        baseline = core.compile_program(self.root, self.program)
+        with_layout = json.loads(json.dumps(self.program))
+        with_layout["layout"] = {"viewport": {"x": 12, "y": 30}}
+        for relative in (
+            "pm/workflows/story-work.json",
+            "pm/organizations/delivery-core.json",
+            "pm/rubrics/story-quality.json",
+        ):
+            path = self.root / relative
+            document = json.loads(path.read_text(encoding="utf-8"))
+            document["layout"] = {"nodes": {"fixture": {"x": 10, "y": 20}}}
+            self._write_json(relative, document)
+        moved = core.compile_program(self.root, with_layout)
+        self.assertEqual(baseline["semantic_hash"], moved["semantic_hash"])
+        self.assertEqual(baseline["policy_bundle_hash"], moved["policy_bundle_hash"])
+        self.assertEqual(baseline["reference_hashes"], moved["reference_hashes"])
+        self.assertNotEqual(baseline["document_hash"], moved["document_hash"])
+        self.assertNotEqual(
+            baseline["references"]["workflows"]["story-work"]["document_hash"],
+            moved["references"]["workflows"]["story-work"]["document_hash"],
+        )
+
+    def test_planner_resumes_active_story_and_assigns_independent_verifier(self):
+        core = self.programs_core
+        plan = core.build_program_plan(self.root, "demo-program")
+        self.assertTrue(plan["applicable"], plan["issues"])
+        self.assertEqual(plan["selection"]["story"], "DM-1-02")
+        self.assertEqual(plan["selection"]["reason"], "resume-in-progress")
+        self.assertEqual(plan["selection"]["workflow"]["slug"], "story-work")
+        self.assertEqual(plan["selection"]["workflow"]["version"], "1.0.0")
+        self.assertEqual(plan["selection"]["rubrics"][0]["version"], "1.0.0")
+        self.assertEqual(
+            plan["program"]["requested_capabilities"],
+            ["agent:dispatch", "check:execute"],
+        )
+        self.assertIn("organization", plan["program"]["reference_hashes"])
+        assignment = plan["assignment"]
+        self.assertEqual(assignment["team"], "story-cell")
+        self.assertNotEqual(
+            assignment["implementer"]["profile"], assignment["verifier"]["profile"]
+        )
+        self.assertNotEqual(
+            assignment["implementer"]["workspace_domain"],
+            assignment["verifier"]["workspace_domain"],
+        )
+        self.assertIsNotNone(assignment["meta_verifier"])
+        self.assertIsNotNone(assignment["master_architect"])
+        reasons = {item["story"]: item["reason"] for item in plan["candidates"]}
+        self.assertEqual(reasons["DM-1-01"], "already-done")
+        self.assertEqual(reasons["DM-1-03"], "out-of-scope")
+        self.assertEqual(reasons["DM-2-01"], "dependency-incomplete")
+        self.assertEqual(reasons["DM-2-02"], "out-of-scope")
+
+    def test_after_active_completion_planner_advances_stably_to_next_phase(self):
+        core = self.programs_core
+        self._set_story_status("DM-1-02", "in-progress", "done")
+        phase1 = self.root / "pm/roadmap/demo/phase-1-alpha"
+        self._write(phase1 / "evidence-story-02.md", """# Evidence - DM-1-02
+
+- **Story:** DM-1-02 - Active build
+- **Status:** done
+- **Date:** 2026-07-22
+
+## Proof
+
+- fixture proof
+""")
+        status_path = phase1 / "current-phase-status.md"
+        text = status_path.read_text(encoding="utf-8")
+        text = text.replace(
+            "| DM-1-02 | Active build | done | [story-02-active-build](./story-02-active-build.md) | - |",
+            "| DM-1-02 | Active build | done | [story-02-active-build](./story-02-active-build.md) | [evidence-story-02](./evidence-story-02.md) |",
+        )
+        status_path.write_text(text, encoding="utf-8")
+        plan = core.build_program_plan(self.root, "demo-program")
+        self.assertTrue(plan["applicable"], plan["issues"])
+        self.assertEqual(plan["selection"]["story"], "DM-2-01")
+        self.assertEqual(plan["selection"]["reason"], "selected")
+        self.assertEqual(plan["selection"]["binding"], "beta")
+
+    def test_dependency_hold_block_pause_and_out_of_scope_reasons_are_distinct(self):
+        core = self.programs_core
+        program = json.loads(json.dumps(self.program))
+        program["scope"]["stories"] = "all"
+        program["budgets"]["max_stories"] = 5
+        validation = core.validate_program(self.root, program)
+        self.assertTrue(validation["valid"], validation["diagnostics"])
+        plan = core.build_program_plan(self.root, program)
+        reasons = {item["story"]: item["reason"] for item in plan["candidates"]}
+        self.assertEqual(reasons["DM-1-03"], "story-held")
+        self.assertEqual(reasons["DM-2-01"], "dependency-incomplete")
+        self.assertEqual(reasons["DM-2-02"], "story-blocked")
+
+        phase1 = self.root / "pm/roadmap/demo/phase-1-alpha/current-phase-status.md"
+        phase1.write_text(
+            phase1.read_text(encoding="utf-8").replace(
+                "**Last updated:** 2026-07-22.",
+                "**Last updated:** 2026-07-22.\n\n**Status:** paused (fixture)",
+            ),
+            encoding="utf-8",
+        )
+        paused = core.build_program_plan(self.root, program)
+        paused_reasons = {item["story"]: item["reason"] for item in paused["candidates"]}
+        self.assertEqual(paused_reasons["DM-1-02"], "phase-paused")
+        self.assertIn("frontier-blocked", {item["code"] for item in paused["issues"]})
+
+    def test_unknown_keys_duplicate_ids_ranges_and_ambiguous_rules_refuse(self):
+        core = self.programs_core
+        broken = json.loads(json.dumps(self.program))
+        broken["surprise"] = True
+        broken["scope"]["phases"] = {"from": 3, "through": 1}
+        broken["bindings"].append(dict(broken["bindings"][0]))
+        validation = core.validate_program(self.root, broken)
+        self.assertFalse(validation["valid"])
+        self.assertTrue(
+            {"unknown-key", "invalid-phase-range", "duplicate-id"}
+            <= self.codes(validation),
+            validation["diagnostics"],
+        )
+
+        ambiguous = json.loads(json.dumps(self.program))
+        duplicate = dict(ambiguous["bindings"][0])
+        duplicate["id"] = "alpha-peer"
+        ambiguous["bindings"].append(duplicate)
+        validation = core.validate_program(self.root, ambiguous)
+        self.assertIn("binding-ambiguous", self.codes(validation))
+
+    def test_dangling_workflow_team_role_and_rubric_references_refuse(self):
+        core = self.programs_core
+        broken = json.loads(json.dumps(self.program))
+        broken["bindings"][0]["workflow"] = "missing-flow"
+        broken["bindings"][0]["team"] = "missing-team"
+        broken["bindings"][0]["rubrics"] = ["missing-rubric"]
+        broken["phase_gates"][0]["role"] = "missing-role"
+        validation = core.validate_program(self.root, broken)
+        self.assertTrue(
+            {
+                "dangling-workflow-reference",
+                "dangling-role-reference",
+                "dangling-rubric-reference",
+            } <= self.codes(validation),
+            validation["diagnostics"],
+        )
+
+    def test_organization_requires_delivery_roles_and_resolved_council_roles(self):
+        core = self.programs_core
+        path = self.root / "pm/organizations/delivery-core.json"
+        organization = json.loads(path.read_text(encoding="utf-8"))
+        organization["teams"][0]["roles"][1]["required"] = False
+        organization["councils"][0]["judge"] = "missing-judge"
+        organization["councils"][0]["meta_verifier"] = "verifier"
+        self._write_json("pm/organizations/delivery-core.json", organization)
+        validation = core.validate_program(self.root, self.program)
+        self.assertFalse(validation["valid"])
+        self.assertTrue(
+            {"missing-separation", "dangling-role-reference"}
+            <= self.codes(validation),
+            validation["diagnostics"],
+        )
+
+    def test_unsupported_roadmap_status_and_empty_scope_refuse(self):
+        core = self.programs_core
+        self._set_story_status("DM-1-02", "in-progress", "mysterious")
+        validation = core.validate_program(self.root, self.program)
+        self.assertIn("unsupported-status", self.codes(validation))
+
+        empty = json.loads(json.dumps(self.program))
+        empty["scope"]["stories"] = {"include": ["DM-9-99"]}
+        validation = core.validate_program(self.root, empty)
+        self.assertTrue(
+            {"scope-story-missing", "empty-scope"} <= self.codes(validation),
+            validation["diagnostics"],
+        )
+
+    def test_multiple_active_and_exhausted_scope_are_explained_without_guessing(self):
+        core = self.programs_core
+        self._set_story_status("DM-2-01", "backlog", "in-progress")
+        multiple = core.build_program_plan(self.root, "demo-program")
+        self.assertFalse(multiple["applicable"])
+        self.assertIn("multiple-active-stories", {item["code"] for item in multiple["issues"]})
+        self.assertEqual(
+            {item["reason"] for item in multiple["candidates"] if item["story"] in {"DM-1-02", "DM-2-01"}},
+            {"already-active"},
+        )
+
+        exhausted = json.loads(json.dumps(self.program))
+        exhausted["scope"]["stories"] = {"include": ["DM-1-01"]}
+        exhausted_plan = core.build_program_plan(self.root, exhausted)
+        self.assertFalse(exhausted_plan["applicable"])
+        self.assertIsNone(exhausted_plan["selection"])
+        self.assertIn("scope-complete", {item["code"] for item in exhausted_plan["issues"]})
+
+    def test_plan_is_byte_stable_and_creates_no_policy_roadmap_run_or_grant_state(self):
+        core = self.programs_core
+        before = {
+            str(path.relative_to(self.root)): path.read_bytes()
+            for path in self.root.rglob("*") if path.is_file()
+        }
+        first = core.build_program_plan(self.root, "demo-program")
+        second = core.build_program_plan(self.root, "demo-program")
+        after = {
+            str(path.relative_to(self.root)): path.read_bytes()
+            for path in self.root.rglob("*") if path.is_file()
+        }
+        self.assertEqual(core.canonical_json(first), core.canonical_json(second))
+        self.assertEqual(before, after)
+        self.assertFalse(first["starts_work"])
+        self.assertFalse(first["writes_policy"])
+        self.assertFalse(first["writes_roadmap"])
+        self.assertFalse(first["writes_run_state"])
+        self.assertFalse(first["creates_grant"])
+        self.assertFalse((self.root / ".git/pmo-programs").exists())
+
+    def test_cli_validate_simulate_plan_and_empty_inventory_share_core(self):
+        core = self.programs_core
+        listed = self.cli("list", "--json")
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertEqual(json.loads(listed.stdout), core.program_inventory(self.root))
+        valid = self.cli("validate", "demo-program", "--json")
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        self.assertEqual(
+            json.loads(valid.stdout), core.validate_program_path(self.root, self.program_path)
+        )
+        simulation = self.cli("simulate", "demo-program", "--json")
+        self.assertEqual(simulation.returncode, 0, simulation.stderr)
+        self.assertEqual(json.loads(simulation.stdout), core.simulate_program(self.root, "demo-program"))
+        plan = self.cli("plan", "demo-program", "--json")
+        self.assertEqual(plan.returncode, 0, plan.stderr)
+        self.assertEqual(json.loads(plan.stdout), core.build_program_plan(self.root, "demo-program"))
+
+        empty_root = self.tmp / "empty"
+        empty_root.mkdir()
+        before = list(empty_root.rglob("*"))
+        inventory = core.program_inventory(empty_root)
+        self.assertEqual(inventory["programs"], [])
+        self.assertTrue(inventory["healthy"])
+        self.assertEqual(before, list(empty_root.rglob("*")))
+
+
 class SignalsTest(unittest.TestCase):
     """WLA-25-02: the authority-free SCM observer (docs/signals.md)."""
 

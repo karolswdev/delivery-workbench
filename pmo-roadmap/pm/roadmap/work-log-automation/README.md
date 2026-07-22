@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-22 (Phase 26 open 1/12: the optional autonomous-program trust contract is evidence-backed; WLA-26-02 is implementing pure multi-phase selection).
-**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (1/12).
-**Status:** WLA-26-01 is done without changing vanilla or bounded-run defaults; the pure program compiler/planner is in progress.
+**Last updated:** 2026-07-22 (Phase 26 open 2/12: the optional contract and pure multi-phase compiler/planner are evidence-backed; WLA-26-03 is compiling reusable bounded hierarchy).
+**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (2/12).
+**Status:** Vanilla and bounded-run defaults remain unchanged; pure deterministic program selection is shipped, and hierarchical workflow compilation is in progress.
 
 ## Vision
 

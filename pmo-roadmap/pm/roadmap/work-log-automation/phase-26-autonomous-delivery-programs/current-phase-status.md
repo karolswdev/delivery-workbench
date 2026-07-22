@@ -44,7 +44,7 @@ roadmap-advancement acts.
   loop semantics, verdict taxonomy, event/refusal vocabulary, and threat table
   before runtime work begins, while pinning vanilla and Phase 24/25 bounded
   orchestration as behavior-compatible independent usage modes (WLA-26-01).
-- [ ] A pure planner explains every candidate and deterministically assigns the
+- [x] A pure planner explains every candidate and deterministically assigns the
   next eligible story, workflow, implementer, independent verifier, optional
   council/meta-verifier, and architect policy across the granted roadmap scope
   while starting and writing nothing (WLA-26-02).
@@ -98,8 +98,8 @@ roadmap-advancement acts.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-26-01 | Contract autonomous delivery programs and trust | done | [story-01-contract-autonomous-delivery-programs-and-trust](./story-01-contract-autonomous-delivery-programs-and-trust.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-26-02 | Select work across a governed roadmap scope | in-progress | [story-02-select-work-across-a-governed-roadmap-scope](./story-02-select-work-across-a-governed-roadmap-scope.md) | - |
-| WLA-26-03 | Compile reusable hierarchical workflows and bounded loops | backlog | [story-03-compile-reusable-hierarchical-workflows-and-bounded-loops](./story-03-compile-reusable-hierarchical-workflows-and-bounded-loops.md) | - |
+| WLA-26-02 | Select work across a governed roadmap scope | done | [story-02-select-work-across-a-governed-roadmap-scope](./story-02-select-work-across-a-governed-roadmap-scope.md) | [evidence-story-02](./evidence-story-02.md) |
+| WLA-26-03 | Compile reusable hierarchical workflows and bounded loops | in-progress | [story-03-compile-reusable-hierarchical-workflows-and-bounded-loops](./story-03-compile-reusable-hierarchical-workflows-and-bounded-loops.md) | - |
 | WLA-26-04 | Model agent roles, teams, and separation of duties | backlog | [story-04-model-agent-roles-teams-and-separation-of-duties](./story-04-model-agent-roles-teams-and-separation-of-duties.md) | - |
 | WLA-26-05 | Run debates, councils, and meta-verification | backlog | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | - |
 | WLA-26-06 | Build the visual program and workflow studio | backlog | [story-06-build-the-visual-program-and-workflow-studio](./story-06-build-the-visual-program-and-workflow-studio.md) | - |
@@ -112,16 +112,19 @@ roadmap-advancement acts.
 
 ## Where we are
 
-Phase open 1/12. WLA-26-01 is done: `docs/programs.md` freezes the optional
-capability ladder; separate program/workflow/organization/rubric kinds; pure
-multi-phase frontier selection; typed finite subflow/loop/debate semantics;
-principal-level implementer/verifier separation; mechanical, agent, council,
-and meta verdict types; fifteen independent capabilities; finite program
-grants/budgets; replay/claim/integration rails; thirty-two refusal codes; and a
-twenty-three-row-plus threat matrix. Six structural tests pin the trust
-boundaries, and the captured matrix is green at 344/344 on both Python floors.
-WLA-26-02 is in progress: implement the pure program compiler and explainable
-roadmap-scope planner without creating policy, state, grants, or work.
+Phase open 2/12. WLA-26-01 froze the optional capability/trust contract.
+WLA-26-02 is done: the closed program compiler and deterministic
+`roadmap-frontier-v1` planner resolve tracked policy references, explicit
+multi-phase scope, stable bindings, workflow/rubric versions, and the local
+driver roster; resume the only eligible active story or select the earliest
+eligible scoped frontier; assign a required writer and independent read-only
+verifier plus optional meta/architect/council roles; explain every included or
+excluded candidate; and bind Git/roadmap/policy/roster hashes while explicitly
+starting and writing nothing. Layout-only changes alter document hashes but
+not program authority. Twelve planner tests plus six contract tests are green,
+and the captured full matrix passed 356/356 on both Python floors and the fresh
+wheel. WLA-26-03 is in progress: compile reusable hierarchy and statically
+bounded subflow, fan-out, repair, review, debate, audit, and escalation loops.
 
 ## Active risks
 
@@ -156,6 +159,18 @@ roadmap-scope planner without creating policy, state, grants, or work.
   active scoped work, otherwise take the earliest eligible scoped phase/story,
   and stop rather than silently skip held, failed, vetoed, or dissenting work -
   WLA-26-01.
+- 2026-07-22 - Make an absent `pm/programs/` directory a healthy empty
+  inventory and keep all program list/validate/simulate/plan documents pure -
+  the autonomous layer remains discoverable without becoming ambient setup or
+  authority - WLA-26-02.
+- 2026-07-22 - Resolve logical team slots against the local driver roster with
+  stable hash ranking, require implementer and independent verifier slots, and
+  refuse a verifier profile that can write the repository - assignment policy
+  cannot weaken separation at plan time - WLA-26-02.
+- 2026-07-22 - Give every policy source separate document and semantic hashes;
+  editor layout changes the former but not the executable bundle or assignment
+  authority - visual authoring cannot invalidate or expand a program merely by
+  moving nodes - WLA-26-02.
 - 2026-07-22 - Treat capabilities as independent granted bits with explicit
   prerequisites, not implication shortcuts; agent dispatch never inherits
   evidence, integration, certification, Git, or roadmap authority - WLA-26-01.
