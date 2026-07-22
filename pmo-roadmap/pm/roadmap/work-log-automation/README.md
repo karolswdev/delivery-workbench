@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-22 (Phase 25 closed 9/9 with the fresh-wheel outward loop proven; Phase 26 open 0/12 and WLA-26-01 contracting the autonomous delivery organization).
-**Current phase:** [Phase 26 - The autonomous delivery organization](./phase-26-autonomous-delivery-programs/) (0/12).
-**Status:** complete through Phase 25 — bounded orchestration plus outward signals/nudges/typed decisions are evidence-backed; Phase 26 is contracted and in progress.
+**Last updated:** 2026-07-22 (Phase 25 closed 9/9 with the fresh-wheel outward loop proven; Phase 26 open 0/12 and WLA-26-01 contracting optional autonomous delivery programs without changing vanilla usage).
+**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (0/12).
+**Status:** complete through Phase 25 — vanilla Delivery Workbench remains the default and bounded orchestration is an independent opt-in; Phase 26's additional program layer is contracted and in progress.
 
 ## Vision
 
@@ -86,6 +86,11 @@ summarization can improve those entries after the lifecycle is proven.
   bounded debate corners, verifier-of-verifier audits, master architects,
   review/repair/escalation loops, and policy-authorized integration/roadmap
   advancement with no required human act after the continuous program grant.
+- User clarification, 2026-07-22: autonomy is an optional capability, not a
+  redefinition of Delivery Workbench. The complete vanilla product remains a
+  first-class way to work, Phase 24/25 bounded orchestration remains an
+  independent opt-in, and only an explicit program policy plus a separate
+  program grant activates the Phase 26 layer.
 - Comparative study (sidequest), 2026-07-19: ogulcancelik/herdr and its
   plugin ecosystem — declarative screen-state manifests with auditable
   `agent explain` derivation (strict blocked-detection, detection firewalled
@@ -95,18 +100,25 @@ summarization can improve those entries after the lifecycle is proven.
   zero-SDK "CLI is the plugin API" ecosystem flywheel — candidate phase-26
   material recorded in the Phase 25 status.
 
-## Current product phase: the autonomous delivery organization
+## Current phase: an optional autonomous delivery capability
 
-Phase 26 builds the program conductor above individual orchestration runs. A
-program scopes multiple roadmap phases/stories, deterministically assigns the
-next eligible work to a reusable hierarchical workflow and specialist team,
-obtains only the declared grant, and conducts the whole organization. Every
-autonomously completed story has a specific independent verifier; policy may
-add research cells, critics, debate councils, judges, meta-verifiers, master
-architects, and finite review/repair/escalation loops. Mechanical receipts and
-agent judgments remain different evidence types, but an explicitly authorized
-rubric/quorum/meta-review policy may let governed verifier verdicts advance the
-program.
+Vanilla Delivery Workbench remains the complete evidence-first product: people
+and agents can inspect roadmaps, choose work, maintain stories, collect proof,
+apply one deliberate step, use the gate, and operate the Workbench without any
+score, run, program, or grant. Phase 24/25 bounded orchestration remains a
+separate optional capability for one exact score and run grant; it is not
+silently wrapped in a program.
+
+When explicitly configured and granted, Phase 26 adds a program conductor
+above individual orchestration runs. A program scopes multiple roadmap
+phases/stories, deterministically assigns the next eligible work to a reusable
+hierarchical workflow and specialist team, obtains only the declared grant,
+and conducts the whole organization. Every autonomously completed story has a
+specific independent verifier; policy may add research cells, critics, debate
+councils, judges, meta-verifiers, master architects, and finite review/repair/
+escalation loops. Mechanical receipts and agent judgments remain different
+evidence types, but an explicitly authorized rubric/quorum/meta-review policy
+may let governed verifier verdicts advance the program.
 
 The operator chooses an autonomy mode — **advisory** (preview every move),
 **checkpointed** (run freely between named decision ports), or **continuous**
@@ -119,6 +131,24 @@ Phase 26. The visual studio and lossless configuration files must expose the
 same roadmap scope, workflow/subflow graph, role topology, verifier separation,
 debate/quorum rules, verdict rubrics, loop ceilings, gates, authority, budgets,
 stop conditions, and optional human checkpoints before the program starts.
+
+The product therefore has a progressive, opt-in capability ladder:
+
+1. **Vanilla:** roadmap, evidence, briefing, deliberate step, gate, and
+   Workbench flows with no orchestration state or setup.
+2. **Bounded orchestration:** one Phase 24/25 score plus one finite run grant,
+   with a terminal handoff and no program implied.
+3. **Program advisory:** multi-story planning and simulation without dispatch
+   or mutation.
+4. **Program checkpointed:** autonomous work only between named decision ports.
+5. **Program continuous:** autonomous advancement inside one explicit, finite,
+   revocable program grant.
+
+These are capabilities, not migrations. Installing or updating Delivery
+Workbench never selects a higher tier, creates program state, starts a process
+or observer, performs network activity, or makes program setup mandatory. No
+program configuration is ordinary healthy state, and the established `status`,
+`next`, `step`, `gate`, and Workbench front-door behavior remains compatible.
 
 ## Phase index
 
@@ -150,7 +180,7 @@ stop conditions, and optional human checkpoints before the program starts.
 | 23 | Let a human or agent deliberately apply exactly one current, allowlisted recommendation without copy/paste, stale intent, arbitrary execution, certification, or commit automation. | done | [phase-23-deliberate-step](./phase-23-deliberate-step/) |
 | 24 | Delivery Workbench can coordinate a bounded multi-agent run from an exact visually authored score and revocable grant: research, dependencies, context, outputs, checks, failures, budgets, recovery, and human checkpoints. | done | [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/) |
 | 25 | Delivery Workbench hears the world outside the run — CI, reviews, merge state, agent activity — records it as durable facts, and under an explicit grant nudges the right agent back to work: observed, bounded, ledgered, revocable. | done | [phase-25-outward-signals](./phase-25-outward-signals/) |
-| 26 | Delivery Workbench can run a governed autonomous delivery organization across an explicit roadmap scope: visually or declaratively authored hierarchical workflows assign specialist implementers, independent verifiers, verifier-of-verifier and master-architect roles; bounded debate, review, repair, and escalation loops drive each story and phase; and a finite revocable program grant permits only the declared quality, integration, and roadmap-advancement acts. | in-progress | [phase-26-autonomous-delivery-programs](./phase-26-autonomous-delivery-programs/) |
+| 26 | Delivery Workbench optionally adds governed autonomous delivery programs across an explicit roadmap scope—without changing vanilla or bounded-run usage—with hierarchical workflows, independent verification, advanced bounded loops, and only the quality, integration, and roadmap acts named by a finite revocable program grant. | in-progress | [phase-26-autonomous-delivery-programs](./phase-26-autonomous-delivery-programs/) |
 
 ## Operating cadence
 

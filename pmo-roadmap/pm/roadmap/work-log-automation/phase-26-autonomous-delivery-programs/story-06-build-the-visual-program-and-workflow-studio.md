@@ -16,6 +16,10 @@ roadmap scope, roles, nested workflows, loops, gates, councils, budgets, and
 authority legible without creating a second policy engine. Advanced constructs
 need direct-manipulation affordances, not a JSON-only escape hatch.
 
+Program Studio is an optional advanced workspace. It must be discoverable when
+wanted without displacing the ordinary roadmap Workbench, turning an empty
+program inventory into an error, or asking vanilla users to configure autonomy.
+
 ## Scope
 
 - **In:** Workbench Program Studio; program/workflow/organization inventory;
@@ -24,8 +28,10 @@ need direct-manipulation affordances, not a JSON-only escape hatch.
   verifier/council inspector; rubric/verdict/gate builder; capabilities,
   budgets, stop/escalation policy; Design/Simulate/Validate/JSON/Authority views;
   guarded preview→diff→apply; accessible desktop/mobile behavior.
-- **Out:** browser-owned validation/scheduling; arbitrary code editor or shell;
-  credentials/provider executables; saving as consent; generic BPMN parity.
+- **Out:** replacing the ordinary Workbench front door or requiring program
+  setup for vanilla/bounded-run use; browser-owned validation/scheduling;
+  arbitrary code editor or shell; credentials/provider executables; saving as
+  consent; generic BPMN parity.
 
 ## Acceptance criteria
 
@@ -42,12 +48,17 @@ need direct-manipulation affordances, not a JSON-only escape hatch.
 - [ ] Saving/deleting uses a stale-safe preview/fingerprint/apply flow, writes
   only the declared tracked policy, and starts no program, agent, check,
   observer, notification, or integration act.
+- [ ] Progressive disclosure makes Program Studio explicitly reachable without
+  routing ordinary Workbench sessions through it; no program means no nag,
+  blocking setup, background poller, changed default route, or empty-state
+  warning.
 - [ ] Authority preview visibly separates requested work/verdict capabilities
   from evidence/certification/commit/push/story/phase capabilities and renders
   advisory/checkpointed/continuous differences without granting them.
 - [ ] UI smoke covers nested, debate-active, verifier-failed, budget-exhausted,
   phase-transition and complete organizations across supported desktop/mobile
-  viewports with no clipping or inaccessible inspector state.
+  viewports with no clipping or inaccessible inspector state; golden no-program
+  UI/API cases preserve existing Workbench behavior.
 
 ## Test plan
 
