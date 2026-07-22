@@ -1,0 +1,400 @@
+{
+  "kind": "delivery-workbench-organization",
+  "schema_version": 1,
+  "slug": "autonomous-story-cell",
+  "title": "Autonomous story cell",
+  "description": "Optional logical organization with independent delivery, verification, council, meta-audit, and architecture duties.",
+  "agents": [
+    {
+      "id": "builder-primary",
+      "profile": "builder-primary",
+      "duties": ["implementer", "repairer"],
+      "workspace_domain": "builder-primary",
+      "capability_ceiling": ["agent:dispatch", "workspace:write"],
+      "max_concurrency": 1,
+      "weight": 2
+    },
+    {
+      "id": "builder-backup",
+      "profile": "builder-backup",
+      "duties": ["implementer", "repairer"],
+      "workspace_domain": "builder-backup",
+      "capability_ceiling": ["agent:dispatch", "workspace:write"],
+      "max_concurrency": 1,
+      "weight": 1
+    },
+    {
+      "id": "verifier-primary",
+      "profile": "verifier-primary",
+      "duties": ["verifier"],
+      "workspace_domain": "verifier-primary",
+      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "max_concurrency": 1,
+      "weight": 2
+    },
+    {
+      "id": "verifier-backup",
+      "profile": "verifier-backup",
+      "duties": ["verifier"],
+      "workspace_domain": "verifier-backup",
+      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "max_concurrency": 1,
+      "weight": 1
+    },
+    {
+      "id": "researcher",
+      "profile": "researcher",
+      "duties": ["researcher"],
+      "workspace_domain": "researcher",
+      "capability_ceiling": ["agent:dispatch"],
+      "max_concurrency": 2,
+      "weight": 1
+    },
+    {
+      "id": "critic-a",
+      "profile": "critic-a",
+      "duties": ["critic"],
+      "workspace_domain": "critic-a",
+      "capability_ceiling": ["agent:dispatch"],
+      "max_concurrency": 1,
+      "weight": 1
+    },
+    {
+      "id": "critic-b",
+      "profile": "critic-b",
+      "duties": ["critic"],
+      "workspace_domain": "critic-b",
+      "capability_ceiling": ["agent:dispatch"],
+      "max_concurrency": 1,
+      "weight": 1
+    },
+    {
+      "id": "judge",
+      "profile": "judge",
+      "duties": ["judge"],
+      "workspace_domain": "judge",
+      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "max_concurrency": 1,
+      "weight": 1
+    },
+    {
+      "id": "meta-verifier",
+      "profile": "meta-verifier",
+      "duties": ["meta-verifier"],
+      "workspace_domain": "meta-verifier",
+      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "max_concurrency": 1,
+      "weight": 1
+    },
+    {
+      "id": "master-architect",
+      "profile": "master-architect",
+      "duties": ["master-architect"],
+      "workspace_domain": "master-architect",
+      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "max_concurrency": 1,
+      "weight": 1
+    }
+  ],
+  "pools": [
+    {"id": "builders", "agents": ["builder-primary"]},
+    {"id": "builder-fallbacks", "agents": ["builder-backup"]},
+    {"id": "verifiers", "agents": ["verifier-primary"]},
+    {"id": "verifier-fallbacks", "agents": ["verifier-backup"]},
+    {"id": "researchers", "agents": ["researcher"]},
+    {"id": "critics", "agents": ["critic-a", "critic-b"]},
+    {"id": "judges", "agents": ["judge"]},
+    {"id": "meta-verifiers", "agents": ["meta-verifier"]},
+    {"id": "architects", "agents": ["master-architect"]}
+  ],
+  "teams": [
+    {
+      "id": "story-cell",
+      "roles": [
+        {
+          "id": "implementer",
+          "duty": "implementer",
+          "pool": "builders",
+          "required": true,
+          "cardinality": 1,
+          "capability_ceiling": ["agent:dispatch", "workspace:write"],
+          "driver_capabilities": ["repository-read", "repository-write"],
+          "workspace": "isolated-worktree",
+          "context": {
+            "allow": ["story", "phase", "roadmap", "workflow-inputs", "mechanical-receipts", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 500000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text", "mechanical-fact"],
+            "write": ["git-diff", "markdown", "json", "text"],
+            "max_bytes": 50000000
+          },
+          "output_schema": "delivery-workbench-implementation-output@1",
+          "verdict_schema": null,
+          "max_concurrency": 1,
+          "resource_groups": ["repository-writer"],
+          "may_request": ["researcher", "repairer"],
+          "may_judge": [],
+          "independent_from": [],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused", "conflicted"],
+            "max_replacements": 1,
+            "fallback_pools": ["builder-fallbacks"],
+            "on_exhausted": "escalate",
+            "preserve_history": true
+          }
+        },
+        {
+          "id": "verifier",
+          "duty": "verifier",
+          "pool": "verifiers",
+          "required": true,
+          "cardinality": 1,
+          "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+          "driver_capabilities": ["repository-read"],
+          "workspace": "read-only",
+          "context": {
+            "allow": ["story", "phase", "roadmap", "candidate-diff", "mechanical-receipts", "prior-verdicts", "dissent", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 500000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text", "git-diff", "mechanical-fact", "verdict"],
+            "write": ["verdict"],
+            "max_bytes": 50000000
+          },
+          "output_schema": null,
+          "verdict_schema": "delivery-workbench-agent-verdict@1",
+          "max_concurrency": 1,
+          "resource_groups": ["independent-verification"],
+          "may_request": ["meta-verifier"],
+          "may_judge": ["implementer"],
+          "independent_from": ["implementer"],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused", "conflicted"],
+            "max_replacements": 1,
+            "fallback_pools": ["verifier-fallbacks"],
+            "on_exhausted": "block",
+            "preserve_history": true
+          }
+        },
+        {
+          "id": "researcher",
+          "duty": "researcher",
+          "pool": "researchers",
+          "required": false,
+          "cardinality": 1,
+          "capability_ceiling": ["agent:dispatch"],
+          "driver_capabilities": ["repository-read"],
+          "workspace": "read-only",
+          "context": {
+            "allow": ["story", "phase", "roadmap", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 250000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text"],
+            "write": ["markdown", "json", "text"],
+            "max_bytes": 1000000
+          },
+          "output_schema": "delivery-workbench-research-output@1",
+          "verdict_schema": null,
+          "max_concurrency": 1,
+          "resource_groups": [],
+          "may_request": [],
+          "may_judge": [],
+          "independent_from": [],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused"],
+            "max_replacements": 0,
+            "fallback_pools": [],
+            "on_exhausted": "block",
+            "preserve_history": true
+          }
+        },
+        {
+          "id": "repairer",
+          "duty": "repairer",
+          "pool": "builder-fallbacks",
+          "required": false,
+          "cardinality": 1,
+          "capability_ceiling": ["agent:dispatch", "workspace:write"],
+          "driver_capabilities": ["repository-read", "repository-write"],
+          "workspace": "isolated-worktree",
+          "context": {
+            "allow": ["story", "candidate-diff", "mechanical-receipts", "prior-verdicts", "dissent", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 500000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text", "git-diff", "mechanical-fact", "verdict"],
+            "write": ["git-diff", "markdown", "json", "text"],
+            "max_bytes": 50000000
+          },
+          "output_schema": "delivery-workbench-repair-output@1",
+          "verdict_schema": null,
+          "max_concurrency": 1,
+          "resource_groups": ["repository-writer"],
+          "may_request": [],
+          "may_judge": [],
+          "independent_from": ["verifier"],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused"],
+            "max_replacements": 0,
+            "fallback_pools": [],
+            "on_exhausted": "escalate",
+            "preserve_history": true
+          }
+        },
+        {
+          "id": "critic",
+          "duty": "critic",
+          "pool": "critics",
+          "required": false,
+          "cardinality": 2,
+          "capability_ceiling": ["agent:dispatch"],
+          "driver_capabilities": ["repository-read"],
+          "workspace": "read-only",
+          "context": {
+            "allow": ["story", "proposal", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 150000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text"],
+            "write": ["markdown", "text"],
+            "max_bytes": 500000
+          },
+          "output_schema": "delivery-workbench-critique@1",
+          "verdict_schema": null,
+          "max_concurrency": 1,
+          "resource_groups": ["debate-corner"],
+          "may_request": [],
+          "may_judge": [],
+          "independent_from": [],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused"],
+            "max_replacements": 0,
+            "fallback_pools": [],
+            "on_exhausted": "block",
+            "preserve_history": true
+          }
+        },
+        {
+          "id": "judge",
+          "duty": "judge",
+          "pool": "judges",
+          "required": false,
+          "cardinality": 1,
+          "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+          "driver_capabilities": ["repository-read"],
+          "workspace": "read-only",
+          "context": {
+            "allow": ["story", "proposal", "prior-verdicts", "dissent", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 250000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text", "verdict"],
+            "write": ["verdict"],
+            "max_bytes": 1000000
+          },
+          "output_schema": null,
+          "verdict_schema": "delivery-workbench-debate-judgment@1",
+          "max_concurrency": 1,
+          "resource_groups": ["debate-corner"],
+          "may_request": ["meta-verifier"],
+          "may_judge": ["critic"],
+          "independent_from": ["implementer", "verifier", "critic"],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused", "conflicted"],
+            "max_replacements": 0,
+            "fallback_pools": [],
+            "on_exhausted": "block",
+            "preserve_history": true
+          }
+        },
+        {
+          "id": "meta-verifier",
+          "duty": "meta-verifier",
+          "pool": "meta-verifiers",
+          "required": false,
+          "cardinality": 1,
+          "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+          "driver_capabilities": ["repository-read"],
+          "workspace": "read-only",
+          "context": {
+            "allow": ["story", "candidate-diff", "mechanical-receipts", "prior-verdicts", "dissent", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 500000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text", "git-diff", "mechanical-fact", "verdict"],
+            "write": ["verdict"],
+            "max_bytes": 50000000
+          },
+          "output_schema": null,
+          "verdict_schema": "delivery-workbench-meta-verdict@1",
+          "max_concurrency": 1,
+          "resource_groups": ["independent-verification"],
+          "may_request": [],
+          "may_judge": ["verifier", "judge"],
+          "independent_from": ["implementer", "verifier", "judge"],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused", "conflicted"],
+            "max_replacements": 0,
+            "fallback_pools": [],
+            "on_exhausted": "escalate",
+            "preserve_history": true
+          }
+        },
+        {
+          "id": "master-architect",
+          "duty": "master-architect",
+          "pool": "architects",
+          "required": false,
+          "cardinality": 1,
+          "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+          "driver_capabilities": ["repository-read"],
+          "workspace": "read-only",
+          "context": {
+            "allow": ["story", "phase", "roadmap", "candidate-diff", "mechanical-receipts", "prior-verdicts", "dissent", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 1000000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text", "git-diff", "mechanical-fact", "verdict", "decision"],
+            "write": ["verdict", "decision"],
+            "max_bytes": 50000000
+          },
+          "output_schema": null,
+          "verdict_schema": "delivery-workbench-architecture-verdict@1",
+          "max_concurrency": 1,
+          "resource_groups": ["architecture-gate"],
+          "may_request": ["researcher", "meta-verifier"],
+          "may_judge": ["implementer", "verifier", "judge"],
+          "independent_from": ["implementer", "verifier"],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused", "conflicted"],
+            "max_replacements": 0,
+            "fallback_pools": [],
+            "on_exhausted": "checkpoint",
+            "preserve_history": true
+          }
+        }
+      ]
+    }
+  ],
+  "councils": [
+    {
+      "id": "debate-council",
+      "members": ["critic", "judge"],
+      "judge": "judge",
+      "quorum": 3,
+      "meta_verifier": "meta-verifier",
+      "distinct_principals": true
+    }
+  ],
+  "layout": {}
+}

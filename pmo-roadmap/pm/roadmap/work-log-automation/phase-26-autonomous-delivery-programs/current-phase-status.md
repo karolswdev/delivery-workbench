@@ -52,7 +52,7 @@ roadmap-advancement acts.
   fan-out/fan-in, bounded retry/repair/debate/audit loops, convergence/stop
   conditions, and exact story bindings without smuggling capability or
   accepting an unbounded cycle (WLA-26-03).
-- [ ] Role and team topology enforces capability/workspace isolation,
+- [x] Role and team topology enforces capability/workspace isolation,
   separation of duties, artifact/context visibility, stable assignment, and
   replacement/escalation rules for implementers, verifiers, meta-verifiers,
   architects, researchers, reviewers, and repairers (WLA-26-04).
@@ -100,8 +100,8 @@ roadmap-advancement acts.
 | WLA-26-01 | Contract autonomous delivery programs and trust | done | [story-01-contract-autonomous-delivery-programs-and-trust](./story-01-contract-autonomous-delivery-programs-and-trust.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-26-02 | Select work across a governed roadmap scope | done | [story-02-select-work-across-a-governed-roadmap-scope](./story-02-select-work-across-a-governed-roadmap-scope.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-26-03 | Compile reusable hierarchical workflows and bounded loops | done | [story-03-compile-reusable-hierarchical-workflows-and-bounded-loops](./story-03-compile-reusable-hierarchical-workflows-and-bounded-loops.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-26-04 | Model agent roles, teams, and separation of duties | in-progress | [story-04-model-agent-roles-teams-and-separation-of-duties](./story-04-model-agent-roles-teams-and-separation-of-duties.md) | - |
-| WLA-26-05 | Run debates, councils, and meta-verification | backlog | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | - |
+| WLA-26-04 | Model agent roles, teams, and separation of duties | done | [story-04-model-agent-roles-teams-and-separation-of-duties](./story-04-model-agent-roles-teams-and-separation-of-duties.md) | [evidence-story-04](./evidence-story-04.md) |
+| WLA-26-05 | Run debates, councils, and meta-verification | in-progress | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | - |
 | WLA-26-06 | Build the visual program and workflow studio | backlog | [story-06-build-the-visual-program-and-workflow-studio](./story-06-build-the-visual-program-and-workflow-studio.md) | - |
 | WLA-26-07 | Turn quality and evidence into governed verdicts | backlog | [story-07-turn-quality-and-evidence-into-governed-verdicts](./story-07-turn-quality-and-evidence-into-governed-verdicts.md) | - |
 | WLA-26-08 | Grant continuous program authority explicitly | backlog | [story-08-grant-continuous-program-authority-explicitly](./story-08-grant-continuous-program-authority-explicitly.md) | - |
@@ -112,19 +112,21 @@ roadmap-advancement acts.
 
 ## Where we are
 
-Phase open 3/12. WLA-26-01 froze the optional capability/trust contract, and
-WLA-26-02 delivered pure deterministic multi-phase selection and assignment.
-WLA-26-03 is done: the pure workflow compiler resolves typed bindings and
-hash-pinned subflows; emits stable hierarchical node, artifact, and role
-lineage; schedules deterministic fan-out/fan-in waves; and statically proves a
-finite envelope for typed loops, debates, checks, agents, bounded Phase 24
-runs, artifacts, rail acts, and time. It refuses recursion, backward routes,
-unbounded predicates, capability smuggling, and program-budget overflow.
-Layout changes do not alter executable instance hashes, and three optional
-templates ship without creating consumer workflow policy. Twelve workflow,
-thirteen planner, and six contract tests are green; the captured full matrix
-passed 369/369 on both Python floors and the fresh wheel. WLA-26-04 is in
-progress: model the organization and enforce role/team separation of duties.
+Phase open 4/12. The optional trust contract, deterministic roadmap planner,
+and finite hierarchical workflow compiler are evidence-backed. WLA-26-04 is
+done: the pure organization compiler closes logical agents, pools, exact role
+packet/capability policy, cardinality, principal/workspace/session separation,
+councils, resources, and finite replacement. Program planning now intersects
+workflow lanes with program, role, logical-agent, and local driver ceilings;
+preassigns a distinct read-only verifier; records non-secret principal and
+adapter-capability fingerprints plus every selection/fallback exclusion; and
+proves council quorum and resource waves without starting anything. Aliases on
+one local principal cannot satisfy independence, replacements preserve prior
+dissent/lineage, and the optional organization template is never seeded into a
+consumer. Nine organization tests plus the existing planner/workflow/driver
+suites are green; the captured full matrix passed 378/378 on both Python floors
+and the fresh wheel. WLA-26-05 is in progress: execute bounded debate corners,
+councils, judging, and verifier-of-verifier audit with replayable receipts.
 
 ## Active risks
 
@@ -187,6 +189,25 @@ progress: model the organization and enforce role/team separation of duties.
   and intersect child capabilities and envelopes with the enclosing program -
   visual layout cannot change authority and hierarchy cannot smuggle a
   capability or exceed the program budget - WLA-26-03.
+- 2026-07-22 - Treat independence as a proven local execution property across
+  logical agent, profile, principal fingerprint, workspace domain, and distinct
+  session binding—not as two display names or a statistical claim - aliases on
+  one principal cannot implement and verify the same story - WLA-26-04.
+- 2026-07-22 - Make every role a closed packet and child-authority policy:
+  program/driver capability ceilings, workspace, context and artifact
+  visibility, schemas, concurrency/resources, and request/judgment edges all
+  intersect before assignment - a team cannot widen its workflow or grant -
+  WLA-26-04.
+- 2026-07-22 - Resolve exact role slots through deterministic weighted hash
+  ranking over tracked pools and the local roster, using only declared fallback
+  pools; replacement consumes a finite count, retains prior dissent/lineage,
+  invalidates stale work, and never changes capability - WLA-26-04.
+- 2026-07-22 - Require distinct-principal council quorum and serialize declared
+  resource conflicts, while recording the complete proof in the pure plan -
+  cardinality cannot be faked with duplicate aliases - WLA-26-04.
+- 2026-07-22 - Ship `autonomous-story-cell` in the package but never create
+  `pm/organizations/` during install/update - organization policy is optional
+  payload adopted only by an explicit user act - WLA-26-04.
 - 2026-07-22 - Treat capabilities as independent granted bits with explicit
   prerequisites, not implication shortcuts; agent dispatch never inherits
   evidence, integration, certification, Git, or roadmap authority - WLA-26-01.

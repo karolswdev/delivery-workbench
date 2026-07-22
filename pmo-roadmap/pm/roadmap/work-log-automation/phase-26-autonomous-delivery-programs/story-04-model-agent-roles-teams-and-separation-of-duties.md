@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 26
-- **Status:** in-progress
+- **Status:** done
   <!-- status vocabulary: roadmap-builder.md §2.3 -->
 - **Depends on:** WLA-26-01, WLA-26-02
 - **Unblocks:** WLA-26-05, WLA-26-06, WLA-26-07, WLA-26-08, WLA-26-09
@@ -30,21 +30,21 @@ critic, judge, reviewer, and repairer without hard-coding providers.
 
 ## Acceptance criteria
 
-- [ ] Every continuous story route resolves one implementer and a distinct
+- [x] Every continuous story route resolves one implementer and a distinct
   verifier identity/profile before work starts; a single session/attempt cannot
   satisfy both duties and the compiler refuses impossible independence.
-- [ ] Roles declare capabilities, workspace mode, allowed context/artifacts,
+- [x] Roles declare capabilities, workspace mode, allowed context/artifacts,
   output/verdict schemas, concurrency/resource groups, and which other roles
   they may request or judge; child grants are subsets of both program authority
   and role policy.
-- [ ] Assignment is deterministic from tracked logical pools plus operator-local
+- [x] Assignment is deterministic from tracked logical pools plus operator-local
   driver availability, explains selection/fallback, and records exact role,
   profile, adapter capability fingerprint, and independence facts without
   storing secrets.
-- [ ] Replacement after unavailable/lost/failed agents follows a declared
+- [x] Replacement after unavailable/lost/failed agents follows a declared
   finite policy, never silently grants more capability, and preserves lineage
   so a replacement verifier cannot hide earlier dissent.
-- [ ] Fixtures prove implementer/verifier separation, council cardinality,
+- [x] Fixtures prove implementer/verifier separation, council cardinality,
   architect visibility, restricted critic context, resource conflicts,
   unavailable pools, colliding identities, and capability downgrade/refusal.
 
@@ -61,3 +61,26 @@ critic, judge, reviewer, and repairer without hard-coding providers.
 “Independent” is a configured technical property—distinct claimed execution
 identity, context lane, and duty—not a claim that two models are statistically
 independent. The UI and ledger must use that precise language.
+
+## Delivered
+
+- Added one pure, closed organization compiler and `dw organization
+  list|validate|simulate` surface over an optional tracked registry. An absent
+  registry remains healthy and creates no state.
+- Made role duties explicit across program/driver capability ceilings,
+  workspace, context and artifact visibility, output/verdict schemas,
+  cardinality, concurrency/resources, request/judgment edges, independence,
+  councils, and finite replacement policy.
+- Extended the local driver roster with non-secret principal identity,
+  availability, adapter version, concurrency, principal fingerprint, and exact
+  adapter-capability fingerprint; aliases sharing a principal cannot masquerade
+  as independent.
+- Integrated workflow role lanes with organization and program ceilings, then
+  emitted deterministic role-slot receipts, verifier preassignment and session
+  separation facts, candidate/fallback explanations, council quorum, and
+  resource-compatible waves in the pure program plan.
+- Added finite replacement previews that preserve assignment/verdict lineage,
+  retain dissent, invalidate outstanding work, hold capability constant, and
+  take the declared exhaustion route.
+- Shipped the optional `autonomous-story-cell` template without creating
+  consumer organization policy during install/update.

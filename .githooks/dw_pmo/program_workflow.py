@@ -1447,10 +1447,15 @@ class _RegistryCompiler:
         source_hashes: dict[str, str] = {}
         expanded_nodes: list[dict[str, object]] = []
         expanded_artifacts: list[dict[str, object]] = []
-        role_lanes: list[dict[str, str]] = []
+        role_lanes: list[dict[str, object]] = []
         required_capabilities: dict[str, list[str]] = {}
         node_envelopes: dict[str, dict[str, int]] = {}
         total = _empty_envelope()
+        artifact_types = {
+            f"{producer['id']}.{output['id']}": str(output["kind"])
+            for producer in nodes
+            for output in producer.get("outputs", [])
+        }
         for index, node in enumerate(nodes):
             node_id = str(node["id"])
             node_address = f"{instance_address}/{node_id}"
@@ -1640,6 +1645,26 @@ class _RegistryCompiler:
                 capabilities.add(str(node["capability"]))
             if capabilities:
                 required_capabilities[node_address] = sorted(capabilities)
+            input_expressions = list(node.get("inputs", {}).values())
+            if node_type == "verdict" and isinstance(node.get("subject"), dict):
+                input_expressions.append(node["subject"])
+            context_reads = sorted({
+                str(expression.get("kind"))
+                for expression in input_expressions
+                if isinstance(expression, dict)
+            })
+            artifact_reads = sorted({
+                artifact_types[str(expression.get("name"))]
+                for expression in input_expressions
+                if (
+                    isinstance(expression, dict)
+                    and expression.get("kind") == "artifact"
+                    and str(expression.get("name")) in artifact_types
+                )
+            })
+            artifact_writes = sorted({
+                str(output["kind"]) for output in node.get("outputs", [])
+            })
             for output in node.get("outputs", []):
                 expanded_artifacts.append({
                     "address": f"{node_address}/artifact/{output['id']}",
@@ -1657,6 +1682,11 @@ class _RegistryCompiler:
                     "node": node_address,
                     "role": str(node["role"]),
                     "duty": node_type,
+                    "workspace": node.get("workspace", "read-only"),
+                    "capabilities": sorted(capabilities),
+                    "context_reads": context_reads,
+                    "artifact_reads": artifact_reads,
+                    "artifact_writes": artifact_writes,
                 })
             elif node_type == "debate":
                 role_lanes.extend([
@@ -1665,6 +1695,11 @@ class _RegistryCompiler:
                         "node": node_address,
                         "role": str(role),
                         "duty": "debate-speaker",
+                        "workspace": "read-only",
+                        "capabilities": sorted(capabilities),
+                        "context_reads": context_reads,
+                        "artifact_reads": artifact_reads,
+                        "artifact_writes": artifact_writes,
                     }
                     for role in node["participants"]
                 ])
@@ -1673,6 +1708,11 @@ class _RegistryCompiler:
                     "node": node_address,
                     "role": str(node["judge_role"]),
                     "duty": "debate-judge",
+                    "workspace": "read-only",
+                    "capabilities": sorted(capabilities),
+                    "context_reads": context_reads,
+                    "artifact_reads": artifact_reads,
+                    "artifact_writes": artifact_writes,
                 })
             expanded_nodes.insert(len(expanded_nodes) - len(child.get("expanded_nodes", [])) if child else len(expanded_nodes), {
                 "address": node_address,

@@ -61,6 +61,7 @@ _CONFIG_KEYS = {"kind", "schema_version", "workspace_root", "profiles"}
 _PROFILE_KEYS = {
     "adapter", "capabilities", "workspace_modes", "command", "model",
     "network", "max_context_bytes", "max_stream_bytes", "timeout_ceiling",
+    "principal", "available", "adapter_version", "max_concurrency",
 }
 _PACKET_KEYS = {
     "kind", "schema_version", "packet_hash", "run_id", "node_id", "attempt",
@@ -178,6 +179,23 @@ def validate_driver_config(value: object) -> dict[str, object]:
         model = raw.get("model")
         if model is not None and (not isinstance(model, str) or not model or len(model) > 200):
             raise DwError(f"driver profile {name!r} model must be a bounded string")
+        principal = raw.get("principal", name)
+        if not isinstance(principal, str) or not _SAFE_ID_RE.fullmatch(principal):
+            raise DwError(f"driver profile {name!r} principal must be a safe local identity")
+        available = raw.get("available", True)
+        if not isinstance(available, bool):
+            raise DwError(f"driver profile {name!r} available must be boolean")
+        adapter_version = raw.get("adapter_version", "builtin-v1")
+        if (
+            not isinstance(adapter_version, str)
+            or not adapter_version
+            or len(adapter_version.encode("utf-8")) > 200
+        ):
+            raise DwError(f"driver profile {name!r} adapter_version must be bounded")
+        max_concurrency = _positive_int(
+            raw.get("max_concurrency", 1),
+            f"driver profile {name!r} max_concurrency", 128,
+        )
         network = raw.get("network", False)
         if not isinstance(network, bool):
             raise DwError(f"driver profile {name!r} network must be boolean")
@@ -214,6 +232,10 @@ def validate_driver_config(value: object) -> dict[str, object]:
             "max_context_bytes": max_context,
             "max_stream_bytes": max_stream,
             "timeout_ceiling": timeout,
+            "principal": principal,
+            "available": available,
+            "adapter_version": adapter_version,
+            "max_concurrency": max_concurrency,
         }
         if model is not None:
             normalized_profile["model"] = model
@@ -264,11 +286,15 @@ def driver_capability(config: dict[str, object], profile: str) -> dict[str, obje
     raw = profiles.get(profile)  # type: ignore[union-attr]
     if raw is None:
         raise DwError(f"logical driver profile is not configured: {profile}")
-    return {
+    public = {
         "kind": DRIVER_CAPABILITY_KIND,
         "schema_version": DRIVER_SCHEMA_VERSION,
         "profile": profile,
         "adapter": raw["adapter"],
+        "adapter_version": raw["adapter_version"],
+        "principal": raw["principal"],
+        "available": raw["available"],
+        "max_concurrency": raw["max_concurrency"],
         "capabilities": raw["capabilities"],
         "workspace_modes": raw["workspace_modes"],
         "sandbox_owner": "codex-cli" if raw["adapter"] == "codex-exec" else "fixture",
@@ -279,6 +305,19 @@ def driver_capability(config: dict[str, object], profile: str) -> dict[str, obje
         "timeout_ceiling": raw["timeout_ceiling"],
         "stores_credentials": False,
     }
+    public["principal_fingerprint"] = "sha256:" + hashlib.sha256(
+        canonical_json({
+            "principal": public["principal"],
+            "adapter": public["adapter"],
+        }).encode("utf-8")
+    ).hexdigest()
+    public["capability_fingerprint"] = "sha256:" + hashlib.sha256(
+        canonical_json({
+            key: value for key, value in public.items()
+            if key not in {"available", "principal_fingerprint"}
+        }).encode("utf-8")
+    ).hexdigest()
+    return public
 
 
 def driver_inventory(config: dict[str, object]) -> dict[str, object]:

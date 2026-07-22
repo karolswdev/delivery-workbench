@@ -1,12 +1,13 @@
 """Pure Phase-26 program policy compilation and roadmap planning.
 
-This first slice deliberately stops before grants or execution.  It reads a
+This planning layer deliberately stops before grants or execution.  It reads a
 tracked program plus its referenced policy documents, validates the explicit
 roadmap scope and binding rules, derives one stable frontier selection, and
-assigns logical team roles against the existing local driver roster.  It never
-creates a program store, grant, ledger, observer, workspace, or roadmap write.
+uses the organization compiler to assign capability- and visibility-bounded
+team roles against the existing local driver roster.  It never creates a
+program store, grant, ledger, observer, workspace, or roadmap write.
 
-The contract is ``docs/programs.md`` (WLA-26-01/02).
+The contract is ``docs/programs.md`` (WLA-26-01/02/03/04).
 """
 
 from __future__ import annotations
@@ -27,7 +28,15 @@ from .model import (
     normalize_status,
 )
 from .orchestration import canonical_json
-from .orchestration_driver import driver_capability, driver_inventory, load_driver_config
+from .orchestration_driver import load_driver_config
+from .program_organization import (
+    DUTIES,
+    ORGANIZATION_KIND,
+    OrganizationValidationError,
+    assign_organization_team,
+    compile_organization,
+    validate_workflow_team,
+)
 from .program_workflow import WorkflowValidationError, compile_workflow
 from .parse import (
     discover_phases,
@@ -44,7 +53,6 @@ from .validate import check_project, project_warnings
 PROGRAM_KIND = "delivery-workbench-program"
 PROGRAM_SCHEMA_VERSION = 1
 WORKFLOW_KIND = "delivery-workbench-workflow"
-ORGANIZATION_KIND = "delivery-workbench-organization"
 RUBRIC_KIND = "delivery-workbench-rubric"
 
 VALIDATION_KIND = "delivery-workbench-program-validation"
@@ -121,18 +129,6 @@ STOP_CONDITIONS = (
     "grant-revoked",
 )
 
-DUTIES = (
-    "implementer",
-    "verifier",
-    "meta-verifier",
-    "master-architect",
-    "researcher",
-    "reviewer",
-    "repairer",
-    "critic",
-    "judge",
-)
-
 _SAFE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$")
 _STORY_ID_RE = re.compile(r"^[A-Z][A-Z0-9]*-\d+-\d+$")
 _DEPENDENCY_RE = re.compile(r"[A-Z][A-Z0-9]*-\d+-\d+")
@@ -151,16 +147,6 @@ _STORY_SELECTOR_KEYS = {"include"}
 _BINDING_KEYS = {"id", "priority", "match", "workflow", "with", "team", "rubrics"}
 _MATCH_KEYS = {"phase_from", "phase_through", "story_ids"}
 _PHASE_GATE_KEYS = {"id", "when", "role", "rubric", "on_fail"}
-
-_ORG_KEYS = {
-    "kind", "schema_version", "slug", "title", "description", "agents",
-    "pools", "teams", "councils", "layout",
-}
-_AGENT_KEYS = {"id", "profile", "duties", "workspace_domain", "weight"}
-_POOL_KEYS = {"id", "agents"}
-_TEAM_KEYS = {"id", "roles"}
-_ROLE_KEYS = {"id", "duty", "pool", "required", "independent_from"}
-_COUNCIL_KEYS = {"id", "members", "judge", "quorum", "meta_verifier"}
 
 _WORKFLOW_KEYS = {
     "kind", "schema_version", "slug", "title", "description", "version",
@@ -527,249 +513,35 @@ class _Compiler:
         }
 
     def normalize_organization(self, slug: str) -> dict[str, object]:
-        ref = self.load_reference(
-            "organizations", slug, ORGANIZATION_KIND, _ORG_KEYS, "/organization"
-        )
-        if ref is None:
-            return {"slug": slug, "agents": [], "pools": [], "teams": [], "councils": []}
-        raw = ref["document"]
-        assert isinstance(raw, dict)
-        source = str(ref["path"])
-        agents_raw = raw.get("agents")
-        if not isinstance(agents_raw, list) or not agents_raw:
-            self.diag("/agents", "missing-agents", "organization needs at least one logical agent", "declare bounded logical agents", source)
-            agents_raw = []
-        agents: list[dict[str, object]] = []
-        agent_ids: set[str] = set()
-        for index, item in enumerate(agents_raw):
-            pointer = f"/agents/{index}"
-            if not isinstance(item, dict):
-                self.diag(pointer, "wrong-type", "agent must be an object", "provide an agent object", source)
-                continue
-            self.exact_keys(item, _AGENT_KEYS, pointer, source=source)
-            agent_id = item.get("id")
-            profile = item.get("profile")
-            if not isinstance(agent_id, str) or not _SAFE_ID_RE.fullmatch(agent_id):
-                self.diag(f"{pointer}/id", "unsafe-selector", "agent id is unsafe", "use a stable lowercase id", source)
-                agent_id = ""
-            if agent_id in agent_ids:
-                self.diag(f"{pointer}/id", "duplicate-id", f"duplicate agent id {agent_id!r}", "use unique ids", source)
-            agent_ids.add(str(agent_id))
-            if not isinstance(profile, str) or not _SAFE_ID_RE.fullmatch(profile):
-                self.diag(f"{pointer}/profile", "unsafe-selector", "profile selector is unsafe", "use a configured logical profile", source)
-                profile = ""
-            duties = item.get("duties")
-            if (
-                not isinstance(duties, list) or not duties
-                or any(duty not in DUTIES for duty in duties)
-                or len(set(duties)) != len(duties)
-            ):
-                self.diag(f"{pointer}/duties", "unsupported-duty", "duties must be a unique non-empty contracted duty list", "use contracted duty names", source)
-                duties = []
-            domain = item.get("workspace_domain")
-            if not isinstance(domain, str) or not _SAFE_ID_RE.fullmatch(domain):
-                self.diag(f"{pointer}/workspace_domain", "unsafe-selector", "workspace domain is unsafe", "use a stable isolation-domain id", source)
-                domain = ""
-            weight = self.positive_int(
-                item.get("weight"), f"{pointer}/weight", 1, 100,
-                source=source,
+        found = _reference_by_slug(self.root, "organizations", slug)
+        if found is None:
+            self.diag(
+                "/organization", "dangling-organization-reference",
+                f"cannot resolve organization {slug!r}",
+                f"add one unambiguous pm/organizations/{slug}.json policy",
             )
-            agents.append({
-                "id": agent_id,
-                "profile": profile,
-                "duties": list(duties),
-                "workspace_domain": domain,
-                "weight": weight,
-            })
-
-        pools_raw = raw.get("pools")
-        if not isinstance(pools_raw, list) or not pools_raw:
-            self.diag("/pools", "missing-pools", "organization needs at least one agent pool", "declare explicit pools", source)
-            pools_raw = []
-        pools: list[dict[str, object]] = []
-        pool_ids: set[str] = set()
-        for index, item in enumerate(pools_raw):
-            pointer = f"/pools/{index}"
-            if not isinstance(item, dict):
-                self.diag(pointer, "wrong-type", "pool must be an object", "provide a pool object", source)
-                continue
-            self.exact_keys(item, _POOL_KEYS, pointer, source=source)
-            pool_id = item.get("id")
-            members = item.get("agents")
-            if not isinstance(pool_id, str) or not _SAFE_ID_RE.fullmatch(pool_id):
-                self.diag(f"{pointer}/id", "unsafe-selector", "pool id is unsafe", "use a stable lowercase id", source)
-                pool_id = ""
-            if pool_id in pool_ids:
-                self.diag(f"{pointer}/id", "duplicate-id", f"duplicate pool id {pool_id!r}", "use unique ids", source)
-            pool_ids.add(str(pool_id))
-            if (
-                not isinstance(members, list) or not members
-                or any(member not in agent_ids for member in members)
-                or len(set(members)) != len(members)
-            ):
-                self.diag(f"{pointer}/agents", "dangling-agent-reference", "pool agents must be unique declared agent ids", "fix the pool membership", source)
-                members = []
-            pools.append({"id": pool_id, "agents": list(members)})
-
-        teams_raw = raw.get("teams")
-        if not isinstance(teams_raw, list) or not teams_raw:
-            self.diag("/teams", "missing-teams", "organization needs at least one team", "declare a team with implementer and verifier roles", source)
-            teams_raw = []
-        teams: list[dict[str, object]] = []
-        team_ids: set[str] = set()
-        all_role_ids: set[str] = set()
-        role_duties: dict[str, str] = {}
-        for team_index, item in enumerate(teams_raw):
-            pointer = f"/teams/{team_index}"
-            if not isinstance(item, dict):
-                self.diag(pointer, "wrong-type", "team must be an object", "provide a team object", source)
-                continue
-            self.exact_keys(item, _TEAM_KEYS, pointer, source=source)
-            team_id = item.get("id")
-            if not isinstance(team_id, str) or not _SAFE_ID_RE.fullmatch(team_id):
-                self.diag(f"{pointer}/id", "unsafe-selector", "team id is unsafe", "use a stable lowercase id", source)
-                team_id = ""
-            if team_id in team_ids:
-                self.diag(f"{pointer}/id", "duplicate-id", f"duplicate team id {team_id!r}", "use unique ids", source)
-            team_ids.add(str(team_id))
-            roles_raw = item.get("roles")
-            if not isinstance(roles_raw, list) or not roles_raw:
-                self.diag(f"{pointer}/roles", "missing-roles", "team needs role slots", "declare implementer and verifier slots", source)
-                roles_raw = []
-            roles: list[dict[str, object]] = []
-            role_ids: set[str] = set()
-            for role_index, role in enumerate(roles_raw):
-                role_pointer = f"{pointer}/roles/{role_index}"
-                if not isinstance(role, dict):
-                    self.diag(role_pointer, "wrong-type", "role must be an object", "provide a role object", source)
-                    continue
-                self.exact_keys(role, _ROLE_KEYS, role_pointer, source=source)
-                role_id = role.get("id")
-                duty = role.get("duty")
-                pool = role.get("pool")
-                if not isinstance(role_id, str) or not _SAFE_ID_RE.fullmatch(role_id):
-                    self.diag(f"{role_pointer}/id", "unsafe-selector", "role id is unsafe", "use a stable lowercase id", source)
-                    role_id = ""
-                if role_id in role_ids:
-                    self.diag(f"{role_pointer}/id", "duplicate-id", f"duplicate role id {role_id!r}", "use unique team role ids", source)
-                if role_id in all_role_ids:
-                    self.diag(f"{role_pointer}/id", "duplicate-id", f"organization role id {role_id!r} is ambiguous across teams", "use organization-wide unique role ids", source)
-                role_ids.add(str(role_id))
-                all_role_ids.add(str(role_id))
-                if duty not in DUTIES:
-                    self.diag(f"{role_pointer}/duty", "unsupported-duty", f"unsupported duty {duty!r}", "use a contracted duty", source)
-                    duty = ""
-                role_duties[str(role_id)] = str(duty)
-                if pool not in pool_ids:
-                    self.diag(f"{role_pointer}/pool", "dangling-pool-reference", f"unknown pool {pool!r}", "reference a declared pool", source)
-                    pool = ""
-                required = role.get("required", True)
-                if not isinstance(required, bool):
-                    self.diag(f"{role_pointer}/required", "wrong-type", "required must be boolean", "use true or false", source)
-                    required = True
-                independence = role.get("independent_from", [])
-                if (
-                    not isinstance(independence, list)
-                    or any(not isinstance(value, str) for value in independence)
-                    or len(set(independence)) != len(independence)
-                ):
-                    self.diag(f"{role_pointer}/independent_from", "wrong-type", "independent_from must be a unique role-id list", "provide declared role ids", source)
-                    independence = []
-                roles.append({
-                    "id": role_id,
-                    "duty": duty,
-                    "pool": pool,
-                    "required": required,
-                    "independent_from": list(independence),
-                })
-            for role_index, role in enumerate(roles):
-                for dependency in role["independent_from"]:
-                    if dependency not in role_ids:
-                        self.diag(f"{pointer}/roles/{role_index}/independent_from", "dangling-role-reference", f"unknown role {dependency!r}", "reference a role in the same team", source)
-                    elif next(
-                        index for index, candidate in enumerate(roles)
-                        if candidate["id"] == dependency
-                    ) >= role_index:
-                        self.diag(
-                            f"{pointer}/roles/{role_index}/independent_from",
-                            "role-order",
-                            f"independence role {dependency!r} must be assigned first",
-                            "order prerequisite roles before dependent roles",
-                            source,
-                        )
-            implementers = [role for role in roles if role["duty"] == "implementer"]
-            verifiers = [role for role in roles if role["duty"] == "verifier"]
-            if len(implementers) != 1 or len(verifiers) != 1:
-                self.diag(f"{pointer}/roles", "missing-separation", "a team requires exactly one implementer and one verifier slot in this slice", "declare one of each", source)
-            elif not implementers[0]["required"] or not verifiers[0]["required"]:
-                self.diag(f"{pointer}/roles", "missing-separation", "implementer and independent verifier slots must both be required", "set required to true for both delivery duties", source)
-            elif implementers[0]["id"] not in verifiers[0]["independent_from"]:
-                self.diag(f"{pointer}/roles", "missing-separation", "verifier must declare independence from implementer", "add the implementer role id to independent_from", source)
-            teams.append({"id": team_id, "roles": roles})
-
-        councils_raw = raw.get("councils", [])
-        if not isinstance(councils_raw, list):
-            self.diag("/councils", "wrong-type", "councils must be an array", "provide an array or remove it", source)
-            councils_raw = []
-        councils: list[dict[str, object]] = []
-        council_ids: set[str] = set()
-        for index, item in enumerate(councils_raw):
-            pointer = f"/councils/{index}"
-            if not isinstance(item, dict):
-                self.diag(pointer, "wrong-type", "council must be an object", "provide a council object", source)
-                continue
-            self.exact_keys(item, _COUNCIL_KEYS, pointer, source=source)
-            council_id = item.get("id")
-            if not isinstance(council_id, str) or not _SAFE_ID_RE.fullmatch(council_id):
-                self.diag(f"{pointer}/id", "unsafe-selector", "council id is unsafe", "use a stable lowercase id", source)
-                council_id = ""
-            if council_id in council_ids:
-                self.diag(f"{pointer}/id", "duplicate-id", f"duplicate council id {council_id!r}", "use unique ids", source)
-            council_ids.add(str(council_id))
-            members = item.get("members", [])
-            if (
-                not isinstance(members, list) or not members
-                or any(not isinstance(member, str) for member in members)
-                or len(set(members)) != len(members)
-                or any(member not in all_role_ids for member in members)
-            ):
-                self.diag(f"{pointer}/members", "dangling-role-reference", "council members must be unique declared team roles", "fix member roles", source)
-                members = []
-            judge = item.get("judge")
-            if not isinstance(judge, str) or judge not in members:
-                self.diag(f"{pointer}/judge", "dangling-role-reference", "council judge must name one declared member role", "choose one council member role", source)
-                judge = None
-            meta_verifier = item.get("meta_verifier")
-            if meta_verifier is not None and (
-                not isinstance(meta_verifier, str)
-                or meta_verifier not in all_role_ids
-                or role_duties.get(meta_verifier) != "meta-verifier"
-            ):
-                self.diag(f"{pointer}/meta_verifier", "dangling-role-reference", "meta_verifier must name a declared meta-verifier role", "choose a declared meta-verifier role or remove the field", source)
-                meta_verifier = None
-            quorum = self.positive_int(
-                item.get("quorum"), f"{pointer}/quorum", 1, 50,
-                source=source,
-            )
-            if members and quorum > len(members):
-                self.diag(f"{pointer}/quorum", "impossible-quorum", "quorum exceeds declared member slots", "lower quorum or add members", source)
-            councils.append({
-                "id": council_id,
-                "members": list(members),
-                "judge": judge,
-                "quorum": quorum,
-                "meta_verifier": meta_verifier,
-            })
-
+            return {
+                "slug": slug, "agents": [], "pools": [], "teams": [],
+                "councils": [], "compiled": None,
+            }
+        path, raw = found
+        source = str(path.relative_to(self.root))
+        try:
+            compiled = compile_organization(self.root, raw, source)
+        except OrganizationValidationError as exc:
+            self.diagnostics.extend(exc.diagnostics)
+            return {
+                "slug": slug, "agents": [], "pools": [], "teams": [],
+                "councils": [], "compiled": None,
+            }
+        runtime = compiled["organization"]
+        assert isinstance(runtime, dict)
         normalized = {
-            "slug": slug,
-            "agents": agents,
-            "pools": pools,
-            "teams": teams,
-            "councils": councils,
+            **runtime,
             "path": source,
-            "semantic_hash": ref["semantic_hash"],
-            "document_hash": ref["document_hash"],
+            "semantic_hash": compiled["semantic_hash"],
+            "document_hash": compiled["document_hash"],
+            "compiled": compiled,
         }
         self.references["organization"] = normalized
         return normalized
@@ -1109,7 +881,24 @@ class _Compiler:
             "artifact_bytes": "max_artifact_bytes",
         }
         requested = set(capabilities)
+        binding_by_id = {str(binding["id"]): binding for binding in bindings}
+        organization_compiled = organization.get("compiled")
         for binding_id, workflow_instance in sorted(workflow_instances.items()):
+            binding = binding_by_id.get(str(binding_id))
+            if binding is not None and isinstance(organization_compiled, dict):
+                role_requirements, role_issues = validate_workflow_team(
+                    organization_compiled,
+                    str(binding["team"]),
+                    workflow_instance,
+                    requested,
+                    source=str(organization.get("path") or self.source),
+                )
+                workflow_instance["organization_requirements"] = role_requirements
+                for issue in role_issues:
+                    self.diag(
+                        issue["pointer"], issue["code"], issue["message"],
+                        issue["remediation"], issue["source"],
+                    )
             required = {
                 capability
                 for values in workflow_instance["required_capabilities"].values()
@@ -1315,12 +1104,6 @@ def _candidate_base(
     return "eligible", []
 
 
-def _role_requirements(duty: str) -> tuple[set[str], str, bool]:
-    if duty in {"implementer", "repairer"}:
-        return {"repository-read", "repository-write"}, "isolated-worktree", True
-    return {"repository-read"}, "read-only", False
-
-
 def _assign_team(
     compiled: dict[str, object],
     story: dict[str, object],
@@ -1329,145 +1112,38 @@ def _assign_team(
 ) -> tuple[dict[str, object] | None, list[dict[str, str]]]:
     organization = compiled["references"]["organization"]  # type: ignore[index]
     assert isinstance(organization, dict)
-    team = next(
-        (item for item in organization["teams"] if item["id"] == binding["team"]),
-        None,
-    )
-    if team is None:
+    organization_compiled = organization.get("compiled")
+    if not isinstance(organization_compiled, dict):
         return None, [{
             "code": "role-unavailable",
-            "message": f"team {binding['team']!r} is not available",
+            "message": "compiled organization policy is unavailable",
         }]
-    agents = {str(agent["id"]): agent for agent in organization["agents"]}
-    pools = {str(pool["id"]): list(pool["agents"]) for pool in organization["pools"]}
-    assignments: list[dict[str, object]] = []
-    issues: list[dict[str, str]] = []
-    assigned_by_role: dict[str, dict[str, object]] = {}
-    roster = driver_inventory(driver_config)
-    roster_hash = _sha(roster)
-    for role in team["roles"]:
-        candidates: list[dict[str, object]] = []
-        exclusions: list[dict[str, str]] = []
-        required_capabilities, workspace_mode, requires_write = _role_requirements(str(role["duty"]))
-        for agent_id in pools.get(str(role["pool"]), []):
-            agent = agents.get(agent_id)
-            if agent is None:
-                exclusions.append({"agent": agent_id, "reason": "agent-not-declared"})
-                continue
-            if role["duty"] not in agent["duties"]:
-                exclusions.append({"agent": agent_id, "reason": "duty-not-allowed"})
-                continue
-            try:
-                capability = driver_capability(driver_config, str(agent["profile"]))
-            except DwError:
-                exclusions.append({"agent": agent_id, "reason": "profile-unconfigured"})
-                continue
-            available_capabilities = set(capability["capabilities"])
-            modes = set(capability["workspace_modes"])
-            if not required_capabilities <= available_capabilities:
-                exclusions.append({"agent": agent_id, "reason": "capability-mismatch"})
-                continue
-            if workspace_mode not in modes:
-                exclusions.append({"agent": agent_id, "reason": "workspace-mismatch"})
-                continue
-            if not requires_write and "repository-write" in available_capabilities:
-                exclusions.append({"agent": agent_id, "reason": "verifier-write-capable"})
-                continue
-            conflict = None
-            for prior_role_id in role["independent_from"]:
-                prior = assigned_by_role.get(str(prior_role_id))
-                if prior is None:
-                    continue
-                if prior["profile"] == agent["profile"]:
-                    conflict = "same-profile-principal"
-                elif prior["workspace_domain"] == agent["workspace_domain"]:
-                    conflict = "same-workspace-domain"
-            if conflict:
-                exclusions.append({"agent": agent_id, "reason": conflict})
-                continue
-            rank_input = (
-                f"{compiled['policy_bundle_hash']}|{story['id']}|"
-                f"program/{story['phase']}/{story['id']}|{role['id']}|{agent_id}"
-            )
-            rank_value = int(
-                hashlib.sha256(rank_input.encode("utf-8")).hexdigest(), 16
-            ) * int(agent["weight"])
-            rank = f"{rank_value:066x}"
-            candidates.append({
-                "agent": agent_id,
-                "profile": agent["profile"],
-                "workspace_domain": agent["workspace_domain"],
-                "weight": agent["weight"],
-                "driver": capability,
-                "rank": rank,
-            })
-        candidates.sort(key=lambda item: (str(item["rank"]), str(item["agent"])), reverse=True)
-        if not candidates:
-            if role["required"]:
-                issues.append({
-                    "code": "role-unavailable",
-                    "message": f"required role {role['id']!r} has no eligible agent",
-                })
-            assignments.append({
-                "role": role["id"],
-                "duty": role["duty"],
-                "required": role["required"],
-                "selected": None,
-                "candidates": [],
-                "exclusions": exclusions,
-            })
-            continue
-        selected = dict(candidates[0])
-        selected["principal_fingerprint"] = _sha({
-            "agent": selected["agent"],
-            "profile": selected["profile"],
-            "driver": selected["driver"],
-            "roster_hash": roster_hash,
-        })
-        assigned_by_role[str(role["id"])] = selected
-        assignments.append({
-            "role": role["id"],
-            "duty": role["duty"],
-            "required": role["required"],
-            "selected": selected,
-            "candidates": candidates,
-            "exclusions": exclusions,
-        })
-    implementer = next((item for item in assignments if item["duty"] == "implementer"), None)
-    verifier = next((item for item in assignments if item["duty"] == "verifier"), None)
-    if (
-        implementer and verifier and implementer["selected"] and verifier["selected"]
-        and (
-            implementer["selected"]["profile"] == verifier["selected"]["profile"]
-            or implementer["selected"]["workspace_domain"] == verifier["selected"]["workspace_domain"]
-        )
-    ):
-        issues.append({
-            "code": "separation-violation",
-            "message": "implementer and verifier do not have independent profile/workspace identities",
-        })
-    if issues:
-        return None, issues
-    role_summary = {
-        str(item["duty"]): item["selected"]
-        for item in assignments if item["selected"] is not None
-    }
-    return {
-        "team": team["id"],
-        "roster_hash": roster_hash,
-        "roles": assignments,
-        "implementer": role_summary.get("implementer"),
-        "verifier": role_summary.get("verifier"),
-        "meta_verifier": role_summary.get("meta-verifier"),
-        "master_architect": role_summary.get("master-architect"),
-        "councils": organization["councils"],
-        "why": (
-            "filtered declared pools by duty, local profile capabilities, "
-            "workspace mode, and independence; ranked remaining candidates "
-            "with rendezvous-sha256-v1"
-        ),
-    }, []
-
+    workflow_instances = compiled["references"]["workflow_instances"]  # type: ignore[index]
+    workflow_instance = workflow_instances.get(str(binding["id"]))
+    if not isinstance(workflow_instance, dict):
+        return None, [{
+            "code": "role-unavailable",
+            "message": f"workflow instance for binding {binding['id']!r} is unavailable",
+        }]
+    workflow_address = (
+        f"program/{compiled['program']['slug']}/phase/{story['phase']}/"
+        f"story/{story['id']}/workflow/{binding['id']}"
+    )
+    assignment = assign_organization_team(
+        organization_compiled,
+        str(binding["team"]),
+        driver_config=driver_config,
+        policy_bundle_hash=str(compiled["policy_bundle_hash"]),
+        story_id=str(story["id"]),
+        workflow_address=workflow_address,
+        program_capabilities=compiled["program"]["requested_capabilities"],
+        workflow=workflow_instance,
+    )
+    issues = [
+        {"code": str(issue["code"]), "message": str(issue["message"])}
+        for issue in assignment.get("issues", [])
+    ]
+    return assignment, issues
 
 def build_program_plan(
     root: Path,
@@ -1665,10 +1341,13 @@ def build_program_plan(
             seen_issues.add(key)
     blocking_codes = {
         "multiple-active-stories", "frontier-blocked", "no-eligible-work",
-        "role-unavailable", "separation-violation", "roadmap-unhealthy",
+        "role-unavailable", "separation-violation", "impossible-quorum",
+        "capability-denied", "visibility-denied", "workspace-denied",
+        "roadmap-unhealthy",
     }
     applicable = (
         selection is not None and assignment is not None
+        and bool(assignment.get("applicable"))
         and not any(issue["code"] in blocking_codes for issue in unique_issues)
     )
     return {

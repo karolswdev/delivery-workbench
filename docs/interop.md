@@ -39,6 +39,13 @@ is added when an external consumer asks for one.
 | Workflow inventory | `delivery-workbench-workflow-list` v1 | `program_workflow.workflow_inventory` |
 | Workflow validation | `delivery-workbench-workflow-validation` v1 | `program_workflow.validate_workflow` |
 | Workflow simulation | `delivery-workbench-workflow-simulation` v1 | `program_workflow.simulate_workflow` |
+| Organization policy | `delivery-workbench-organization` v1 | `program_organization.validate_organization` |
+| Compiled organization | `delivery-workbench-compiled-organization` v1 | `program_organization.compile_organization` |
+| Organization inventory | `delivery-workbench-organization-list` v1 | `program_organization.organization_inventory` |
+| Organization validation | `delivery-workbench-organization-validation` v1 | `program_organization.validate_organization` |
+| Organization simulation | `delivery-workbench-organization-simulation` v1 | `program_organization.simulate_organization` |
+| Pure team assignment | `delivery-workbench-team-assignment` v1 | `program_organization.assign_organization_team` |
+| Pure assignment replacement | `delivery-workbench-assignment-replacement` v1 | `program_organization.plan_assignment_replacement` |
 | Program inventory | `delivery-workbench-program-list` v1 | `programs.program_inventory` |
 | Program validation | `delivery-workbench-program-validation` v1 | `programs.validate_program` |
 | Program simulation | `delivery-workbench-program-simulation` v1 | `programs.simulate_program` |
@@ -76,6 +83,9 @@ is added when an external consumer asks for one.
 | `dw orchestration show <score> --json` | `orchestration.compile_score` | normalized runtime score, layout, analysis, semantic hash, and document hash |
 | `dw orchestration validate <score> --json` | `orchestration.validate_score` | exact-key verdict plus JSON-pointer diagnostics/remediation; exit 1 invalid |
 | `dw orchestration simulate <score> --json` | `orchestration.simulate_score` | pure scheduling waves, locks, lineage, branches, budgets, checkpoints, and terminals |
+| `dw organization list --json` | `program_organization.organization_inventory` | healthy empty inventory or direct-contained organization validation/hash summaries; pure |
+| `dw organization validate <organization> --json` | `program_organization.validate_organization` | closed role/capability/visibility/cardinality/independence/council/replacement policy plus logical feasibility diagnostics; exit 1 invalid |
+| `dw organization simulate <organization> --json` | `program_organization.simulate_organization` | logical assignment witnesses, packet policies, councils, and resource-compatible concurrency waves; pure |
 | `dw workflow list --json` | `program_workflow.workflow_inventory` | healthy empty inventory or contained source-aware template validation plus finite envelope/hash summaries; pure |
 | `dw workflow validate <workflow> --json` | `program_workflow.validate_workflow` | closed parameters/nodes/routes, exact nested version/hash and bounded-score references, recursion/cycle/capability/envelope diagnostics; exit 1 invalid |
 | `dw workflow simulate <workflow> --json` | `program_workflow.simulate_workflow` | namespaced hierarchy, fan waves, typed route outcomes, concrete bounded rounds, per-node/route/worst-case envelopes, source provenance, and capability consumers; pure |
