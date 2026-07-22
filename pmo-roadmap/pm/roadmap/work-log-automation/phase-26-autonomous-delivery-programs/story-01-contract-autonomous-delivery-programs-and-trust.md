@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 26
-- **Status:** in-progress
+- **Status:** done
   <!-- status vocabulary: roadmap-builder.md §2.3 -->
 - **Depends on:** none
 - **Unblocks:** WLA-26-02 through WLA-26-12
@@ -42,30 +42,30 @@ the more powerful layer.
 
 ## Acceptance criteria
 
-- [ ] The contract distinguishes tracked program/workflow/organization policy,
+- [x] The contract distinguishes tracked program/workflow/organization policy,
   local driver resolution, and a separate finite program grant; opening,
   compiling, simulating, or saving policy starts nothing.
-- [ ] Vanilla roadmap/evidence/briefing/deliberate-step/gate/Workbench behavior
+- [x] Vanilla roadmap/evidence/briefing/deliberate-step/gate/Workbench behavior
   remains a complete, behavior-compatible no-program mode: absent program
   configuration is healthy, and install/update starts no program state,
   process, observer, notification, network call, or setup ceremony.
-- [ ] `delivery-workbench-orchestration@1` remains an independently opt-in
+- [x] `delivery-workbench-orchestration@1` remains an independently opt-in
   one-score/one-run contract with terminal handoff; a score, run, template, or
   existing bounded grant is never auto-wrapped in or interpreted as a program.
-- [ ] Multi-phase scope, deterministic work/team assignment, hierarchical
+- [x] Multi-phase scope, deterministic work/team assignment, hierarchical
   subflows, fan-out/fan-in, bounded loop/exhaustion semantics, and optional
   human checkpoints are complete enough to simulate every legal route.
-- [ ] Continuous story completion requires an independent verifier assignment;
+- [x] Continuous story completion requires an independent verifier assignment;
   implementer, verifier, meta-verifier, council, and master-architect duties and
   separation rules are explicit.
-- [ ] Mechanical facts, individual agent judgments, council/quorum judgments,
+- [x] Mechanical facts, individual agent judgments, council/quorum judgments,
   dissent, and meta-verification are different typed verdicts; none can
   impersonate another.
-- [ ] Advisory/checkpointed/continuous modes, capability lattice, per-scope and
+- [x] Advisory/checkpointed/continuous modes, capability lattice, per-scope and
   per-loop budgets, objective/agent-authorized certification, integration,
   story/phase advancement, expiry/revocation, and permanent exclusions are
   defined with exact fail checks.
-- [ ] A threat table covers ambient authority, self-verification, prompt/rubric
+- [x] A threat table covers ambient authority, self-verification, prompt/rubric
   mutation, infinite loops, colluding councils, hidden dissent, stale verdicts,
   phase skipping, duplicate destructive acts, content leakage, and UI/runtime
   drift, plus default-mode creep and mandatory program setup; docs/canon
@@ -84,6 +84,7 @@ the more powerful layer.
 
 ## Notes / open questions
 
-The contract may choose a new hierarchical workflow kind or a compatible v2 of
-the score, but it must not overload the existing v1 DAG with implicit runtime
-semantics. That choice is settled here before compiler work.
+The choice is settled: Phase 24's score stays frozen as one bounded-run kind.
+Phase 26 adds separate program, workflow, organization, and rubric kinds that
+compile into one immutable bundle; a program may call a score only through an
+explicit bounded child-run leaf and strict subset grant.

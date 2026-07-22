@@ -646,3 +646,9 @@ One extension has since been contracted: outward observation and bounded
 nudging — CI, review, merge-state, and agent-activity facts recorded as
 durable signals and routed back to agents under grant authority — is
 specified in the [outward signals contract](./signals.md) (Phase 25).
+
+A second, separately opt-in extension is now contracted in
+[programs.md](./programs.md): multi-phase programs may compose bounded child
+runs, hierarchical workflows, independent verifiers, councils, and exact
+delivery rails under their own finite program grant. Existing scores and run
+grants acquire none of those semantics or capabilities.

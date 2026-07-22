@@ -7,7 +7,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 ### work-log-automation
 
 - Current phase: 26 (phase-26-autonomous-delivery-programs)
-- Next story: WLA-26-01 — Contract autonomous delivery programs and trust [in-progress]
+- Next story: WLA-26-02 — Select work across a governed roadmap scope [in-progress]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

@@ -496,12 +496,29 @@ implemented, evidence-backed, and closed. The measured outcome and audit trail
 are in the
 [Phase 24 final summary](../pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/final-summary.md).
 
+## Phase 25 and the optional Phase 26 layer
+
+Phase 25 delivered authority-free outward facts, bounded granted nudges,
+driver activity, durable requests, notifications, and replayable streams over
+the same finite run spine. Phase 26 now contracts an additional opt-in program
+layer above bounded runs: deterministic multi-phase selection, reusable
+hierarchical workflows, logical delivery organizations, independent per-story
+verification, typed councils/meta-review, and separately granted integration
+and roadmap advancement.
+
+This does not redefine the product's ordinary mode. Vanilla Delivery Workbench
+remains complete with no program configured, and a Phase 24 score remains an
+independent one-run capability. The exact capability ladder, policy kinds,
+verdict taxonomy, grant, state, refusal, and threat model are in the
+[optional autonomous-program contract](./programs.md).
+
 ## Where to go deeper
 
 - [Architecture and executable claims](./architecture.md)
 - [Status briefing contract](./status-briefing.md)
 - [Deliberate step contract](./deliberate-step.md)
 - [Visual orchestration contract](./orchestration.md)
+- [Optional autonomous-program contract](./programs.md)
 - [Interop inventory and schema policy](./interop.md)
 - [MCP tool contract and exclusions](./mcp.md)
 - [Mission-control substrate and consent rings](./mission-control.md)
