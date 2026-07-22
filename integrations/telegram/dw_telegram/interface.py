@@ -470,7 +470,7 @@ class TelegramInterface:
         approve/reject still crosses the local exact-token checkpoint
         boundary via the rails. Stale or unknown correlations refuse.
         """
-        if len(args) < 2 or args[1] not in {"approve", "reject"}:
+        if len(args) < 2:
             self._say(chat_id, "usage: /decision <correlation-id> approve|reject")
             return
         correlation, decision = args[0], args[1]
@@ -486,7 +486,9 @@ class TelegramInterface:
         for item in doc.get("notifications", []):
             request = item.get("request") or {}
             if (
-                item.get("kind") == "checkpoint-pending"
+                item.get("kind") in {
+                    "checkpoint-pending", "request-pending", "request-republished",
+                }
                 and request.get("correlation_id") == correlation
             ):
                 match = item
@@ -498,15 +500,24 @@ class TelegramInterface:
                 "no decision was applied",
             )
             return
+        options = (match.get("request") or {}).get(
+            "response_schema", {}
+        ).get("decision", ["approve", "reject"])
+        if decision not in options:
+            self._say(
+                chat_id,
+                "usage: /decision <correlation-id> " + "|".join(options),
+            )
+            return
         result, why = self.rails.checkpoint_decide(
-            repo, str(match.get("run_id", "")), decision
+            repo, str(match.get("run_id", "")), correlation, decision
         )
         if result is None:
             self._say(chat_id, f"✕ {why}")
             return
         self._say(
             chat_id,
-            f"✓ checkpoint {decision} applied to {match.get('run_id')} "
+            f"✓ request {decision} applied to {match.get('run_id')} "
             f"(state: {result.get('state', 'unknown')})",
         )
 

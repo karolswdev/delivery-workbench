@@ -2,9 +2,9 @@
 
 - **Project:** work-log-automation
 - **Phase:** 25
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-25-01
-- **Unblocks:** WLA-25-06, WLA-25-09
+- **Unblocks:** WLA-25-09
 - **Owner:** unassigned
 
 ## Problem
@@ -44,24 +44,24 @@ delivers notifications through.
 
 ## Acceptance criteria
 
-- [ ] Stopping the conductor (crash or pause) with a checkpoint pending
+- [x] Stopping the conductor (crash or pause) with a checkpoint pending
   and resuming republishes exactly one `request-republished` event with
   the original correlation id; a decision submitted against the
   pre-restart id still applies, and a duplicate republish cannot occur,
   proven across three consecutive restarts.
-- [ ] Outstanding requests are derivable from the ledger alone: a
+- [x] Outstanding requests are derivable from the ledger alone: a
   replay test reconstructs the pending set at every ledger position and
   matches the live projection.
-- [ ] Typed validation holds at the seam: a response that fails the
+- [x] Typed validation holds at the seam: a response that fails the
   declared schema or correlation id is a recorded refusal that leaves
   the request outstanding.
-- [ ] The Workbench and `run show` render outstanding requests with age,
+- [x] The Workbench and `run show` render outstanding requests with age,
   origin node, and schema summary; an operator can find every waiting
   decision without scrolling the ledger.
-- [ ] Checkpoint lineage renders as a decision tree in `run view`, and
+- [x] Checkpoint lineage renders as a decision tree in `run view`, and
   inspecting a historical decision shows the exact facts preview the
   decider saw (already ledgered), read-only.
-- [ ] Grant expiry converts outstanding requests to recorded `expired`
+- [x] Grant expiry converts outstanding requests to recorded `expired`
   refusals during the next tick or resume, and the notification layer
   observes that transition.
 
@@ -81,3 +81,17 @@ The MAF-go checkpoint model also carries in-flight *messages*; our
 equivalent (undelivered nudge packets) is deliberately excluded — an
 undelivered nudge is refused and re-derived from its signal fact rather
 than persisted as a queued message, keeping the ledger the only truth.
+
+The explicit request record is a replay projection of the existing
+hash-chained opening fact (`checkpoint_reached` or the uncovered-nudge
+`nudge_refused`), not a second append or database. Its correlation id is
+derived from that event hash, so waiting and persistence cannot be split by
+a crash. New lifecycle events record republish, typed decision, and
+content-free refusal. `run request` is the generic boundary; `run checkpoint`
+is deliberately type-restricted to checkpoint requests for compatibility.
+
+Age is read-time display data and is excluded from the exact act token. A
+historical decided request instead binds to the decision event's `prev_hash`,
+which is the exact ledger head the decider authorized. A maintenance tick can
+also close a crash prefix in which terminal authority was recorded before its
+outstanding requests were expired; that recovery path starts no work.

@@ -28,6 +28,7 @@ from .orchestration_run import (
     _sha,
     build_run_plan,
     decide_checkpoint,
+    decide_outstanding_request,
     replay_run,
     run_inventory,
     start_run,
@@ -41,7 +42,9 @@ RUN_SUMMARY_KIND = "delivery-workbench-run-summary-list"
 RUN_STREAM_KIND = "delivery-workbench-run-stream"
 RUN_SURFACE_SCHEMA_VERSION = 1
 
-_ACTIONS = {"tick", "pause", "resume", "revoke", "cancel", "checkpoint"}
+_ACTIONS = {
+    "tick", "pause", "resume", "revoke", "cancel", "checkpoint", "request",
+}
 _SAFE_EXECUTION_ID = re.compile(r"^(?:session|check)-[A-Za-z0-9_.:-]{1,127}$")
 _MAX_STREAM_READ = 100_000
 
@@ -88,6 +91,7 @@ def _act_applicability(
     action: str,
     reason: str,
     decision: str,
+    correlation_id: str = "",
 ) -> list[str]:
     state = str(projection["state"])
     issues: list[str] = []
@@ -95,17 +99,26 @@ def _act_applicability(
         raise DwError(f"unsupported run act: {action}")
     if action in {"pause", "revoke", "cancel"} and not reason:
         issues.append(f"run {action} requires a reason")
-    if action in {"tick", "resume", "checkpoint"} and reason:
+    if action in {"tick", "resume", "checkpoint", "request"} and reason:
         issues.append(f"run {action} does not accept a reason")
     if len(reason) > 200 or "\n" in reason or "\0" in reason:
         issues.append("run act reason must be a bounded single line")
-    if action == "checkpoint" and decision not in {"approve", "reject"}:
-        issues.append("checkpoint decision must be approve or reject")
-    if action != "checkpoint" and decision:
+    if action not in {"checkpoint", "request"} and decision:
         issues.append(f"run {action} does not accept a checkpoint decision")
+    if action not in {"checkpoint", "request"} and correlation_id:
+        issues.append(f"run {action} does not accept a request correlation id")
 
     if action == "tick":
-        if state == "awaiting-certification":
+        if (
+            state in TERMINAL_STATES
+            and state != "awaiting-certification"
+            and projection["outstanding_requests"]
+        ):
+            # Recover a crash after terminal authority was ledgered but before
+            # its outstanding requests were expired. This tick dispatches no
+            # work; the conductor's first act is request maintenance.
+            pass
+        elif state == "awaiting-certification":
             # A tick here observes external commits and evaluates the
             # score's declared nudge rules — the sanctioned wake. With no
             # rules declared there is nothing a tick could do.
@@ -114,15 +127,27 @@ def _act_applicability(
             )
             if not compiled["score"].get("nudges"):
                 issues.append(f"cannot tick a run in state {state}")
+        elif state == "awaiting-approval" and projection["outstanding_requests"]:
+            # A restart maintenance tick republishes/ages requests but cannot
+            # dispatch while a human decision is outstanding.
+            pass
         elif state != "active":
             issues.append(f"cannot tick a run in state {state}")
         elif not projection["dispatch_allowed"]:
             issues.append("run grant does not currently permit dispatch")
     elif action == "pause":
-        if state != "active" or not projection["dispatch_allowed"]:
+        pausable = (
+            (state == "active" and projection["dispatch_allowed"])
+            or (state == "awaiting-approval" and projection["outstanding_requests"])
+        )
+        if not pausable:
             issues.append(f"cannot pause a run in state {state}")
     elif action == "resume":
-        if state != "paused" or projection["expired"]:
+        resumable = (
+            state == "paused"
+            and (not projection["expired"] or projection["outstanding_requests"])
+        )
+        if not resumable:
             issues.append(f"cannot resume a run in state {state}")
         else:
             _run_path, grant, _compiled = _load_run_documents(
@@ -132,11 +157,32 @@ def _act_applicability(
     elif action in {"revoke", "cancel"}:
         if state not in {"active", "paused", "awaiting-approval"}:
             issues.append(f"cannot {action} a run in state {state}")
-    elif action == "checkpoint":
-        if state != "awaiting-approval" or not isinstance(
-            projection.get("pending_checkpoint"), dict
-        ):
-            issues.append("run has no pending checkpoint")
+    elif action in {"checkpoint", "request"}:
+        requests = list(projection["outstanding_requests"])
+        if action == "checkpoint":
+            requests = [item for item in requests if item["kind"] == "checkpoint"]
+        if not requests:
+            issues.append("run has no matching outstanding request")
+        elif not correlation_id:
+            issues.append("request response requires a correlation id")
+        else:
+            matching = next(
+                (
+                    item for item in requests
+                    if item["correlation_id"] == correlation_id
+                ),
+                None,
+            )
+            # A mismatch remains applicable: applying the exact preview
+            # records a correlation-mismatch refusal without consuming the
+            # live request. A matching request must be in a decidable state.
+            if matching is not None:
+                if matching["kind"] == "checkpoint" and state != "awaiting-approval":
+                    issues.append("checkpoint request is not currently decidable")
+                if matching["kind"] == "nudge" and state not in {
+                    "active", "awaiting-certification",
+                }:
+                    issues.append("nudge request is not currently decidable")
     return issues
 
 
@@ -147,6 +193,7 @@ def build_run_act_preview(
     *,
     reason: str = "",
     decision: str = "",
+    correlation_id: str = "",
     now: datetime | None = None,
 ) -> dict[str, object]:
     """Build a pure action+parameter+ledger-bound confirmation document."""
@@ -154,14 +201,43 @@ def build_run_act_preview(
     reason = str(reason or "").strip()
     decision = str(decision or "").strip().lower()
     projection = replay_run(root, run_id, now=now)
-    issues = _act_applicability(root, projection, action, reason, decision)
+    correlation_id = str(correlation_id or "").strip()
+    if action == "checkpoint" and not correlation_id:
+        pending = projection.get("pending_checkpoint")
+        if isinstance(pending, dict):
+            correlation_id = str(pending.get("correlation_id") or "")
+    issues = _act_applicability(
+        root, projection, action, reason, decision, correlation_id
+    )
     pending = projection.get("pending_checkpoint")
     pending_summary = None
     if isinstance(pending, dict):
         pending_summary = {
             key: pending.get(key)
-            for key in ("node_id", "checkpoint", "mode", "terminal", "reason")
+            for key in (
+                "node_id", "checkpoint", "mode", "terminal", "reason",
+                "correlation_id",
+            )
         }
+    eligible_requests = list(projection["outstanding_requests"])
+    if action == "checkpoint":
+        eligible_requests = [
+            item for item in eligible_requests if item["kind"] == "checkpoint"
+        ]
+    request = next(
+        (
+            item for item in eligible_requests
+            if item["correlation_id"] == correlation_id
+        ),
+        None,
+    )
+    request_summary = None if request is None else {
+        key: request.get(key)
+        for key in (
+            "correlation_id", "kind", "origin", "origin_node",
+            "schema_summary", "opened_at", "expires_at",
+        )
+    }
     unsigned: dict[str, object] = {
         "kind": RUN_ACT_PREVIEW_KIND,
         "schema_version": RUN_SURFACE_SCHEMA_VERSION,
@@ -174,8 +250,18 @@ def build_run_act_preview(
         "ledger_head": projection["ledger_head"],
         "reason": reason,
         "decision": decision,
+        "correlation_id": correlation_id,
         "pending_checkpoint": pending_summary,
-        "starts_work": action == "tick",
+        "outstanding_request": request_summary,
+        "response_outcome": (
+            "correlation-mismatch" if action in {"checkpoint", "request"}
+            and request is None else "invalid-response"
+            if action in {"checkpoint", "request"}
+            and request is not None
+            and decision not in request["response_schema"]["decision"]
+            else "decision"
+        ),
+        "starts_work": action == "tick" and projection["state"] == "active",
         "writes_events": False,
     }
     return {**unsigned, "act_token": _sha(unsigned)}
@@ -189,11 +275,13 @@ def apply_run_act(
     *,
     reason: str = "",
     decision: str = "",
+    correlation_id: str = "",
     now: datetime | None = None,
 ) -> dict[str, object]:
     """Apply exactly the fresh preview; no caller-supplied runtime semantics."""
     preview = build_run_act_preview(
-        root, run_id, action, reason=reason, decision=decision, now=now
+        root, run_id, action, reason=reason, decision=decision,
+        correlation_id=correlation_id, now=now
     )
     if str(expect or "") != preview["act_token"]:
         raise DwError(
@@ -205,7 +293,16 @@ def apply_run_act(
     if action == "tick":
         return tick_run(root, run_id, expect=ledger_head, now=now)
     if action == "checkpoint":
+        if correlation_id:
+            return decide_outstanding_request(
+                root, run_id, correlation_id, decision, ledger_head, now=now,
+                expected_kind="checkpoint",
+            )
         return decide_checkpoint(root, run_id, decision, ledger_head, now=now)
+    if action == "request":
+        return decide_outstanding_request(
+            root, run_id, correlation_id, decision, ledger_head, now=now
+        )
     return transition_run(
         root, run_id, action, ledger_head, reason=reason, now=now
     )
@@ -333,23 +430,25 @@ def _node_document(
 def _control_catalog(
     root: Path, projection: dict[str, object]
 ) -> list[dict[str, object]]:
-    state = str(projection["state"])
     controls: list[dict[str, object]] = []
     candidates = [
-        ("tick", False, "", True),
-        ("pause", True, "", False),
-        ("resume", False, "", False),
-        ("revoke", True, "", False),
-        ("cancel", True, "", False),
+        ("tick", False, "", True, ""),
+        ("pause", True, "", False, ""),
+        ("resume", False, "", False, ""),
+        ("revoke", True, "", False, ""),
+        ("cancel", True, "", False, ""),
     ]
-    if state == "awaiting-approval" and projection.get("pending_checkpoint"):
-        candidates.extend([
-            ("checkpoint", False, "approve", False),
-            ("checkpoint", False, "reject", False),
-        ])
-    for action, reason_required, decision, starts_work in candidates:
+    for request in projection["outstanding_requests"]:
+        for option in request["response_schema"]["decision"]:
+            candidates.append((
+                "request", False, str(option), False,
+                str(request["correlation_id"]),
+            ))
+    for action, reason_required, decision, starts_work, correlation_id in candidates:
         reason = "operator reason required" if reason_required else ""
-        issues = _act_applicability(root, projection, action, reason, decision)
+        issues = _act_applicability(
+            root, projection, action, reason, decision, correlation_id
+        )
         # The placeholder satisfies shape validation only; the UI must collect
         # the real reason and request a new exact preview before confirming.
         if reason_required:
@@ -357,6 +456,7 @@ def _control_catalog(
         controls.append({
             "action": action,
             "decision": decision,
+            "correlation_id": correlation_id,
             "available": not issues,
             "issues": issues,
             "reason_required": reason_required,
@@ -384,6 +484,32 @@ def _control_catalog(
         },
     ])
     return controls
+
+
+def _decision_tree(history: list[dict[str, object]]) -> dict[str, object]:
+    children: dict[str, list[str]] = {
+        str(item["correlation_id"]): [] for item in history
+    }
+    roots: list[str] = []
+    for item in history:
+        correlation = str(item["correlation_id"])
+        parent = str(item.get("parent_correlation_id") or "")
+        if parent and parent in children:
+            children[parent].append(correlation)
+        else:
+            roots.append(correlation)
+    nodes = []
+    for item in history:
+        correlation = str(item["correlation_id"])
+        nodes.append({
+            key: item.get(key)
+            for key in (
+                "correlation_id", "parent_correlation_id", "kind", "origin",
+                "origin_node", "status", "opened_seq", "opened_at",
+                "decision", "decision_seq", "schema_summary", "preview",
+            )
+        } | {"children": children[correlation]})
+    return {"roots": roots, "nodes": nodes, "inspect_only": True}
 
 
 def build_run_view(
@@ -474,6 +600,9 @@ def build_run_view(
         "routes": projection["routes"],
         "checkpoints": projection["checkpoints"],
         "pending_checkpoint": projection["pending_checkpoint"],
+        "outstanding_requests": projection["outstanding_requests"],
+        "decision_tree": _decision_tree(projection["request_history"]),
+        "request_refusals": projection["request_refusals"],
         "fact_binding": projection["fact_binding"],
         "external_commits": projection["external_commits"],
         "timeline": events,
@@ -524,6 +653,7 @@ def run_summary_inventory(
             "story": run["story"]["id"],
             "active_claims": len(run["active_claims"]),
             "completed_claims": len(run["completed_claims"]),
+            "outstanding_requests": len(run["outstanding_requests"]),
             "ledger_events": run["ledger_events"],
             "ledger_head": run["ledger_head"],
             "expired": run["expired"],

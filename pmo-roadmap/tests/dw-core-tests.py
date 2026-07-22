@@ -1536,7 +1536,7 @@ class DwCoreTest(unittest.TestCase):
                 "/api/orchestration/preview", "/api/orchestration/apply",
                 "/api/runs/preview", "/api/runs/start", "/api/runs/tick",
                 "/api/runs/pause", "/api/runs/resume", "/api/runs/revoke",
-                "/api/runs/cancel", "/api/runs/checkpoint",
+                "/api/runs/cancel", "/api/runs/checkpoint", "/api/runs/request",
                 "/api/notifications/ack",
             },
         )
@@ -1553,6 +1553,7 @@ class DwCoreTest(unittest.TestCase):
             "dw run plan", "dw run start", "dw run list", "dw run show", "dw run view",
             "dw run preview", "dw run tick", "dw run pause", "dw run resume",
             "dw run revoke", "dw run cancel", "dw run checkpoint", "dw run stream",
+            "dw run request",
             "dw run tail",
         ]
         self.assertEqual(self._interop_missing(verbs, doc), [])
@@ -2704,7 +2705,7 @@ class MCPServerTest(unittest.TestCase):
             "dw_orchestration_simulate", "dw_run_plan", "dw_run_list",
             "dw_run_show", "dw_run_view", "dw_run_preview", "dw_run_start",
             "dw_run_tick", "dw_run_pause", "dw_run_resume", "dw_run_revoke",
-            "dw_run_cancel", "dw_run_checkpoint", "dw_run_stream",
+            "dw_run_cancel", "dw_run_checkpoint", "dw_run_request", "dw_run_stream",
         ])
         for banned in ("certify", "commit", "bundle"):
             self.assertFalse(any(banned in n for n in names), names)
@@ -6202,6 +6203,22 @@ class OrchestrationConductorTest(unittest.TestCase):
             approved_by="conductor-fixture", now=self.now,
         )
 
+    def _open_checkpoint_request(self, name="pending-request", offset=3600):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+
+        self._write_score(name, [{
+            "id": "human-gate", "type": "approval",
+            "prompt": "Review the bounded facts.",
+            "options": ["approve", "reject"],
+        }])
+        started = self._start(name, offset=offset)
+        conductor.tick_run(self.root, started["run_id"], now=self.now)
+        waiting = runs.replay_run(self.root, started["run_id"], now=self.now)
+        self.assertEqual(waiting["state"], "awaiting-approval")
+        self.assertEqual(len(waiting["outstanding_requests"]), 1)
+        return waiting
+
     @staticmethod
     def _responses(polls=2):
         return {
@@ -6516,6 +6533,57 @@ class OrchestrationConductorTest(unittest.TestCase):
         )
         view = surface.build_run_view(self.root, run_id, now=self.now)
         self.assertEqual(len(view["nudges"]), len(again["nudges"]))
+
+    def test_uncovered_nudge_is_a_typed_request_before_manual_delivery(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+
+        nodes, responses = self._nudge_nodes()
+        self._write_score("nudge-manual-request", nodes, nudges=[
+            {"id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+             "max_total": 2},
+        ])
+        started = self._start(
+            "nudge-manual-request", signal_channel="origin/manual-x"
+        )
+        fixture = drivers.FixtureDriver(responses)
+        self._run_to_terminal(started["run_id"], fixture)
+        self._seed_signal(branch="manual-x", name="ci-manual")
+        conductor.tick_run(
+            self.root, started["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        pending = runs.replay_run(self.root, started["run_id"], now=self.now)
+        self.assertEqual(len(pending["outstanding_requests"]), 1)
+        request = pending["outstanding_requests"][0]
+        self.assertEqual(request["kind"], "nudge")
+        self.assertEqual(request["origin_node"], "repair")
+        self.assertEqual(request["response_schema"], {
+            "decision": ["approve", "reject"],
+        })
+
+        preview = surface.build_run_act_preview(
+            self.root, started["run_id"], "request",
+            correlation_id=request["correlation_id"], decision="approve",
+            now=self.now,
+        )
+        approved = surface.apply_run_act(
+            self.root, started["run_id"], "request", preview["act_token"],
+            correlation_id=request["correlation_id"], decision="approve",
+            now=self.now,
+        )
+        self.assertEqual(approved["request_history"][-1]["status"], "approved")
+        conductor.tick_run(
+            self.root, started["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        delivered = runs.replay_run(self.root, started["run_id"], now=self.now)
+        self.assertEqual(
+            len([item for item in delivered["nudges"] if item["delivered"]]), 1
+        )
+        self.assertEqual(delivered["request_history"][-1]["status"], "applied")
 
     def test_nudge_refusals_are_distinct_recorded_and_deduped(self):
         import dw_pmo.orchestration_conductor as conductor
@@ -7022,15 +7090,15 @@ class OrchestrationConductorTest(unittest.TestCase):
         self.assertEqual(len(pending), 1)
         entry = pending[0]
         self.assertTrue(entry["unread"])
-        self.assertEqual(
-            entry["request"]["correlation_id"], entry["id"]
-        )
+        correlation = entry["request"]["correlation_id"]
+        self.assertRegex(correlation, r"^req-[0-9a-f]{24}$")
+        self.assertNotEqual(correlation, entry["id"])
         for excluded in ("sha256:", "--expect", "apply_command"):
             self.assertNotIn(excluded, entry["outbound"])
         self.assertIn("ack: " + entry["id"], entry["outbound"])
 
         # The correlation resolves while pending and refuses once decided.
-        match = ntf.resolve_correlation(self.root, entry["id"])
+        match = ntf.resolve_correlation(self.root, correlation)
         self.assertEqual(match["run_id"], run_id)
         import dw_pmo.orchestration_surface as surface
 
@@ -7042,7 +7110,7 @@ class OrchestrationConductorTest(unittest.TestCase):
             decision="approve", now=self.now,
         )
         with self.assertRaises(DwError):
-            ntf.resolve_correlation(self.root, entry["id"])
+            ntf.resolve_correlation(self.root, correlation)
 
         # Acknowledgement is idempotent and receipted; derivation is
         # stable across repeated builds (no hidden cache).
@@ -7697,6 +7765,381 @@ class OrchestrationConductorTest(unittest.TestCase):
             now=self.now,
         )
         self.assertEqual(rejected["state"], "blocked")
+
+    def test_outstanding_request_republishes_once_per_restart_generation(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+
+        waiting = self._open_checkpoint_request("durable-request")
+        run_id = waiting["run_id"]
+        correlation = waiting["outstanding_requests"][0]["correlation_id"]
+
+        # Three consecutive restart ticks produce one republish in the
+        # unchanged generation, never one per poll/process invocation.
+        for _ in range(3):
+            conductor.tick_run(self.root, run_id, now=self.now)
+        after_restarts = runs.replay_run(self.root, run_id, now=self.now)
+        republished = [
+            event for event in runs._read_events(  # noqa: protected-access
+                runs._run_dir(self.root, run_id), run_id  # noqa: protected-access
+            )
+            if event["event"] == "request_republished"
+        ]
+        self.assertEqual(len(republished), 1)
+        self.assertEqual(republished[0]["detail"]["correlation_id"], correlation)
+        self.assertEqual(republished[0]["detail"]["generation"], 0)
+
+        paused = runs.transition_run(
+            self.root, run_id, "pause", after_restarts["ledger_head"],
+            reason="operator pause with decision pending", now=self.now,
+        )
+        self.assertEqual(paused["state"], "paused")
+        self.assertEqual(
+            paused["outstanding_requests"][0]["correlation_id"], correlation
+        )
+        resumed = runs.transition_run(
+            self.root, run_id, "resume", paused["ledger_head"], now=self.now,
+        )
+        self.assertEqual(resumed["state"], "awaiting-approval")
+        self.assertEqual(
+            resumed["outstanding_requests"][0]["correlation_id"], correlation
+        )
+        republished = [
+            event for event in runs._read_events(  # noqa: protected-access
+                runs._run_dir(self.root, run_id), run_id  # noqa: protected-access
+            )
+            if event["event"] == "request_republished"
+        ]
+        self.assertEqual([event["detail"]["generation"] for event in republished], [0, 2])
+
+        # The original pre-restart correlation remains the decision address.
+        preview = surface.build_run_act_preview(
+            self.root, run_id, "request", correlation_id=correlation,
+            decision="approve", now=self.now,
+        )
+        decided = surface.apply_run_act(
+            self.root, run_id, "request", preview["act_token"],
+            correlation_id=correlation, decision="approve", now=self.now,
+        )
+        self.assertEqual(decided["state"], "active")
+        self.assertEqual(decided["request_history"][0]["status"], "approved")
+
+        # Every valid ledger prefix independently reconstructs the same live
+        # pending set; projection.json is never consulted.
+        ledger = runs._run_dir(self.root, run_id) / "ledger.jsonl"  # noqa: protected-access
+        original = ledger.read_bytes()
+        lines = original.splitlines(keepends=True)
+        expected = set()
+        try:
+            for index, line in enumerate(lines, start=1):
+                event = json.loads(line)
+                if event["event"] == "checkpoint_reached" and event["detail"]["terminal"] == "none":
+                    expected.add(runs._request_correlation(event))  # noqa: protected-access
+                elif event["event"] == "request_decided":
+                    expected.discard(event["detail"]["correlation_id"])
+                elif event["event"] == "request_refused" and event["detail"]["reason"] == "expired":
+                    expected.discard(event["detail"]["correlation_id"])
+                ledger.write_bytes(b"".join(lines[:index]))
+                replayed = runs.replay_run(self.root, run_id, now=self.now)
+                self.assertEqual(
+                    {item["correlation_id"] for item in replayed["outstanding_requests"]},
+                    expected,
+                    f"ledger prefix {index}",
+                )
+        finally:
+            ledger.write_bytes(original)
+
+    def test_typed_request_refusals_are_ledgered_and_leave_request_live(self):
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+
+        waiting = self._open_checkpoint_request("typed-request")
+        run_id = waiting["run_id"]
+        correlation = waiting["outstanding_requests"][0]["correlation_id"]
+        wrong = "req-000000000000000000000000"
+        mismatch = surface.build_run_act_preview(
+            self.root, run_id, "request", correlation_id=wrong,
+            decision="approve", now=self.now,
+        )
+        self.assertTrue(mismatch["applicable"])
+        self.assertEqual(mismatch["response_outcome"], "correlation-mismatch")
+        after_mismatch = surface.apply_run_act(
+            self.root, run_id, "request", mismatch["act_token"],
+            correlation_id=wrong, decision="approve", now=self.now,
+        )
+        self.assertEqual(
+            after_mismatch["outstanding_requests"][0]["correlation_id"], correlation
+        )
+        invalid = surface.build_run_act_preview(
+            self.root, run_id, "request", correlation_id=correlation,
+            decision="maybe", now=self.now,
+        )
+        self.assertTrue(invalid["applicable"])
+        self.assertEqual(invalid["response_outcome"], "invalid-response")
+        after_invalid = surface.apply_run_act(
+            self.root, run_id, "request", invalid["act_token"],
+            correlation_id=correlation, decision="maybe", now=self.now,
+        )
+        self.assertEqual(len(after_invalid["outstanding_requests"]), 1)
+        self.assertEqual(
+            [item["reason"] for item in after_invalid["request_refusals"]],
+            ["correlation-mismatch", "invalid-response"],
+        )
+        ledger = (
+            runs._run_dir(self.root, run_id) / "ledger.jsonl"  # noqa: protected-access
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("maybe", ledger)
+
+    def test_checkpoint_alias_cannot_decide_a_live_nudge_request(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+
+        nodes, responses = self._nudge_nodes()
+        nodes.append({
+            "id": "human-gate", "type": "approval", "needs": ["worker"],
+            "prompt": "Review the bounded facts.",
+            "options": ["approve", "reject"],
+        })
+        self._write_score("request-kind-isolation", nodes, nudges=[{
+            "id": "on-ci-failed", "signal": "ci-failed", "target": "repair",
+            "max_total": 1,
+        }])
+        self._seed_signal(branch="kind-isolation", name="ci-kind")
+        started = self._start(
+            "request-kind-isolation", signal_channel="origin/kind-isolation"
+        )
+        fixture = drivers.FixtureDriver(responses)
+        for _ in range(10):
+            conductor.tick_run(
+                self.root, started["run_id"], driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+            projection = runs.replay_run(
+                self.root, started["run_id"], now=self.now
+            )
+            if projection["state"] == "awaiting-approval":
+                break
+        self.assertEqual(projection["state"], "awaiting-approval")
+        by_kind = {
+            item["kind"]: item for item in projection["outstanding_requests"]
+        }
+        self.assertEqual(set(by_kind), {"checkpoint", "nudge"})
+
+        nudge_id = by_kind["nudge"]["correlation_id"]
+        preview = surface.build_run_act_preview(
+            self.root, started["run_id"], "checkpoint",
+            correlation_id=nudge_id, decision="approve", now=self.now,
+        )
+        self.assertTrue(preview["applicable"])
+        self.assertEqual(preview["response_outcome"], "correlation-mismatch")
+        refused = surface.apply_run_act(
+            self.root, started["run_id"], "checkpoint", preview["act_token"],
+            correlation_id=nudge_id, decision="approve", now=self.now,
+        )
+        self.assertEqual(
+            {item["kind"] for item in refused["outstanding_requests"]},
+            {"checkpoint", "nudge"},
+        )
+        self.assertEqual(
+            refused["request_refusals"][-1]["reason"],
+            "correlation-mismatch",
+        )
+
+        checkpoint_id = next(
+            item["correlation_id"]
+            for item in refused["outstanding_requests"]
+            if item["kind"] == "checkpoint"
+        )
+        reject = surface.build_run_act_preview(
+            self.root, started["run_id"], "request",
+            correlation_id=checkpoint_id, decision="reject", now=self.now,
+        )
+        blocked = surface.apply_run_act(
+            self.root, started["run_id"], "request", reject["act_token"],
+            correlation_id=checkpoint_id, decision="reject", now=self.now,
+        )
+        self.assertEqual(blocked["state"], "blocked")
+        self.assertEqual(blocked["outstanding_requests"], [])
+        nudge_history = next(
+            item for item in blocked["request_history"] if item["kind"] == "nudge"
+        )
+        self.assertEqual(nudge_history["status"], "expired")
+
+    def test_terminal_request_cleanup_recovers_a_crash_prefix(self):
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+
+        waiting = self._open_checkpoint_request("terminal-cleanup")
+        run_id = waiting["run_id"]
+        correlation = waiting["outstanding_requests"][0]["correlation_id"]
+        with runs._store_lock(self.root):  # noqa: protected-access
+            crashed = runs._append_event_locked(  # noqa: protected-access
+                self.root, run_id, waiting, "run_revoked",
+                {"reason": "simulate crash after terminal event", "generation": 1},
+                self.now,
+            )
+        self.assertEqual(crashed["state"], "revoked")
+        self.assertEqual(
+            crashed["outstanding_requests"][0]["correlation_id"], correlation
+        )
+
+        preview = surface.build_run_act_preview(
+            self.root, run_id, "tick", now=self.now
+        )
+        self.assertTrue(preview["applicable"])
+        self.assertFalse(preview["starts_work"])
+        result = surface.apply_run_act(
+            self.root, run_id, "tick", preview["act_token"], now=self.now
+        )
+        self.assertEqual(result["state"], "revoked")
+        recovered = runs.replay_run(self.root, run_id, now=self.now)
+        self.assertEqual(recovered["outstanding_requests"], [])
+        self.assertEqual(recovered["request_history"][0]["status"], "expired")
+        self.assertEqual(recovered["active_claims"], [])
+
+    def test_request_expiry_is_a_recorded_refusal_and_notification(self):
+        import dw_pmo.notifications as ntf
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+
+        waiting = self._open_checkpoint_request("expiring-request", offset=1)
+        late = self.now + timedelta(seconds=2)
+        conductor.tick_run(self.root, waiting["run_id"], now=late)
+        expired = runs.replay_run(self.root, waiting["run_id"], now=late)
+        self.assertEqual(expired["state"], "blocked")
+        self.assertEqual(expired["outstanding_requests"], [])
+        self.assertEqual(expired["request_history"][0]["status"], "expired")
+        self.assertEqual(expired["request_refusals"][-1]["reason"], "expired")
+        inventory = ntf.build_notifications(self.root, now=late)
+        self.assertTrue(any(
+            item["kind"] == "request-expired"
+            and item["run_id"] == waiting["run_id"]
+            for item in inventory["notifications"]
+        ))
+
+    def test_run_view_exposes_request_age_schema_and_inspect_only_lineage(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_run as runs
+        import dw_pmo.orchestration_surface as surface
+
+        self._write_score("decision-lineage", [
+            {"id": "first-gate", "type": "approval", "prompt": "First"},
+            {"id": "second-gate", "type": "approval", "prompt": "Second",
+             "needs": ["first-gate"]},
+        ])
+        started = self._start("decision-lineage")
+        conductor.tick_run(self.root, started["run_id"], now=self.now)
+        first = runs.replay_run(self.root, started["run_id"], now=self.now)
+        first_id = first["outstanding_requests"][0]["correlation_id"]
+        first = runs.decide_outstanding_request(
+            self.root, started["run_id"], first_id, "approve",
+            first["ledger_head"], now=self.now,
+        )
+        conductor.tick_run(self.root, started["run_id"], now=self.now)
+        observed = self.now + timedelta(seconds=7)
+        view = surface.build_run_view(self.root, started["run_id"], now=observed)
+        self.assertEqual(len(view["outstanding_requests"]), 1)
+        second = view["outstanding_requests"][0]
+        self.assertEqual(second["age_seconds"], 7)
+        self.assertEqual(second["origin_node"], "second-gate")
+        self.assertEqual(second["schema_summary"], "decision: approve | reject")
+        tree = view["decision_tree"]
+        self.assertTrue(tree["inspect_only"])
+        by_id = {item["correlation_id"]: item for item in tree["nodes"]}
+        second_id = second["correlation_id"]
+        self.assertEqual(by_id[second_id]["parent_correlation_id"], first_id)
+        self.assertEqual(by_id[first_id]["children"], [second_id])
+        self.assertIn("ledger_head", by_id[first_id]["preview"])
+        decision_event = next(
+            event for event in runs._read_events(  # noqa: protected-access
+                runs._run_dir(self.root, started["run_id"]),  # noqa: protected-access
+                started["run_id"],
+            )
+            if event["event"] == "request_decided"
+            and event["detail"]["correlation_id"] == first_id
+        )
+        self.assertEqual(
+            by_id[first_id]["preview"]["ledger_head"],
+            decision_event["prev_hash"],
+        )
+        self.assertEqual(by_id[first_id]["preview"]["state"], "awaiting-approval")
+        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        for token in (
+            "outstanding requests", "checkpoint lineage · inspect only",
+            "inspect exact decision preview", "schema_summary",
+        ):
+            self.assertIn(token, app)
+
+    def test_request_preview_and_apply_are_exact_across_interop_surfaces(self):
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.orchestration_surface as surface
+        import dw_pmo.workbench as wb
+
+        waiting = self._open_checkpoint_request("request-interop")
+        run_id = waiting["run_id"]
+        correlation = waiting["outstanding_requests"][0]["correlation_id"]
+        with mock.patch(
+            "dw_pmo.orchestration_run._utc_now", return_value=self.now
+        ):
+            core_preview = surface.build_run_act_preview(
+                self.root, run_id, "request", correlation_id=correlation,
+                decision="approve",
+            )
+            mcp_preview = mcp.call_tool(self.root, "dw_run_preview", {
+                "run_id": run_id, "action": "request",
+                "correlation_id": correlation, "decision": "approve",
+            })["structuredContent"]
+            status, http_preview = wb.handle_api(
+                self.root, f"/api/runs/{run_id}/act/request", {
+                    "correlation_id": [correlation], "decision": ["approve"],
+                },
+            )
+        cli_preview = json.loads(self._dw(
+            "run", "preview", run_id, "request", "--correlation", correlation,
+            "--decision", "approve", "--json",
+        ).stdout)
+        self.assertEqual(status, 200)
+        self.assertEqual(core_preview, mcp_preview)
+        self.assertEqual(core_preview, http_preview["data"])
+        self.assertEqual(core_preview, cli_preview)
+        shown = self._dw("run", "show", run_id).stdout
+        self.assertIn("outstanding-request\t" + correlation, shown)
+        cli_applied = json.loads(self._dw(
+            "run", "request", run_id, correlation, "approve",
+            "--expect", core_preview["act_token"], "--json",
+        ).stdout)
+        self.assertEqual(cli_applied["state"], "active")
+
+        mcp_waiting = self._open_checkpoint_request("request-interop-mcp")
+        mcp_run = mcp_waiting["run_id"]
+        mcp_correlation = mcp_waiting["outstanding_requests"][0]["correlation_id"]
+        mcp_act = surface.build_run_act_preview(
+            self.root, mcp_run, "request", correlation_id=mcp_correlation,
+            decision="approve", now=self.now,
+        )
+        mcp_applied = mcp.call_tool(self.root, "dw_run_request", {
+            "run_id": mcp_run, "correlation_id": mcp_correlation,
+            "decision": "approve", "expect": mcp_act["act_token"],
+        })
+        self.assertFalse(mcp_applied.get("isError", False), mcp_applied)
+        self.assertEqual(mcp_applied["structuredContent"]["state"], "active")
+
+        http_waiting = self._open_checkpoint_request("request-interop-http")
+        http_run = http_waiting["run_id"]
+        http_correlation = http_waiting["outstanding_requests"][0]["correlation_id"]
+        http_act = surface.build_run_act_preview(
+            self.root, http_run, "request", correlation_id=http_correlation,
+            decision="approve", now=self.now,
+        )
+        status, applied = wb.handle_mutation(self.root, "/api/runs/request", {
+            "run_id": http_run, "correlation_id": http_correlation,
+            "decision": "approve", "expect": http_act["act_token"],
+        })
+        self.assertEqual(status, 200, applied)
+        self.assertEqual(applied["data"]["state"], "active")
 
     def test_rail_uses_fresh_step_lease_and_stale_action_never_starts(self):
         import dw_pmo.orchestration_conductor as conductor

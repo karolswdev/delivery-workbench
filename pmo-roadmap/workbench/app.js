@@ -1510,10 +1510,12 @@ function runTimelineHtml(view) {
 function runControlsHtml(view) {
   const available = (view.controls || []).filter((control) => control.available);
   const unavailable = (view.controls || []).filter((control) => !control.available);
-  if (view.terminal) return `<section class="run-controls terminal"><div><span>terminal handoff</span><strong>${esc(view.state)}</strong></div><p>${esc(view.terminal_meaning)}</p><p class="guard">No certification, commit, elevation, retry, or apply control is exposed in this state.</p></section>`;
-  return `<section class="run-controls"><div class="run-control-head"><div><span>separate act boundary</span><strong>Preview, inspect, then confirm exactly one control</strong></div>${badge("no automatic continuation", "warn")}</div>
+  const requestControls = available.filter((control) => control.action === "request");
+  if (view.terminal && !requestControls.length) return `<section class="run-controls terminal"><div><span>terminal handoff</span><strong>${esc(view.state)}</strong></div><p>${esc(view.terminal_meaning)}</p><p class="guard">No certification, commit, elevation, retry, or apply control is exposed in this state.</p></section>`;
+  const shown = view.terminal ? requestControls : available;
+  return `<section class="run-controls${view.terminal ? " terminal-with-request" : ""}">${view.terminal ? `<div><span>terminal handoff with a typed request</span><strong>${esc(view.state)}</strong></div><p>${esc(view.terminal_meaning)}</p><p class="guard">Only the correlated request response is available; certification, commit, elevation, and retry remain absent.</p>` : ""}<div class="run-control-head"><div><span>separate act boundary</span><strong>Preview, inspect, then confirm exactly one control</strong></div>${badge("no automatic continuation", "warn")}</div>
     ${available.some((control) => control.reason_required) ? `<label class="run-reason">operator reason<input id="run-control-reason" value="${esc(orchState.controlReason)}" placeholder="bounded reason, required"></label>` : ""}
-    <div class="run-control-buttons">${available.map((control) => `<button type="button" data-run-act="${esc(control.action)}" data-run-decision="${esc(control.decision)}" class="${control.action === "cancel" || control.decision === "reject" ? "danger" : control.starts_work ? "starts-work" : ""}">preview ${esc(control.action)}${control.decision ? ` · ${esc(control.decision)}` : ""}${control.starts_work ? " (may start work)" : ""}</button>`).join("") || '<span class="hint">No bounded control is applicable.</span>'}</div>
+    <div class="run-control-buttons">${shown.map((control) => `<button type="button" data-run-act="${esc(control.action)}" data-run-decision="${esc(control.decision)}" data-run-correlation="${esc(control.correlation_id || "")}" class="${control.action === "cancel" || control.decision === "reject" ? "danger" : control.starts_work ? "starts-work" : ""}">preview ${esc(control.action)}${control.correlation_id ? ` · ${esc(control.correlation_id)}` : ""}${control.decision ? ` · ${esc(control.decision)}` : ""}${control.starts_work ? " (may start work)" : ""}</button>`).join("") || '<span class="hint">No bounded control is applicable.</span>'}</div>
     <div class="run-unavailable">${unavailable.map((control) => `<div><strong>${esc(control.action)}${control.decision ? ` · ${esc(control.decision)}` : ""}</strong><span>${esc((control.issues || []).join("; "))}</span></div>`).join("")}</div>
   </section>`;
 }
@@ -1522,7 +1524,7 @@ function runActPreviewHtml(preview) {
   if (!preview) return "";
   return `<section class="run-consent ${preview.applicable ? "" : "refused"}" aria-live="polite"><div class="run-consent-head"><div><span>exact control preview</span><strong>${esc(preview.action)}${preview.decision ? ` · ${esc(preview.decision)}` : ""}</strong></div>${badge(preview.starts_work ? "may start bounded work" : "one ledger act", preview.starts_work ? "warn" : "ok")}</div>
     <div class="run-token"><span>state + intent token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.control_generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p>
-    ${preview.reason ? `<p><strong>bound reason:</strong> ${esc(preview.reason)}</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}
+    ${preview.correlation_id ? `<p><strong>bound request:</strong> <code>${esc(preview.correlation_id)}</code> · ${esc(preview.response_outcome)}</p>` : ""}${preview.reason ? `<p><strong>bound reason:</strong> ${esc(preview.reason)}</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}
     <div class="run-consent-actions">${preview.applicable ? '<button type="button" id="run-act-confirm">confirm this exact act</button>' : ""}<button type="button" id="run-act-close">close preview</button></div>
     <small>Any ledger change, action change, decision change, or reason change invalidates this token.</small></section>`;
 }
@@ -1530,6 +1532,18 @@ function runActPreviewHtml(preview) {
 function runStreamHtml(stream) {
   if (!stream) return "";
   return `<section class="run-open-stream" aria-live="polite"><div><strong>${esc(stream.executor)} · ${esc(stream.execution_id)} · ${esc(stream.stream)}</strong><button type="button" id="run-stream-close">close explicit stream</button></div><small>${esc(stream.included_bytes)} / ${esc(stream.bytes)} bytes · ${stream.truncated ? "truncated" : "complete"} · ${esc(stream.sha256)}</small><pre>${esc(stream.content)}</pre></section>`;
+}
+
+function runRequestsHtml(view) {
+  const outstanding = view.outstanding_requests || [];
+  const tree = view.decision_tree || { roots: [], nodes: [] };
+  const nodes = new Map((tree.nodes || []).map((item) => [item.correlation_id, item]));
+  const renderDecision = (id, depth = 0) => {
+    const item = nodes.get(id); if (!item) return "";
+    const preview = item.preview || {};
+    return `<li style="--decision-depth:${depth}"><div><code>${esc(item.correlation_id)}</code>${badge(item.status, item.status === "approved" || item.status === "applied" ? "ok" : item.status === "pending" ? "warn" : "issue")}</div><strong>${esc(item.kind)} · ${esc(item.origin_node || item.origin)}</strong><small>opened at ledger #${esc(item.opened_seq)} · parent ${esc(item.parent_correlation_id || "root")}</small><details><summary>inspect exact decision preview</summary><dl>${Object.entries(preview).map(([key, value]) => `<div><dt>${esc(key)}</dt><dd><code>${esc(value)}</code></dd></div>`).join("")}</dl></details>${(item.children || []).length ? `<ol>${item.children.map((child) => renderDecision(child, depth + 1)).join("")}</ol>` : ""}</li>`;
+  };
+  return `<div class="run-request-grid"><section><h3>outstanding requests</h3>${outstanding.map((request) => `<article class="run-request"><div><code>${esc(request.correlation_id)}</code>${badge(`${esc(request.age_seconds)}s old`, "warn")}</div><strong>${esc(request.kind)} · ${esc(request.origin_node || request.origin)}</strong><span>${esc(request.schema_summary)}</span><small>opened #${esc(request.opened_seq)} · expires ${esc(request.expires_at)} · republished generations ${(request.republished_generations || []).map(esc).join(", ") || "none"}</small></article>`).join("") || '<p class="hint">No human decision is outstanding.</p>'}</section><section><h3>checkpoint lineage · inspect only</h3><ol class="run-decision-tree">${(tree.roots || []).map((id) => renderDecision(id)).join("")}</ol>${!tree.roots?.length ? '<p class="hint">No decision point has been recorded.</p>' : ""}</section></div>`;
 }
 
 function grantPreviewHtml(plan) {
@@ -1559,6 +1573,7 @@ function runViewHtml() {
     <section class="run-panel"><div class="run-panel-head"><div><span>authoritative graph state</span><strong>Why every node is waiting, eligible, active, failed, or complete</strong></div>${badge("inspection is pure", "ok")}</div>${liveRunGraph(view)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>executors and fail checks</span><strong>Sessions expose receipts and bounded streams, never prompts or commands</strong></div></div>${runSessionsHtml(view)}${runStreamHtml(orchState.runStream)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>declared output conventions</span><strong>Artifact metadata and lineage</strong></div></div>${runArtifactHtml(view)}</section>
+    <section class="run-panel"><div class="run-panel-head"><div><span>typed human request ports</span><strong>Outstanding requests, age, origin, schemas, and checkpoint lineage</strong></div>${badge("inspect-only history", "ok")}</div>${runRequestsHtml(view)}</section>
     <section class="run-panel">${runRoutesHtml(view)}</section>
     ${runControlsHtml(view)}${runActPreviewHtml(orchState.runAct)}
     <section class="run-panel"><div class="run-panel-head"><div><span>operator notifications</span><strong>Derived from the ledger and signal chains; ack is receipted</strong></div>${badge("previews, never tokens", "ok")}</div>${runNotificationsHtml(view)}</section>
@@ -1576,7 +1591,7 @@ function runNotificationsHtml(view) {
       <code>${esc(item.kind)}</code> ${item.unread ? badge("unread", "warn") : badge("acked", "ok")}
       ${item.delivered ? badge("delivered", "ok") : badge(`attempts ${esc(item.delivery_attempts)}`, "")}
       <span>${esc(item.detail)}</span>
-      ${item.request ? `<small>typed response · correlation <code>${esc(item.request.correlation_id)}</code> · applied only through the local exact-token checkpoint boundary</small>` : ""}
+      ${item.request ? `<small>typed response · correlation <code>${esc(item.request.correlation_id)}</code> · applied only through the local exact-token request boundary</small>` : ""}
       ${item.unread ? `<button type="button" data-ntf-ack="${esc(item.id)}">ack</button>` : ""}
     </li>`).join("")}</ul>`;
 }
@@ -1914,11 +1929,11 @@ async function confirmRunGrant() {
   orchState.runId = body.data.run_id; orchState.runPlan = null; await refreshRunData();
 }
 
-async function previewRunAct(action, decision) {
-  const control = (orchState.runView?.controls || []).find((item) => item.action === action && String(item.decision || "") === String(decision || ""));
+async function previewRunAct(action, decision, correlation) {
+  const control = (orchState.runView?.controls || []).find((item) => item.action === action && String(item.decision || "") === String(decision || "") && String(item.correlation_id || "") === String(correlation || ""));
   const reason = control?.reason_required ? orchState.controlReason.trim() : "";
   orchState.runAct = null; orchState.runError = ""; renderOrchestration();
-  const { status, body } = await postJson("/api/runs/preview", { run_id: orchState.runId, action, ...(reason ? { reason } : {}), ...(decision ? { decision } : {}) });
+  const { status, body } = await postJson("/api/runs/preview", { run_id: orchState.runId, action, ...(reason ? { reason } : {}), ...(decision ? { decision } : {}), ...(correlation ? { correlation_id: correlation } : {}) });
   if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run preview failed (${status})`; }
   else orchState.runAct = body.data;
   renderOrchestration();
@@ -1927,7 +1942,7 @@ async function previewRunAct(action, decision) {
 async function confirmRunAct() {
   const preview = orchState.runAct;
   if (!preview?.applicable) return;
-  const request = { run_id: preview.run_id, expect: preview.act_token, ...(preview.reason ? { reason: preview.reason } : {}), ...(preview.decision ? { decision: preview.decision } : {}) };
+  const request = { run_id: preview.run_id, expect: preview.act_token, ...(preview.reason ? { reason: preview.reason } : {}), ...(preview.decision ? { decision: preview.decision } : {}), ...(preview.correlation_id ? { correlation_id: preview.correlation_id } : {}) };
   orchState.runLoading = true; renderOrchestration();
   const { status, body } = await postJson(`/api/runs/${encodeURIComponent(preview.action)}`, request);
   orchState.runLoading = false;
@@ -1951,7 +1966,7 @@ function wireRunView() {
   document.getElementById("run-start-confirm")?.addEventListener("click", confirmRunGrant);
   document.getElementById("run-plan-close")?.addEventListener("click", () => { orchState.runPlan = null; renderOrchestration(); });
   document.getElementById("run-control-reason")?.addEventListener("input", (event) => { orchState.controlReason = event.target.value; });
-  document.querySelectorAll("[data-run-act]").forEach((button) => button.addEventListener("click", () => previewRunAct(button.dataset.runAct, button.dataset.runDecision)));
+  document.querySelectorAll("[data-run-act]").forEach((button) => button.addEventListener("click", () => previewRunAct(button.dataset.runAct, button.dataset.runDecision, button.dataset.runCorrelation)));
   document.getElementById("run-act-confirm")?.addEventListener("click", confirmRunAct);
   document.getElementById("run-act-close")?.addEventListener("click", () => { orchState.runAct = null; renderOrchestration(); });
   document.querySelectorAll("[data-run-stream]").forEach((button) => button.addEventListener("click", () => openRunStream(button)));

@@ -423,8 +423,11 @@ This runtime is delivered as one shared core: `schedule_decision` is pure;
 reconciliation/dispatch boundary; and
 `dw run supervise <run> --max-ticks N --interval S` is finite repetition over
 that same tick for an explicitly requested CLI supervisor.
-`dw run checkpoint <run> approve|reject --expect <act-token>` is the
-preview-bound human decision. A tick first polls or recovers existing
+`dw run request <run> <correlation> <decision> --expect <act-token>` is the
+generic preview-bound typed response; `dw run checkpoint` remains its
+checkpoint-only compatibility alias. Pending requests are replayed from the
+ledger, shown with age/origin/schema, and republished once per restart/resume
+generation without changing their correlation. A tick first polls or recovers existing
 claims, then records configured failure routes, then schedules in immutable
 score order. A repair receipt binds source attempt, visit, repair node and
 repair attempt; successful repair re-enables exactly the failed source, while
@@ -542,7 +545,7 @@ and never deletes the audit trail.
 One core owns score compilation, grant planning, run projection, tick, and
 cancellation. Adapters remain thin:
 
-- CLI: `dw orchestration list|show|validate|simulate`, plus `dw run plan|start|list|show|view|preview|pause|resume|revoke|cancel|tick|supervise|checkpoint|stream`;
+- CLI: `dw orchestration list|show|validate|simulate`, plus `dw run plan|start|list|show|view|preview|pause|resume|revoke|cancel|tick|supervise|checkpoint|request|stream`;
 - MCP: byte-identical score/run reads, previews, exact-token acts, and explicit bounded streams—never caller-supplied score semantics or provider/check argv;
 - HTTP: the same documents inside versioned envelopes, with stale acts as 409;
 - Workbench: Design, Validate, JSON, and Run views over those HTTP models, with manual refresh and no authorization poller; and

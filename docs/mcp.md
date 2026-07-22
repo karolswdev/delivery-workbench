@@ -106,7 +106,7 @@ commands, driver configuration, scheduling choices, or credentials.
 | `dw_run_list` | `orchestration_run.run_inventory` | `{}`; content-safe projections only |
 | `dw_run_show` | `orchestration_run.replay_run` | `{run_id}` |
 | `dw_run_view` | `orchestration_surface.build_run_view` | `{run_id}`; live graph, attempts, sessions/check receipts, artifact metadata/lineage, budgets, routes, controls, and ledger timeline |
-| `dw_run_preview` | `orchestration_surface.build_run_act_preview` | `{run_id, action, reason?, decision?}`; binds the exact action and parameters to the current ledger head in one `act_token` |
+| `dw_run_preview` | `orchestration_surface.build_run_act_preview` | `{run_id, action, reason?, correlation_id?, decision?}`; binds the exact action, parameters, request correlation, and current ledger head in one `act_token` |
 
 ### Bounded orchestration (exact-token acts)
 
@@ -122,7 +122,8 @@ errors with the shared refusal text; nothing is automatically re-previewed.
 | `dw_run_resume` | `orchestration_surface.apply_run_act` | `{run_id, expect}`; re-observes grant facts |
 | `dw_run_revoke` | `orchestration_surface.apply_run_act` | `{run_id, expect, reason}`; permanent for that grant |
 | `dw_run_cancel` | `orchestration_surface.apply_run_act` | `{run_id, expect, reason}`; cancellation is ledgered before interruption |
-| `dw_run_checkpoint` | `orchestration_surface.apply_run_act` | `{run_id, expect, decision: "approve"|"reject"}` |
+| `dw_run_request` | `orchestration_surface.apply_run_act` | `{run_id, expect, correlation_id, decision}`; one response validated against the outstanding request's closed schema |
+| `dw_run_checkpoint` | `orchestration_surface.apply_run_act` | `{run_id, expect, decision, correlation_id?}`; checkpoint-only compatibility alias |
 | `dw_run_stream` | `orchestration_surface.read_run_stream` | `{run_id, executor: "agent"|"check", execution_id, stream: "stdout"|"stderr", max_bytes?}`; explicit, independently bounded open only |
 
 Retry remains an immutable score failure policy exercised by a confirmed

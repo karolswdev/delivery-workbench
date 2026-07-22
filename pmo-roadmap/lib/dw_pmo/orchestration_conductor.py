@@ -38,6 +38,7 @@ from .orchestration_run import (
     _run_dir,
     _sha,
     claim_node,
+    maintain_outstanding_requests,
     observed_fact_binding,
     record_runtime_event,
     release_node_claim,
@@ -1300,6 +1301,19 @@ def _standing_covers(grant: dict[str, object], rule: dict[str, object]) -> bool:
     return False
 
 
+def _manual_nudge_decision(
+    projection: dict[str, object], rule_id: str, signal_hash: str
+) -> str:
+    for request in reversed(list(projection.get("request_history", []))):
+        if (
+            request.get("kind") == "nudge"
+            and request.get("origin") == rule_id
+            and request.get("signal_hash") == signal_hash
+        ):
+            return str(request.get("status") or "")
+    return ""
+
+
 def _evaluate_nudges(
     root: Path,
     run_id: str,
@@ -1381,8 +1395,10 @@ def _evaluate_nudges(
                 )
                 actions.append({"action": "abort", "reason": "nudge-budget-exhausted"})
             continue
-        if not _standing_covers(grant, rule):
-            refused("no-standing-rule")
+        manual = _manual_nudge_decision(projection, rule_id, signal_hash)
+        if not _standing_covers(grant, rule) and manual != "approved":
+            if manual != "rejected":
+                refused("no-standing-rule")
             continue
         target = str(rule["target"])
         active_claim = next(
@@ -1505,13 +1521,27 @@ def _tick_run_once(
     before_head = str(started["ledger_head"])
     _run_path, grant, compiled = _load_run_documents(root, run_id)
     actions: list[dict[str, object]] = []
+    closes_requests = (
+        started["state"] in TERMINAL_STATES
+        and started["state"] != "awaiting-certification"
+    )
+    maintained = maintain_outstanding_requests(
+        root, run_id, before_head, now=now,
+        republish=not closes_requests,
+        force_expire=closes_requests,
+    )
+    if maintained["ledger_head"] != before_head:
+        actions.append({
+            "action": "requests-maintained",
+            "outstanding": len(maintained["outstanding_requests"]),
+        })
     check_manager = CheckManager(root, check_runner)
     rail_manager = RailManager(root, rail_runner)
 
     # Claims always reconcile before new eligibility. Cancellation first
     # prevents any future start, then interrupts a persisted live session.
     ordered = sorted(
-        list(started["active_claims"]),
+        list(maintained["active_claims"]),
         key=lambda item: (_node_index(compiled)[str(item["node_id"])], int(item["attempt"])),
     )
     for claim in ordered:

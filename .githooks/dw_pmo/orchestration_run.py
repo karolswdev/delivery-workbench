@@ -78,6 +78,10 @@ _NUDGE_REFUSAL_REASONS = {
     "no-standing-rule", "nudge-budget-exhausted", "rule-exhausted",
     "run-inactive", "grant-expired", "non-receptive", "attempt-ceiling",
 }
+_REQUEST_REFUSAL_REASONS = {
+    "correlation-mismatch", "invalid-response", "expired",
+}
+_REQUEST_CLOSED_STATES = {"complete", "blocked", "cancelled", "revoked"}
 _EVENT_KEYS = {
     "kind", "schema_version", "run_id", "seq", "event", "ts", "detail",
     "prev_hash", "event_hash",
@@ -122,6 +126,9 @@ _EVENT_DETAIL_KEYS = {
     "checkpoint_decided": {
         "node_id", "checkpoint", "mode", "decision",
     },
+    "request_republished": {"correlation_id", "generation"},
+    "request_decided": {"correlation_id", "decision", "response_hash"},
+    "request_refused": {"correlation_id", "reason", "response_hash"},
     "run_aborted": {"node_id", "reason", "generation"},
     "run_terminal": {"node_id", "meaning"},
     "rail_advanced": {
@@ -135,6 +142,7 @@ _RUNTIME_EVENTS = {
     "node_receipt", "activity_observed", "nudge_delivered", "nudge_refused",
     "failure_routed", "route_resolved",
     "checkpoint_reached", "checkpoint_decided", "run_aborted",
+    "request_republished", "request_decided", "request_refused",
     "run_terminal", "rail_advanced", "external_commit_observed",
 }
 
@@ -173,6 +181,18 @@ def _parse_time(value: object, field: str) -> datetime:
 
 def _sha(value: object) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _request_correlation(event: dict[str, object]) -> str:
+    """Derive a stable, content-free request id from its opening event.
+
+    ``checkpoint_reached`` and ``nudge_refused:no-standing-rule`` already are
+    the authoritative, hash-chained facts that a human decision is needed.
+    Deriving the id from that fact keeps older ledgers readable and avoids a
+    second request store or a crash gap between "checkpoint" and "request".
+    """
+    digest = str(event["event_hash"]).partition(":")[2]
+    return "req-" + digest[:24]
 
 
 def _file_sha(path: Path | None) -> str | None:
@@ -792,6 +812,10 @@ def replay_run(
     routes: list[dict[str, object]] = []
     checkpoints: list[dict[str, object]] = []
     pending_checkpoint: dict[str, object] | None = None
+    outstanding: dict[str, dict[str, object]] = {}
+    request_history: list[dict[str, object]] = []
+    request_refusals: list[dict[str, object]] = []
+    latest_decision = ""
     fact_binding: dict[str, object] | None = None
     external_commits: list[dict[str, object]] = []
     claimed_attempts: set[tuple[str, int]] = set()
@@ -813,7 +837,7 @@ def replay_run(
                 raise DwError("run_started expiry does not match the grant")
             continue
         if kind == "run_paused":
-            if state != "active":
+            if state not in {"active", "awaiting-approval"}:
                 raise DwError("invalid run_paused transition")
             generation += 1
             if detail["generation"] != generation:
@@ -825,7 +849,11 @@ def replay_run(
             generation += 1
             if detail["generation"] != generation:
                 raise DwError("run_resumed generation is not monotonic")
-            state = "active"
+            state = (
+                "awaiting-approval"
+                if any(item["kind"] == "checkpoint" for item in outstanding.values())
+                else "active"
+            )
         elif kind == "run_revoked":
             if state not in {"active", "paused", "awaiting-approval"}:
                 raise DwError("invalid run_revoked transition")
@@ -905,8 +933,60 @@ def replay_run(
                 raise DwError("nudge delivery recorded in an inactive run")
             counters["nudges"] += 1
             nudges.append({"seq": offset, "delivered": True, **dict(detail)})
+            for request in request_history:
+                if (
+                    request["kind"] == "nudge"
+                    and request["origin"] == detail["rule"]
+                    and request["signal_hash"] == detail["signal_hash"]
+                    and request.get("status") == "approved"
+                ):
+                    request["status"] = "applied"
+                    request["applied_seq"] = offset
         elif kind == "nudge_refused":
             nudges.append({"seq": offset, "delivered": False, **dict(detail)})
+            if detail["reason"] == "no-standing-rule":
+                correlation = _request_correlation(event)
+                rule = next(
+                    (
+                        item for item in compiled["score"].get("nudges", [])
+                        if item.get("id") == detail["rule"]
+                    ),
+                    {},
+                )
+                request = {
+                    "correlation_id": correlation,
+                    "kind": "nudge",
+                    "origin": str(detail["rule"]),
+                    "origin_node": str(rule.get("target") or ""),
+                    "checkpoint": "",
+                    "mode": "nudge",
+                    "signal": str(detail["signal"]),
+                    "signal_hash": str(detail["signal_hash"]),
+                    "opened_seq": offset,
+                    "opened_at": event["ts"],
+                    "expires_at": grant["expires_at"],
+                    "parent_correlation_id": latest_decision,
+                    "request_schema": {
+                        "kind": "nudge-preview@1",
+                        "required": ["correlation_id", "rule", "signal_hash"],
+                    },
+                    "response_schema": {"decision": ["approve", "reject"]},
+                    "schema_summary": "decision: approve | reject",
+                    "preview": {
+                        "ledger_head": event["event_hash"],
+                        "state": state,
+                        "control_generation": generation,
+                        "rule": str(detail["rule"]),
+                        "signal": str(detail["signal"]),
+                        "signal_hash": str(detail["signal_hash"]),
+                        "target": str(rule.get("target") or ""),
+                        "expires_at": grant["expires_at"],
+                    },
+                    "republished_generations": [],
+                    "status": "pending",
+                }
+                outstanding[correlation] = request
+                request_history.append(request)
         elif kind == "failure_routed":
             source = next(
                 (
@@ -955,10 +1035,62 @@ def replay_run(
         elif kind == "checkpoint_reached":
             if state != "active" or pending_checkpoint is not None:
                 raise DwError("checkpoint reached while the run cannot accept one")
-            pending_checkpoint = {"seq": offset, **dict(detail)}
+            correlation = _request_correlation(event)
+            pending_checkpoint = {
+                "seq": offset, "correlation_id": correlation, **dict(detail),
+            }
             checkpoints.append(pending_checkpoint)
             terminal = str(detail["terminal"])
-            state = terminal if terminal != "none" else "awaiting-approval"
+            if terminal != "none":
+                state = terminal
+            else:
+                node = next(
+                    (
+                        item for item in compiled["score"]["nodes"]
+                        if item.get("id") == detail["node_id"]
+                    ),
+                    {},
+                )
+                options = (
+                    list(node.get("options", ["approve", "reject"]))
+                    if node.get("type") == "approval"
+                    else ["approve", "reject"]
+                )
+                request = {
+                    "correlation_id": correlation,
+                    "kind": "checkpoint",
+                    "origin": str(detail["checkpoint"]),
+                    "origin_node": str(detail["node_id"]),
+                    "checkpoint": str(detail["checkpoint"]),
+                    "mode": str(detail["mode"]),
+                    "signal": "",
+                    "signal_hash": "",
+                    "opened_seq": offset,
+                    "opened_at": event["ts"],
+                    "expires_at": grant["expires_at"],
+                    "parent_correlation_id": latest_decision,
+                    "request_schema": {
+                        "kind": "checkpoint-request@1",
+                        "required": ["correlation_id", "checkpoint", "preview_hash"],
+                    },
+                    "response_schema": {"decision": options},
+                    "schema_summary": "decision: " + " | ".join(options),
+                    "preview": {
+                        "ledger_head": event["event_hash"],
+                        "state": "awaiting-approval",
+                        "control_generation": generation,
+                        "node_id": str(detail["node_id"]),
+                        "checkpoint": str(detail["checkpoint"]),
+                        "mode": str(detail["mode"]),
+                        "reason": str(detail["reason"]),
+                        "expires_at": grant["expires_at"],
+                    },
+                    "republished_generations": [],
+                    "status": "pending",
+                }
+                outstanding[correlation] = request
+                request_history.append(request)
+                state = "awaiting-approval"
         elif kind == "checkpoint_decided":
             if state != "awaiting-approval" or pending_checkpoint is None:
                 raise DwError("checkpoint decision has no pending checkpoint")
@@ -967,8 +1099,107 @@ def replay_run(
                     raise DwError("checkpoint decision does not match the pending checkpoint")
             pending_checkpoint["decision"] = detail["decision"]
             pending_checkpoint["decision_seq"] = offset
+            correlation = str(pending_checkpoint.get("correlation_id") or "")
+            request = outstanding.pop(correlation, None)
+            if request is not None:
+                request["preview"] = {
+                    **request["preview"],
+                    "ledger_head": event["prev_hash"],
+                    "state": state,
+                    "control_generation": generation,
+                }
+                request["decision"] = detail["decision"]
+                request["decision_seq"] = offset
+                request["status"] = (
+                    "approved" if detail["decision"] == "approve" else "rejected"
+                )
+                latest_decision = correlation
             state = "active" if detail["decision"] == "approve" else "blocked"
             pending_checkpoint = None
+        elif kind == "request_republished":
+            correlation = str(detail["correlation_id"])
+            request = outstanding.get(correlation)
+            if request is None:
+                raise DwError("request republish has no matching outstanding request")
+            if _parse_time(event["ts"], "event ts") >= _parse_time(
+                request["expires_at"], "request expires_at"
+            ):
+                raise DwError("expired request was republished")
+            if detail["generation"] != generation:
+                raise DwError("request republish uses a stale control generation")
+            generations = request["republished_generations"]
+            if generation in generations:
+                raise DwError("request was republished twice in one control generation")
+            generations.append(generation)
+            request.setdefault("republished", []).append({
+                "seq": offset, "ts": event["ts"], "generation": generation,
+            })
+        elif kind == "request_decided":
+            correlation = str(detail["correlation_id"])
+            request = outstanding.pop(correlation, None)
+            if request is None:
+                raise DwError("request decision has no matching outstanding request")
+            if _parse_time(event["ts"], "event ts") >= _parse_time(
+                request["expires_at"], "request expires_at"
+            ):
+                raise DwError("expired request received a decision")
+            options = request["response_schema"]["decision"]
+            if detail["decision"] not in options:
+                raise DwError("request decision violates its response schema")
+            request["preview"] = {
+                **request["preview"],
+                "ledger_head": event["prev_hash"],
+                "state": state,
+                "control_generation": generation,
+            }
+            request["decision"] = detail["decision"]
+            request["decision_seq"] = offset
+            request["response_hash"] = detail["response_hash"]
+            request["status"] = (
+                "approved" if detail["decision"] == "approve" else "rejected"
+            )
+            latest_decision = correlation
+            if request["kind"] == "checkpoint":
+                if state != "awaiting-approval" or pending_checkpoint is None:
+                    raise DwError("checkpoint response has no pending checkpoint")
+                if pending_checkpoint.get("correlation_id") != correlation:
+                    raise DwError("checkpoint response correlation does not match")
+                pending_checkpoint["decision"] = detail["decision"]
+                pending_checkpoint["decision_seq"] = offset
+                state = "active" if detail["decision"] == "approve" else "blocked"
+                pending_checkpoint = None
+        elif kind == "request_refused":
+            correlation = str(detail["correlation_id"])
+            reason = str(detail["reason"])
+            request = outstanding.get(correlation)
+            request_refusals.append({
+                "seq": offset,
+                "ts": event["ts"],
+                **dict(detail),
+            })
+            if reason == "expired":
+                if request is None:
+                    raise DwError("expired refusal has no matching outstanding request")
+                outstanding.pop(correlation)
+                request["status"] = "expired"
+                request["refusal_seq"] = offset
+                request["response_hash"] = detail["response_hash"]
+                if request["kind"] == "checkpoint":
+                    if (
+                        pending_checkpoint is None
+                        or pending_checkpoint.get("correlation_id") != correlation
+                    ):
+                        raise DwError("expired checkpoint request has no pending checkpoint")
+                    pending_checkpoint["refusal"] = "expired"
+                    pending_checkpoint["refusal_seq"] = offset
+                    pending_checkpoint = None
+                    if state not in {"revoked", "cancelled"}:
+                        state = "blocked"
+            elif reason == "invalid-response":
+                if request is None:
+                    raise DwError("invalid response refusal has no matching request")
+            elif reason == "correlation-mismatch" and request is not None:
+                raise DwError("correlation mismatch unexpectedly names a live request")
         elif kind == "run_aborted":
             if state not in {"active", "paused", "awaiting-approval"}:
                 raise DwError("invalid run_aborted transition")
@@ -995,6 +1226,18 @@ def replay_run(
 
     observed = (now or _utc_now()).astimezone(timezone.utc).replace(microsecond=0)
     expired = observed >= _parse_time(grant["expires_at"], "expires_at")
+    outstanding_requests = [
+        {
+            **item,
+            "age_seconds": max(
+                0,
+                int((observed - _parse_time(item["opened_at"], "opened_at")).total_seconds()),
+            ),
+        }
+        for item in sorted(
+            outstanding.values(), key=lambda value: int(value["opened_seq"])
+        )
+    ]
     budgets = grant["budgets"]
     budget_state = {
         "max_concurrency": {
@@ -1056,6 +1299,9 @@ def replay_run(
         "routes": routes,
         "checkpoints": checkpoints,
         "pending_checkpoint": pending_checkpoint,
+        "outstanding_requests": outstanding_requests,
+        "request_history": request_history,
+        "request_refusals": request_refusals,
         "fact_binding": fact_binding,
         "external_commits": external_commits,
         "ledger_events": len(events),
@@ -1257,6 +1503,53 @@ def _validate_runtime_transition(
             raise DwError("checkpoint decision does not match the pending checkpoint")
         if detail["decision"] not in {"approve", "reject"}:
             raise DwError("checkpoint decision must be approve or reject")
+    elif event in {"request_republished", "request_decided", "request_refused"}:
+        requests = {
+            str(item["correlation_id"]): item
+            for item in projection["outstanding_requests"]
+        }
+        correlation = str(detail["correlation_id"])
+        request = requests.get(correlation)
+        if not re.fullmatch(r"(?:req|unmatched)-[0-9a-f]{24}", correlation):
+            raise DwError("request correlation id is malformed")
+        if event == "request_republished":
+            if request is None:
+                raise DwError("request republish has no matching outstanding request")
+            if projection["expired"]:
+                raise DwError("expired request cannot be republished")
+            if detail["generation"] != projection["control_generation"]:
+                raise DwError("request republish uses a stale control generation")
+            if detail["generation"] in request["republished_generations"]:
+                raise DwError("request was already republished in this generation")
+        elif event == "request_decided":
+            if request is None:
+                raise DwError("request decision has no matching outstanding request")
+            if projection["expired"]:
+                raise DwError("expired request cannot receive a decision")
+            if detail["decision"] not in request["response_schema"]["decision"]:
+                raise DwError("request response violates the declared schema")
+            if request["kind"] == "checkpoint" and state != "awaiting-approval":
+                raise DwError("checkpoint response requires an awaiting-approval run")
+            if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(detail["response_hash"])):
+                raise DwError("request response hash is malformed")
+        else:
+            reason = str(detail["reason"])
+            if reason not in _REQUEST_REFUSAL_REASONS:
+                raise DwError("request refusal has an unsupported reason")
+            if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(detail["response_hash"])):
+                raise DwError("request response hash is malformed")
+            if reason == "correlation-mismatch" and request is not None:
+                raise DwError("correlation mismatch names a live request")
+            if reason in {"invalid-response", "expired"} and request is None:
+                raise DwError("request refusal has no matching outstanding request")
+            if reason == "invalid-response" and projection["expired"]:
+                raise DwError("expired request must use the expired refusal")
+            if (
+                reason == "expired"
+                and not projection["expired"]
+                and state not in _REQUEST_CLOSED_STATES
+            ):
+                raise DwError("request cannot expire before its grant")
     elif event == "run_aborted":
         if state not in {"active", "paused", "awaiting-approval"}:
             raise DwError("run cannot be aborted from its current state")
@@ -1320,19 +1613,192 @@ def decide_checkpoint(
     pending = projection.get("pending_checkpoint")
     if not isinstance(pending, dict):
         raise DwError("run has no pending checkpoint")
-    return record_runtime_event(
-        root,
-        run_id,
-        "checkpoint_decided",
-        {
-            "node_id": pending["node_id"],
-            "checkpoint": pending["checkpoint"],
-            "mode": pending["mode"],
-            "decision": decision,
-        },
-        expect,
-        now=now,
+    correlation = str(pending.get("correlation_id") or "")
+    if not correlation:
+        raise DwError("pending checkpoint has no request correlation id")
+    return decide_outstanding_request(
+        root, run_id, correlation, decision, expect, now=now,
+        expected_kind="checkpoint",
     )
+
+
+def _response_hash(correlation_id: object, decision: object) -> str:
+    return _sha({
+        "correlation_id": str(correlation_id),
+        "decision": str(decision),
+    })
+
+
+def _stored_correlation(
+    correlation_id: object, *, force_unmatched: bool = False
+) -> str:
+    value = str(correlation_id or "").strip()
+    if not force_unmatched and re.fullmatch(r"req-[0-9a-f]{24}", value):
+        return value
+    return "unmatched-" + _sha(value).partition(":")[2][:24]
+
+
+def decide_outstanding_request(
+    root: Path,
+    run_id: str,
+    correlation_id: str,
+    decision: str,
+    expect: str,
+    *,
+    now: datetime | None = None,
+    expected_kind: str | None = None,
+) -> dict[str, object]:
+    """Validate one typed response and ledger either its act or refusal.
+
+    Correlation and schema failures are outcomes, not invisible adapter
+    errors: after a fresh exact-token preview they append a content-free
+    refusal and leave the original request outstanding.
+    """
+    current = (now or _utc_now()).astimezone(timezone.utc).replace(microsecond=0)
+    raw_correlation = str(correlation_id or "").strip()
+    raw_decision = str(decision or "").strip().lower()
+    response_hash = _response_hash(raw_correlation, raw_decision)
+    with _store_lock(root):
+        projection = replay_run(root, run_id, now=current)
+        if str(expect or "") != projection["ledger_head"]:
+            raise DwError("stale request response token refused; no event was appended")
+        _run_path, _grant, compiled = _load_run_documents(root, run_id)
+        requests = {
+            str(item["correlation_id"]): item
+            for item in projection["outstanding_requests"]
+        }
+        request = requests.get(raw_correlation)
+        wrong_kind = (
+            request is not None
+            and expected_kind is not None
+            and request.get("kind") != expected_kind
+        )
+        if wrong_kind:
+            request = None
+        stored_correlation = _stored_correlation(
+            raw_correlation, force_unmatched=wrong_kind
+        )
+        if request is None:
+            detail = {
+                "correlation_id": stored_correlation,
+                "reason": "correlation-mismatch",
+                "response_hash": response_hash,
+            }
+            _validate_runtime_transition(projection, compiled, "request_refused", detail)
+            return _append_event_locked(
+                root, run_id, projection, "request_refused", detail, current
+            )
+        if projection["expired"]:
+            detail = {
+                "correlation_id": raw_correlation,
+                "reason": "expired",
+                "response_hash": response_hash,
+            }
+            _validate_runtime_transition(projection, compiled, "request_refused", detail)
+            return _append_event_locked(
+                root, run_id, projection, "request_refused", detail, current
+            )
+        options = request["response_schema"]["decision"]
+        if (
+            not raw_decision
+            or len(raw_decision) > 200
+            or "\n" in raw_decision
+            or "\0" in raw_decision
+            or raw_decision not in options
+        ):
+            detail = {
+                "correlation_id": raw_correlation,
+                "reason": "invalid-response",
+                "response_hash": response_hash,
+            }
+            _validate_runtime_transition(projection, compiled, "request_refused", detail)
+            return _append_event_locked(
+                root, run_id, projection, "request_refused", detail, current
+            )
+        detail = {
+            "correlation_id": raw_correlation,
+            "decision": raw_decision,
+            "response_hash": response_hash,
+        }
+        _validate_runtime_transition(projection, compiled, "request_decided", detail)
+        updated = _append_event_locked(
+            root, run_id, projection, "request_decided", detail, current
+        )
+        if (
+            updated["state"] in _REQUEST_CLOSED_STATES
+            and updated["outstanding_requests"]
+        ):
+            updated = _maintain_outstanding_locked(
+                root, run_id, updated, current, republish=False,
+                force_expire=True,
+            )
+        return updated
+
+
+def _maintain_outstanding_locked(
+    root: Path,
+    run_id: str,
+    projection: dict[str, object],
+    current: datetime,
+    *,
+    republish: bool,
+    force_expire: bool = False,
+) -> dict[str, object]:
+    """Expire or once-per-generation republish every live request."""
+    _run_path, _grant, compiled = _load_run_documents(root, run_id)
+    for snapshot in list(projection["outstanding_requests"]):
+        correlation = str(snapshot["correlation_id"])
+        request = next(
+            (
+                item for item in projection["outstanding_requests"]
+                if item["correlation_id"] == correlation
+            ),
+            None,
+        )
+        if request is None:
+            continue
+        if projection["expired"] or force_expire:
+            detail = {
+                "correlation_id": correlation,
+                "reason": "expired",
+                "response_hash": _response_hash(correlation, "expired"),
+            }
+            _validate_runtime_transition(projection, compiled, "request_refused", detail)
+            projection = _append_event_locked(
+                root, run_id, projection, "request_refused", detail, current
+            )
+            continue
+        generation = int(projection["control_generation"])
+        if republish and generation not in request["republished_generations"]:
+            detail = {"correlation_id": correlation, "generation": generation}
+            _validate_runtime_transition(
+                projection, compiled, "request_republished", detail
+            )
+            projection = _append_event_locked(
+                root, run_id, projection, "request_republished", detail, current
+            )
+    return projection
+
+
+def maintain_outstanding_requests(
+    root: Path,
+    run_id: str,
+    expect: str,
+    *,
+    now: datetime | None = None,
+    republish: bool = True,
+    force_expire: bool = False,
+) -> dict[str, object]:
+    """One restart-safe maintenance pass over ledger-derived requests."""
+    current = (now or _utc_now()).astimezone(timezone.utc).replace(microsecond=0)
+    with _store_lock(root):
+        projection = replay_run(root, run_id, now=current)
+        if str(expect or "") != projection["ledger_head"]:
+            raise DwError("stale request maintenance token refused; no event was appended")
+        return _maintain_outstanding_locked(
+            root, run_id, projection, current, republish=republish,
+            force_expire=force_expire,
+        )
 
 
 def _grant_freshness_issues(
@@ -1436,8 +1902,17 @@ def transition_run(
             raise DwError("stale run transition token refused; no event was appended")
         state = projection["state"]
         valid = {
-            "pause": state == "active" and projection["dispatch_allowed"],
-            "resume": state == "paused" and not projection["expired"],
+            "pause": (
+                (state == "active" and projection["dispatch_allowed"])
+                or (state == "awaiting-approval" and bool(projection["outstanding_requests"]))
+            ),
+            "resume": (
+                state == "paused"
+                and (
+                    not projection["expired"]
+                    or bool(projection["outstanding_requests"])
+                )
+            ),
             "revoke": state in {"active", "paused", "awaiting-approval"},
             "cancel": state in {"active", "paused", "awaiting-approval"},
         }[action]
@@ -1452,9 +1927,19 @@ def transition_run(
         detail: dict[str, object] = {"generation": generation}
         if action != "resume":
             detail["reason"] = reason
-        return _append_event_locked(
+        updated = _append_event_locked(
             root, run_id, projection, event_by_action[action], detail, current
         )
+        if action == "resume":
+            updated = _maintain_outstanding_locked(
+                root, run_id, updated, current, republish=True
+            )
+        elif action in {"revoke", "cancel"} and updated["outstanding_requests"]:
+            updated = _maintain_outstanding_locked(
+                root, run_id, updated, current, republish=False,
+                force_expire=True,
+            )
+        return updated
 
 
 def claim_node(

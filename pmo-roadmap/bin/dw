@@ -309,6 +309,12 @@ def _render_run(run: dict[str, object]) -> str:
     for name, budget in run["budgets"].items():
         lines.append(f"budget\t{name}\t{budget['used']}/{budget['limit']}")
     lines.append(f"active-claims\t{len(run['active_claims'])}")
+    for request in run.get("outstanding_requests", []):
+        lines.append(
+            f"outstanding-request\t{request['correlation_id']}\t"
+            f"{request['kind']}\t{request['origin_node']}\t"
+            f"age={request['age_seconds']}s\t{request['schema_summary']}"
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -417,6 +423,7 @@ def command_run_preview(args: argparse.Namespace) -> int:
         args.action,
         reason=args.reason or "",
         decision=args.decision or "",
+        correlation_id=args.correlation or "",
     )
     if args.json:
         print(json.dumps(preview, sort_keys=True))
@@ -488,6 +495,23 @@ def command_run_checkpoint(args: argparse.Namespace) -> int:
         "checkpoint",
         args.expect,
         decision=args.decision,
+        correlation_id=args.correlation or "",
+    )
+    if args.json:
+        print(json.dumps(projection, sort_keys=True))
+    else:
+        print(_render_run(projection), end="")
+    return 0
+
+
+def command_run_request(args: argparse.Namespace) -> int:
+    projection = apply_run_act(
+        args.root,
+        args.run_id,
+        "request",
+        args.expect,
+        decision=args.decision,
+        correlation_id=args.correlation,
     )
     if args.json:
         print(json.dumps(projection, sort_keys=True))
@@ -1250,9 +1274,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_preview = run_sub.add_parser("preview", help="pure exact-token preview for one run control act")
     run_preview.add_argument("run_id")
-    run_preview.add_argument("action", choices=("tick", "pause", "resume", "revoke", "cancel", "checkpoint"))
+    run_preview.add_argument("action", choices=("tick", "pause", "resume", "revoke", "cancel", "checkpoint", "request"))
     run_preview.add_argument("--reason", default="", help="required for pause/revoke/cancel; bound into the token")
-    run_preview.add_argument("--decision", choices=("approve", "reject"), default="", help="required only for checkpoint")
+    run_preview.add_argument("--decision", default="", help="typed decision for checkpoint/request")
+    run_preview.add_argument("--correlation", default="", help="outstanding request correlation id; checkpoint defaults to its pending id")
     run_preview.add_argument("--json", action="store_true")
     run_preview.set_defaults(func=command_run_preview)
 
@@ -1289,10 +1314,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="apply one exact approve/reject decision to the pending checkpoint",
     )
     run_checkpoint.add_argument("run_id")
-    run_checkpoint.add_argument("decision", choices=("approve", "reject"))
+    run_checkpoint.add_argument("decision")
+    run_checkpoint.add_argument("--correlation", default="", help="exact request id; defaults to the pending checkpoint")
     run_checkpoint.add_argument("--expect", required=True, help="act_token from a fresh matching checkpoint preview")
     run_checkpoint.add_argument("--json", action="store_true")
     run_checkpoint.set_defaults(func=command_run_checkpoint)
+
+    run_request = run_sub.add_parser(
+        "request",
+        help="apply one exact typed response to a correlated outstanding request",
+    )
+    run_request.add_argument("run_id")
+    run_request.add_argument("correlation")
+    run_request.add_argument("decision")
+    run_request.add_argument("--expect", required=True, help="act_token from a fresh matching request preview")
+    run_request.add_argument("--json", action="store_true")
+    run_request.set_defaults(func=command_run_request)
 
     run_stream = run_sub.add_parser("stream", help="explicitly open one bounded agent/check stdout or stderr log")
     run_stream.add_argument("run_id")

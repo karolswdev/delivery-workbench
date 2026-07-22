@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-19 (Phase 25 open 7/9 — WLA-25-07 landed the Claude Code driver: least-privilege `claude -p` through the neutral seam, version-pinned discovery, and a live nudge round-trip specimen).
-**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (7/9).
+**Last updated:** 2026-07-21 (Phase 25 open 8/9 — WLA-25-08 made every pending human decision a durable, typed, restart-safe request; WLA-25-09 is the outward-loop exit exam before governed roadmap autopilot).
+**Current phase:** [Phase 25 - The listening conductor](./phase-25-outward-signals/) (8/9).
 **Status:** complete through Phase 24 — visual orchestration is delivered and evidence-backed; Phase 25 (outward signals and bounded nudges) is contracted and in progress.
 
 ## Vision
@@ -74,6 +74,11 @@ summarization can improve those entries after the lifecycle is proven.
   Delivery Workbench may route observed signals back to agents
   automatically, provided every nudge is score-declared, grant-authorized,
   budget-bounded, and ledgered.
+- User requirement, 2026-07-21: push beyond bounded individual runs toward
+  independently executed, rule-governed programs that can auto-advance a
+  roadmap. The product destination combines reusable visually authored
+  workflows, quality/evidence gates, repair and integration routes, and
+  explicit autonomy policy rather than hiding a perpetual agent loop.
 - Comparative study (sidequest), 2026-07-19: ogulcancelik/herdr and its
   plugin ecosystem — declarative screen-state manifests with auditable
   `agent explain` derivation (strict blocked-detection, detection firewalled
@@ -82,6 +87,26 @@ summarization can improve those entries after the lifecycle is proven.
   explicitly rejected, reviewr's draft-into-input-box review loop, and the
   zero-SDK "CLI is the plugin API" ecosystem flywheel — candidate phase-26
   material recorded in the Phase 25 status.
+
+## Next product destination: governed roadmap autopilot
+
+After Phase 25's outward-loop exam, the next product phase is the program
+conductor above individual orchestration runs. A program policy selects the
+next eligible story from the authoritative roadmap, instantiates a reusable
+visual score, obtains only the declared grant, conducts independent work,
+enforces quality and evidence gates, routes failures through bounded repair,
+prepares or performs only policy-authorized integration, advances the exact
+roadmap rails, and repeats while budget and authority remain live.
+
+The operator chooses an autonomy mode — **advisory** (preview every move),
+**checkpointed** (run freely between named decision ports), or **continuous**
+(advance within an explicit program grant). Certification, commit, push,
+merge, release, and deployment remain separate capabilities: a program never
+inherits them merely because it can choose and complete work. The visual
+builder must make story-selection rules, workflow templates, quality gates,
+repair ceilings, evidence requirements, integration policy, portfolio
+budgets, stop conditions, and every human checkpoint inspectable before the
+program starts.
 
 ## Phase index
 
@@ -112,7 +137,7 @@ summarization can improve those entries after the lifecycle is proven.
 | 22 | Give every human and agent one deterministic, versioned answer for repository readiness, current work, and the next safe action, shared across every supported surface. | done | [phase-22-agent-briefing](./phase-22-agent-briefing/) |
 | 23 | Let a human or agent deliberately apply exactly one current, allowlisted recommendation without copy/paste, stale intent, arbitrary execution, certification, or commit automation. | done | [phase-23-deliberate-step](./phase-23-deliberate-step/) |
 | 24 | Delivery Workbench can coordinate a bounded multi-agent run from an exact visually authored score and revocable grant: research, dependencies, context, outputs, checks, failures, budgets, recovery, and human checkpoints. | done | [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/) |
-| 25 | Delivery Workbench hears the world outside the run — CI, reviews, merge state, agent activity — records it as durable facts, and under an explicit grant nudges the right agent back to work: observed, bounded, ledgered, revocable. | not-started | [phase-25-outward-signals](./phase-25-outward-signals/) |
+| 25 | Delivery Workbench hears the world outside the run — CI, reviews, merge state, agent activity — records it as durable facts, and under an explicit grant nudges the right agent back to work: observed, bounded, ledgered, revocable. | in-progress | [phase-25-outward-signals](./phase-25-outward-signals/) |
 
 ## Operating cadence
 
