@@ -535,14 +535,23 @@ their hash-verified local channel. It records content-safe outward-fact
 receipts, delivers finite program-declared nudges only to an already-run exact
 agent, and causally reruns dependent work and independent verification without
 polling the forge or importing raw content. Grant planning freezes all
-scope-reachable seats and checkpoint ports. Once WLA-26-10's separately
-authorized delivery rails make a story complete, replay selects the next exact
+scope-reachable seats and checkpoint ports.
+
+WLA-26-10 now supplies the separately authorized delivery adapter. One pure
+preview simulates the exact isolated patch and final staged tree, binds fresh
+mechanical checks and independent governed proof, and lists separate claims
+for evidence, story/phase/next-story mutations, contract generation, objective
+and governed certification, gated commit, and optional fast-forward push.
+Every effect has immutable intent and a ledger-bound receipt. Recovery
+reconciles evidence, roadmap content, index tree, certified contract, archive,
+commit, and remote ref without duplicate blocks, status flips, summaries,
+commits, or pushes; mixed state and remote divergence stop without force.
+Non-blocking obligations remain ledger-only unless separately materialized as
+one decision/obligation-traced roadmap story, and accountable disposition
+retains the original history. Replay then selects the next exact
 story/binding/phase while carrying non-blocking obligations and stopping on a
 blocking one. An immutable proof and terminal event complete the program only
-after the pure planner proves the entire granted scope done. Planted crashes
-recover without duplicate claims, starts, checks, nudges, loop rounds,
-decisions, verdicts, gates, or scope completion. WLA-26-10 still owns
-integration, evidence, certification, Git, and roadmap acts; WLA-26-11 still
+after the pure planner proves the entire granted scope done. WLA-26-11 still
 owns public runtime controls and the control room.
 
 This does not redefine the product's ordinary mode. Vanilla Delivery Workbench

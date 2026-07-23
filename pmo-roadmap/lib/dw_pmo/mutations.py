@@ -19,7 +19,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .model import DONE_STATUSES, HOLD_STATUSES, STORY_RE, STORY_STATUSES, Phase, Project, die
+from .model import (
+    DONE_STATUSES,
+    HOLD_STATUSES,
+    STORY_RE,
+    STORY_STATUSES,
+    Phase,
+    Project,
+    die,
+    normalize_status,
+)
 
 
 _SLUG_RE_STRICT = __import__("re").compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -39,7 +48,12 @@ def validate_story_status(status: str) -> str:
         allowed = ", ".join(sorted(STORY_STATUSES))
         die(f"unknown story status {status!r}; allowed: {allowed}")
     return status
-from .parse import find_story, get_project, parse_story_rows
+from .parse import (
+    find_story,
+    get_project,
+    parse_current_phase_dirname,
+    parse_story_rows,
+)
 from .paths import ensure_under, read_text, rel, roadmap_dir, slugify, write_text
 from .render import (
     evidence_link_for,
@@ -50,6 +64,7 @@ from .render import (
     replace_phase_index_content,
     replace_story_table_content,
     set_phase_header_status_content,
+    update_current_phase_pointer_content,
     update_phase_index_status_content,
     update_story_header_status_content,
     update_story_table_row_content,
@@ -252,7 +267,7 @@ def apply_plan(plan: MutationPlan, validate_after: bool = True) -> dict[str, obj
     elif plan.kind == "phase-create":
         emit(plan.root, "phase_created", project=plan.project_slug,
              detail={"phase": summary.get("phase_number")})
-    elif plan.kind == "phase-close":
+    elif plan.kind in {"phase-close", "phase-advance"}:
         emit(plan.root, "phase_closed", project=plan.project_slug,
              detail={"phase": summary.get("phase_number")})
     elif plan.kind == "phase-pause":
@@ -281,6 +296,7 @@ def plan_story_status(
     evidence_body: str = "",
     force: bool = False,
     reason: str = "",
+    evidence_date: str | None = None,
 ) -> MutationPlan:
     status = validate_story_status(status)
     reason = " ".join(reason.split())
@@ -311,7 +327,15 @@ def plan_story_status(
         _change(status_file, update_story_table_row_content(status_file, row.story_id, status=written_status, evidence=evidence_link))
     )
     if evidence_body:
-        plan.changes.append(_change(evidence_path, render_evidence(row, story_num, evidence_body)))
+        plan.changes.append(_change(
+            evidence_path,
+            render_evidence(
+                row,
+                story_num,
+                evidence_body,
+                evidence_date=evidence_date,
+            ),
+        ))
     plan.summary = {
         "story_id": row.story_id,
         "status": status,
@@ -331,6 +355,7 @@ def plan_story_evidence(
     story_selector: str,
     body: str = "",
     force: bool = False,
+    evidence_date: str | None = None,
 ) -> MutationPlan:
     row, story_num, _story_path = find_story(project, phase, story_selector)
     evidence_path = phase.path / f"evidence-story-{story_num:02d}.md"
@@ -342,7 +367,15 @@ def plan_story_evidence(
         _change(status_file, update_story_table_row_content(status_file, row.story_id, evidence=evidence_link_for(story_num)))
     )
     if body or not evidence_path.exists():
-        plan.changes.append(_change(evidence_path, render_evidence(row, story_num, body)))
+        plan.changes.append(_change(
+            evidence_path,
+            render_evidence(
+                row,
+                story_num,
+                body,
+                evidence_date=evidence_date,
+            ),
+        ))
     plan.summary = {
         "story_id": row.story_id,
         "evidence_path": rel(evidence_path, root),
@@ -478,10 +511,14 @@ def plan_phase_close(
     summary_body: str = "",
     status: str = "done",
     force: bool = False,
+    summary_date: str | None = None,
 ) -> MutationPlan:
     status = status.strip().lower()
     rows = parse_story_rows(phase.path / "current-phase-status.md")
-    open_rows = [row for row in rows if row.status not in DONE_STATUSES]
+    open_rows = [
+        row for row in rows
+        if normalize_status(row.status) not in DONE_STATUSES
+    ]
     if open_rows and not force:
         ids = ", ".join(row.story_id for row in open_rows)
         die(f"refusing to close phase with non-done stories: {ids}")
@@ -494,11 +531,132 @@ def plan_phase_close(
         summary_body = "Phase closed by `dw phase close`; see story evidence files for proof."
     readme = project.path / "README.md"
     plan = MutationPlan(kind="phase-close", root=root, project_slug=project.slug)
-    plan.changes.append(_change(summary_path, render_final_summary(phase, summary_body)))
+    plan.changes.append(_change(
+        summary_path,
+        render_final_summary(
+            phase,
+            summary_body,
+            summary_date=summary_date,
+        ),
+    ))
     plan.changes.append(_change(readme, update_phase_index_status_content(readme, phase.number, status)))
     plan.summary = {
         "phase_number": phase.number,
         "summary_path": rel(summary_path, root),
         "status": status,
+    }
+    return plan
+
+
+def plan_phase_advance(
+    root: Path,
+    project: Project,
+    phase: Phase,
+    next_phase: Phase | None,
+    *,
+    summary_body: str = "",
+    summary_date: str | None = None,
+) -> MutationPlan:
+    """Close one complete phase and atomically move the current pointer.
+
+    This is the canonical phase-transition primitive consumed by autonomous
+    delivery.  It deliberately has no ``force`` route: every story in the
+    closing phase must already be done, the next phase (when present) must be
+    later, and one guarded plan owns the summary, index rows, phase headers,
+    and pointer.
+    """
+    rows = parse_story_rows(phase.path / "current-phase-status.md")
+    open_rows = [
+        row for row in rows
+        if normalize_status(row.status) not in DONE_STATUSES
+    ]
+    if open_rows:
+        ids = ", ".join(row.story_id for row in open_rows)
+        die(f"refusing to advance phase with non-done stories: {ids}")
+    if next_phase is not None and next_phase.number <= phase.number:
+        die("next phase must be later than the phase being closed")
+    if parse_current_phase_dirname(project) != phase.path.name:
+        die(
+            "phase advance source differs from the project current-phase "
+            "pointer"
+        )
+    if (
+        next_phase is not None
+        and (next_phase.path / "final-summary.md").exists()
+    ):
+        die(f"next phase {next_phase.number} is already closed")
+
+    summary_body = summary_body.strip() or (
+        "Phase closed by the exact program-delivery rail; "
+        "see paired story evidence and the archived commit contract."
+    )
+    summary_path = phase.path / "final-summary.md"
+    ensure_under(summary_path, roadmap_dir(root))
+    if summary_path.exists():
+        die(f"final summary already exists: {rel(summary_path, root)}")
+
+    readme = project.path / "README.md"
+    readme_content = update_phase_index_status_content(
+        readme, phase.number, "done"
+    )
+    # The renderer is path-based for ordinary commands.  Compose the second
+    # index edit against the first edit through a small scratch FileChange so
+    # the resulting MutationPlan still owns one exact before/after README.
+    if next_phase is not None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory(prefix="dw-phase-advance.") as temporary:
+            scratch = Path(temporary) / "README.md"
+            scratch.write_text(readme_content, encoding="utf-8")
+            readme_content = update_phase_index_status_content(
+                scratch, next_phase.number, "in-progress"
+            )
+            scratch.write_text(readme_content, encoding="utf-8")
+            readme_content = update_current_phase_pointer_content(
+                scratch, next_phase
+            )
+    else:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory(prefix="dw-phase-advance.") as temporary:
+            scratch = Path(temporary) / "README.md"
+            scratch.write_text(readme_content, encoding="utf-8")
+            readme_content = update_current_phase_pointer_content(
+                scratch, None
+            )
+
+    plan = MutationPlan(
+        kind="phase-advance",
+        root=root,
+        project_slug=project.slug,
+    )
+    plan.changes.append(_change(
+        summary_path,
+        render_final_summary(
+            phase,
+            summary_body,
+            summary_date=summary_date,
+        ),
+    ))
+    plan.changes.append(_change(readme, readme_content))
+    plan.changes.append(_change(
+        phase.path / "current-phase-status.md",
+        set_phase_header_status_content(
+            phase.path / "current-phase-status.md", "done"
+        ),
+    ))
+    if next_phase is not None:
+        plan.changes.append(_change(
+            next_phase.path / "current-phase-status.md",
+            set_phase_header_status_content(
+                next_phase.path / "current-phase-status.md",
+                "in-progress",
+            ),
+        ))
+    plan.summary = {
+        "phase_number": phase.number,
+        "next_phase_number": next_phase.number if next_phase else None,
+        "summary_path": rel(summary_path, root),
+        "status": "done",
     }
     return plan

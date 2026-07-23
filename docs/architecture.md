@@ -285,13 +285,19 @@ without rewriting completed governance. Per-rule and global ceilings and all
 child/start/artifact budgets are replayed from the sole program ledger.
 
 The grant freezes the union of deterministic seats and checkpoint ports
-reachable across the whole scope. After separately authorized WLA-26-10 facts
-complete a story, the planner/conductor can therefore select the next binding,
-story, and phase without introducing new authority. Non-blocking obligations
-remain in the frontier, blocking obligations stop, and terminal completion
-requires one immutable claim-bound proof of the planner's exact
-`scope-complete` result. Integration/evidence/certification/Git/roadmap
-mutation remain WLA-26-10, and public transports remain WLA-26-11.
+reachable across the whole scope. The separate WLA-26-10 delivery adapter now
+turns a certified conductor frontier into one pure, content-addressed plan
+over the candidate patch, mechanical and governed proof, final staged tree,
+roadmap transition, contract, commit, and optional remote lease. Each effect
+reserves an independent program-ledger claim and produces an immutable receipt;
+recovery accepts only all-old or exact-all-new state. Its canonical phase
+mutation closes the complete phase, moves the current pointer, and starts the
+planner-selected next story in the same gated commit. The planner/conductor can
+then select that exact binding, story, and phase without introducing new
+authority. Non-blocking obligations remain in the frontier, blocking
+obligations stop, and terminal completion requires one immutable claim-bound
+proof of the planner's exact `scope-complete` result. Public transports remain
+WLA-26-11.
 
 Viewport rendering is smoke-tested headlessly at desktop and mobile
 (`tests/workbench-ui-smoke.sh`, CI-run where Firefox exists).

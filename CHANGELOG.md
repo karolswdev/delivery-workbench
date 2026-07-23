@@ -167,9 +167,16 @@ to an already-run agent, reruns causally stale verification, freezes every
 scope-reachable seat/port, carries non-blocking obligations across exact
 story/phase selection, blocks on blocking obligations, and completes only
 through one claim-bound proof of the pure planner's full-scope result.
-Integration/evidence/certification/Git/roadmap rails and public runtime
-controls are still fail-closed phase work; ordinary and bounded run modes
-remain unchanged. Current detail:
+WLA-26-10 adds the separate exact delivery adapter: a pure preview over the
+certified patch/proof/repository/roadmap/remote facts; independent claims and
+receipts for integration, evidence, canonical story/phase transitions,
+contract generation, objective and governed machine attestation, gated commit,
+range verification, and optional no-force fast-forward push; all-old/exact-new
+crash reconciliation; and deduplicated obligation materialization plus
+accountable disposition. A two-story bare-remote fixture plants crashes after
+every effect and receipt while proving one phase transition and zero duplicate
+commits or pushes. Public runtime controls remain fail-closed phase work;
+ordinary and bounded run modes remain unchanged. Current detail:
 [Phase 26](./pmo-roadmap/pm/roadmap/work-log-automation/phase-26-autonomous-delivery-programs/current-phase-status.md)
 and the [program contract](./docs/programs.md).
 

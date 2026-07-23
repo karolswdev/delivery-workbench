@@ -132,6 +132,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_studio.py" ] || fail "wheel omitted the pure Program Studio model/edit core"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_verdict.py" ] || fail "wheel omitted the governed verdict and quality-gate core"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_run.py" ] || fail "wheel omitted the finite program grant and ledger core"
+[ -f "$FIXTURE/.githooks/dw_pmo/program_delivery.py" ] || fail "wheel omitted the exact autonomous program delivery rails"
 [ -f "$FIXTURE/pm/orchestration/research-build-review.json" ] \
   || fail "install did not seed the ordinary orchestration preset"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"

@@ -124,8 +124,14 @@ Record unresolved decisions here before implementation starts.
 """
 
 
-def render_evidence(row: StoryRow, story_num: int, body: str) -> str:
-    today = date.today().isoformat()
+def render_evidence(
+    row: StoryRow,
+    story_num: int,
+    body: str,
+    *,
+    evidence_date: str | None = None,
+) -> str:
+    today = evidence_date or date.today().isoformat()
     body = body.strip()
     if not body:
         body = f"- {EVIDENCE_PLACEHOLDER}"
@@ -141,8 +147,13 @@ def render_evidence(row: StoryRow, story_num: int, body: str) -> str:
 """
 
 
-def render_final_summary(phase: Phase, summary_body: str) -> str:
-    today = date.today().isoformat()
+def render_final_summary(
+    phase: Phase,
+    summary_body: str,
+    *,
+    summary_date: str | None = None,
+) -> str:
+    today = summary_date or date.today().isoformat()
     return f"""# Phase {phase.number} Final Summary
 
 **Status:** complete.
@@ -286,3 +297,35 @@ def update_phase_index_status_content(readme: Path, phase_number: int, status: s
     if not changed:
         die(f"phase {phase_number} row not found in {readme}")
     return "\n".join(lines) + "\n"
+
+
+def update_current_phase_pointer_content(
+    readme: Path,
+    phase: Phase | None,
+) -> str:
+    """Move the project README's canonical current-phase pointer.
+
+    The pointer is a guarded roadmap fact, not prose.  A terminal project
+    uses ``n/a.``; otherwise the exact phase directory and status document
+    are named.  Refuse a README without the canonical field rather than
+    silently adding a second dialect.
+    """
+    lines = read_text(readme).splitlines()
+    if phase is None:
+        replacement = "**Current phase:** n/a."
+    else:
+        status_path = phase.path / "current-phase-status.md"
+        heading = (
+            read_text(status_path).splitlines()[0].removeprefix("# ").strip()
+            if status_path.is_file() else ""
+        )
+        label = heading or phase.path.name
+        replacement = (
+            f"**Current phase:** [{label}]"
+            f"(./{phase.path.name}/current-phase-status.md)."
+        )
+    for index, line in enumerate(lines):
+        if line.startswith("**Current phase:**"):
+            lines[index] = replacement
+            return "\n".join(lines) + "\n"
+    die(f"current phase pointer not found in {readme}")
