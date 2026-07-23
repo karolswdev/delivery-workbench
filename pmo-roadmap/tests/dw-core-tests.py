@@ -1522,7 +1522,7 @@ class DwCoreTest(unittest.TestCase):
         for line in source.splitlines():
             if "parts" not in line:
                 continue
-            tokens.update(_re.findall(r'"([a-z]+)"', line))
+            tokens.update(_re.findall(r'"([a-z-]+)"', line))
         tokens.discard("api")  # the prefix, not a surface
         self.assertTrue(
             {"context", "projects", "board", "stories", "trace", "health"} <= tokens,
@@ -1531,13 +1531,14 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(self._interop_missing(tokens, doc), [])
         # every POST route literal handle_mutation dispatches on
         mutation_source = inspect.getsource(wb.handle_mutation)
-        post_routes = set(_re.findall(r'"(/api/[a-z/]+)"', mutation_source))
+        post_routes = set(_re.findall(r'"(/api/[a-z/-]+)"', mutation_source))
         self.assertEqual(
             post_routes,
             {
                 "/api/step/apply",
                 "/api/mutations/preview", "/api/mutations/apply",
                 "/api/orchestration/preview", "/api/orchestration/apply",
+                "/api/program-studio/preview", "/api/program-studio/apply",
                 "/api/runs/preview", "/api/runs/start", "/api/runs/tick",
                 "/api/runs/pause", "/api/runs/resume", "/api/runs/revoke",
                 "/api/runs/cancel", "/api/runs/checkpoint", "/api/runs/request",
@@ -1551,6 +1552,11 @@ class DwCoreTest(unittest.TestCase):
             "dw holds", "dw story show", "dw sessions --json", "dw events",
             "dw check", "dw gate --porcelain", "dw verify",
             "dw orchestration list", "dw orchestration show", "dw orchestration simulate",
+            "dw organization list", "dw organization validate", "dw organization simulate",
+            "dw workflow list", "dw workflow validate", "dw workflow simulate",
+            "dw rubric list", "dw rubric validate",
+            "dw program list", "dw program validate", "dw program simulate",
+            "dw program plan",
             "dw signals list", "dw signals observe",
             "dw notifications list", "dw notifications ack",
             "dw notifications delivered",
@@ -1568,7 +1574,38 @@ class DwCoreTest(unittest.TestCase):
                       "delivery-workbench-workbench-response",
                       "delivery-workbench-board", "delivery-workbench-run-act-preview",
                       "delivery-workbench-run-view", "delivery-workbench-run-stream",
-                      "delivery-workbench-run-summary-list", "feed_schema"):
+                      "delivery-workbench-run-summary-list",
+                      "delivery-workbench-program-start-plan",
+                      "delivery-workbench-program-grant",
+                      "delivery-workbench-program-event",
+                      "delivery-workbench-program-projection",
+                      "delivery-workbench-program-claim-preview",
+                      "delivery-workbench-program-completion-preview",
+                      "delivery-workbench-program-control-preview",
+                      "delivery-workbench-program-child-grant",
+                      "delivery-workbench-program-run-list",
+                      "delivery-workbench-deliberation-plan",
+                      "delivery-workbench-deliberation-event",
+                      "delivery-workbench-deliberation-projection",
+                      "delivery-workbench-deliberation-simulation",
+                      "delivery-workbench-council-verdict",
+                      "delivery-workbench-meta-verdict",
+                      "delivery-workbench-architecture-verdict",
+                      "delivery-workbench-decision",
+                      "delivery-workbench-program-studio",
+                      "delivery-workbench-program-studio-document",
+                      "delivery-workbench-program-studio-graph",
+                      "delivery-workbench-program-studio-authority-preview",
+                      "delivery-workbench-program-studio-round-trip",
+                      "delivery-workbench-program-studio-mutation-preview",
+                      "delivery-workbench-program-studio-mutation-result",
+                      "delivery-workbench-program-frontier",
+                      "delivery-workbench-program-tick",
+                      "delivery-workbench-program-supervision",
+                      "delivery-workbench-program-conductor-receipt",
+                      "delivery-workbench-program-artifact-receipt",
+                      "delivery-workbench-program-driver-operation",
+                      "feed_schema"):
             self.assertIn(stamp, doc)
         # the pin must actually bite: a planted surface reads as missing
         self.assertEqual(
@@ -5638,6 +5675,72 @@ class OrchestrationDriverTest(unittest.TestCase):
         with self.assertRaisesRegex(DwError, "hash check"):
             drivers.validate_work_packet(tampered)
 
+    def test_pi_adapter_pins_version_and_renders_closed_credential_free_argv(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        _claimed, packet = self.claim_packet("research-api", "pi-packet")
+        raw = {
+            "kind": drivers.DRIVER_CONFIG_KIND,
+            "schema_version": drivers.DRIVER_SCHEMA_VERSION,
+            "workspace_root": None,
+            "profiles": {
+                "research-readonly": {
+                    "adapter": "pi-exec",
+                    "adapter_version": "pi-cli@0.42.1",
+                    "command": ["pi"],
+                    "capabilities": ["repository-read", "network"],
+                    "workspace_modes": ["read-only"],
+                    "network": True,
+                    "router": "openrouter",
+                    "provider": "openrouter",
+                    "model_vendor": "moonshot",
+                    "model_family": "kimi-k3",
+                    "model": "moonshot/kimi-k3",
+                    "model_binding": "requested-alias",
+                    "auth_domain": "openrouter-fixture",
+                },
+            },
+        }
+        config = drivers.validate_driver_config(raw)
+        profile = config["profiles"]["research-readonly"]
+        captured = []
+
+        def run(argv, **kwargs):
+            if argv[1:] == ["--version"]:
+                return subprocess.CompletedProcess(argv, 0, "pi 0.42.1\n", "")
+            captured.append((list(argv), dict(kwargs["env"])))
+            kwargs["stdout"].write(
+                b"# Findings\nBounded.\n\n# Sources\nhttps://example.test\n\n# Risks\nNone.\n"
+            )
+            return subprocess.CompletedProcess(argv, 0)
+
+        staging = self.tmp / "pi-staging"
+        with mock.patch.object(drivers.shutil, "which", return_value="/fixture/pi"), \
+             mock.patch.object(drivers.subprocess, "run", side_effect=run), \
+             mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "opaque-fixture-key"}):
+            result = drivers.PiExecDriver().start(packet, profile, staging)
+        self.assertEqual(result["state"], "succeeded")
+        self.assertEqual(len(captured), 1)
+        argv, environment = captured[0]
+        self.assertEqual(argv[:5], [
+            "/fixture/pi", "-p", "--no-session", "--tools",
+            "read,grep,find,ls",
+        ])
+        self.assertEqual(
+            argv[5:9],
+            ["--provider", "openrouter", "--model", "moonshot/kimi-k3"],
+        )
+        self.assertNotIn("opaque-fixture-key", " ".join(argv))
+        self.assertEqual(environment["OPENROUTER_API_KEY"], "opaque-fixture-key")
+        self.assertEqual(environment["PI_SKIP_VERSION_CHECK"], "1")
+        self.assertEqual(environment["PI_TELEMETRY"], "0")
+        self.assertNotIn("shell", argv[4])
+
+        skewed = json.loads(json.dumps(raw))
+        skewed["profiles"]["research-readonly"]["adapter_version"] = "pi-cli@0.42"
+        with self.assertRaisesRegex(DwError, "pin"):
+            drivers.validate_driver_config(skewed)
+
     def test_unsupported_profile_request_refuses_before_adapter_start(self):
         import dw_pmo.orchestration_driver as drivers
 
@@ -9276,7 +9379,10 @@ class ProgramPlannerTest(unittest.TestCase):
                 "on_fail": "block",
             }],
             "mode_ceiling": "continuous",
-            "requested_capabilities": ["agent:dispatch", "check:execute", "workspace:write"],
+            "requested_capabilities": [
+                "agent:dispatch", "check:execute", "verdict:issue",
+                "workspace:write",
+            ],
             "budgets": {"max_phases": 2, "max_stories": 3},
             "stop_conditions": ["scope-complete", "blocked-frontier", "budget-exhausted"],
         }
@@ -9343,6 +9449,65 @@ class ProgramPlannerTest(unittest.TestCase):
             {"kind": "context", "name": "story.id"},
         )
 
+    def test_program_nudge_rules_are_exact_targeted_and_finitely_budgeted(self):
+        core = self.programs_core
+        program = json.loads(json.dumps(self.program))
+        program["requested_capabilities"].extend([
+            "program:select",
+            "nudge:deliver",
+        ])
+        program["nudges"] = [{
+            "id": "repair-failed-ci",
+            "signal": "ci-failed",
+            "binding": "alpha",
+            "target": "story-work/implement",
+            "max_per_signal": 1,
+            "max_total": 2,
+            "expectation": "Revisit the declared implementation evidence.",
+        }]
+        program["budgets"]["max_nudges"] = 2
+        validation = core.validate_program(self.root, program)
+        self.assertTrue(validation["valid"], validation["diagnostics"])
+        compiled = core.compile_program(self.root, program)
+        self.assertEqual(compiled["program"]["nudges"], program["nudges"])
+        plan = core.build_program_plan(self.root, program)
+        self.assertEqual(plan["program"]["nudges"], program["nudges"])
+
+        missing_authority = json.loads(json.dumps(program))
+        missing_authority["requested_capabilities"].remove("nudge:deliver")
+        self.assertIn(
+            "workflow-capability-missing",
+            self.codes(core.validate_program(self.root, missing_authority)),
+        )
+
+        dangling = json.loads(json.dumps(program))
+        dangling["nudges"][0]["target"] = "story-work/missing-agent"
+        self.assertIn(
+            "dangling-nudge-target",
+            self.codes(core.validate_program(self.root, dangling)),
+        )
+
+        unbound = json.loads(json.dumps(program))
+        unbound["nudges"][0]["binding"] = "missing-binding"
+        self.assertIn(
+            "dangling-nudge-binding",
+            self.codes(core.validate_program(self.root, unbound)),
+        )
+
+        unsupported = json.loads(json.dumps(program))
+        unsupported["nudges"][0]["signal"] = "waiting-input-timeout"
+        self.assertIn(
+            "unsupported-program-signal",
+            self.codes(core.validate_program(self.root, unsupported)),
+        )
+
+        exhausted = json.loads(json.dumps(program))
+        exhausted["budgets"]["max_nudges"] = 1
+        self.assertIn(
+            "workflow-exceeds-budget",
+            self.codes(core.validate_program(self.root, exhausted)),
+        )
+
     def test_layout_changes_document_hashes_but_not_program_authority(self):
         core = self.programs_core
         baseline = core.compile_program(self.root, self.program)
@@ -9385,7 +9550,10 @@ class ProgramPlannerTest(unittest.TestCase):
         self.assertEqual(plan["selection"]["rubrics"][0]["version"], "1.0.0")
         self.assertEqual(
             plan["program"]["requested_capabilities"],
-            ["agent:dispatch", "check:execute", "workspace:write"],
+            [
+                "agent:dispatch", "check:execute", "verdict:issue",
+                "workspace:write",
+            ],
         )
         self.assertIn("organization", plan["program"]["reference_hashes"])
         assignment = plan["assignment"]
@@ -9413,6 +9581,18 @@ class ProgramPlannerTest(unittest.TestCase):
             if role["duty"] == "verifier"
         )
         self.assertEqual(verifier_policy["workspace"], "read-only")
+        architect_policy = next(
+            role["packet_policy"] for role in assignment["roles"]
+            if role["duty"] == "master-architect"
+        )
+        self.assertEqual(
+            architect_policy["effective_capability_ceiling"],
+            ["agent:dispatch", "verdict:issue"],
+        )
+        self.assertEqual(
+            architect_policy["workflow_requirements"]["artifact_reads"],
+            ["markdown"],
+        )
         reasons = {item["story"]: item["reason"] for item in plan["candidates"]}
         self.assertEqual(reasons["DM-1-01"], "already-done")
         self.assertEqual(reasons["DM-1-03"], "out-of-scope")
@@ -9548,7 +9728,13 @@ class ProgramPlannerTest(unittest.TestCase):
             },
         })
         self._write_json("pm/workflows/story-work.json", capability_workflow)
-        validation = core.validate_program(self.root, self.program)
+        missing_verdict_authority = json.loads(json.dumps(self.program))
+        missing_verdict_authority["requested_capabilities"].remove(
+            "verdict:issue"
+        )
+        validation = core.validate_program(
+            self.root, missing_verdict_authority
+        )
         self.assertIn("workflow-capability-missing", self.codes(validation))
 
         workflow["nodes"][0]["timeout_seconds"] = 86400
@@ -9743,7 +9929,8 @@ class ProgramRunAuthorityTest(unittest.TestCase):
         }
 
     def plan(self, *, mode="continuous", capabilities=None, budgets=None,
-             intent="authority-1", expires_at=None):
+             intent="authority-1", expires_at=None, remote=None,
+             remote_ref=None):
         return self.core.build_program_start_plan(
             self.root,
             "demo-program",
@@ -9755,13 +9942,17 @@ class ProgramRunAuthorityTest(unittest.TestCase):
             budgets=budgets,
             issued_at=self.issued_at,
             expires_at=expires_at or self.expires_at,
+            remote=remote,
+            remote_ref=remote_ref,
         )
 
     def start(self, *, mode="continuous", intent="authority-1",
-              capabilities=None, budgets=None, expires_at=None):
+              capabilities=None, budgets=None, expires_at=None, remote=None,
+              remote_ref=None):
         plan = self.plan(
             mode=mode, intent=intent, capabilities=capabilities,
-            budgets=budgets, expires_at=expires_at,
+            budgets=budgets, expires_at=expires_at, remote=remote,
+            remote_ref=remote_ref,
         )
         self.assertTrue(plan["applicable"], plan["issues"])
         return plan, self.core.start_program(
@@ -9822,6 +10013,18 @@ class ProgramRunAuthorityTest(unittest.TestCase):
         kimi = next(seat for seat in plan["roster"]["seats"] if seat["profile"] == "meta-a")
         self.assertEqual(kimi["execution"]["router"], "openrouter")
         self.assertEqual(kimi["execution"]["model"], "kimi/k3")
+        roster_addresses = {
+            seat["address"] for seat in plan["roster"]["seats"]
+        }
+        for story_id in ("DM-1-01", "DM-1-02", "DM-2-01"):
+            self.assertTrue(any(
+                f"/story/{story_id}/" in address
+                for address in roster_addresses
+            ))
+        self.assertFalse(any(
+            "/story/DM-1-03/" in address
+            for address in roster_addresses
+        ))
         rule_assignment = json.loads(json.dumps(plan["planning"]["assignment"]))
         rule_council = rule_assignment["councils"][0]
         rule_council["decision"]["method"] = "majority"
@@ -10010,7 +10213,7 @@ class ProgramRunAuthorityTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             role_address=implementer["address"],
-            node_address="program/demo/phase/1/story/DM-1-02/workflow/alpha/implement",
+            node_address="program/demo-program/phase/1/story/DM-1-02/workflow/alpha/node/implement",
             capabilities=["agent:dispatch", "workspace:write"],
             budgets={"max_agent_starts": 1, "max_artifact_bytes": 1_000},
             now="2026-07-22T12:02:00Z",
@@ -10027,7 +10230,7 @@ class ProgramRunAuthorityTest(unittest.TestCase):
                 self.root,
                 projection["run_id"],
                 role_address=implementer["address"],
-                node_address="program/demo/phase/1/story/DM-1-02/workflow/alpha/implement",
+                node_address="program/demo-program/phase/1/story/DM-1-02/workflow/alpha/node/implement",
                 capabilities=["agent:dispatch", "git:commit"],
                 budgets={"max_agent_starts": 1},
                 now="2026-07-22T12:02:00Z",
@@ -10091,7 +10294,7 @@ class ProgramRunAuthorityTest(unittest.TestCase):
             self.root,
             run_id,
             role_address=implementer["address"],
-            node_address="program/demo/phase/1/story/DM-1-02/workflow/alpha/implement",
+            node_address="program/demo-program/phase/1/story/DM-1-02/workflow/alpha/node/implement",
             capabilities=["agent:dispatch", "workspace:write"],
             budgets={"max_agent_starts": 1},
             now="2026-07-22T12:02:00Z",
@@ -10405,6 +10608,134 @@ class ProgramRunAuthorityTest(unittest.TestCase):
         self.assertEqual(result["state"], "revoked")
         self.assertEqual(result["generation"], 1)
 
+    def test_obligations_are_claim_bound_durable_and_separately_disposed(self):
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+        decision_hash = self.h("d")
+        obligation = {
+            "id": "follow-up-1",
+            "kind": "follow-up",
+            "statement": "Verify the deferred compatibility edge.",
+            "priority": "high",
+            "blocking": True,
+            "accountable_role": "verifier",
+            "target": "DM-1-02",
+            "citations": ["artifact:decision-1"],
+            "acceptance": "The exact compatibility check is green.",
+            "state": "open",
+        }
+        obligation_hash = self.core._sha({
+            "decision_hash": decision_hash,
+            "obligation": obligation,
+        })
+        preview = self.claim_preview(
+            run_id, "obligation-record", key="obligation-record-1",
+            subject=self.subject(
+                kind="program-obligation", identifier="follow-up-1",
+                hash_char="a",
+            ) | {"hash": obligation_hash},
+        )
+        claim = self.apply_claim(preview)["claim"]
+        completion = self.core.build_program_completion_preview(
+            self.root, run_id, claim_id=claim["claim_id"],
+            result="succeeded", receipt_hash=self.h("1"),
+            reason="Validated the exact council obligation.",
+            now="2026-07-22T12:02:10Z",
+        )
+        self.core.apply_program_completion(
+            self.root, completion,
+            completion_token=completion["completion_token"],
+            now="2026-07-22T12:02:10Z",
+        )
+        recorded = self.core.record_program_obligation(
+            self.root, run_id, claim_id=claim["claim_id"],
+            decision_hash=decision_hash, obligation=obligation,
+            now="2026-07-22T12:02:20Z",
+        )
+        self.assertEqual(
+            [item["id"] for item in recorded["blocking_obligations"]],
+            ["follow-up-1"],
+        )
+        again = self.core.record_program_obligation(
+            self.root, run_id, claim_id=claim["claim_id"],
+            decision_hash=decision_hash, obligation=obligation,
+            now="2026-07-22T12:02:30Z",
+        )
+        self.assertTrue(again["idempotent"])
+
+        disposition = {
+            "obligation_id": "follow-up-1",
+            "from_state": "open",
+            "to_state": "completed",
+            "actor": "verifier-a",
+            "authority": "quality-council",
+            "reason": "The bound compatibility check passed.",
+            "replacement_id": None,
+        }
+        disposition_hash = self.core._sha(disposition)
+        preview = self.claim_preview(
+            run_id, "obligation-disposition", key="obligation-dispose-1",
+            subject=self.subject(
+                kind="program-obligation-disposition",
+                identifier="follow-up-1", hash_char="b",
+            ) | {"hash": disposition_hash},
+            at="2026-07-22T12:03:00Z",
+        )
+        disposition_claim = self.apply_claim(
+            preview, at="2026-07-22T12:03:00Z"
+        )["claim"]
+        completion = self.core.build_program_completion_preview(
+            self.root, run_id, claim_id=disposition_claim["claim_id"],
+            result="succeeded", receipt_hash=self.h("2"),
+            reason="Authorized the exact terminal disposition.",
+            now="2026-07-22T12:03:10Z",
+        )
+        self.core.apply_program_completion(
+            self.root, completion,
+            completion_token=completion["completion_token"],
+            now="2026-07-22T12:03:10Z",
+        )
+        disposed = self.core.dispose_program_obligation(
+            self.root, run_id, claim_id=disposition_claim["claim_id"],
+            obligation_id="follow-up-1", to_state="completed",
+            actor="verifier-a", authority="quality-council",
+            reason="The bound compatibility check passed.",
+            now="2026-07-22T12:03:20Z",
+        )
+        self.assertEqual(disposed["obligation"]["state"], "completed")
+        self.assertEqual(disposed["blocking_obligations"], [])
+        self.assertEqual(len(disposed["obligation_history"]), 2)
+
+    def test_scope_completion_refuses_a_claim_without_complete_roadmap_facts(self):
+        _plan, projection = self.start()
+        proof_hash = self.h("c")
+        preview = self.claim_preview(
+            projection["run_id"], "assignment", key="premature-scope",
+            subject=self.subject(
+                kind="program-scope-proof", identifier="demo-program",
+                hash_char="c",
+            ),
+        )
+        claim = self.apply_claim(preview)["claim"]
+        completion = self.core.build_program_completion_preview(
+            self.root, projection["run_id"], claim_id=claim["claim_id"],
+            result="succeeded", receipt_hash=self.h("3"),
+            reason="Store the candidate scope proof.",
+            now="2026-07-22T12:02:10Z",
+        )
+        self.core.apply_program_completion(
+            self.root, completion,
+            completion_token=completion["completion_token"],
+            now="2026-07-22T12:02:10Z",
+        )
+        with self.assertRaisesRegex(DwError, "planner.*scope complete"):
+            self.core.complete_program_scope(
+                self.root, projection["run_id"], claim_id=claim["claim_id"],
+                proof_hash=proof_hash,
+                completed_stories=["DM-1-01", "DM-1-02", "DM-2-01"],
+                completed_phases=[1, 2], now="2026-07-22T12:02:20Z",
+            )
+
     def test_ledger_and_grant_corruption_fail_closed(self):
         _plan, projection = self.start()
         run_dir = self.root / ".git/pmo-programs/runs" / projection["run_id"]
@@ -10509,6 +10840,2011 @@ class ProgramRunAuthorityTest(unittest.TestCase):
         )
         self.assertEqual(len(final["claims"]), 1)
         self.assertEqual(final["budgets"]["max_check_starts"]["used"], 1)
+
+
+class ProgramConductorTest(unittest.TestCase):
+    """WLA-26-09: deterministic program conduction and crash recovery."""
+
+    now = "2026-07-22T12:02:00Z"
+
+    def setUp(self):
+        import dw_pmo.program_conductor as conductor
+        from dw_pmo.orchestration_driver import load_driver_config
+
+        self.core = conductor
+        self.authority = ProgramRunAuthorityTest(
+            "test_start_is_exact_immutable_idempotent_and_creates_only_local_authority"
+        )
+        self.authority.setUp()
+        self.addCleanup(self.authority.doCleanups)
+        self.root = self.authority.root
+        path = self.root / "pm/programs/demo-program.json"
+        program = json.loads(path.read_text(encoding="utf-8"))
+        for key in (
+            "max_child_runs", "max_agent_starts",
+            "max_provider_starts", "max_model_starts",
+        ):
+            program["budgets"][key] = 8
+            self.authority.budgets[key] = 8
+        program["budgets"]["max_artifact_bytes"] = 8_000_000
+        self.authority.budgets["max_artifact_bytes"] = 8_000_000
+        # Most conductor tests isolate story-work behavior.  Architect-gate
+        # cases opt back into the fixture program's phase policy explicitly.
+        program["phase_gates"] = []
+        path.write_text(
+            json.dumps(program, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture.program = program
+        self.authority.fixture._git("add", "pm")
+        self.authority.fixture._git("commit", "-qm", "conductor fixture budgets")
+        self.config = load_driver_config(self.root)
+        self.intent = 0
+
+    def start(self, *, remote=None, remote_ref=None):
+        self.intent += 1
+        _plan, projection = self.authority.start(
+            intent=f"conductor-{self.intent}",
+            budgets=self.authority.budgets,
+            remote=remote,
+            remote_ref=remote_ref,
+        )
+        return projection
+
+    def advance_to_agent(self, projection):
+        fixture = self.core.ProgramFixtureDriver()
+        first = self.core.tick_program(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        second = self.core.tick_program(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        self.assertEqual((first["action"]["kind"], second["action"]["kind"]),
+                         ("selection", "assignment"))
+        return fixture
+
+    def configure_outward_nudge(self):
+        program_path = self.root / "pm/programs/demo-program.json"
+        program = json.loads(program_path.read_text(encoding="utf-8"))
+        if "nudge:deliver" not in program["requested_capabilities"]:
+            program["requested_capabilities"].append("nudge:deliver")
+        if "nudge:deliver" not in self.authority.capabilities:
+            self.authority.capabilities.append("nudge:deliver")
+        program["budgets"]["max_nudges"] = 1
+        self.authority.budgets["max_nudges"] = 1
+        program["budgets"]["max_artifact_bytes"] = 4_000_000
+        self.authority.budgets["max_artifact_bytes"] = 4_000_000
+        program["nudges"] = [{
+            "id": "repair-failed-ci",
+            "signal": "ci-failed",
+            "binding": "alpha",
+            "target": "story-work/implement",
+            "max_per_signal": 1,
+            "max_total": 1,
+            "expectation": (
+                "Revisit the declared implementation against the failed "
+                "mechanical signal."
+            ),
+        }]
+        program_path.write_text(
+            json.dumps(program, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture.program = program
+        self.authority.fixture._git("add", "pm")
+        self.authority.fixture._git(
+            "commit", "-qm", "program outward nudge fixture"
+        )
+        self.authority.fixture._git(
+            "remote", "add", "origin", str(self.root)
+        )
+        self.authority.fixture._git(
+            "update-ref", "refs/remotes/origin/main", "HEAD"
+        )
+
+    def observe_failed_ci(self):
+        import dw_pmo.signals as signals
+
+        scenario = self.root / ".git/program-signal-fixture.json"
+        scenario.write_text(json.dumps({
+            "prs": [{
+                "number": 7,
+                "state": "open",
+                "draft": False,
+                "head": "main",
+                "base": "main",
+                "url": "https://example.test/pull/7",
+                "checks": [{
+                    "name": "core",
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "url": "https://example.test/check/7",
+                }],
+                "review": {
+                    "unresolved": 0,
+                    "resolved": 0,
+                    "changes_requested": False,
+                    "approved": False,
+                    "reviewers": [],
+                    "url": "https://example.test/pull/7",
+                },
+                "mergeable": "true",
+                "mergeable_reason": "clean",
+            }],
+        }), encoding="utf-8")
+        return signals.observe_signals(
+            self.root,
+            signals.FixtureProvider(scenario),
+            "origin",
+            "main",
+            now=datetime.fromisoformat(
+                self.now.replace("Z", "+00:00")
+            ),
+        )
+
+    def record_fixture_obligation(
+        self,
+        projection,
+        *,
+        obligation_id,
+        blocking,
+        story="DM-1-02",
+        phase=1,
+    ):
+        decision_hash = self.authority.h("d")
+        obligation = {
+            "id": obligation_id,
+            "kind": "technical-debt",
+            "statement": "Retain this exact cross-story fixture obligation.",
+            "priority": "high" if blocking else "medium",
+            "blocking": blocking,
+            "accountable_role": "implementer",
+            "target": story,
+            "citations": ["evidence:fixture-decision"],
+            "acceptance": "The exact obligation receives a terminal disposition.",
+            "state": "open",
+        }
+        subject_hash = self.authority.core._sha({
+            "decision_hash": decision_hash,
+            "obligation": obligation,
+        })
+        preview = self.authority.claim_preview(
+            projection["run_id"],
+            "obligation-record",
+            key=f"fixture-obligation/{obligation_id}",
+            subject={
+                "kind": "program-obligation",
+                "id": obligation_id,
+                "hash": subject_hash,
+                "phase": phase,
+                "story": story,
+            },
+            at=self.now,
+        )
+        claimed = self.authority.apply_claim(preview, at=self.now)
+        claim = claimed["claim"]
+        completion = self.authority.core.build_program_completion_preview(
+            self.root,
+            projection["run_id"],
+            claim_id=claim["claim_id"],
+            result="succeeded",
+            receipt_hash=self.authority.h("e"),
+            reason="Recorded the exact fixture obligation source.",
+            now=self.now,
+        )
+        completed = self.authority.core.apply_program_completion(
+            self.root,
+            completion,
+            completion_token=completion["completion_token"],
+            now=self.now,
+        )
+        return self.authority.core.record_program_obligation(
+            self.root,
+            projection["run_id"],
+            claim_id=claim["claim_id"],
+            decision_hash=decision_hash,
+            obligation=obligation,
+            now=self.now,
+        )
+
+    def complete_story_rail(self, projection, story_id):
+        phase = int(story_id.split("-")[1])
+        preview = self.authority.claim_preview(
+            projection["run_id"],
+            "story-complete",
+            key=f"fixture-story-complete/{story_id}",
+            subject={
+                "kind": "program-story-completion",
+                "id": story_id,
+                "hash": self.authority.core._sha({
+                    "story": story_id,
+                    "to_status": "done",
+                }),
+                "phase": phase,
+                "story": story_id,
+            },
+            at=self.now,
+        )
+        claimed = self.authority.apply_claim(preview, at=self.now)
+        claim = claimed["claim"]
+        self.authority.fixture._set_story_status(
+            story_id,
+            "in-progress" if story_id == "DM-1-02" else "backlog",
+            "done",
+        )
+        phase_dir = (
+            self.root
+            / "pm/roadmap/demo"
+            / (
+                "phase-1-alpha"
+                if phase == 1
+                else "phase-2-beta"
+            )
+        )
+        story_number = int(story_id.rsplit("-", 1)[1])
+        evidence_name = f"evidence-story-{story_number:02d}.md"
+        evidence_path = phase_dir / evidence_name
+        evidence_path.write_text(
+            f"# Evidence - {story_id}\n\n"
+            f"- **Story:** {story_id} - Fixture completion\n"
+            "- **Status:** done\n"
+            "- **Date:** 2026-07-22\n\n"
+            "## Proof\n\n- externally authorized fixture rail\n",
+            encoding="utf-8",
+        )
+        status_path = phase_dir / "current-phase-status.md"
+        status = status_path.read_text(encoding="utf-8")
+        row = next(
+            line for line in status.splitlines()
+            if f"| {story_id} |" in line
+        )
+        status_path.write_text(
+            status.replace(
+                row,
+                row.rsplit("| - |", 1)[0]
+                + f"| [evidence-story-{story_number:02d}]"
+                f"(./{evidence_name}) |",
+            ),
+            encoding="utf-8",
+        )
+        self.authority.fixture._git("add", "pm/roadmap")
+        self.authority.fixture._git(
+            "commit", "-qm", f"complete {story_id} fixture rail"
+        )
+        completion = self.authority.core.build_program_completion_preview(
+            self.root,
+            projection["run_id"],
+            claim_id=claim["claim_id"],
+            result="succeeded",
+            receipt_hash=self.authority.core._sha({
+                "fixture_story_completion": story_id,
+            }),
+            reason=f"Applied the exact {story_id} fixture completion rail.",
+            now=self.now,
+        )
+        return self.authority.core.apply_program_completion(
+            self.root,
+            completion,
+            completion_token=completion["completion_token"],
+            now=self.now,
+        )
+
+    def configure_council_workflow(
+        self, *, method="majority", threshold=1,
+        tie_policy="judge", audit="none",
+    ):
+        from dw_pmo.orchestration_driver import (
+            load_driver_config, write_driver_config,
+        )
+
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        implement = workflow["nodes"][0]
+        implement["activation"] = "route"
+        implement.pop("needs", None)
+        check = {
+            "id": "council-evidence", "type": "check", "inputs": {},
+            "runner": {
+                "kind": "builtin", "name": "file-exists",
+                "path": "pm/programs/demo-program.json",
+                "output_bytes": 50_000,
+            },
+            "expect": {"exit_code": 0},
+            "timeout_seconds": 60, "max_attempts": 1,
+            "outputs": [{
+                "id": "fact", "kind": "mechanical-fact",
+                "max_bytes": 20_000,
+            }],
+            "on_failure": {"kind": "action", "target": "block"},
+        }
+        debate = {
+            "id": "design-council", "type": "debate",
+            "needs": ["council-evidence"],
+            "inputs": {
+                "evidence": {
+                    "kind": "artifact",
+                    "name": "council-evidence.fact",
+                },
+            },
+            "participants": ["architect", "critic"],
+            "judge_role": "verifier",
+            "max_rounds": 1, "quorum": 1,
+            "artifact_max_bytes": 30_000,
+            "artifact_max_tokens": 4_000,
+            "round_timeout_seconds": 600,
+            "tie_policy": tie_policy,
+            "dissent_policy": "preserve",
+            "on_consensus": {"kind": "node", "target": "implement"},
+            "on_repair": {"kind": "action", "target": "block"},
+            "on_dissent": {"kind": "action", "target": "checkpoint"},
+            "on_quorum_lost": {"kind": "action", "target": "escalate"},
+            "on_exhausted": {"kind": "action", "target": "escalate"},
+            "outputs": [{
+                "id": "judgment", "kind": "decision",
+                "max_bytes": 50_000,
+            }],
+        }
+        workflow["nodes"] = [check, debate, implement]
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        organization_path = self.root / "pm/organizations/delivery-core.json"
+        organization = json.loads(
+            organization_path.read_text(encoding="utf-8")
+        )
+        source_agent = next(
+            item for item in organization["agents"]
+            if item["id"] == "meta-a"
+        )
+        critic_agent = json.loads(json.dumps(source_agent))
+        critic_agent.update({
+            "id": "critic-a",
+            "profile": "critic-a",
+            "duties": ["critic"],
+            "workspace_domain": "critic-a",
+            "capability_ceiling": ["agent:dispatch"],
+        })
+        organization["agents"].append(critic_agent)
+        organization["pools"].append({
+            "id": "critics", "agents": ["critic-a"],
+        })
+        source_role = next(
+            item for item in organization["teams"][0]["roles"]
+            if item["id"] == "meta"
+        )
+        critic = json.loads(json.dumps(source_role))
+        critic.update({
+            "id": "critic",
+            "duty": "critic",
+            "pool": "critics",
+            "required": False,
+            "capability_ceiling": ["agent:dispatch"],
+            "driver_capabilities": ["repository-read"],
+            "workspace": "read-only",
+            "output_schema": "fixture-output@1",
+            "verdict_schema": None,
+            "may_request": [],
+            "may_judge": [],
+            "independent_from": [],
+        })
+        critic["artifacts"]["write"] = [
+            "markdown", "json", "text", "decision",
+        ]
+        organization["teams"][0]["roles"].append(critic)
+        council = organization["councils"][0]
+        council.update({
+            "members": ["architect", "critic", "verifier"],
+            "judge": "verifier",
+            "meta_verifier": "meta",
+            "decision": {
+                "method": method,
+                "threshold": threshold,
+                "veto_roles": [],
+            },
+            "audit": {
+                "mode": audit,
+                "sample_size": 0 if audit == "none" else 3,
+                "on_overturn": "repair",
+                "on_escalate": "escalate",
+            },
+        })
+        organization_path.write_text(
+            json.dumps(organization, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        config = load_driver_config(self.root)
+        critic_profile = json.loads(json.dumps(config["profiles"]["meta-a"]))
+        critic_profile.update({
+            "principal": "critic-a",
+            "auth_domain": "auth-critic-a",
+            "model": "fixture/critic-a",
+        })
+        config["profiles"]["critic-a"] = critic_profile
+        write_driver_config(self.root, config)
+        self.config = load_driver_config(self.root)
+
+        program_path = self.root / "pm/programs/demo-program.json"
+        program = json.loads(program_path.read_text(encoding="utf-8"))
+        for key in (
+            "max_child_runs", "max_agent_starts",
+            "max_provider_starts", "max_model_starts",
+        ):
+            program["budgets"][key] = 16
+            self.authority.budgets[key] = 16
+        program_path.write_text(
+            json.dumps(program, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture.program = program
+        self.authority.fixture._git("add", "pm")
+        self.authority.fixture._git(
+            "commit", "-qm", "governed council conductor fixture"
+        )
+
+    def configure_phase_architect_gate(self, *, on_fail="block"):
+        program_path = self.root / "pm/programs/demo-program.json"
+        program = json.loads(program_path.read_text(encoding="utf-8"))
+        program["phase_gates"] = [{
+            "id": "architecture-gate",
+            "when": "before-phase-complete",
+            "role": "master-architect",
+            "rubric": "phase-architecture",
+            "on_fail": on_fail,
+        }]
+        program_path.write_text(
+            json.dumps(program, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        rubric_path = self.root / "pm/rubrics/phase-architecture.json"
+        rubric = json.loads(rubric_path.read_text(encoding="utf-8"))
+        rubric["result_vocabulary"] = [
+            "pass", "fail", "approve", "veto", "escalate",
+        ]
+        rubric["aggregation"].update({
+            "on_pass": "approve",
+            "on_fail": "veto",
+            "on_abstain": "escalate",
+            "on_inconclusive": "escalate",
+        })
+        rubric_path.write_text(
+            json.dumps(rubric, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture.program = program
+        self.authority.fixture._git("add", "pm")
+        self.authority.fixture._git(
+            "commit", "-qm", "phase architect conductor fixture"
+        )
+
+    def configure_structural_loop(
+        self,
+        predicate,
+        *,
+        check_path="pm/programs/demo-program.json",
+        success_to_node=False,
+    ):
+        child = {
+            "kind": "delivery-workbench-workflow",
+            "schema_version": 1,
+            "slug": "loop-child",
+            "title": "One bounded implementation and check round",
+            "version": "1.0.0",
+            "parameters": [{
+                "id": "story-id",
+                "type": "string",
+                "required": True,
+                "max_bytes": 128,
+            }],
+            "defaults": {},
+            "nodes": [{
+                "id": "implement",
+                "type": "agent",
+                "role": "implementer",
+                "task": "Produce the candidate for this exact loop round.",
+                "workspace": "isolated-worktree",
+                "capability_ceiling": [
+                    "agent:dispatch", "workspace:write",
+                ],
+                "timeout_seconds": 300,
+                "max_attempts": 1,
+                "inputs": {
+                    "story": {
+                        "kind": "parameter",
+                        "name": "story-id",
+                    },
+                },
+                "outputs": [{
+                    "id": "candidate",
+                    "kind": "git-diff",
+                    "max_bytes": 300_000,
+                }],
+                "on_failure": {
+                    "kind": "action",
+                    "target": "block",
+                },
+            }, {
+                "id": "check-loop",
+                "type": "check",
+                "needs": ["implement"],
+                "inputs": {
+                    "candidate": {
+                        "kind": "artifact",
+                        "name": "implement.candidate",
+                    },
+                },
+                "runner": {
+                    "kind": "builtin",
+                    "name": "file-exists",
+                    "path": check_path,
+                    "output_bytes": 50_000,
+                },
+                "expect": {"exit_code": 0},
+                "timeout_seconds": 60,
+                "max_attempts": 1,
+                "outputs": [{
+                    "id": "fact",
+                    "kind": "mechanical-fact",
+                    "max_bytes": 20_000,
+                }],
+                "on_success": {
+                    "kind": "terminal",
+                    "target": "complete",
+                },
+                "on_failure": {
+                    "kind": "action",
+                    "target": "block",
+                },
+            }],
+            "terminals": [{
+                "id": "complete",
+                "meaning": "complete",
+            }],
+        }
+        child_path = self.root / "pm/workflows/loop-child.json"
+        child_path.write_text(
+            json.dumps(child, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        parent_path = self.root / "pm/workflows/story-work.json"
+        parent = json.loads(parent_path.read_text(encoding="utf-8"))
+        loop = {
+            "id": "quality-loop",
+            "type": "loop",
+            "purpose": "repeat-until",
+            "workflow": "loop-child",
+            "version": "1.0.0",
+            "with": {
+                "story-id": {
+                    "kind": "parameter",
+                    "name": "story-id",
+                },
+            },
+            "capability_ceiling": [
+                "agent:dispatch", "check:execute", "workspace:write",
+            ],
+            "max_rounds": 2,
+            "until": predicate,
+            "carry": ["implement.candidate"],
+            "on_success": {
+                "kind": "node" if success_to_node else "terminal",
+                "target": "after-loop" if success_to_node else "complete",
+            },
+            "on_exhausted": {
+                "kind": "action",
+                "target": "escalate",
+            },
+        }
+        parent["nodes"] = [loop]
+        if success_to_node:
+            parent["nodes"].append({
+                "id": "after-loop",
+                "type": "agent",
+                "activation": "route",
+                "role": "implementer",
+                "task": "Continue only after the loop predicate is green.",
+                "workspace": "isolated-worktree",
+                "capability_ceiling": [
+                    "agent:dispatch", "workspace:write",
+                ],
+                "timeout_seconds": 300,
+                "max_attempts": 1,
+                "inputs": {},
+                "outputs": [{
+                    "id": "integrated-candidate",
+                    "kind": "git-diff",
+                    "max_bytes": 100_000,
+                }],
+                "on_success": {
+                    "kind": "terminal",
+                    "target": "complete",
+                },
+                "on_failure": {
+                    "kind": "action",
+                    "target": "block",
+                },
+            })
+        parent_path.write_text(
+            json.dumps(parent, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture._git("add", "pm")
+        self.authority.fixture._git(
+            "commit", "-qm", "structural loop conductor fixture"
+        )
+
+    def test_structural_loop_records_typed_green_round_and_lineage(self):
+        self.configure_structural_loop({
+            "kind": "check-result",
+            "source": "check-loop",
+            "operator": "green",
+        }, success_to_node=True)
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        result = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=12,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (result["state"], result["stop"]),
+            ("story-certified", "checkpoint"),
+        )
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        round_receipts = [
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "loop-round"
+        ]
+        self.assertEqual(len(round_receipts), 1)
+        receipt = round_receipts[0]
+        self.assertIn(
+            "/loop/quality-loop/round/1/predicate/attempt/1",
+            receipt["address"],
+        )
+        self.assertEqual(
+            (receipt["result"], receipt["route"]),
+            (
+                "success",
+                {"kind": "node", "target": "after-loop"},
+            ),
+        )
+        self.assertEqual(
+            receipt["payload"]["observation"]["value"], "pass"
+        )
+        self.assertTrue(receipt["payload"]["matched"])
+        self.assertEqual(
+            receipt["payload"]["carried_artifacts"][0]["source"],
+            "implement.candidate",
+        )
+        child = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "agent"
+        )
+        self.assertIn(
+            "/loop/quality-loop/round/1/subflow/loop-child/"
+            "node/implement/role/implementer/attempt/1",
+            child["address"],
+        )
+        self.assertEqual(
+            replayed["authority"]["budgets"]["max_loop_rounds"]["used"],
+            1,
+        )
+        after_loop = next(
+            item for item in replayed["receipts"]
+            if item.get("node") == "after-loop"
+            and item["action_kind"] == "agent"
+        )
+        self.assertIn(
+            "/node/after-loop/role/implementer/attempt/1",
+            after_loop["address"],
+        )
+
+    def test_structural_loop_advances_round_then_routes_exhaustion(self):
+        self.configure_structural_loop({
+            "kind": "artifact-valid",
+            "source": "check-loop.fact",
+            "operator": "green",
+        }, check_path="pm/programs/missing-loop-target.json")
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        result = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=15,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (result["state"], result["stop"], result["checkpoint"]),
+            ("stopped", "route-escalate", False),
+        )
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        rounds = [
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "loop-round"
+        ]
+        self.assertEqual(
+            [
+                (
+                    item["payload"]["round"],
+                    item["result"],
+                    item["payload"]["matched"],
+                )
+                for item in rounds
+            ],
+            [(1, "continue", False), (2, "exhausted", False)],
+        )
+        self.assertEqual(
+            [item["payload"]["observation"]["value"] for item in rounds],
+            ["fail", "fail"],
+        )
+        agent_addresses = [
+            item["address"] for item in replayed["receipts"]
+            if item["action_kind"] == "agent"
+        ]
+        self.assertEqual(len(agent_addresses), 2)
+        self.assertTrue(any("/round/1/" in item for item in agent_addresses))
+        self.assertTrue(any("/round/2/" in item for item in agent_addresses))
+        self.assertEqual(
+            replayed["authority"]["budgets"]["max_loop_rounds"]["used"],
+            2,
+        )
+        self.assertFalse(any(
+            item["action_kind"] == "story-verification"
+            for item in replayed["receipts"]
+        ))
+
+    def test_structural_loop_receipt_crash_recovers_exactly_once(self):
+        self.configure_structural_loop({
+            "kind": "check-result",
+            "source": "check-loop",
+            "operator": "green",
+        })
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        while True:
+            frontier = self.core.derive_program_frontier(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                now=self.now,
+            )
+            if (
+                frontier["next_actions"]
+                and frontier["next_actions"][0]["kind"] == "loop-round"
+            ):
+                break
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+            )
+
+        def crash(name, detail):
+            if (
+                name == "after-receipt"
+                and detail.get("receipt_kind") == "loop-round"
+            ):
+                raise RuntimeError("loop receipt stored")
+
+        with self.assertRaisesRegex(RuntimeError, "loop receipt stored"):
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+                boundary_hook=crash,
+            )
+        recovered = self.core.tick_program(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(recovered["action"]["kind"], "loop-round")
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(len([
+            item for item in replayed["authority"]["claims"]
+            if item["category"] == "loop-round"
+        ]), 1)
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "loop-round"
+        ]), 1)
+
+    def test_tick_conducts_implementer_then_independent_verifier(self):
+        from dw_pmo.program_verdict import validate_verdict_document
+
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        supervised = self.core.supervise_program(
+            self.root, projection["run_id"], max_ticks=10,
+            driver_config=self.config, adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(supervised["stop"], "checkpoint")
+        self.assertEqual(supervised["state"], "story-certified")
+        self.assertEqual(supervised["ticks"], 4)
+        self.assertEqual(fixture.starts, 2)
+
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        authority = replayed["authority"]
+        self.assertEqual(authority["active_claims"], [])
+        self.assertEqual(len(authority["dispatches"]), 2)
+        self.assertEqual(
+            [item["category"] for item in authority["claims"]],
+            [
+                "selection", "assignment", "child-grant", "agent",
+                "child-grant", "agent", "verdict",
+            ],
+        )
+        implement = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "agent"
+        )
+        verification = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "story-verification"
+        )
+        self.assertIn("/node/implement/role/implementer/attempt/1", implement["address"])
+        self.assertIn("/verifier/story-quality/role/verifier/attempt/1", verification["address"])
+        self.assertNotEqual(implement["role_address"], verification["role_address"])
+        self.assertEqual(verification["result"], "pass")
+        verdict_artifact = next(
+            item for item in verification["artifacts"]
+            if item["name"] == "issued-verdict"
+        )
+        verdict = json.loads(
+            self.core._artifact_content(
+                self.root, projection["run_id"], verdict_artifact
+            ).decode("utf-8")
+        )
+        self.assertEqual(validate_verdict_document(verdict), verdict)
+        self.assertNotEqual(
+            verdict["issuer"]["principal_fingerprint"],
+            verdict["subject"]["implementer_principals"][0],
+        )
+        story = (
+            self.root / "pm/roadmap/demo/phase-1-alpha/story-02-active-build.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("- **Status:** in-progress", story)
+
+    def test_outward_fact_delivers_one_bounded_restart_safe_nudge(self):
+        self.configure_outward_nudge()
+        missing_channel = self.authority.plan(
+            intent="nudge-without-channel",
+            budgets=self.authority.budgets,
+        )
+        self.assertFalse(missing_channel["applicable"])
+        self.assertTrue(any(
+            "remote-tracking ref" in item["message"]
+            for item in missing_channel["issues"]
+        ))
+        projection = self.start(
+            remote="origin",
+            remote_ref="refs/remotes/origin/main",
+        )
+        fixture = self.core.ProgramFixtureDriver()
+        initial = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=10,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (initial["state"], initial["stop"]),
+            ("story-certified", "checkpoint"),
+        )
+        observed = self.observe_failed_ci()
+        self.assertEqual((observed["status"], observed["appended"]),
+                         ("ci-failed", 4))
+        result = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=10,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (result["state"], result["stop"]),
+            ("story-certified", "checkpoint"),
+        )
+        self.assertEqual(fixture.starts, 4)
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        outward = [
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "outward-fact"
+        ]
+        nudges = [
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "nudge"
+        ]
+        self.assertEqual((len(outward), len(nudges)), (1, 1))
+        self.assertEqual(
+            set(outward[0]["payload"]),
+            {
+                "rule_id", "rule_hash", "signal", "signal_event_hash",
+                "signal_event_kind", "signal_seq", "channel_hash",
+            },
+        )
+        self.assertNotIn(
+            "example.test", json.dumps(outward[0], sort_keys=True)
+        )
+        nudge = nudges[0]
+        self.assertEqual(
+            nudge["payload"]["outward_fact_receipt_hash"],
+            outward[0]["receipt_hash"],
+        )
+        attempts = sorted(
+            [
+                item for item in replayed["receipts"]
+                if item["action_kind"] == "agent"
+                and item["node"] == "implement"
+            ],
+            key=lambda item: item["attempt"],
+        )
+        self.assertEqual([item["attempt"] for item in attempts], [1, 2])
+        self.assertEqual(
+            attempts[1]["payload"]["nudge"]["nudge_receipt_hash"],
+            nudge["receipt_hash"],
+        )
+        self.assertEqual(
+            replayed["authority"]["budgets"]["max_nudges"]["used"], 1
+        )
+        self.assertEqual(len([
+            item for item in replayed["authority"]["claims"]
+            if item["category"] == "nudge"
+        ]), 1)
+        verifications = [
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "story-verification"
+        ]
+        self.assertEqual(
+            sorted(
+                (item["attempt"], item["result"])
+                for item in verifications
+            ),
+            [(1, "pass"), (2, "pass")],
+        )
+
+    def test_nudge_receipt_crash_recovers_delivery_and_target_once(self):
+        self.configure_outward_nudge()
+        self.observe_failed_ci()
+        projection = self.start(
+            remote="origin",
+            remote_ref="refs/remotes/origin/main",
+        )
+        fixture = self.core.ProgramFixtureDriver()
+        while True:
+            frontier = self.core.derive_program_frontier(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                now=self.now,
+            )
+            if (
+                frontier["next_actions"]
+                and frontier["next_actions"][0]["kind"] == "nudge"
+            ):
+                break
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+            )
+
+        def crash(name, detail):
+            if (
+                name == "after-receipt"
+                and detail.get("receipt_kind") == "nudge"
+            ):
+                raise RuntimeError("nudge receipt stored")
+
+        with self.assertRaisesRegex(RuntimeError, "nudge receipt stored"):
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+                boundary_hook=crash,
+            )
+        recovered = self.core.tick_program(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(recovered["action"]["kind"], "nudge")
+        target = self.core.tick_program(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (target["action"]["kind"], target["action"]["attempt"]),
+            ("agent", 2),
+        )
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(len([
+            item for item in replayed["authority"]["claims"]
+            if item["category"] == "nudge"
+        ]), 1)
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "nudge"
+        ]), 1)
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "agent"
+            and item["node"] == "implement"
+            and item["attempt"] == 2
+        ]), 1)
+
+    def test_cross_phase_continuation_carries_obligation_and_completes_scope(self):
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        first = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=10,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (first["state"], first["stop"]),
+            ("story-certified", "checkpoint"),
+        )
+        projection = self.record_fixture_obligation(
+            projection,
+            obligation_id="carry-across-phase",
+            blocking=False,
+        )
+        projection = self.complete_story_rail(projection, "DM-1-02")
+
+        transition = self.core.tick_program(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (
+                transition["action"]["kind"],
+                transition["lineage"]["phase"],
+                transition["lineage"]["story"],
+            ),
+            ("selection", 2, "DM-2-01"),
+        )
+        frontier = self.core.derive_program_frontier(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertEqual(
+            frontier["open_obligation_ids"], ["carry-across-phase"]
+        )
+        second = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=10,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (second["state"], second["stop"]),
+            ("story-certified", "checkpoint"),
+        )
+        projection = self.complete_story_rail(projection, "DM-2-01")
+
+        def crash(name, detail):
+            if (
+                name == "after-receipt"
+                and detail.get("receipt_kind") == "scope-completion"
+            ):
+                raise RuntimeError("scope proof stored")
+
+        with self.assertRaisesRegex(RuntimeError, "scope proof stored"):
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+                boundary_hook=crash,
+            )
+        completed = self.core.tick_program(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(completed["action"]["kind"], "scope-completion")
+        self.assertTrue(completed["terminal"])
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(replayed["authority"]["state"], "complete")
+        self.assertEqual(
+            replayed["authority"]["scope_completion"][
+                "open_obligation_ids"
+            ],
+            ["carry-across-phase"],
+        )
+        self.assertEqual(
+            replayed["authority"]["selected_stories"],
+            ["DM-1-02", "DM-2-01"],
+        )
+        self.assertEqual(len([
+            item for item in replayed["authority"]["claims"]
+            if item["subject"]["kind"] == "program-scope-proof"
+        ]), 1)
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "scope-completion"
+        ]), 1)
+
+    def test_blocking_obligation_stops_cross_story_selection(self):
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        first = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=10,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(first["state"], "story-certified")
+        projection = self.record_fixture_obligation(
+            projection,
+            obligation_id="block-next-story",
+            blocking=True,
+        )
+        projection = self.complete_story_rail(projection, "DM-1-02")
+        frontier = self.core.derive_program_frontier(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertEqual(
+            (frontier["state"], frontier["stop"]),
+            ("stopped", "blocking-obligation-open"),
+        )
+        self.assertEqual(
+            frontier["blocking_obligation_ids"], ["block-next-story"]
+        )
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(
+            replayed["authority"]["selected_stories"], ["DM-1-02"]
+        )
+
+    def test_fanout_fanin_collect_and_closed_check_replay_stably(self):
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        first = workflow["nodes"][0]
+        first.pop("on_success", None)
+        first["outputs"][0]["max_bytes"] = 300_000
+        second = json.loads(json.dumps(first))
+        second["id"] = "implement-peer"
+        second["task"] = "Independently produce the peer candidate slice."
+        second["outputs"][0]["id"] = "peer-candidate"
+        collect = {
+            "id": "collect-candidates", "type": "collect",
+            "needs": ["implement", "implement-peer"],
+            "producers": ["implement", "implement-peer"],
+            "inputs": {
+                "first": {"kind": "artifact", "name": "implement.candidate"},
+                "second": {"kind": "artifact", "name": "implement-peer.peer-candidate"},
+            },
+            "outputs": [{
+                "id": "candidate-index", "kind": "markdown",
+                "max_bytes": 50_000,
+            }],
+            "on_failure": {"kind": "action", "target": "block"},
+        }
+        check = {
+            "id": "check-repository", "type": "check",
+            "needs": ["collect-candidates"],
+            "inputs": {
+                "index": {"kind": "artifact", "name": "collect-candidates.candidate-index"},
+            },
+            "runner": {
+                "kind": "builtin", "name": "file-exists",
+                "path": "pm/programs/demo-program.json",
+                "output_bytes": 50_000,
+            },
+            "expect": {"exit_code": 0},
+            "timeout_seconds": 60, "max_attempts": 1,
+            "outputs": [{
+                "id": "repository-fact", "kind": "mechanical-fact",
+                "max_bytes": 20_000,
+            }],
+            "on_success": {"kind": "terminal", "target": "complete"},
+            "on_failure": {"kind": "action", "target": "block"},
+        }
+        workflow["nodes"] = [first, second, collect, check]
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture._git("add", "pm")
+        self.authority.fixture._git("commit", "-qm", "fanout conductor workflow")
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        result = self.core.supervise_program(
+            self.root, projection["run_id"], max_ticks=12,
+            driver_config=self.config, adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(result["state"], "story-certified")
+        self.assertEqual(result["stop"], "checkpoint")
+        self.assertEqual(fixture.starts, 3)
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        kinds = [item["action_kind"] for item in replayed["receipts"]]
+        self.assertEqual(kinds.count("agent"), 2)
+        self.assertEqual(kinds.count("collect"), 1)
+        self.assertEqual(kinds.count("check"), 1)
+        check_receipt = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "check"
+        )
+        self.assertEqual(check_receipt["result"], "pass")
+        fact = next(
+            item for item in check_receipt["artifacts"]
+            if item["artifact_kind"] == "mechanical-fact"
+        )
+        self.assertIn("mechanical-fact-core", fact["checks"])
+        collected = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "collect"
+        )
+        self.assertEqual(collected["payload"]["input_count"], 2)
+
+    def test_failed_verdict_takes_one_claimed_repair_then_reverifies(self):
+        projection = self.start()
+        first_verifier = (
+            "program/demo-program/phase/1/story/DM-1-02/workflow/alpha/"
+            "verifier/story-quality/role/verifier/attempt/1"
+        )
+        fixture = self.core.ProgramFixtureDriver({
+            first_verifier: {"judgment_result": "fail"},
+        })
+        result = self.core.supervise_program(
+            self.root, projection["run_id"], max_ticks=10,
+            driver_config=self.config, adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(result["state"], "story-certified")
+        self.assertEqual(result["stop"], "checkpoint")
+        self.assertEqual(fixture.starts, 4)
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        verdicts = sorted(
+            [
+                item for item in replayed["receipts"]
+                if item["action_kind"] == "story-verification"
+            ],
+            key=lambda item: item["attempt"],
+        )
+        self.assertEqual(
+            [(item["attempt"], item["result"]) for item in verdicts],
+            [(1, "needs-repair"), (2, "pass")],
+        )
+        repair = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "repair"
+        )
+        self.assertEqual(repair["payload"]["repair_round"], 1)
+        self.assertIn("/repair/round/1/", repair["address"])
+        self.assertEqual(
+            replayed["authority"]["budgets"]["max_repairs_per_story"]["used"],
+            1,
+        )
+        self.assertEqual(len([
+            item for item in replayed["authority"]["claims"]
+            if item["category"] == "repair"
+        ]), 1)
+
+    def test_crashes_around_claim_dispatch_and_receipt_never_duplicate_start(self):
+        cases = [
+            ("agent-claim", "after-claim", "agent", 0, 1),
+            ("before-dispatch", "before-dispatch", None, 0, 1),
+            ("dispatch-record", "after-dispatch-record", None, 0, 1),
+            ("after-dispatch", "after-dispatch", None, 1, 0),
+            ("agent-receipt", "after-receipt", "agent", 1, 0),
+        ]
+        for label, boundary, detail_kind, first_starts, recovered_starts in cases:
+            with self.subTest(boundary=label):
+                projection = self.start()
+                self.advance_to_agent(projection)
+                first = self.core.ProgramFixtureDriver()
+
+                def crash(name, detail):
+                    observed_kind = (
+                        detail.get("category")
+                        if name == "after-claim"
+                        else detail.get("receipt_kind")
+                    )
+                    if name == boundary and (
+                        detail_kind is None or observed_kind == detail_kind
+                    ):
+                        raise RuntimeError("planted program crash")
+
+                with self.assertRaisesRegex(RuntimeError, "planted program crash"):
+                    self.core.tick_program(
+                        self.root, projection["run_id"],
+                        driver_config=self.config,
+                        adapters={"fixture": first}, now=self.now,
+                        boundary_hook=crash,
+                    )
+                self.assertEqual(first.starts, first_starts)
+                recovered = self.core.ProgramFixtureDriver()
+                result = self.core.tick_program(
+                    self.root, projection["run_id"],
+                    driver_config=self.config,
+                    adapters={"fixture": recovered}, now=self.now,
+                )
+                self.assertTrue(result["progressed"])
+                self.assertEqual(recovered.starts, recovered_starts)
+                replayed = self.core.replay_program_conductor(
+                    self.root, projection["run_id"], now=self.now
+                )
+                agent_claims = [
+                    item for item in replayed["authority"]["claims"]
+                    if item["category"] == "agent"
+                ]
+                self.assertEqual(len(agent_claims), 1)
+                self.assertEqual(len(replayed["authority"]["dispatches"]), 1)
+                self.assertEqual(len([
+                    item for item in replayed["receipts"]
+                    if item["action_kind"] == "agent"
+                ]), 1)
+
+    def test_missing_session_after_durable_dispatch_stops_uncertain(self):
+        projection = self.start()
+        self.advance_to_agent(projection)
+        first = self.core.ProgramFixtureDriver()
+
+        def crash(name, _detail):
+            if name == "after-dispatch":
+                raise RuntimeError("driver started")
+
+        with self.assertRaisesRegex(RuntimeError, "driver started"):
+            self.core.tick_program(
+                self.root, projection["run_id"], driver_config=self.config,
+                adapters={"fixture": first}, now=self.now,
+                boundary_hook=crash,
+            )
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        operation_id = replayed["authority"]["dispatches"][0]["operation_id"]
+        operation_path = (
+            self.root / ".git/pmo-programs/runs" / projection["run_id"]
+            / "conductor/driver-sessions" / f"{operation_id}.json"
+        )
+        operation_path.unlink()
+        recovered = self.core.ProgramFixtureDriver()
+        stopped = self.core.tick_program(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": recovered}, now=self.now,
+        )
+        self.assertEqual(stopped["stop"], "external-operation-uncertain")
+        self.assertEqual(stopped["execution_status"], "uncertain")
+        self.assertEqual(recovered.starts, 0)
+        final = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(len(final["authority"]["dispatches"]), 1)
+        self.assertEqual(len(final["authority"]["active_claims"]), 1)
+
+    def test_crash_after_closed_check_observation_does_not_rerun_check(self):
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        workflow["nodes"][0].pop("on_success", None)
+        workflow["nodes"].append({
+            "id": "closed-check", "type": "check", "needs": ["implement"],
+            "inputs": {
+                "candidate": {"kind": "artifact", "name": "implement.candidate"},
+            },
+            "runner": {
+                "kind": "builtin", "name": "file-exists",
+                "path": "pm/programs/demo-program.json",
+                "output_bytes": 50_000,
+            },
+            "expect": {"exit_code": 0}, "timeout_seconds": 60,
+            "max_attempts": 1,
+            "outputs": [{
+                "id": "fact", "kind": "mechanical-fact",
+                "max_bytes": 20_000,
+            }],
+            "on_success": {"kind": "terminal", "target": "complete"},
+            "on_failure": {"kind": "action", "target": "block"},
+        })
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture._git("add", "pm")
+        self.authority.fixture._git("commit", "-qm", "closed check crash workflow")
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        for _index in range(3):
+            self.core.tick_program(
+                self.root, projection["run_id"], driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+        calls = {"count": 0}
+        original = self.core._run_closed_check
+
+        def counted(*args, **kwargs):
+            calls["count"] += 1
+            return original(*args, **kwargs)
+
+        def crash(name, detail):
+            if name == "after-dispatch" and str(detail.get("operation_id", "")).startswith("check-"):
+                raise RuntimeError("check observed")
+
+        with mock.patch.object(self.core, "_run_closed_check", side_effect=counted):
+            with self.assertRaisesRegex(RuntimeError, "check observed"):
+                self.core.tick_program(
+                    self.root, projection["run_id"], driver_config=self.config,
+                    adapters={"fixture": fixture}, now=self.now,
+                    boundary_hook=crash,
+                )
+            self.core.tick_program(
+                self.root, projection["run_id"], driver_config=self.config,
+                adapters={"fixture": fixture}, now=self.now,
+            )
+        self.assertEqual(calls["count"], 1)
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "check"
+        ]), 1)
+
+    def test_ledger_bound_receipt_tamper_fails_closed(self):
+        projection = self.start()
+        self.core.tick_program(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": self.core.ProgramFixtureDriver()}, now=self.now,
+        )
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        receipt_hash = replayed["receipt_hashes"][0]
+        path = self.core._receipt_path(
+            self.root, projection["run_id"], receipt_hash
+        )
+        path.chmod(0o600)
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        receipt["result"] = "tampered"
+        path.write_text(
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(DwError, "hash"):
+            self.core.replay_program_conductor(
+                self.root, projection["run_id"], now=self.now
+            )
+
+    def test_rule_council_meta_audits_and_ingests_durable_obligation(self):
+        from dw_pmo.program_deliberation import validate_council_decision
+
+        self.configure_council_workflow(audit="full")
+        obligation = {
+            "id": "document-council-fallback",
+            "kind": "technical-debt",
+            "statement": "Document the governed council fallback.",
+            "priority": "medium",
+            "blocking": False,
+            "accountable_role": "architect",
+            "target": "DM-1-02",
+            "citations": ["evidence:council-evidence"],
+            "acceptance": "The fallback has an evidence-backed contract.",
+            "state": "open",
+        }
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver({
+            "council-judgment": {"obligations": [obligation]},
+        })
+        result = self.core.supervise_program(
+            self.root, projection["run_id"], max_ticks=30,
+            driver_config=self.config, adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual((result["state"], result["stop"]),
+                         ("story-certified", "checkpoint"))
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        decision_receipt = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "council-decision"
+        )
+        decision_artifact = next(
+            item for item in decision_receipt["artifacts"]
+            if item["name"] == "issued-decision"
+        )
+        decision = json.loads(self.core._artifact_content(
+            self.root, projection["run_id"], decision_artifact
+        ))
+        self.assertEqual(validate_council_decision(decision), decision)
+        self.assertEqual(decision["authority"]["kind"], "rule")
+        self.assertIsNone(decision["authority"]["decider"])
+        self.assertIsNone(decision["authority"]["decider_seat"])
+        self.assertEqual(decision["obligations"], [obligation])
+        self.assertEqual(
+            [item["id"] for item in replayed["authority"]["open_obligations"]],
+            ["document-council-fallback"],
+        )
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "meta-verdict-issuance"
+        ]), 1)
+        self.assertEqual(
+            replayed["authority"]["budgets"]["max_debate_rounds"]["used"], 1
+        )
+        speaker_receipts = [
+            item for item in replayed["receipts"]
+            if item["action_kind"] in {
+                "debate-proposal", "debate-critique",
+                "debate-rebuttal", "council-judgment",
+            }
+        ]
+        self.assertEqual(len(speaker_receipts), 7)
+        self.assertTrue(all(
+            "/council/quality-council/round/1/" in item["address"]
+            and "/seat/" in item["address"]
+            for item in speaker_receipts
+        ))
+
+    def test_judge_council_binds_only_the_preassigned_decider(self):
+        from dw_pmo.program_deliberation import validate_council_decision
+
+        self.configure_council_workflow(method="judge", audit="none")
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        result = self.core.supervise_program(
+            self.root, projection["run_id"], max_ticks=30,
+            driver_config=self.config, adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual((result["state"], result["stop"]),
+                         ("story-certified", "checkpoint"))
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        receipt = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "council-decision"
+        )
+        artifact = next(
+            item for item in receipt["artifacts"]
+            if item["name"] == "issued-decision"
+        )
+        decision = json.loads(self.core._artifact_content(
+            self.root, projection["run_id"], artifact
+        ))
+        self.assertEqual(validate_council_decision(decision), decision)
+        authority = decision["authority"]
+        self.assertEqual(authority["kind"], "judge")
+        self.assertEqual(
+            authority["decider_seat"],
+            replayed["authority"]["roster"]["councils"][0]["decider_seat"],
+        )
+        self.assertEqual(
+            authority["decider"]["execution"],
+            next(
+                item["execution"]
+                for item in replayed["authority"]["roster"]["seats"]
+                if item["address"] == authority["decider_seat"]
+            ),
+        )
+
+    def test_tie_checkpoint_and_decision_receipt_crash_are_idempotent(self):
+        self.configure_council_workflow(
+            method="majority", threshold=2,
+            tie_policy="checkpoint", audit="none",
+        )
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver({
+            "architect": {"vote": "advance"},
+            "critic": {"vote": "repair"},
+            "verifier": {"decision_result": "checkpoint"},
+        })
+        while True:
+            frontier = self.core.derive_program_frontier(
+                self.root, projection["run_id"],
+                driver_config=self.config, now=self.now,
+            )
+            if (
+                frontier["next_actions"]
+                and frontier["next_actions"][0]["kind"] == "council-decision"
+            ):
+                break
+            self.core.tick_program(
+                self.root, projection["run_id"],
+                driver_config=self.config, adapters={"fixture": fixture},
+                now=self.now,
+            )
+
+        def crash(name, detail):
+            if (
+                name == "after-receipt"
+                and detail.get("receipt_kind") == "council-decision"
+            ):
+                raise RuntimeError("decision receipt stored")
+
+        with self.assertRaisesRegex(RuntimeError, "decision receipt stored"):
+            self.core.tick_program(
+                self.root, projection["run_id"],
+                driver_config=self.config, adapters={"fixture": fixture},
+                now=self.now, boundary_hook=crash,
+            )
+        recovered = self.core.tick_program(
+            self.root, projection["run_id"],
+            driver_config=self.config, adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(recovered["action"]["kind"], "council-decision")
+        checkpoint = self.core.tick_program(
+            self.root, projection["run_id"],
+            driver_config=self.config, adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertTrue(checkpoint["checkpoint"])
+        final = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(final["authority"]["state"], "checkpoint")
+        self.assertEqual(
+            final["authority"]["outstanding_requests"][0]["port"],
+            "program-decision-checkpoint",
+        )
+        self.assertEqual(len([
+            item for item in final["authority"]["claims"]
+            if item["category"] == "council"
+        ]), 1)
+        self.assertEqual(len([
+            item for item in final["receipts"]
+            if item["action_kind"] == "council-decision"
+        ]), 1)
+
+    def test_phase_architect_approves_exact_frozen_boundary(self):
+        from dw_pmo.program_verdict import validate_verdict_document
+
+        self.configure_phase_architect_gate()
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver()
+        result = self.core.supervise_program(
+            self.root, projection["run_id"], max_ticks=20,
+            driver_config=self.config, adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (result["state"], result["stop"], result["ticks"]),
+            ("story-certified", "checkpoint", 7),
+        )
+        self.assertEqual(result["last_tick"]["stop"], "integration-required")
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        boundary = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "architecture-boundary"
+        )
+        boundary_artifact = next(
+            item for item in boundary["artifacts"]
+            if item["name"] == "boundary-snapshot"
+        )
+        self.assertEqual(
+            boundary["payload"]["snapshot_hash"],
+            boundary_artifact["sha256"],
+        )
+        architect_receipt = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "architect-verdict"
+        )
+        verdict_artifact = next(
+            item for item in architect_receipt["artifacts"]
+            if item["name"] == "issued-verdict"
+        )
+        verdict = validate_verdict_document(json.loads(
+            self.core._artifact_content(
+                self.root, projection["run_id"], verdict_artifact
+            )
+        ))
+        self.assertEqual(verdict["verdict_type"], "architect-verdict")
+        self.assertEqual(verdict["result"], "approve")
+        self.assertEqual(verdict["issuer"]["duty"], "master-architect")
+        self.assertEqual(verdict["subject"]["kind"], "phase-snapshot")
+        self.assertIsNone(verdict["subject"]["story"])
+        self.assertEqual(
+            verdict["subject"]["hash"], boundary_artifact["sha256"]
+        )
+        architect_seat = next(
+            item for item in replayed["authority"]["roster"]["seats"]
+            if item["duty"] == "master-architect"
+        )
+        self.assertEqual(
+            verdict["issuer"]["address"], architect_seat["address"]
+        )
+        self.assertEqual(
+            verdict["assignment"]["execution"],
+            architect_seat["execution"],
+        )
+        gate = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "architecture-gate"
+        )
+        self.assertEqual((gate["result"], gate["route"]), ("pass", "advance"))
+        self.assertEqual(
+            replayed["authority"]["budgets"]["max_verdicts"]["used"], 2
+        )
+
+    def test_phase_architect_veto_stops_before_integration(self):
+        self.configure_phase_architect_gate(on_fail="block")
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver({
+            "architect-verdict": {"judgment_result": "fail"},
+        })
+        result = self.core.supervise_program(
+            self.root, projection["run_id"], max_ticks=20,
+            driver_config=self.config, adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (result["state"], result["stop"], result["checkpoint"]),
+            ("stopped", "architect-veto", False),
+        )
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        architect = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "architect-verdict"
+        )
+        gate = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "architecture-gate"
+        )
+        self.assertEqual(architect["result"], "veto")
+        self.assertEqual((gate["result"], gate["route"]), ("fail", "block"))
+        self.assertFalse(any(
+            item["category"] in {
+                "integration", "story-complete", "phase-advance",
+            }
+            for item in replayed["authority"]["claims"]
+        ))
+
+    def test_phase_architect_receipt_crash_recovers_before_typed_checkpoint(self):
+        self.configure_phase_architect_gate(on_fail="checkpoint")
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver({
+            "architect-verdict": {"judgment_result": "fail"},
+        })
+        while True:
+            frontier = self.core.derive_program_frontier(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                now=self.now,
+            )
+            if (
+                frontier["next_actions"]
+                and frontier["next_actions"][0]["kind"]
+                == "architecture-boundary"
+            ):
+                break
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+            )
+
+        def crash_boundary(name, detail):
+            if (
+                name == "after-receipt"
+                and detail.get("receipt_kind") == "architecture-boundary"
+            ):
+                raise RuntimeError("architect boundary stored")
+
+        with self.assertRaisesRegex(
+            RuntimeError, "architect boundary stored"
+        ):
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+                boundary_hook=crash_boundary,
+            )
+        recovered_boundary = self.core.tick_program(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            recovered_boundary["action"]["kind"],
+            "architecture-boundary",
+        )
+
+        while True:
+            frontier = self.core.derive_program_frontier(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                now=self.now,
+            )
+            if (
+                frontier["next_actions"]
+                and frontier["next_actions"][0]["kind"]
+                == "architect-verdict"
+            ):
+                break
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+            )
+
+        def crash(name, detail):
+            if (
+                name == "after-receipt"
+                and detail.get("receipt_kind") == "architect-verdict"
+            ):
+                raise RuntimeError("architect receipt stored")
+
+        with self.assertRaisesRegex(RuntimeError, "architect receipt stored"):
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+                boundary_hook=crash,
+            )
+        recovered = self.core.tick_program(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            recovered["action"]["kind"], "architect-verdict"
+        )
+        frontier = self.core.derive_program_frontier(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertEqual(
+            frontier["next_actions"][0]["kind"], "architecture-gate"
+        )
+
+        def crash_gate(name, detail):
+            if (
+                name == "after-receipt"
+                and detail.get("receipt_kind") == "architecture-gate"
+            ):
+                raise RuntimeError("architect gate stored")
+
+        with self.assertRaisesRegex(RuntimeError, "architect gate stored"):
+            self.core.tick_program(
+                self.root,
+                projection["run_id"],
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+                boundary_hook=crash_gate,
+            )
+        recovered_gate = self.core.tick_program(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            recovered_gate["action"]["kind"], "architecture-gate"
+        )
+        final = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=5,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (final["state"], final["checkpoint"]),
+            ("checkpoint", True),
+        )
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(fixture.starts, 3)
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "architect-verdict"
+        ]), 1)
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "architecture-boundary"
+        ]), 1)
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "architecture-gate"
+        ]), 1)
+        self.assertEqual(len([
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "architect-verdict-issuance"
+            and item.get("parent_action_id") is not None
+        ]), 1)
+        self.assertEqual(
+            replayed["authority"]["outstanding_requests"][0]["port"],
+            "phase-boundary",
+        )
+        self.assertEqual(len([
+            item for item in replayed["authority"]["claims"]
+            if item["category"] == "checkpoint-request"
+        ]), 1)
 
 
 class ProgramOrganizationTest(unittest.TestCase):
@@ -12972,6 +15308,12 @@ class ProgramWorkflowTest(unittest.TestCase):
         self.assertGreater(compiled["envelope"]["agent_starts"], 0)
         self.assertEqual(len(compiled["loops"]), 1)
         self.assertEqual(len(compiled["debates"]), 1)
+        self.assertIn(
+            "agent:dispatch",
+            compiled["required_capabilities"][
+                "architect-debate-delivery/audit-loop"
+            ],
+        )
 
     def test_layout_changes_document_hash_only(self):
         workflow = self.load(self.docs_path)
@@ -13023,6 +15365,11 @@ class ProgramWorkflowTest(unittest.TestCase):
         self.assertIn("parameter-type", self.diagnostic_codes(raised))
 
     def test_subflow_provenance_and_expanded_addresses_are_stable(self):
+        from dw_pmo.program_conductor import (
+            _instantiate_loop_rounds,
+            _lineage_address,
+        )
+
         first = self.core.simulate_workflow(self.root, "architect-debate-delivery")
         second = self.core.simulate_workflow(self.root, "architect-debate-delivery")
         self.assertEqual(self.core.canonical_json(first), self.core.canonical_json(second))
@@ -13038,6 +15385,36 @@ class ProgramWorkflowTest(unittest.TestCase):
         self.assertTrue(any(item["role"] == "verifier" for item in first["role_lanes"]))
         self.assertTrue(any(item["duty"] == "debate-judge" for item in first["role_lanes"]))
         self.assertEqual(len(first["loops"][0]["iterations"]), 2)
+        nested_loops = [
+            {"address": "root/outer"},
+            {
+                "address":
+                    "root/outer/round/{round}/child/inner",
+            },
+        ]
+        nested = _instantiate_loop_rounds(
+            "root/outer/round/{round}/child/inner/"
+            "round/{round}/grand/leaf",
+            nested_loops,
+            {
+                "root/outer": 2,
+                "root/outer/round/{round}/child/inner": 3,
+            },
+        )
+        self.assertEqual(
+            nested,
+            "root/outer/round/2/child/inner/round/3/grand/leaf",
+        )
+        self.assertEqual(
+            _lineage_address(
+                "program/demo/phase/1/story/DM-1-02/workflow/alpha",
+                "root",
+                str(nested),
+            ),
+            "program/demo/phase/1/story/DM-1-02/workflow/alpha"
+            "/loop/outer/round/2/subflow/child/loop/inner/round/3"
+            "/subflow/grand/node/leaf",
+        )
 
     def test_recursive_subflow_reference_refuses(self):
         workflow = self.load(self.docs_path)

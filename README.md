@@ -30,6 +30,17 @@ repair routes, budgets, approvals, and terminal handoff. A separate revocable
 grant authorizes the compiled score; the conductor executes only those rules
 and leaves certification and commit with the operator.
 
+An additional, explicitly opt-in program layer sits above that one-run spine.
+It compiles governed multi-story and multi-phase policy,
+independent roles, bounded councils, carried obligations, and architecture
+gates under a separate finite grant. Its restart-safe embedded conductor can
+now execute one replay-derived act at a time through agent, check, repair,
+council, meta-review, structural-loop, phase-architect, outward-signal, nudge,
+story/phase-transition, and scope-completion boundaries. Integration/Git/
+roadmap rails and public runtime controls remain fail-closed while Phase 26 is
+active; ordinary Delivery Workbench and bounded runs acquire none of this
+authority.
+
 ## Install
 
 ```bash
@@ -147,6 +158,7 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 | `dw orchestration list\|show\|validate\|simulate` | Compile and explain exact `pm/orchestration/*.json` scores without starting agents or writing run state. |
 | `dw organization list\|validate\|simulate` | Purely compile optional `pm/organizations/*.json`: logical pools, exact role packet/capability policy, principal/workspace separation, councils, resource waves, and finite replacement; an empty registry is healthy. |
 | `dw workflow list\|validate\|simulate` | Purely compile reusable hierarchical `pm/workflows/*.json`: exact subflows, bounded runs/loops/debates, typed routes, finite envelopes, provenance, and capability consumers; an empty library is healthy. |
+| `dw rubric list\|validate` | Purely compile optional governed-quality policy: mechanical versus judgment criteria, evidence/citations, aggregation/veto, and freshness; an empty registry is healthy. |
 | `dw program list\|validate\|simulate\|plan` | Purely compile optional multi-phase policy, explain every roadmap candidate, and bind one deterministic workflow/team assignment to current Git, roadmap, and local roster facts; no grant or work starts. |
 | `dw run plan\|start\|list\|show\|view\|preview\|tick\|supervise\|pause\|resume\|revoke\|cancel\|request\|checkpoint\|stream` | Preview and authorize an exact score-bound grant, conduct its bounded agent/check work, inspect its hash-chained run and outstanding typed requests, and apply only fresh-token controls. |
 | `dw next` | The next actionable story. Exit 0 found, 2 nothing to do. |
@@ -172,6 +184,12 @@ read-only; JSON apply returns the versioned result and human apply renders the
 same bounded streams. See [docs/deliberate-step.md](./docs/deliberate-step.md).
 The specialist orientation commands
 support `--json` or `--porcelain` output.
+
+The public `dw program` namespace currently stops at the pure
+`list|validate|simulate|plan` boundary. Program grants and the embedded
+conductor are shared core APIs delivered through WLA-26-09;
+CLI/MCP/HTTP controls and the visual control room belong to WLA-26-11 and are
+not implied by the read commands above.
 
 Parked work is first-class: a story goes on-hold only with a
 recorded reason, whole phases pause and resume (`dw phase pause
@@ -271,16 +289,37 @@ integration, evidence, Git, or roadmap authority.
 
 The optional program authority core now supplies the missing consent boundary:
 one pure start preview freezes scope, policy hashes, worst-case budgets,
-operator intent, exact assigned seats, and each seat's provider/model/auth
-execution binding; exact start creates only a finite local grant and
+operator intent, every deterministic seat reachable across the granted scope,
+and each seat's provider/model/auth execution binding; exact start creates
+only a finite local grant and
 hash-chained ledger under `.git`. Advisory grants permit no claims;
 checkpointed and continuous grants reserve only named capabilities through
 exclusive idempotent claims. Replay re-derives budgets and legal transitions,
 child grants are strict non-delegable intersections, and pause/resume/revoke/
 cancel use current-head generation-bound decisions. This remains invisible to
 ordinary and bounded-run use unless a program is explicitly planned and
-granted; the live conductor and control-room surfaces are subsequent Phase 26
-slices.
+granted.
+
+The embedded restart-safe program conductor now consumes that authority
+through one deterministic `tick_program`. Every tick locks and replays the
+program ledger, verifies immutable receipts, reconciles an already-dispatched
+operation before retry, rebuilds the exact selection/team/workflow frontier,
+claims at most one act, and stops. The delivered path covers isolated
+implementation, deterministic fan-out/fan-in, built-in checks, independent
+verification with finite repair, replay-derived council decisions and
+meta-audit, obligation ingestion, typed finite workflow loops, and final-story
+phase-architecture review. It also consumes already-observed Phase 25 signal
+facts by hash, delivers only program-declared finite nudges to an already-run
+agent under `nudge:deliver`, causally re-runs the declared downstream
+verification path, carries non-blocking obligations across exact story/phase
+selection, stops on blocking obligations, and enters `complete` only after the
+pure planner proves the full granted scope done. Each completed loop round has
+its own claim and
+immutable receipt binding the typed predicate observation, producer receipt,
+carried artifact hashes, exact round lineage, and success/continue/exhaustion
+route; restart cannot spend or record that round twice. It never integrates,
+certifies, commits, or edits roadmap status; those rails remain WLA-26-10,
+while the public control room remains WLA-26-11.
 
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 
@@ -349,7 +388,7 @@ trailers and an archived contract, the full history passing
 - [Status briefing contract](./docs/status-briefing.md): the Phase 22 one-answer model, readiness semantics, and guided action order
 - [Deliberate step contract](./docs/deliberate-step.md): the Phase 23 state-bound preview/apply seam and closed executable action table
 - [Visual orchestration contract](./docs/orchestration.md): the Phase 24 score editor, roles/research, outputs, checks/failures, grants, scheduling, drivers, recovery, and authority model
-- [Optional autonomous-program contract](./docs/programs.md): the Phase 26 capability ladder, multi-phase scope, hierarchical workflows, organizations, independent verification, bounded councils/loops, grants, and exact advancement boundaries
+- [Optional autonomous-program contract](./docs/programs.md): the Phase 26 capability ladder, multi-phase scope, hierarchical workflows, organizations, independent verification, bounded councils/loops, grants, restart-safe conductor, and exact advancement boundaries
 - [Architecture](./docs/architecture.md), with the test that proves each claim
 - [Framework README](./pmo-roadmap/README.md): install, update, adopt, operate
 - [The contract rules](./pmo-roadmap/templates/PMO-CONTRACT.md)

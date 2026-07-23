@@ -1,9 +1,12 @@
 # Optional autonomous delivery programs
 
 **Status:** Phase 26 contract and incremental implementation. Planning,
-workflow, organization, deliberation, Studio, governed quality-decision, and
-finite program-grant/replay cores are pinned by tests; conductor, advancement,
-and control-room slices remain explicit later stories.
+workflow, organization, deliberation, Studio, governed quality-decision,
+finite program-grant/replay, and the restart-safe WLA-26-09 conductor are
+pinned by tests. The conductor includes typed structural loops, content-safe
+outward facts, finite nudges, causal verification reruns, cross-story/phase
+selection, obligation gates, and exact scope completion. Integration/Git/
+roadmap rails and the public control room remain explicit later work.
 **Product claim:** Delivery Workbench **can run** a governed delivery program
 across an explicit roadmap scope when tracked policy has compiled and an
 operator has issued a separate finite program grant. Delivery Workbench is not
@@ -105,7 +108,7 @@ Phase 26 introduces new versioned policy kinds rather than extending
 
 | Kind | Default path | Owns |
 |---|---|---|
-| `delivery-workbench-program@1` | `pm/programs/<slug>.json` | roadmap scope, binding rules, mode ceiling, requested capabilities, budgets, phase gates, and stop policy |
+| `delivery-workbench-program@1` | `pm/programs/<slug>.json` | roadmap scope, binding and standing-nudge rules, mode ceiling, requested capabilities, budgets, phase gates, and stop policy |
 | `delivery-workbench-workflow@1` | `pm/workflows/<slug>.json` | reusable hierarchical graph, parameters, artifacts, typed loops, routes, and terminal meanings |
 | `delivery-workbench-organization@1` | `pm/organizations/<slug>.json` | logical agents, pools, teams, role duties, separation, councils, replacement, and escalation |
 | `delivery-workbench-rubric@1` | `pm/rubrics/<slug>.json` | agent-judgment criteria, evidence/citation requirements, result aggregation, and freshness |
@@ -162,12 +165,24 @@ A representative program policy is:
       "on_fail": "block"
     }
   ],
+  "nudges": [
+    {
+      "id": "repair-failed-ci",
+      "signal": "ci-failed",
+      "binding": "phase-26",
+      "target": "story-work/implement",
+      "max_per_signal": 1,
+      "max_total": 2,
+      "expectation": "Revisit the failed CI evidence and repair only the declared story work."
+    }
+  ],
   "mode_ceiling": "continuous",
   "requested_capabilities": [
     "program:select",
     "agent:dispatch",
     "check:execute",
     "workspace:write",
+    "nudge:deliver",
     "verdict:issue",
     "council:decide",
     "obligation:record",
@@ -225,6 +240,21 @@ Policy requests capabilities and limits; it grants neither. `mode_ceiling`
 states the most autonomous mode the author considered. A grant may choose a
 less autonomous mode and smaller limits but never a higher mode, new
 capability, wider scope, or larger budget.
+
+Program `nudges` are an optional closed list of at most 20 standing rules.
+Each rule has exactly `id`, `signal`, `binding`, `target`,
+`max_per_signal`, `max_total`, and optional bounded `expectation`. The signal
+is one of `ci-failed`, `changes-requested`, or `merge-conflict`; the Phase 25
+`waiting-input-timeout` signal remains local to a bounded child score. The
+binding must be exact, and `target` must resolve uniquely to an expanded agent
+node outside a structural-loop round template. Bounds are finite positive
+integers, `max_per_signal` cannot exceed `max_total`, rule ids are unique, and
+the sum of every rule's `max_total` must fit `budgets.max_nudges`.
+
+Standing program rules require both `program:select` and `nudge:deliver`.
+Compilation charges their worst-case target reruns against child, agent,
+provider, model, artifact, and nudge envelopes; a rule cannot hide starts
+outside the grant.
 
 ### Workflow document
 
@@ -415,6 +445,12 @@ workflow version, team, logical agents, resolved principals, required verifier,
 optional council/meta-verifier/architect policy, requested acts, and the reason
 for every excluded candidate. Repeating at one observation time is
 byte-equivalent and creates no state.
+
+Grant planning freezes the deterministic union of every seat and checkpoint
+port reachable by every binding in the granted scope, not only the first
+selected story. A later story or phase therefore cannot introduce a principal,
+provider/model/auth binding, or decision port that was absent from the
+operator-reviewed start plan.
 
 ### Delivered pure planning surface (WLA-26-02)
 
@@ -707,9 +743,9 @@ caller-owned event list. A claim is deterministic over protocol, complete
 round/stage/role-slot address, assignment generation, and bound principal.
 Restart returns the unresolved claim; an exact repeated receipt is idempotent;
 a different receipt conflicts. The module starts no driver, writes no run
-store, creates no grant, and mutates no repository or roadmap. WLA-26-09 can
-place these exact transitions behind program-ledger claims without inventing
-new council semantics.
+store, creates no grant, and mutates no repository or roadmap. The delivered
+WLA-26-09 conductor places these exact transitions behind program-ledger
+claims without inventing new council semantics.
 
 Only closed artifact receipts are durable. Proposal, critique, and rebuttal
 records carry content hash/reference, bounded byte/token counts, and citations;
@@ -930,8 +966,9 @@ for the separate certification rail and must be granted independently.
 preview over that plan. In addition to the complete assignment it carries:
 
 - repository physical identity, branch, HEAD, index tree, worktree cleanliness,
-  Git operation, worktree fingerprint, and—when push is requested—one exact
-  remote/ref, URL fingerprint, head, and fast-forward observation;
+  Git operation, worktree fingerprint, and—when push or a program standing
+  nudge is requested—one exact remote/ref, URL fingerprint, and head (plus the
+  fast-forward observation required for push);
 - roadmap snapshot/hash, selected project, complete scope, current frontier,
   and all candidate reasons;
 - source document hashes, bundle hash, roster and assignment fingerprints,
@@ -970,6 +1007,12 @@ cancel additionally requests bounded interruption of active children. A wider
 scope, larger budget, different mode, changed policy, or changed authority
 always requires a new grant—not mutation in place.
 
+When standing program nudges exist, start also requires an exact resolving
+remote-tracking ref in either `refs/remotes/<remote>/<branch>` or
+`<remote>/<branch>` form. This freezes the Phase 25 signal-channel branch.
+The conductor never performs a network observation pass; it consumes only the
+already-observed, hash-verified local channel for that exact remote and branch.
+
 The WLA-26-08 authority core reserves every act through an exclusive,
 idempotent `delivery-workbench-program-claim-preview@1`, appends only
 hash-chained `delivery-workbench-program-event@1` records, and derives the
@@ -995,7 +1038,8 @@ the conductor checks the minimum of policy, grant, scope, role, node, loop,
 story, phase, and remaining global limits. Budget is reserved atomically with
 the claim and reconciled from its receipt; a crash cannot spend the same unit
 twice. Worst-case compilation includes every retry, repair, debate, replacement,
-and failure branch rather than only the green path.
+standing-nudge target rerun, and failure branch rather than only the green
+path.
 
 Exhaustion is a typed result, not an invitation to improvise. It follows the
 compiled `block`, `escalate`, `checkpoint`, or `abort` route and prevents all
@@ -1031,12 +1075,15 @@ stateDiagram-v2
   paused --> cancelled: approved cancel
   expired --> cancelled: approved cancel
   exhausted --> cancelled: approved cancel
+  running --> complete: exact scope proof + complete roadmap facts
 ```
 
-`advisory` can only be inspected or revoked. `expired`, `exhausted`, `revoked`,
-and `cancelled` permit no future claims; bounded active-claim receipts may still
-be reconciled without reviving authority. The conductor will add the exact
-scope-complete transition in WLA-26-09. Operational labels such as waiting for
+`advisory` can only be inspected or revoked. `complete`, `expired`, `exhausted`,
+`revoked`, and `cancelled` permit no future claims; bounded active-claim
+receipts may still be reconciled without reviving authority. Scope completion
+now requires an exact claim-bound proof, no blocking obligation, a fresh grant,
+and the pure roadmap planner independently reporting the entire granted scope
+complete. Operational labels such as waiting for
 a child, repairing, or blocked are conductor views over claims/routes, not new
 authority states. A corrupt, forked, truncated, reordered, or invalid ledger
 produces no projection at all—it does not become a usable `corrupt` state.
@@ -1048,19 +1095,23 @@ The WLA-26-08 authority directory is deliberately small:
   grant.json                 immutable local authority
   plan.json                  immutable reviewed start plan
   ledger.jsonl               authoritative hash-chained events
+  conductor/                 subordinate immutable receipts/artifacts/child grants
+    driver-sessions/         non-authoritative reconciliation journal
 ```
 
 Child grants are mechanically derived documents and projections are replayed,
-not trusted caches. The conductor/integration stories may add bounded artifact
-and receipt storage, but neither may replace the three authoritative files or
-smuggle authority into them.
+not trusted caches. The delivered conductor uses the bounded subordinate
+storage shown above, and WLA-26-10 may add delivery receipts; neither may
+replace the three authoritative files or smuggle authority into them.
 
 Every current `delivery-workbench-program-event@1` carries exact run id,
 sequence, timestamp, previous/event hash, grant generation, one closed event
-name, and exact typed detail. The WLA-26-08 event names are
+name, and exact typed detail. The event names are
 `program_started`, `claim_reserved`, `claim_completed`, `program_paused`,
 `program_resumed`, `program_revoked`, `program_cancelled`, and
-`program_exhausted`. A reservation records deterministic claim id,
+`program_exhausted`, plus the conductor-owned `claim_dispatched`,
+`program_obligation_recorded`, `program_obligation_disposed`, and
+`program_scope_completed`. A reservation records deterministic claim id,
 idempotency/request hash, category, exact typed subject (including phase/story
 when applicable), capability, decision, reason, resource estimate, consumed
 budget, optional child-grant hash, and optional typed request port.
@@ -1068,10 +1119,9 @@ budget, optional child-grant hash, and optional typed request port.
 Claim categories close over selection/assignment, child and agent work,
 checks, council/debate/loop rounds, verdict/gate/repair, all three obligation
 acts, evidence/integration/certification, commit/push, story/phase transitions,
-nudges/notifications, and checkpoint requests. WLA-26-09/10 may add versioned
-conductor and delivery receipts, but their authority must continue to originate
-in these reservations and their exact artifact/decision receipts; they cannot
-invent an unclaimed event family as a shortcut.
+outward facts, nudges/notifications, and checkpoint requests. Conductor
+receipts already originate in these reservations; WLA-26-10 delivery receipts
+must do the same. Neither can invent an unclaimed event family as a shortcut.
 
 Before any external or mutation act, the conductor atomically appends an
 exclusive claim with an idempotency key over run/generation/phase/story/
@@ -1084,6 +1134,134 @@ operation-specific idempotency/reconciliation seam. An uncertain destructive
 act blocks rather than repeats. A corrupt, forked, truncated, reordered, or
 hash-invalid ledger refuses replay and all further claims. No projection cache
 is authoritative; creating, deleting, or changing one cannot change meaning.
+
+### Delivered restart-safe conductor (WLA-26-09)
+
+`derive_program_frontier` is the read-only next-act derivation;
+`tick_program` is the only scheduling primitive; and `supervise_program` does
+nothing except repeat that tick inside explicit tick/time ceilings. One tick
+takes the run-local conductor lock, replays the grant and ledger, verifies every
+ledger-bound immutable conductor receipt, reconciles an active external
+operation, rebuilds the current program/workflow/team assignment, reserves one
+exact act, dispatches or records it, and returns a content-safe projection.
+It does not mutate Git or roadmap rails.
+
+The delivered slice conducts selection and assignment, isolated implementer
+work, deterministic fan-out/fan-in collection, registered built-in checks,
+mechanical facts, mandatory independent rubric verification, and one or more
+finite claimed repair/reverification rounds as budgets allow. Addresses retain
+`program/phase/story/workflow/subflow/loop/round/council/seat/node/role/attempt`;
+child grants are strict intersections and are embedded verbatim in work
+packets. A compact workflow that omits an explicit verdict node still receives
+its policy-required preassigned verifier, with a read-only packet and a
+principal/workspace/session separation proof.
+
+Declared debate nodes now compose the existing pure deliberation core through
+the same tick. The first claimed debate round freezes the exact finite protocol
+plan in its immutable receipt. Subsequent replay reconstructs
+`start_deliberation` → `claim_next_deliberation` →
+`record_deliberation_submission` from ledger-bound conductor receipts; there
+is no second mutable council ledger. Every proposal, critique, rebuttal,
+judgment and meta-audit retains
+`program/phase/story/workflow/node/council/round/stage/seat/role/attempt`
+lineage and receives its own agent claim and strict child grant.
+
+Raw seat submissions do not themselves mint an outcome. A separate
+`council` claim issues the validated immutable decision, and a separate
+`verdict` claim issues a required meta-audit result. Rule mode records no agent
+decider; judge or judge-only tie mode binds the one preassigned seat and its
+exact execution identity; checkpoint ties open only the workflow-declared
+`program-decision-checkpoint` request. Each decision obligation is then
+ingested through its own exact `obligation-record` claim and the authoritative
+program ledger before an advance route is eligible. Non-blocking obligations
+remain durable; the pure council core refuses an advance decision carrying an
+open blocking obligation.
+
+Structural `loop` nodes now execute through that same frontier and sole
+authority ledger. Replay derives the current round only from contiguous,
+hash-verified `loop-round` receipts; child nodes retain
+`.../loop/<id>/round/<n>/subflow/...` lineage, including nested loop segments.
+The predicate reads only its compiled named check result, governed verdict,
+typed decision, or validated artifact. Its separately claimed immutable round
+receipt carries the scalar observation, producing action and receipt hash,
+exact valid carried-artifact hashes, the finite maximum, and the compiled
+success, next-round, or exhaustion route. A red predicate source is therefore
+a loop observation rather than permission for the child node's unrelated
+failure route to take over. Exhaustion stops or routes exactly as policy
+declares, missing source work stops distinctly, and a crash after the receipt
+replays the same completed claim instead of consuming another loop-round
+budget unit.
+
+Configured `before-phase-complete` architecture gates now activate only when
+the selected story is the last unfinished story in that scoped phase. Program
+planning projects each gate into the selected team requirements, so the
+declared master-architect seat is policy-required, read-only, phase-visible,
+able to read the boundary artifact, and limited to the exact
+`agent:dispatch`/`verdict:issue` intersection. A gate cannot leave an optional
+architect seat present but inert, and a program cannot configure the gate
+without requesting both capabilities.
+
+The conductor first reserves a `gate` claim and freezes one bounded Markdown
+phase snapshot containing only the exact policy, roadmap/repository,
+assignment, receipt, evidence-hash, and open-obligation lineage. The
+preassigned architect receives that immutable snapshot as bounded packet
+content and emits raw criterion results under an ordinary agent claim. A
+separate verdict claim issues one validated `architect-verdict` with the
+architect seat's exact provider/model/auth execution identity; a final
+separate gate claim evaluates it through the pure quality-gate core. Approval
+retains the integration checkpoint. Veto stops as `architect-veto`; a declared
+checkpoint opens only the grant's `phase-boundary` port; abort remains a
+distinct stop. None of these acts integrates, commits, or changes the roadmap.
+
+Agent dispatch has two distinct durable facts. `claim_reserved` authorizes the
+exact attempt; `claim_dispatched` binds its deterministic operation id, packet
+hash, child grant, profile, adapter/version, provider/model/auth execution
+identity, and idempotency key *before* the external start. A missing mutable
+session after that event is `external-operation-uncertain`, never permission to
+start again. Fixture reconciliation proves both the “not found, safe to start
+the same key” and “found, poll/collect without restart” paths. Immutable
+`delivery-workbench-program-conductor-receipt@1` and artifact receipts are
+hash-verified on every replay; deletion or editing stops the conductor because
+the completed ledger claim still binds the missing exact hash.
+
+The registered Pi adapter is `pi-exec`. Its configuration pins
+`pi-cli@<semver>`, resolves provider/model through the local driver profile,
+uses non-session print mode with a closed no-shell tool set, passes credentials
+only through a scrubbed harness-owned environment, and refuses version skew.
+Codex, Claude, Pi, and the deterministic fixture remain named adapters; tracked
+program policy cannot supply executable flags, credentials, or arbitrary
+command checks.
+
+Before selecting new work, the conductor now composes the Phase 25 local signal
+projection without observing the network. For a currently matching declared
+SCM fact it records a separately claimed content-safe `outward-fact` receipt
+containing only rule/hash, signal kind, signal event hash/sequence, and channel
+hash. It then claims at most one bounded nudge only after that rule's exact
+target agent has already run. The nudge receipt binds the fact receipt, target
+lineage, next attempt, expectation, idle receptivity, and both finite rule
+ceilings; its target packet and receipt bind the nudge receipt. Newer green or
+resolved signal facts stop a stale failure from matching.
+
+A nudge reruns only its declared agent and work made causally stale by that new
+receipt: dependent DAG nodes, independent verification, and a later
+architecture boundary are re-evaluated with new attempts. It never activates
+undeclared work early. If replay would need to reopen a completed council or
+structural-loop governance outcome, the conductor stops distinctly as
+`nudge-governance-replay-required` rather than silently rewriting history.
+Crashes after the outward or nudge receipt recover the same claim and target;
+per-signal, per-rule, program, child, start, model/provider, and artifact
+ceilings remain authoritative.
+
+After WLA-26-10's separately claimed integration, evidence, certification,
+Git, and roadmap facts make the selected story complete, the next tick
+re-plans and selects the next exact scoped story, binding, workflow, and phase.
+Non-blocking obligations stay in the replayed frontier across that transition;
+any open blocking obligation stops as `blocking-obligation-open`. When the
+pure planner reports `scope-complete`, a separately claimed immutable scope
+proof binds the complete frontier and one `program_scope_completed` event
+enters terminal `complete`; a crash after the proof records neither a second
+proof nor a second terminal event. The conductor itself still never performs
+the WLA-26-10 rails.
 
 ## Integration and exact roadmap advancement
 
@@ -1134,6 +1312,15 @@ A nudge changes when an already declared role/node runs, never which work,
 agent, check, rubric, or capability exists. `blocked` and `unknown` principals
 still refuse input. Program recovery links existing signal/nudge/request
 receipts instead of republishing or redelivering them.
+
+Program-level standing rules are deliberately narrower than Phase 25 score
+rules: they accept only SCM failure/review/conflict signals, bind one exact
+program binding and expanded agent target, require an exact grant-time
+remote-tracking ref, and can wake only an idle target that already has a
+completed attempt. Signal observation remains an authority-free operator or
+adapter act outside the conductor. No raw forge prose, URL, log, review body,
+credential, or notification payload enters the program ledger or a nudge work
+packet.
 
 Decision ports name exact allowed responses and effects. A checkpoint response
 binds program/run, request id, generation, ledger head, subject hashes, chosen

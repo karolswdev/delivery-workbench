@@ -46,10 +46,50 @@ is added when an external consumer asks for one.
 | Organization simulation | `delivery-workbench-organization-simulation` v1 | `program_organization.simulate_organization` |
 | Pure team assignment | `delivery-workbench-team-assignment` v1 | `program_organization.assign_organization_team` |
 | Pure assignment replacement | `delivery-workbench-assignment-replacement` v1 | `program_organization.plan_assignment_replacement` |
+| Rubric policy | `delivery-workbench-rubric` v1 | `program_verdict.validate_rubric` |
+| Compiled rubric | `delivery-workbench-compiled-rubric` v1 | `program_verdict.compile_rubric` |
+| Rubric inventory | `delivery-workbench-rubric-list` v1 | `program_verdict.rubric_inventory` |
+| Rubric validation | `delivery-workbench-rubric-validation` v1 | `program_verdict.validate_rubric` |
+| Mechanical receipt | `delivery-workbench-mechanical-receipt` v1 | `program_verdict` trusted receipt input |
+| Mechanical fact | `delivery-workbench-mechanical-fact` v1 | `program_verdict.build_mechanical_fact` |
+| Verdict assignment | `delivery-workbench-verdict-assignment` v1 | `program_verdict.build_verdict_assignment` |
+| Governed verdict | `delivery-workbench-verdict` v1 | `program_verdict.issue_agent_verdict` |
+| Quality gate | `delivery-workbench-quality-gate` v1 | `program_verdict.evaluate_quality_gate` |
+| Quality proof | `delivery-workbench-quality-proof` v1 | `program_verdict.evaluate_quality_gate` |
 | Program inventory | `delivery-workbench-program-list` v1 | `programs.program_inventory` |
 | Program validation | `delivery-workbench-program-validation` v1 | `programs.validate_program` |
 | Program simulation | `delivery-workbench-program-simulation` v1 | `programs.simulate_program` |
 | Pure program plan | `delivery-workbench-program-plan` v1 | `programs.build_program_plan` |
+| Program start plan | `delivery-workbench-program-start-plan` v1 | `program_run.build_program_start_plan` |
+| Program grant | `delivery-workbench-program-grant` v1 | `program_run.start_program` |
+| Program event | `delivery-workbench-program-event` v1 | `program_run` ledger |
+| Program projection | `delivery-workbench-program-projection` v1 | `program_run.replay_program` |
+| Program claim preview | `delivery-workbench-program-claim-preview` v1 | `program_run.build_program_claim_preview` |
+| Program completion preview | `delivery-workbench-program-completion-preview` v1 | `program_run.build_program_completion_preview` |
+| Program control preview | `delivery-workbench-program-control-preview` v1 | `program_run.build_program_control_preview` |
+| Program child grant | `delivery-workbench-program-child-grant` v1 | `program_run.derive_child_grant` |
+| Program run inventory | `delivery-workbench-program-run-list` v1 | `program_run.program_run_inventory` |
+| Deliberation plan | `delivery-workbench-deliberation-plan` v1 | `program_deliberation.compile_deliberation_plan` |
+| Deliberation event | `delivery-workbench-deliberation-event` v1 | `program_deliberation` event chain |
+| Deliberation projection | `delivery-workbench-deliberation-projection` v1 | `program_deliberation.replay_deliberation` |
+| Deliberation simulation | `delivery-workbench-deliberation-simulation` v1 | `program_deliberation.simulate_deliberation` |
+| Council round verdict | `delivery-workbench-council-verdict` v1 | `program_deliberation` |
+| Meta-verifier verdict | `delivery-workbench-meta-verdict` v1 | `program_deliberation` |
+| Architecture verdict | `delivery-workbench-architecture-verdict` v1 | `program_deliberation` |
+| Council decision | `delivery-workbench-decision` v1 | `program_deliberation.validate_council_decision` |
+| Program Studio overview | `delivery-workbench-program-studio` v1 | `program_studio.build_program_studio` |
+| Program Studio document | `delivery-workbench-program-studio-document` v1 | `program_studio.build_studio_document` |
+| Program Studio graph | `delivery-workbench-program-studio-graph` v1 | `program_studio.build_studio_graph` |
+| Program Studio authority preview | `delivery-workbench-program-studio-authority-preview` v1 | `program_studio.build_authority_preview` |
+| Program Studio round trip | `delivery-workbench-program-studio-round-trip` v1 | `program_studio.graph_config_round_trip` |
+| Program Studio mutation preview | `delivery-workbench-program-studio-mutation-preview` v1 | `program_studio.studio_mutation_preview` |
+| Program Studio mutation result | `delivery-workbench-program-studio-mutation-result` v1 | `program_studio.apply_studio_mutation` |
+| Program frontier | `delivery-workbench-program-frontier` v1 | `program_conductor.derive_program_frontier` |
+| Program conductor tick | `delivery-workbench-program-tick` v1 | `program_conductor.tick_program` |
+| Program conductor supervision | `delivery-workbench-program-supervision` v1 | `program_conductor.supervise_program` |
+| Program conductor receipt | `delivery-workbench-program-conductor-receipt` v1 | `program_conductor.replay_program_conductor` |
+| Program artifact receipt | `delivery-workbench-program-artifact-receipt` v1 | `program_conductor.ProgramDriverManager` |
+| Program driver operation | `delivery-workbench-program-driver-operation` v1 | `program_conductor.ProgramDriverManager` |
 | Orchestration run plan | `delivery-workbench-run-plan` v1 | `orchestration_run.build_run_plan` |
 | Orchestration run grant | `delivery-workbench-run-grant` v1 | `orchestration_run.start_run` |
 | Orchestration run event | `delivery-workbench-run-event` v1 | `orchestration_run` ledger |
@@ -89,6 +129,8 @@ is added when an external consumer asks for one.
 | `dw workflow list --json` | `program_workflow.workflow_inventory` | healthy empty inventory or contained source-aware template validation plus finite envelope/hash summaries; pure |
 | `dw workflow validate <workflow> --json` | `program_workflow.validate_workflow` | closed parameters/nodes/routes, exact nested version/hash and bounded-score references, recursion/cycle/capability/envelope diagnostics; exit 1 invalid |
 | `dw workflow simulate <workflow> --json` | `program_workflow.simulate_workflow` | namespaced hierarchy, fan waves, typed route outcomes, concrete bounded rounds, debate byte/token/route proof, per-node/route/worst-case envelopes, source provenance, and capability consumers; pure |
+| `dw rubric list --json` | `program_verdict.rubric_inventory` | healthy empty inventory or direct-contained rubric validation/hash summaries; pure |
+| `dw rubric validate <rubric> --json` | `program_verdict.validate_rubric` | exact criteria, evidence/citation, aggregation/veto and freshness policy with source-aware diagnostics; exit 1 invalid |
 | `dw program list --json` | `programs.program_inventory` | healthy empty inventory when no program is configured; otherwise contained policy validation/hashes; pure |
 | `dw program validate <program> --json` | `programs.validate_program` | exact-key policy/reference/scope/binding verdict plus source-aware diagnostics; exit 1 invalid |
 | `dw program simulate <program> --json` | `programs.simulate_program` | every roadmap candidate reason plus deterministic workflow/team/role assignment; explicitly no work/state/grant |
@@ -110,19 +152,6 @@ is added when an external consumer asks for one.
 | `dw run checkpoint <run> approve|reject [--correlation <id>] --expect <act-token> --json` | generic request boundary → `orchestration_run.decide_checkpoint` | compatibility alias for the exact pending checkpoint request |
 | `dw run stream <run> agent|check <execution> stdout|stderr --json` | `orchestration_surface.read_run_stream` | one explicitly opened log, independently bounded to 100,000 bytes; never a list/feed/event field |
 | `dw run tail <run> [--after N] [--follow]` | `orchestration_surface.tail_run_events` | the verified hash-chained ledger suffix after a cursor, one canonical event JSON per line; pure read, no tokens or content bodies |
-
-The individual lifecycle spellings are `dw run show`, `dw run pause`,
-`dw run resume`, `dw run revoke`, and `dw run cancel`; the grouped rows above
-do not imply a combined command.
-
-The WLA-26-05 deliberation seam is currently an embedded core, not ambient CLI
-authority: `program_deliberation.compile_deliberation_plan` and
-`simulate_deliberation` are pure; `start_deliberation`,
-`claim_next_deliberation`, `record_deliberation_submission`,
-`record_deliberation_replacement`, and `replay_deliberation` operate only on a
-caller-owned exact event list and dispatch nothing. WLA-26-09 places those
-transitions under the program conductor/grant, and WLA-26-11 exposes the shared
-projection across public surfaces.
 | `dw context [project] [--compact] [--trace]` | `api.build_context_payload` | the stamped roadmap context |
 | `dw state --json` | `statefeed.build_state_feed` | the mission-control feed (`feed_schema` 1) |
 | `dw next [project] --json` | `api.next_story` | the next actionable story or `{next_story: null, parked}` |
@@ -134,6 +163,29 @@ projection across public surfaces.
 | `dw check [project]` | `validate.check_project` | greppable `ERROR` lines (exit 1 on issues) |
 | `dw gate --porcelain` | `gate.run_gate` | the gate verdict, machine-readable |
 | `dw verify [range] --porcelain` | `verify.run_verify` | the history audit, machine-readable |
+
+The individual lifecycle spellings are `dw run show`, `dw run pause`,
+`dw run resume`, `dw run revoke`, and `dw run cancel`; the grouped rows above
+do not imply a combined command.
+
+## Embedded Phase 26 core (no transport yet)
+
+The program authority, deliberation, and conductor documents named above are
+shared-core contracts, not ambient CLI authority. The current public
+`dw program` surface ends at pure `list|validate|simulate|plan`.
+`program_deliberation.compile_deliberation_plan` and
+`simulate_deliberation` are pure; their event transitions dispatch nothing on
+their own. WLA-26-09 reconstructs those transitions under the finite program
+grant and sole program ledger, then conducts agent/check/repair, council,
+obligation, meta-verifier, structural-loop, phase-architect, outward-fact,
+nudge, cross-story/phase-selection, and scope-completion acts through
+`tick_program`. Structural-loop receipts bind typed predicate provenance,
+carried artifacts, exact lineage, and a finite route. Outward-fact receipts
+bind only content-safe Phase 25 event/channel hashes; separate nudge receipts
+bind one standing rule and an already-run exact agent attempt. No embedded
+program API observes the network or performs integration, evidence,
+certification, Git, or roadmap mutation. WLA-26-10 owns those delivery rails;
+WLA-26-11 owns byte-equivalent CLI/MCP/HTTP projections and controls.
 
 ## Workbench HTTP (localhost/tailnet)
 
@@ -153,11 +205,15 @@ or provider argv.
 | `GET /api/orchestration/<score>` | shared compiler | raw score plus validation, compiled model, and simulation; pure |
 | `GET /api/orchestration/<score>/compiled` | `orchestration.compile_score_path` | byte-identical compiled score in `data` |
 | `GET /api/orchestration/<score>/simulation` | `orchestration.simulate_score` | byte-identical pure simulation in `data` |
+| `GET /api/program-studio` | `program_studio.build_program_studio` | healthy optional policy inventory plus shared family/compiler metadata; pure and neutral when empty |
+| `GET /api/program-studio/<family>/<name>` | `program_studio.build_studio_document` | selected program/workflow/organization source, validation, graph, simulation and authority projections; pure |
 | `GET /api/notifications` | `notifications.build_notifications` | the derived notification inventory in `data`; pure |
 | `POST /api/notifications/ack` | `notifications.acknowledge_notification` | receipted idempotent acknowledgement of one notification id |
 | `GET /api/signals?remote=…&branch=…` | `signals.build_signals_inventory` | observed outward channels and derived status in `data`; pure, never an observe pass |
 | `POST /api/orchestration/preview` | `orchestration_edit.build_score_mutation_plan` | normalized save/delete diff, compiler verdict, and state fingerprint; no write/run/event |
 | `POST /api/orchestration/apply` | `orchestration_edit.apply_score_mutation` | one fresh atomic score save/delete with read-back verification and rollback; never starts a run |
+| `POST /api/program-studio/preview` | `program_studio.build_studio_mutation_plan` | one selected policy save/delete diff, compiler projections and stale fingerprint; no grant/run/agent/check/roadmap effect |
+| `POST /api/program-studio/apply` | `program_studio.apply_studio_mutation` | one fresh direct-contained policy save/delete with read-back validation and explicit false runtime effects |
 | `GET /api/run-plan?score=…&project=…&story=…` | `orchestration_run.build_run_plan` | exact pure grant/start preview; identifiers and timestamps only |
 | `GET /api/runs` | `orchestration_run.run_inventory` | authoritative local projections; no prompts, argv, source, transcripts, or artifact bytes |
 | `GET /api/runs/<run>` | `orchestration_run.replay_run` | byte-identical projection in `data` |

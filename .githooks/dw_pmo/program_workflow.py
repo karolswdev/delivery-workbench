@@ -1673,6 +1673,10 @@ class _RegistryCompiler:
                 else:
                     capabilities.update(node.get("capability_ceiling", []))
             elif node_type == "loop":
+                # The authoritative structural progress receipt is a
+                # separately claimed loop-round act even when the child
+                # workflow itself contains only local checks.
+                capabilities.add("agent:dispatch")
                 if child is not None:
                     capabilities.update(
                         capability

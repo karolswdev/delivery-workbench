@@ -1329,13 +1329,21 @@ def assign_organization_team(
     program_caps = set(program_capabilities)
     candidate_map: dict[tuple[str, int], list[dict[str, object]]] = {}
     exclusion_map: dict[str, list[dict[str, str]]] = {}
+    effective_by_role: dict[str, list[str]] = {}
     roles = list(team["roles"])
     for role in roles:
         role_id = str(role["id"])
         exclusions: list[dict[str, str]] = []
         requirement = requirements.get(role_id, {})
         needed = set(requirement.get("capabilities", []))
+        # Every delivery team has a standing independent verifier contract,
+        # even when a compact workflow leaves the final rubric verdict to the
+        # program conductor instead of spelling out a verdict node.  Keep the
+        # port closed to the declared role/program ceilings.
+        if role.get("duty") == "verifier" and bool(role.get("required")):
+            needed.update({"agent:dispatch", "verdict:issue"})
         effective = sorted(needed & set(role["capability_ceiling"]) & program_caps)
+        effective_by_role[role_id] = effective
         pool_order = [str(role["pool"])] + list(role["replacement"]["fallback_pools"])
         seen_agents: set[str] = set()
         all_candidates: list[dict[str, object]] = []
@@ -1537,9 +1545,7 @@ def assign_organization_team(
                 "workspace": role["workspace"],
                 "driver_capabilities": role["driver_capabilities"],
                 "effective_capability_ceiling": sorted(
-                    set(requirement["capabilities"])
-                    & set(role["capability_ceiling"])
-                    & program_caps
+                    effective_by_role.get(role_id, [])
                 ),
                 "context": role["context"],
                 "artifacts": role["artifacts"],

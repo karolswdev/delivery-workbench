@@ -1,6 +1,6 @@
 # Delivery Workbench — solution overview
 
-**Assessment date:** 2026-07-18. **Product version assessed:** v1.14.0.
+**Assessment date:** 2026-07-23. **Product version assessed:** v1.14.0.
 This is the map of the whole solution. Exact subsystem protocols remain
 owned by the linked specialist documents.
 
@@ -516,9 +516,34 @@ the council's stable `decider_seat`, assignment generation, provider/model and
 auth-domain execution binding—inside an expiring, revocable grant. Its
 exclusive claims and hash-chained replay ledger reserve only named capabilities
 and budgets; rule-decided councils still have no agent decider, and checkpoint
-decisions remain external typed requests. The remaining conductor and
-integration slices will execute those reserved acts and carry obligation state
-onto exact roadmap rails without acquiring broader authority.
+decisions remain external typed requests.
+
+The delivered WLA-26-09 conductor consumes those reservations through one
+locked, deterministic, replay-first tick. The delivered path selects and
+assigns exact work, dispatches isolated implementer/check/verifier/repair acts
+through closed driver adapters, reconstructs bounded council rounds from
+immutable receipts, separately issues council decisions and meta-verdicts,
+ingests their obligations, conducts typed finite structural workflow rounds,
+and evaluates a final-story phase snapshot through the preassigned master
+architect. A loop predicate consumes only a named check, verdict, decision, or
+validated artifact result; its separately claimed immutable round receipt
+binds producer and carried-artifact hashes plus the exact continue, success,
+or exhaustion route.
+
+The same tick now consumes only already-observed Phase 25 SCM facts through
+their hash-verified local channel. It records content-safe outward-fact
+receipts, delivers finite program-declared nudges only to an already-run exact
+agent, and causally reruns dependent work and independent verification without
+polling the forge or importing raw content. Grant planning freezes all
+scope-reachable seats and checkpoint ports. Once WLA-26-10's separately
+authorized delivery rails make a story complete, replay selects the next exact
+story/binding/phase while carrying non-blocking obligations and stopping on a
+blocking one. An immutable proof and terminal event complete the program only
+after the pure planner proves the entire granted scope done. Planted crashes
+recover without duplicate claims, starts, checks, nudges, loop rounds,
+decisions, verdicts, gates, or scope completion. WLA-26-10 still owns
+integration, evidence, certification, Git, and roadmap acts; WLA-26-11 still
+owns public runtime controls and the control room.
 
 This does not redefine the product's ordinary mode. Vanilla Delivery Workbench
 remains complete with no program configured, and a Phase 24 score remains an

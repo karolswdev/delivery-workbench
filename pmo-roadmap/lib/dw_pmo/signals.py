@@ -89,6 +89,12 @@ STATUS_PRECEDENCE = (
     "unobserved",
 )
 
+SCM_NUDGE_SIGNALS = (
+    "ci-failed",
+    "changes-requested",
+    "merge-conflict",
+)
+
 
 def _sha(value):
     return "sha256:" + hashlib.sha256(
@@ -383,6 +389,49 @@ def derive_status(facts):
     if number is None:
         return "unobserved"
     return _derive_pr_status(facts, number)
+
+
+def latest_nudge_fact(projection, signal):
+    """Return the latest current fact matching one closed SCM nudge signal.
+
+    The signal chain remains authoritative.  This helper only selects from
+    the replayed current-fact map, so a later green/resolved observation for
+    the same fact key automatically stops matching its older red event.
+    """
+    if signal not in SCM_NUDGE_SIGNALS:
+        raise DwError("unsupported SCM nudge signal %r" % (signal,))
+    facts = projection.get("facts")
+    if not isinstance(facts, dict):
+        raise DwError("signal projection has no current fact map")
+    matched = None
+    for record in facts.values():
+        if not isinstance(record, dict):
+            raise DwError("signal projection contains a malformed fact")
+        detail = record.get("detail")
+        if not isinstance(detail, dict):
+            raise DwError("signal projection fact detail is malformed")
+        applies = (
+            (
+                signal == "ci-failed"
+                and record.get("fact") == "pr-check"
+                and detail.get("conclusion") in _CHECK_FAILED
+            )
+            or (
+                signal == "changes-requested"
+                and record.get("fact") == "pr-review-thread"
+                and detail.get("changes_requested") is True
+            )
+            or (
+                signal == "merge-conflict"
+                and record.get("fact") == "pr-mergeability"
+                and detail.get("mergeable") == "false"
+            )
+        )
+        if applies and (
+            matched is None or int(record.get("seq", -1)) > int(matched["seq"])
+        ):
+            matched = record
+    return dict(matched) if matched is not None else None
 
 
 def _pr_read_model(facts):
