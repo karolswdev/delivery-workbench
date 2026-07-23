@@ -26,11 +26,16 @@ from typing import Iterator
 from .gitio import current_branch, head_sha, in_rewrite_state, run_git, write_tree
 from .model import DwError
 from .orchestration import canonical_json
-from .orchestration_driver import driver_inventory, load_driver_config
+from .orchestration_driver import (
+    driver_capability,
+    driver_inventory,
+    load_driver_config,
+)
 from .programs import (
     BUDGET_DEFAULTS,
     MODE_CEILINGS,
     PROGRAM_CAPABILITIES,
+    _assign_team,
     build_program_plan,
     compile_program_path,
     find_program_path,
@@ -152,6 +157,23 @@ _EVENT_DETAIL_KEYS = {
         "claim_id", "request_hash", "result", "receipt_hash", "reason",
         "fact_binding",
     },
+    "claim_dispatched": {
+        "claim_id", "request_hash", "operation_id", "packet_hash",
+        "idempotency_key", "profile", "adapter", "adapter_version",
+        "execution", "child_grant_hash",
+    },
+    "program_obligation_recorded": {
+        "claim_id", "request_hash", "decision_hash", "obligation",
+        "obligation_hash",
+    },
+    "program_obligation_disposed": {
+        "claim_id", "request_hash", "obligation_id", "from_state",
+        "to_state", "actor", "authority", "reason", "replacement_id",
+    },
+    "program_scope_completed": {
+        "claim_id", "request_hash", "proof_hash", "completed_stories",
+        "completed_phases", "open_obligation_ids",
+    },
     "program_paused": {
         "action", "reason", "decision", "token_hash", "from_state",
         "to_state", "new_generation", "expired_request_ids",
@@ -175,6 +197,22 @@ _EVENT_DETAIL_KEYS = {
     "program_exhausted": {
         "counter", "used", "limit", "request_hash",
     },
+}
+
+_OBLIGATION_KEYS = {
+    "id", "kind", "statement", "priority", "blocking",
+    "accountable_role", "target", "citations", "acceptance", "state",
+}
+_OBLIGATION_KINDS = {
+    "backlog", "technical-debt", "risk", "research", "follow-up",
+}
+_OBLIGATION_PRIORITIES = {"critical", "high", "medium", "low"}
+_OBLIGATION_STATES = {
+    "open", "in-progress", "completed", "superseded", "waived",
+    "escalated",
+}
+_OBLIGATION_TERMINAL_STATES = {
+    "completed", "superseded", "waived", "escalated",
 }
 _CLAIM_PREVIEW_KEYS = {
     "kind", "schema_version", "run_id", "applicable", "issues", "request",
@@ -240,6 +278,7 @@ _NON_DELEGABLE = {
 
 # category -> (required capability, decision, fixed budget reservations)
 _CLAIM_RULES: dict[str, tuple[str, str, dict[str, int]]] = {
+    "outward-fact": ("program:select", "observe", {}),
     "selection": ("program:select", "select", {"max_stories": 1}),
     "assignment": ("program:select", "bind", {}),
     "child-grant": ("agent:dispatch", "delegate", {"max_child_runs": 1}),
@@ -432,6 +471,24 @@ def _remote_observation(root: Path, remote: str | None, remote_ref: str | None) 
     }
 
 
+def _program_signal_branch(
+    remote: str | None,
+    remote_ref: str | None,
+) -> str | None:
+    """Resolve one exact remote-tracking ref to its signal-channel branch."""
+    if remote is None or remote_ref is None:
+        return None
+    for prefix in (
+        f"refs/remotes/{remote}/",
+        f"{remote}/",
+    ):
+        if remote_ref.startswith(prefix):
+            branch = remote_ref[len(prefix):]
+            if branch and branch != "HEAD":
+                return branch
+    return None
+
+
 def _repository_facts(root: Path, remote: str | None = None, remote_ref: str | None = None) -> dict[str, object]:
     porcelain = run_git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
     _require(porcelain is not None, "cannot observe repository status")
@@ -546,6 +603,16 @@ def _checkpoint_ports(compiled: dict[str, object], binding_id: str | None) -> li
                     "kind": "workflow",
                     "address": str(node["address"]),
                 })
+        if any(
+            isinstance(debate, dict)
+            and debate.get("tie_policy") == "checkpoint"
+            for debate in instance.get("debates", [])
+        ):
+            ports.append({
+                "id": "program-decision-checkpoint",
+                "kind": "workflow",
+                "address": "program/decision-checkpoint",
+            })
     ports.sort(key=lambda item: (str(item["kind"]), str(item["id"])))
     return ports
 
@@ -637,6 +704,130 @@ def _roster(assignment: dict[str, object], capabilities: list[str], workflow: di
         "councils": councils,
         "separation": dict(assignment.get("separation", {})),
     }
+
+
+def _scope_roster(
+    compiled: dict[str, object],
+    planning: dict[str, object],
+    capabilities: list[str],
+    driver_config: dict[str, object],
+) -> tuple[dict[str, object], list[dict[str, str]]]:
+    """Freeze every deterministic seat reachable inside the granted scope."""
+    initial = planning.get("assignment")
+    selection = planning.get("selection")
+    _require(
+        isinstance(initial, dict) and isinstance(selection, dict),
+        "program planning produced no initial assignment",
+    )
+    instances = compiled["references"]["workflow_instances"]  # type: ignore[index]
+    _require(
+        isinstance(instances, dict),
+        "compiled program has no workflow instances",
+    )
+    initial_instance = instances.get(str(selection["binding"]))
+    base = _roster(
+        initial,
+        capabilities,
+        initial_instance if isinstance(initial_instance, dict) else None,
+    )
+    initial_addresses = [
+        str(seat["address"]) for seat in base["seats"]  # type: ignore[index]
+    ]
+    by_address = {
+        str(seat["address"]): seat
+        for seat in base["seats"]  # type: ignore[index]
+    }
+    issues: list[dict[str, str]] = []
+    bindings = {
+        str(binding["id"]): binding
+        for binding in compiled["program"]["bindings"]  # type: ignore[index]
+        if isinstance(binding, dict)
+    }
+    binding_by_story = compiled["analysis"]["binding_by_story"]  # type: ignore[index]
+    _require(
+        isinstance(binding_by_story, dict),
+        "compiled program has no scope binding proof",
+    )
+    for story_id in compiled["program"]["scope"]["story_ids"]:  # type: ignore[index]
+        story = str(story_id)
+        binding_id = binding_by_story.get(story)
+        binding = bindings.get(str(binding_id))
+        if binding is None:
+            issues.append({
+                "code": "binding-missing",
+                "message": (
+                    f"scope roster cannot bind story {story!r} to one workflow"
+                ),
+            })
+            continue
+        try:
+            phase = int(story.split("-")[-2])
+        except (ValueError, IndexError):
+            issues.append({
+                "code": "scope-violation",
+                "message": f"scope roster cannot parse story {story!r}",
+            })
+            continue
+        assignment, assignment_issues = _assign_team(
+            compiled,
+            {"id": story, "phase": phase},
+            binding,
+            driver_config,
+        )
+        issues.extend(assignment_issues)
+        if (
+            not isinstance(assignment, dict)
+            or not assignment.get("applicable")
+        ):
+            continue
+        workflow = instances.get(str(binding["id"]))
+        roster = _roster(
+            assignment,
+            capabilities,
+            workflow if isinstance(workflow, dict) else None,
+        )
+        _require(
+            roster["roster_hash"] == base["roster_hash"],
+            "scope assignment resolved a different driver roster",
+        )
+        for seat in roster["seats"]:  # type: ignore[index]
+            address = str(seat["address"])
+            prior = by_address.get(address)
+            _require(
+                prior is None or prior == seat,
+                "scope assignments conflict at one stable seat address",
+            )
+            by_address[address] = seat
+    additional_addresses = sorted(
+        set(by_address) - set(initial_addresses)
+    )
+    base["seats"] = [
+        by_address[address]
+        for address in initial_addresses + additional_addresses
+    ]
+    return base, issues
+
+
+def _scope_checkpoint_ports(
+    compiled: dict[str, object],
+) -> list[dict[str, object]]:
+    binding_ids = [
+        str(binding["id"])
+        for binding in compiled["program"]["bindings"]  # type: ignore[index]
+        if isinstance(binding, dict)
+    ]
+    by_identity: dict[
+        tuple[str, str, str], dict[str, object]
+    ] = {}
+    for binding_id in binding_ids:
+        for port in _checkpoint_ports(compiled, binding_id):
+            identity = (
+                str(port["id"]),
+                str(port["kind"]),
+                str(port["address"]),
+            )
+            by_identity[identity] = port
+    return [by_identity[key] for key in sorted(by_identity)]
 
 
 def _validate_roster(value: object) -> dict[str, object]:
@@ -736,6 +927,29 @@ def build_program_start_plan(
         issues.append({"code": "repository-stale", "message": "repository is in a rewrite operation"})
     if repository["clean"] is not True:
         issues.append({"code": "repository-stale", "message": "repository worktree must be clean at program start"})
+    program_nudges = [
+        item
+        for item in planning["program"].get("nudges", [])  # type: ignore[union-attr]
+        if isinstance(item, dict)
+    ]
+    if program_nudges:
+        signal_branch = _program_signal_branch(remote, remote_ref)
+        if signal_branch is None:
+            issues.append({
+                "code": "capability-denied",
+                "message": (
+                    "program standing nudge rules require one exact "
+                    "remote-tracking ref such as refs/remotes/origin/main"
+                ),
+            })
+        elif repository["remote_head"] is None:
+            issues.append({
+                "code": "repository-stale",
+                "message": (
+                    "program standing nudge rules require the exact "
+                    "remote-tracking ref to resolve at grant time"
+                ),
+            })
     if "git:push" in chosen_caps:
         if remote is None or remote_ref is None:
             issues.append({"code": "capability-denied", "message": "git:push requires one exact remote and ref observation"})
@@ -746,11 +960,15 @@ def build_program_start_plan(
     _require(isinstance(assignment, dict), "program planning produced no assignment document")
     selection = planning.get("selection")
     _require(isinstance(selection, dict), "program planning produced no selection document")
-    binding_id = str(selection.get("binding"))
-    instances = compiled["references"]["workflow_instances"]  # type: ignore[index]
-    workflow_instance = instances.get(binding_id) if isinstance(instances, dict) else None
-    roster = _roster(assignment, chosen_caps, workflow_instance if isinstance(workflow_instance, dict) else None)
-    checkpoint_ports = _checkpoint_ports(compiled, binding_id)
+    config = load_driver_config(root, driver_config)
+    roster, roster_issues = _scope_roster(
+        compiled,
+        planning,
+        chosen_caps,
+        config,
+    )
+    issues.extend(roster_issues)
+    checkpoint_ports = _scope_checkpoint_ports(compiled)
 
     roadmap = {
         "project": str(planning["roadmap"]["project"]),  # type: ignore[index]
@@ -1124,7 +1342,11 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
     active: dict[str, dict[str, object]] = {}
     completed: list[dict[str, object]] = []
     claims: list[dict[str, object]] = []
+    dispatches: list[dict[str, object]] = []
     controls: list[dict[str, object]] = []
+    obligations: dict[str, dict[str, object]] = {}
+    obligation_history: list[dict[str, object]] = []
+    scope_completion: dict[str, object] | None = None
     selected_stories: set[str] = set()
     selected_phases: set[int] = set()
     idempotency_keys: set[str] = set()
@@ -1214,6 +1436,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
                 "child_grant_hash": detail["child_grant_hash"],
                 "request_port": detail["request_port"],
                 "reserved_at": event["at"],
+                "dispatch": None,
                 "status": "active",
             }
             active[claim_id] = claim
@@ -1225,6 +1448,57 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
                     selected_phases.add(int(subject["phase"]))
             if category == "checkpoint-request":
                 state = "checkpoint"
+        elif event_name == "claim_dispatched":
+            _require(event_generation == generation, "dispatch uses the wrong revocation generation")
+            _require(state == "running", "dispatch was recorded while program was not running")
+            claim_id = _safe(detail["claim_id"], "dispatch claim id")
+            _require(claim_id in active, "dispatch does not match one active claim")
+            claim = active[claim_id]
+            _require(claim["category"] == "agent", "only an agent claim may be externally dispatched")
+            _require(claim["request_hash"] == detail["request_hash"], "dispatch request hash differs from claim")
+            _require(claim.get("dispatch") is None, "program claim was dispatched more than once")
+            _safe(detail["operation_id"], "dispatch operation id")
+            _hash(detail["packet_hash"], "dispatch packet hash")
+            _safe(detail["idempotency_key"], "dispatch idempotency key")
+            _safe(detail["profile"], "dispatch profile")
+            _safe(detail["adapter"], "dispatch adapter")
+            _safe(detail["adapter_version"], "dispatch adapter version", reference=True)
+            execution = _exact(detail["execution"], _EXECUTION_KEYS, "dispatch execution")
+            for field in ("auth_domain_fingerprint", "capability_fingerprint"):
+                _hash(execution[field], f"dispatch execution {field}")
+            child_hash = detail["child_grant_hash"]
+            _require(child_hash is None or isinstance(child_hash, str), "dispatch child grant hash is invalid")
+            if child_hash is not None:
+                _hash(child_hash, "dispatch child grant hash")
+            _require(child_hash == claim["subject"]["hash"], "dispatch child grant differs from its agent claim")
+            expected_operation = "operation-" + hashlib.sha256(
+                f"{run_id}|{claim_id}".encode("utf-8")
+            ).hexdigest()[:24]
+            _require(detail["operation_id"] == expected_operation, "dispatch operation id is not deterministic")
+            seat = next(
+                (
+                    item for item in grant["roster"]["seats"]  # type: ignore[index]
+                    if item["profile"] == detail["profile"]
+                    and item["execution"] == execution
+                ),
+                None,
+            )
+            _require(seat is not None, "dispatch execution is outside the immutable grant roster")
+            _require(
+                detail["adapter"] == execution["adapter"]
+                and detail["adapter_version"] == execution["adapter_version"],
+                "dispatch adapter differs from its execution binding",
+            )
+            dispatch = {
+                **detail,
+                "dispatched_at": event["at"],
+            }
+            claim["dispatch"] = dispatch
+            dispatches.append(dispatch)
+            for item in claims:
+                if item["claim_id"] == claim_id:
+                    item["dispatch"] = dispatch
+                    break
         elif event_name == "claim_completed":
             _require(event_generation == generation, "completion uses the wrong revocation generation")
             claim_id = _safe(detail["claim_id"], "completion claim id")
@@ -1259,6 +1533,141 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
                 expected_roadmap = dict(fact_binding["roadmap"])
             if claim["category"] == "checkpoint-request" and state == "checkpoint":
                 state = "running"
+        elif event_name == "program_obligation_recorded":
+            _require(event_generation == generation, "obligation record uses the wrong revocation generation")
+            claim_id = _safe(detail["claim_id"], "obligation claim id")
+            claim = next((item for item in completed if item["claim_id"] == claim_id), None)
+            _require(claim is not None and claim["category"] == "obligation-record", "obligation event lacks one completed record claim")
+            _require(claim["status"] == "succeeded" and claim["request_hash"] == detail["request_hash"], "obligation record claim did not succeed exactly")
+            _hash(detail["decision_hash"], "obligation decision hash")
+            obligation = _normalize_obligation(detail["obligation"])
+            _require(detail["obligation_hash"] == _sha(obligation), "program obligation hash is invalid")
+            obligation_id = str(obligation["id"])
+            _require(
+                claim["subject"]["kind"] == "program-obligation"
+                and claim["subject"]["id"] == obligation_id
+                and claim["subject"]["hash"] == _sha({
+                    "decision_hash": detail["decision_hash"],
+                    "obligation": obligation,
+                }),
+                "obligation event differs from its exact claim subject",
+            )
+            _require(obligation_id not in obligations, "program obligation id was reused")
+            entry = {
+                **obligation,
+                "source_decision_hash": detail["decision_hash"],
+                "obligation_hash": detail["obligation_hash"],
+                "recorded_at": event["at"],
+                "record_claim_id": claim_id,
+                "history": [],
+            }
+            obligations[obligation_id] = entry
+            obligation_history.append({
+                "event": event_name,
+                "at": event["at"],
+                "obligation_id": obligation_id,
+                "claim_id": claim_id,
+                "to_state": "open",
+            })
+        elif event_name == "program_obligation_disposed":
+            _require(event_generation == generation, "obligation disposition uses the wrong revocation generation")
+            claim_id = _safe(detail["claim_id"], "obligation disposition claim id")
+            claim = next((item for item in completed if item["claim_id"] == claim_id), None)
+            _require(claim is not None and claim["category"] == "obligation-disposition", "obligation disposition lacks one completed claim")
+            _require(claim["status"] == "succeeded" and claim["request_hash"] == detail["request_hash"], "obligation disposition claim did not succeed exactly")
+            obligation_id = _safe(detail["obligation_id"], "obligation disposition id")
+            _require(obligation_id in obligations, "obligation disposition names no durable obligation")
+            obligation = obligations[obligation_id]
+            _require(detail["from_state"] == obligation["state"], "obligation disposition source state is stale")
+            _require(detail["to_state"] in _OBLIGATION_TERMINAL_STATES, "obligation disposition state is not terminal")
+            _safe(detail["actor"], "obligation disposition actor", reference=True)
+            _safe(detail["authority"], "obligation disposition authority", reference=True)
+            _text(detail["reason"], "obligation disposition reason", 1_000)
+            replacement_id = detail["replacement_id"]
+            _require(
+                replacement_id is None
+                or (isinstance(replacement_id, str) and bool(_SAFE_ID_RE.fullmatch(replacement_id))),
+                "obligation replacement id is unsafe",
+            )
+            _require(
+                (detail["to_state"] == "superseded") == (replacement_id is not None),
+                "superseded obligation must name exactly one replacement",
+            )
+            _require(
+                claim["subject"]["kind"] == "program-obligation-disposition"
+                and claim["subject"]["id"] == obligation_id
+                and claim["subject"]["hash"] == _sha({
+                    "obligation_id": obligation_id,
+                    "from_state": detail["from_state"],
+                    "to_state": detail["to_state"],
+                    "actor": detail["actor"],
+                    "authority": detail["authority"],
+                    "reason": detail["reason"],
+                    "replacement_id": replacement_id,
+                }),
+                "obligation disposition event differs from its exact claim subject",
+            )
+            disposition = {
+                "claim_id": claim_id,
+                "from_state": detail["from_state"],
+                "to_state": detail["to_state"],
+                "actor": detail["actor"],
+                "authority": detail["authority"],
+                "reason": detail["reason"],
+                "replacement_id": replacement_id,
+                "at": event["at"],
+            }
+            obligation["state"] = detail["to_state"]
+            obligation["history"].append(disposition)  # type: ignore[union-attr]
+            obligation_history.append({
+                "event": event_name,
+                "at": event["at"],
+                "obligation_id": obligation_id,
+                **disposition,
+            })
+        elif event_name == "program_scope_completed":
+            _require(event_generation == generation, "scope completion uses the wrong revocation generation")
+            _require(state == "running", "program scope completed outside running state")
+            claim_id = _safe(detail["claim_id"], "scope completion claim id")
+            claim = next((item for item in completed if item["claim_id"] == claim_id), None)
+            _require(claim is not None and claim["category"] == "assignment", "scope completion lacks one completed assignment claim")
+            _require(claim["status"] == "succeeded" and claim["request_hash"] == detail["request_hash"], "scope completion claim did not succeed exactly")
+            _hash(detail["proof_hash"], "scope completion proof hash")
+            _require(
+                claim["subject"]["kind"] == "program-scope-proof"
+                and claim["subject"]["hash"] == detail["proof_hash"],
+                "scope completion proof differs from its exact claim subject",
+            )
+            stories = detail["completed_stories"]
+            phases = detail["completed_phases"]
+            open_ids = detail["open_obligation_ids"]
+            _require(
+                isinstance(stories, list) and stories == sorted(set(stories))
+                and stories == sorted(grant["scope"]["story_ids"]),  # type: ignore[index]
+                "scope completion story set is invalid",
+            )
+            _require(
+                isinstance(phases, list) and phases == sorted(set(phases))
+                and phases == sorted(grant["scope"]["phases"]),  # type: ignore[index]
+                "scope completion phase set is invalid",
+            )
+            current_open = sorted(
+                obligation_id for obligation_id, obligation in obligations.items()
+                if obligation["state"] in {"open", "in-progress"}
+            )
+            _require(open_ids == current_open, "scope completion obligation frontier is stale")
+            _require(
+                not any(
+                    obligation["blocking"] and obligation["state"] in {"open", "in-progress"}
+                    for obligation in obligations.values()
+                ),
+                "scope completion has an open blocking obligation",
+            )
+            scope_completion = {
+                **detail,
+                "completed_at": event["at"],
+            }
+            state = "complete"
         elif event_name in {"program_paused", "program_resumed", "program_revoked", "program_cancelled"}:
             _require(detail["from_state"] == state, "program control source state is stale")
             expected_action = event_name.removeprefix("program_")
@@ -1349,12 +1758,30 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
         "expected_repository": expected_repository,
         "expected_roadmap": expected_roadmap,
         "claims": claims,
+        "dispatches": dispatches,
         "active_claims": sorted(active.values(), key=lambda item: str(item["claim_id"])),
         "completed_claims": completed,
         "outstanding_requests": outstanding_requests,
         "selected_stories": sorted(selected_stories),
         "selected_phases": sorted(selected_phases),
         "controls": controls,
+        "obligations": sorted(obligations.values(), key=lambda item: str(item["id"])),
+        "open_obligations": sorted(
+            (
+                item for item in obligations.values()
+                if item["state"] in {"open", "in-progress"}
+            ),
+            key=lambda item: str(item["id"]),
+        ),
+        "blocking_obligations": sorted(
+            (
+                item for item in obligations.values()
+                if item["blocking"] and item["state"] in {"open", "in-progress"}
+            ),
+            key=lambda item: str(item["id"]),
+        ),
+        "obligation_history": obligation_history,
+        "scope_completion": scope_completion,
         "exhaustion": exhaustion,
         "issued_at": grant["issued_at"],
         "expires_at": grant["expires_at"],
@@ -1383,6 +1810,29 @@ def _append_event(path: Path, event: dict[str, object]) -> None:
 def _current_roster_hash(root: Path, driver_config: dict[str, object] | None = None) -> str:
     config = load_driver_config(root, driver_config)
     return _sha(driver_inventory(config))
+
+
+def _execution_for_profile(
+    root: Path,
+    profile: str,
+    driver_config: dict[str, object] | None = None,
+) -> tuple[dict[str, object], dict[str, object]]:
+    capability = driver_capability(load_driver_config(root, driver_config), profile)
+    execution = {
+        "harness": capability["harness"],
+        "adapter": capability["adapter"],
+        "adapter_version": capability["adapter_version"],
+        "router": capability["router"],
+        "provider": capability["provider"],
+        "model_vendor": capability["model_vendor"],
+        "model_family": capability["model_family"],
+        "model": capability["model"],
+        "model_revision": capability["model_revision"],
+        "model_binding": capability["model_binding"],
+        "auth_domain_fingerprint": capability["auth_domain_fingerprint"],
+        "capability_fingerprint": capability["capability_fingerprint"],
+    }
+    return capability, execution
 
 
 def program_freshness_issues(
@@ -1451,6 +1901,43 @@ def _resource_estimate(value: object) -> dict[str, int]:
         _require(isinstance(candidate, int) and not isinstance(candidate, bool) and candidate >= 0, f"resource estimate {key} is invalid")
         result[key] = int(candidate)
     return result
+
+
+def _normalize_obligation(value: object) -> dict[str, object]:
+    raw = _exact(value, _OBLIGATION_KEYS, "program obligation")
+    obligation_id = _safe(raw["id"], "obligation.id")
+    _require(raw["kind"] in _OBLIGATION_KINDS, "program obligation kind is unsupported")
+    _require(
+        raw["priority"] in _OBLIGATION_PRIORITIES,
+        "program obligation priority is unsupported",
+    )
+    _require(isinstance(raw["blocking"], bool), "program obligation blocking must be boolean")
+    target = raw["target"]
+    _require(
+        target is None or (isinstance(target, str) and bool(_REF_RE.fullmatch(target))),
+        "program obligation target is unsafe",
+    )
+    citations = raw["citations"]
+    _require(
+        isinstance(citations, list)
+        and 0 < len(citations) <= 32
+        and len(set(citations)) == len(citations)
+        and all(isinstance(item, str) and bool(_REF_RE.fullmatch(item)) for item in citations),
+        "program obligation citations must be non-empty unique references",
+    )
+    _require(raw["state"] == "open", "a recorded program obligation must start open")
+    return {
+        "id": obligation_id,
+        "kind": str(raw["kind"]),
+        "statement": _text(raw["statement"], "obligation.statement", 2_000),
+        "priority": str(raw["priority"]),
+        "blocking": bool(raw["blocking"]),
+        "accountable_role": _safe(raw["accountable_role"], "obligation.accountable_role"),
+        "target": target,
+        "citations": list(citations),
+        "acceptance": _text(raw["acceptance"], "obligation.acceptance", 2_000),
+        "state": "open",
+    }
 
 
 def _claim_budget(
@@ -1532,6 +2019,65 @@ def derive_child_grant(
         (seat for seat in grant["roster"]["seats"] if seat["address"] == role_address),  # type: ignore[index]
         None,
     )
+    if role is None:
+        # The immutable grant binds the complete policy bundle and local
+        # driver roster, while a stable story assignment is derived only when
+        # that story reaches the roadmap frontier.  Recompute that exact
+        # assignment here rather than treating the first story's seat address
+        # as authority for every later story in a multi-phase program.
+        current = build_program_plan(
+            root,
+            str(grant["program_selector"]),
+            driver_config=driver_config,
+        )
+        assignment = current.get("assignment")
+        selection = current.get("selection")
+        _require(
+            current.get("applicable") is True
+            and isinstance(assignment, dict)
+            and isinstance(selection, dict),
+            "current roadmap frontier has no grant-compatible assignment",
+        )
+        _require(
+            assignment.get("roster_hash") == grant["roster"]["roster_hash"],  # type: ignore[index]
+            "current assignment resolved a different driver roster",
+        )
+        _require(
+            assignment.get("separation", {}).get("passed") is True,  # type: ignore[union-attr]
+            "current assignment does not prove separation of duties",
+        )
+        for assigned_role in assignment.get("roles", []):
+            if not isinstance(assigned_role, dict):
+                continue
+            for member in assigned_role.get("members", []):
+                if not isinstance(member, dict) or member.get("address") != role_address:
+                    continue
+                role = {
+                    "address": member["address"],
+                    "role": assigned_role["role"],
+                    "duty": assigned_role["duty"],
+                    "slot": member["slot"],
+                    "agent": member["agent"],
+                    "profile": member["profile"],
+                    "principal_fingerprint": member["principal_fingerprint"],
+                    "assignment_generation": member["assignment_generation"],
+                    "workspace_domain": member["workspace_domain"],
+                    "session_binding_key": member["session_binding_key"],
+                    "execution": member["execution"],
+                    "authority_ceiling": sorted(
+                        set(projection["capabilities"])
+                        & set(assigned_role.get("capability_ceiling", []))
+                        & set(
+                            assigned_role.get("packet_policy", {}).get(  # type: ignore[union-attr]
+                                "effective_capability_ceiling", []
+                            )
+                            or assigned_role.get("capability_ceiling", [])
+                        )
+                    ),
+                }
+                break
+            if role is not None:
+                break
     _require(isinstance(role, dict), "child role address is not assigned by the grant")
     requested = _normalize_capabilities(capabilities)
     allowed = set(grant["authority"]["child_capability_ceiling"]) & set(role["authority_ceiling"])  # type: ignore[index]
@@ -1539,6 +2085,10 @@ def derive_child_grant(
     _require(not (set(requested) & _NON_DELEGABLE), "child grant contains a non-delegable rail")
     _require(bool(requested), "child grant needs at least one capability")
     _safe(node_address, "node_address", reference=True)
+    _require(
+        node_address.startswith(str(role_address).rsplit("/role/", 1)[0] + "/"),
+        "child node address is outside its assigned workflow lineage",
+    )
     normalized_budgets = _budget_map(budgets)
     _require(bool(normalized_budgets), "child grant needs finite local budgets")
     for key, amount in normalized_budgets.items():
@@ -2000,6 +2550,355 @@ def apply_program_completion(
         )
         _append_event(path, event)
     return replay_program(root, run_id, now=observed)
+
+
+def record_program_dispatch(
+    root: Path,
+    run_id: str,
+    *,
+    claim_id: str,
+    operation_id: str,
+    packet_hash: str,
+    idempotency_key: str,
+    profile: str,
+    adapter: str,
+    adapter_version: str,
+    execution: object,
+    child_grant_hash: str | None,
+    now: str | datetime | None = None,
+    driver_config: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Record the durable external-operation boundary before dispatch.
+
+    A mutable driver session file is never proof that an operation did or did
+    not start.  This ledger event makes deletion of that file fail closed
+    instead of turning restart into a duplicate provider invocation.
+    """
+    observed = _time(now, "now")
+    claim_id = _safe(claim_id, "dispatch claim id")
+    operation_id = _safe(operation_id, "dispatch operation id")
+    packet_hash = _hash(packet_hash, "dispatch packet hash")
+    idempotency_key = _safe(idempotency_key, "dispatch idempotency key")
+    profile = _safe(profile, "dispatch profile")
+    adapter = _safe(adapter, "dispatch adapter")
+    adapter_version = _safe(adapter_version, "dispatch adapter version", reference=True)
+    normalized_execution = dict(_exact(execution, _EXECUTION_KEYS, "dispatch execution"))
+    if child_grant_hash is not None:
+        child_grant_hash = _hash(child_grant_hash, "dispatch child grant hash")
+    expected_operation = "operation-" + hashlib.sha256(
+        f"{run_id}|{claim_id}".encode("utf-8")
+    ).hexdigest()[:24]
+    _require(operation_id == expected_operation, "dispatch operation id is not deterministic")
+
+    root = root.resolve()
+    path, grant, _plan = _load_documents(root, run_id)
+    detail = {
+        "claim_id": claim_id,
+        "request_hash": "",
+        "operation_id": operation_id,
+        "packet_hash": packet_hash,
+        "idempotency_key": idempotency_key,
+        "profile": profile,
+        "adapter": adapter,
+        "adapter_version": adapter_version,
+        "execution": normalized_execution,
+        "child_grant_hash": child_grant_hash,
+    }
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        claim = next(
+            (item for item in projection["active_claims"] if item["claim_id"] == claim_id),
+            None,
+        )
+        _require(claim is not None, "dispatch requires one active program claim")
+        _require(claim["category"] == "agent", "only an agent claim may dispatch a driver")
+        detail["request_hash"] = claim["request_hash"]
+        prior = claim.get("dispatch")
+        if prior is not None:
+            expected_prior = {**detail, "dispatched_at": prior["dispatched_at"]}
+            _require(prior == expected_prior, "program claim dispatch conflicts with its durable operation")
+            return {**projection, "dispatch": prior, "idempotent": True}
+        _require(
+            projection["state"] == "running" and projection["mode"] != "advisory",
+            "program grant does not permit driver dispatch",
+        )
+        freshness = program_freshness_issues(
+            root, grant, projection, driver_config=driver_config
+        )
+        _require(not freshness, "program dispatch facts are stale: " + "; ".join(freshness))
+        capability, expected_execution = _execution_for_profile(
+            root, profile, driver_config
+        )
+        _require(capability["available"] is True, "dispatch profile is unavailable")
+        _require(
+            adapter == capability["adapter"]
+            and adapter_version == capability["adapter_version"]
+            and normalized_execution == expected_execution,
+            "dispatch execution binding differs from the resolved profile",
+        )
+        _require(idempotency_key == claim["idempotency_key"], "driver idempotency key differs from its claim")
+        _require(child_grant_hash is not None, "agent dispatch requires one exact child grant")
+        _require(
+            child_grant_hash == claim["subject"]["hash"],
+            "agent claim subject does not bind its child grant",
+        )
+        event = _event_document(
+            run_id,
+            int(projection["event_count"]) + 1,
+            "claim_dispatched",
+            int(projection["generation"]),
+            observed,
+            detail,
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    after = replay_program(root, run_id, now=observed)
+    dispatch = next(item for item in after["dispatches"] if item["claim_id"] == claim_id)
+    return {**after, "dispatch": dispatch, "idempotent": False}
+
+
+def record_program_obligation(
+    root: Path,
+    run_id: str,
+    *,
+    claim_id: str,
+    decision_hash: str,
+    obligation: object,
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    """Append one exact council obligation after its reserved claim succeeds."""
+    observed = _time(now, "now")
+    claim_id = _safe(claim_id, "obligation claim id")
+    decision_hash = _hash(decision_hash, "obligation decision hash")
+    normalized = _normalize_obligation(obligation)
+    root = root.resolve()
+    path, _grant, _plan = _load_documents(root, run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        prior = next(
+            (item for item in projection["obligations"] if item["id"] == normalized["id"]),
+            None,
+        )
+        if prior is not None:
+            _require(
+                prior["source_decision_hash"] == decision_hash
+                and prior["obligation_hash"] == _sha(normalized),
+                "program obligation id was reused for different meaning",
+            )
+            return {**projection, "obligation": prior, "idempotent": True}
+        claim = next(
+            (item for item in projection["completed_claims"] if item["claim_id"] == claim_id),
+            None,
+        )
+        _require(
+            claim is not None
+            and claim["category"] == "obligation-record"
+            and claim["status"] == "succeeded"
+            and claim["subject"]["kind"] == "program-obligation"
+            and claim["subject"]["id"] == normalized["id"]
+            and claim["subject"]["hash"] == _sha({
+                "decision_hash": decision_hash,
+                "obligation": normalized,
+            }),
+            "obligation record requires one succeeded reserved claim",
+        )
+        event = _event_document(
+            run_id,
+            int(projection["event_count"]) + 1,
+            "program_obligation_recorded",
+            int(projection["generation"]),
+            observed,
+            {
+                "claim_id": claim_id,
+                "request_hash": claim["request_hash"],
+                "decision_hash": decision_hash,
+                "obligation": normalized,
+                "obligation_hash": _sha(normalized),
+            },
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    after = replay_program(root, run_id, now=observed)
+    recorded = next(item for item in after["obligations"] if item["id"] == normalized["id"])
+    return {**after, "obligation": recorded, "idempotent": False}
+
+
+def dispose_program_obligation(
+    root: Path,
+    run_id: str,
+    *,
+    claim_id: str,
+    obligation_id: str,
+    to_state: str,
+    actor: str,
+    authority: str,
+    reason: str,
+    replacement_id: str | None = None,
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    """Record one separately claimed terminal obligation disposition."""
+    observed = _time(now, "now")
+    claim_id = _safe(claim_id, "obligation disposition claim id")
+    obligation_id = _safe(obligation_id, "obligation disposition id")
+    _require(to_state in _OBLIGATION_TERMINAL_STATES, "obligation disposition state is unsupported")
+    actor = _safe(actor, "obligation disposition actor", reference=True)
+    authority = _safe(authority, "obligation disposition authority", reference=True)
+    reason = _text(reason, "obligation disposition reason", 1_000)
+    if replacement_id is not None:
+        replacement_id = _safe(replacement_id, "obligation replacement id")
+    _require(
+        (to_state == "superseded") == (replacement_id is not None),
+        "superseded obligation must name exactly one replacement",
+    )
+    root = root.resolve()
+    path, _grant, _plan = _load_documents(root, run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        obligation = next(
+            (item for item in projection["obligations"] if item["id"] == obligation_id),
+            None,
+        )
+        _require(obligation is not None, "obligation disposition names no durable obligation")
+        if obligation["state"] in _OBLIGATION_TERMINAL_STATES:
+            history = obligation["history"]
+            prior = history[-1] if history else None
+            _require(
+                prior is not None
+                and prior["claim_id"] == claim_id
+                and prior["to_state"] == to_state
+                and prior["actor"] == actor
+                and prior["authority"] == authority
+                and prior["reason"] == reason
+                and prior["replacement_id"] == replacement_id,
+                "obligation already has a different terminal disposition",
+            )
+            return {**projection, "obligation": obligation, "idempotent": True}
+        claim = next(
+            (item for item in projection["completed_claims"] if item["claim_id"] == claim_id),
+            None,
+        )
+        _require(
+            claim is not None
+            and claim["category"] == "obligation-disposition"
+            and claim["status"] == "succeeded"
+            and claim["subject"]["kind"] == "program-obligation-disposition"
+            and claim["subject"]["id"] == obligation_id
+            and claim["subject"]["hash"] == _sha({
+                "obligation_id": obligation_id,
+                "from_state": obligation["state"],
+                "to_state": to_state,
+                "actor": actor,
+                "authority": authority,
+                "reason": reason,
+                "replacement_id": replacement_id,
+            }),
+            "obligation disposition requires one succeeded reserved claim",
+        )
+        event = _event_document(
+            run_id,
+            int(projection["event_count"]) + 1,
+            "program_obligation_disposed",
+            int(projection["generation"]),
+            observed,
+            {
+                "claim_id": claim_id,
+                "request_hash": claim["request_hash"],
+                "obligation_id": obligation_id,
+                "from_state": obligation["state"],
+                "to_state": to_state,
+                "actor": actor,
+                "authority": authority,
+                "reason": reason,
+                "replacement_id": replacement_id,
+            },
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    after = replay_program(root, run_id, now=observed)
+    disposed = next(item for item in after["obligations"] if item["id"] == obligation_id)
+    return {**after, "obligation": disposed, "idempotent": False}
+
+
+def complete_program_scope(
+    root: Path,
+    run_id: str,
+    *,
+    claim_id: str,
+    proof_hash: str,
+    completed_stories: list[str],
+    completed_phases: list[int],
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    """Enter the exact authority terminal after a conductor proof is claimed."""
+    observed = _time(now, "now")
+    claim_id = _safe(claim_id, "scope completion claim id")
+    proof_hash = _hash(proof_hash, "scope completion proof hash")
+    stories = sorted(set(completed_stories))
+    phases = sorted(set(completed_phases))
+    _require(stories == completed_stories, "completed story set must be sorted and unique")
+    _require(phases == completed_phases, "completed phase set must be sorted and unique")
+    root = root.resolve()
+    path, grant, _plan = _load_documents(root, run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        if projection["scope_completion"] is not None:
+            prior = projection["scope_completion"]
+            _require(
+                prior["claim_id"] == claim_id
+                and prior["proof_hash"] == proof_hash
+                and prior["completed_stories"] == stories
+                and prior["completed_phases"] == phases,
+                "program scope already completed under a different proof",
+            )
+            return {**projection, "idempotent": True}
+        _require(projection["state"] == "running", "program scope can complete only while running")
+        _require(stories == sorted(grant["scope"]["story_ids"]), "scope completion omits a granted story")  # type: ignore[index]
+        _require(phases == sorted(grant["scope"]["phases"]), "scope completion omits a granted phase")  # type: ignore[index]
+        _require(not projection["blocking_obligations"], "scope completion has an open blocking obligation")
+        claim = next(
+            (item for item in projection["completed_claims"] if item["claim_id"] == claim_id),
+            None,
+        )
+        _require(
+            claim is not None
+            and claim["category"] == "assignment"
+            and claim["status"] == "succeeded"
+            and claim["subject"]["kind"] == "program-scope-proof"
+            and claim["subject"]["hash"] == proof_hash,
+            "scope completion requires one succeeded reserved assignment claim",
+        )
+        freshness = program_freshness_issues(root, grant, projection)
+        _require(not freshness, "scope completion facts are stale: " + "; ".join(freshness))
+        current = build_program_plan(root, str(grant["program_selector"]))
+        issue_codes = {
+            str(item.get("code"))
+            for item in current.get("issues", []) if isinstance(item, dict)
+        }
+        _require(
+            current.get("selection") is None
+            and "scope-complete" in issue_codes,
+            "scope completion requires the roadmap planner to prove the exact grant scope complete",
+        )
+        event = _event_document(
+            run_id,
+            int(projection["event_count"]) + 1,
+            "program_scope_completed",
+            int(projection["generation"]),
+            observed,
+            {
+                "claim_id": claim_id,
+                "request_hash": claim["request_hash"],
+                "proof_hash": proof_hash,
+                "completed_stories": stories,
+                "completed_phases": phases,
+                "open_obligation_ids": sorted(
+                    item["id"] for item in projection["open_obligations"]
+                ),
+            },
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    return {**replay_program(root, run_id, now=observed), "idempotent": False}
 
 
 def _control_effect(projection: dict[str, object], action: str) -> dict[str, object]:

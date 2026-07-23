@@ -47,6 +47,7 @@ from .orchestration_run import (
     transition_run,
 )
 from .signals import receptivity as signal_receptivity
+from .signals import latest_nudge_fact as signal_latest_nudge_fact
 from .signals import replay_channel as signal_replay_channel
 from .status import build_status
 from .step import StepChild, apply_step, build_step
@@ -1245,7 +1246,6 @@ def _record_failure_policy(
 
 
 _SCM_NUDGE_KINDS = {"ci-failed", "changes-requested", "merge-conflict"}
-_FAILED_CONCLUSIONS = {"failure", "timed_out", "startup_failure"}
 
 
 def _pending_nudge_for(
@@ -1289,21 +1289,7 @@ def _nudge_triggers(
         if kind in _SCM_NUDGE_KINDS:
             if chan is None:
                 continue
-            fact = None
-            for record in chan["facts"].values():  # type: ignore[union-attr]
-                detail = record["detail"]
-                matched = (
-                    (kind == "ci-failed" and record["fact"] == "pr-check"
-                     and detail.get("conclusion") in _FAILED_CONCLUSIONS)
-                    or (kind == "changes-requested"
-                        and record["fact"] == "pr-review-thread"
-                        and detail.get("changes_requested") is True)
-                    or (kind == "merge-conflict"
-                        and record["fact"] == "pr-mergeability"
-                        and detail.get("mergeable") == "false")
-                )
-                if matched and (fact is None or record["seq"] > fact["seq"]):
-                    fact = record
+            fact = signal_latest_nudge_fact(chan, kind)
             if fact is not None:
                 triggers.append((rule, str(fact["event_hash"])))
         elif kind == "waiting-input-timeout":

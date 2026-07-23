@@ -154,7 +154,7 @@ def validate_driver_config(value: object) -> dict[str, object]:
         if unknown:
             raise DwError(f"driver profile {name!r} has unknown keys: {', '.join(unknown)}")
         adapter = raw.get("adapter")
-        if adapter not in {"fixture", "codex-exec", "claude-exec"}:
+        if adapter not in {"fixture", "codex-exec", "claude-exec", "pi-exec"}:
             raise DwError(f"driver profile {name!r} has unsupported adapter {adapter!r}")
         capabilities = raw.get("capabilities", [])
         if (
@@ -170,7 +170,11 @@ def validate_driver_config(value: object) -> dict[str, object]:
             or len(set(modes)) != len(modes)
         ):
             raise DwError(f"driver profile {name!r} has invalid workspace_modes")
-        default_command = {"codex-exec": ["codex"], "claude-exec": ["claude"]}.get(str(adapter), ["fixture"])
+        default_command = {
+            "codex-exec": ["codex"],
+            "claude-exec": ["claude"],
+            "pi-exec": ["pi"],
+        }.get(str(adapter), ["fixture"])
         command = raw.get("command", default_command)
         if (
             not isinstance(command, list) or len(command) != 1
@@ -188,6 +192,7 @@ def validate_driver_config(value: object) -> dict[str, object]:
             "fixture": "fixture",
             "codex-exec": "openai",
             "claude-exec": "anthropic",
+            "pi-exec": "unresolved",
         }[str(adapter)]
         execution_ids: dict[str, str] = {}
         for field, default in (
@@ -252,6 +257,14 @@ def validate_driver_config(value: object) -> dict[str, object]:
             or len(adapter_version.encode("utf-8")) > 200
         ):
             raise DwError(f"driver profile {name!r} adapter_version must be bounded")
+        if adapter == "pi-exec" and not re.fullmatch(
+            r"pi-cli@[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?",
+            str(adapter_version),
+        ):
+            raise DwError(
+                f"driver profile {name!r} pi-exec adapter_version must pin "
+                "pi-cli@<semver> exactly"
+            )
         max_concurrency = _positive_int(
             raw.get("max_concurrency", 1),
             f"driver profile {name!r} max_concurrency", 128,
@@ -376,9 +389,14 @@ def driver_capability(config: dict[str, object], profile: str) -> dict[str, obje
         "max_concurrency": raw["max_concurrency"],
         "capabilities": raw["capabilities"],
         "workspace_modes": raw["workspace_modes"],
-        "sandbox_owner": "codex-cli" if raw["adapter"] == "codex-exec" else "fixture",
+        "sandbox_owner": {
+            "fixture": "fixture",
+            "codex-exec": "codex-cli",
+            "claude-exec": "claude-cli",
+            "pi-exec": "pi-cli",
+        }[str(raw["adapter"])],
         "network": "operator-enabled" if raw["network"] else "disabled",
-        "supports_interrupt": raw["adapter"] != "codex-exec",
+        "supports_interrupt": raw["adapter"] == "fixture",
         "max_context_bytes": raw["max_context_bytes"],
         "max_stream_bytes": raw["max_stream_bytes"],
         "timeout_ceiling": raw["timeout_ceiling"],
@@ -1137,6 +1155,145 @@ class ClaudeCodeExecDriver:
         return False
 
 
+class PiExecDriver:
+    """Closed non-interactive adapter for the pi coding-agent CLI.
+
+    The profile pins the exact reported CLI semver.  Tracked policy cannot
+    supply argv or credentials: this adapter renders one closed print-mode
+    invocation, selects only the resolved provider/model binding, disables
+    session persistence and update telemetry, and exposes no shell tool.
+    """
+
+    adapter = "pi-exec"
+    _READ_TOOLS = "read,grep,find,ls"
+    _WRITE_TOOLS = "read,write,edit,grep,find,ls"
+    _prompt = staticmethod(CodexExecDriver._prompt)
+
+    @staticmethod
+    def _safe_env() -> dict[str, str]:
+        allowed = {
+            "HOME", "PATH", "TMPDIR", "LANG", "LC_ALL", "TERM",
+            "USER", "LOGNAME", "SSL_CERT_FILE", "SSL_CERT_DIR",
+            "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY",
+            "GOOGLE_API_KEY", "GEMINI_API_KEY", "XAI_API_KEY",
+            "MISTRAL_API_KEY", "GROQ_API_KEY", "DEEPSEEK_API_KEY",
+            "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+            "AWS_REGION", "AWS_DEFAULT_REGION",
+            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+            "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+        }
+        env = {key: value for key, value in os.environ.items() if key in allowed}
+        env.update({
+            "PI_SKIP_VERSION_CHECK": "1",
+            "PI_TELEMETRY": "0",
+        })
+        return env
+
+    def _version_supported(
+        self, executable: str, expected_adapter_version: str
+    ) -> bool:
+        try:
+            probe = subprocess.run(
+                [executable, "--version"],
+                env=self._safe_env(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=20,
+                text=True,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        if probe.returncode != 0:
+            return False
+        match = re.search(
+            r"(?<![0-9])([0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?)",
+            probe.stdout or "",
+        )
+        return bool(match) and expected_adapter_version == f"pi-cli@{match.group(1)}"
+
+    def start(
+        self, packet: dict[str, object], profile: dict[str, object], staging: Path
+    ) -> dict[str, object]:
+        def refusal(reason: str) -> dict[str, object]:
+            return {
+                "state": "failed", "exit_code": None, "reason": reason,
+                "polls_remaining": 0, "final_state": "failed",
+                "stdout_bytes": 0, "stderr_bytes": 0, "activity_plan": [],
+            }
+
+        command = str(profile["command"][0])
+        executable = shutil.which(command)
+        if executable is None or not self._version_supported(
+            executable, str(profile["adapter_version"])
+        ):
+            return refusal("adapter-unavailable")
+        outputs = packet["outputs"]
+        read_only = packet["workspace"]["mode"] == "read-only"
+        if read_only and len(outputs) != 1:
+            return refusal("unsupported-output-shape")
+        staging.mkdir(parents=True, exist_ok=True)
+        output_dir = staging / "outputs"
+        output_dir.mkdir(exist_ok=True)
+        stdout_path = staging / "stdout.log"
+        stderr_path = staging / "stderr.log"
+        tools = self._READ_TOOLS if read_only else self._WRITE_TOOLS
+        argv = [
+            executable,
+            "-p",
+            "--no-session",
+            "--tools",
+            tools,
+        ]
+        provider = str(profile.get("provider") or "")
+        if provider and provider != "unresolved":
+            argv.extend(["--provider", provider])
+        if profile.get("model"):
+            argv.extend(["--model", str(profile["model"])])
+        prompt = self._prompt(packet)
+        reason = "completed"
+        exit_code: int | None = None
+        try:
+            with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+                result = subprocess.run(
+                    argv + [prompt],
+                    stdout=stdout,
+                    stderr=stderr,
+                    env=self._safe_env(),
+                    timeout=int(packet["timeout_seconds"]),
+                    cwd=str(packet["workspace"]["path"]),
+                )
+                exit_code = result.returncode
+        except subprocess.TimeoutExpired:
+            reason = "timeout"
+        stdout_bytes = stdout_path.stat().st_size if stdout_path.exists() else 0
+        stderr_bytes = stderr_path.stat().st_size if stderr_path.exists() else 0
+        max_stream = int(packet["max_stream_bytes"])
+        if stdout_bytes > max_stream or stderr_bytes > max_stream:
+            reason = "oversized-stream"
+            exit_code = exit_code if exit_code is not None else 1
+        if exit_code == 0 and (not read_only or stdout_bytes > 0):
+            if read_only:
+                shutil.copyfile(stdout_path, output_dir / str(outputs[0]["name"]))
+            state = "succeeded"
+        else:
+            state = "failed"
+            if reason == "completed":
+                reason = "nonzero-exit" if exit_code is not None else "lost"
+        return {
+            "state": state,
+            "exit_code": exit_code,
+            "reason": reason,
+            "polls_remaining": 0,
+            "final_state": state,
+            "stdout_bytes": min(stdout_bytes, max_stream + 1),
+            "stderr_bytes": min(stderr_bytes, max_stream + 1),
+            "activity_plan": [],
+        }
+
+    def interrupt(self, _session: dict[str, object]) -> bool:
+        return False
+
+
 def _schema_check(value: object, schema: object, pointer: str = "$") -> list[str]:
     if not isinstance(schema, dict):
         return [f"{pointer}: schema must be an object"]
@@ -1396,6 +1553,7 @@ class DriverManager:
             "fixture": FixtureDriver(),
             "codex-exec": CodexExecDriver(),
             "claude-exec": ClaudeCodeExecDriver(),
+            "pi-exec": PiExecDriver(),
         }
 
     def capability(self, profile: str) -> dict[str, object]:

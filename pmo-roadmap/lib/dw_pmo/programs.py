@@ -27,7 +27,7 @@ from .model import (
     DwError,
     normalize_status,
 )
-from .orchestration import canonical_json
+from .orchestration import NUDGE_SIGNALS, canonical_json
 from .orchestration_driver import load_driver_config
 from .program_organization import (
     DUTIES,
@@ -161,7 +161,7 @@ _DEPENDENCY_RE = re.compile(r"[A-Z][A-Z0-9]*-\d+-\d+")
 
 _PROGRAM_KEYS = {
     "kind", "schema_version", "slug", "title", "description", "scope",
-    "organization", "bindings", "phase_gates", "mode_ceiling",
+    "organization", "bindings", "phase_gates", "nudges", "mode_ceiling",
     "requested_capabilities", "budgets", "stop_conditions", "layout",
 }
 _SCOPE_KEYS = {
@@ -173,6 +173,16 @@ _STORY_SELECTOR_KEYS = {"include"}
 _BINDING_KEYS = {"id", "priority", "match", "workflow", "with", "team", "rubrics"}
 _MATCH_KEYS = {"phase_from", "phase_through", "story_ids"}
 _PHASE_GATE_KEYS = {"id", "when", "role", "rubric", "on_fail"}
+_PROGRAM_NUDGE_KEYS = {
+    "id", "signal", "binding", "target", "max_per_signal", "max_total",
+    "expectation",
+}
+_PROGRAM_NUDGE_SIGNALS = tuple(
+    signal for signal in NUDGE_SIGNALS if signal != "waiting-input-timeout"
+)
+_WORKFLOW_TARGET_RE = re.compile(
+    r"^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*(?:/[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*)*$"
+)
 
 _WORKFLOW_KEYS = {
     "kind", "schema_version", "slug", "title", "description", "version",
@@ -875,6 +885,147 @@ class _Compiler:
             })
         return gates
 
+    def normalize_nudges(
+        self,
+        value: object,
+        bindings: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            self.diag(
+                "/nudges", "wrong-type",
+                "program nudges must be an array of standing rules",
+                "provide a bounded rule array or remove the section",
+            )
+            return []
+        if len(value) > 20:
+            self.diag(
+                "/nudges", "unbounded-value",
+                "program nudges exceed the 20-rule bound",
+                "keep the standing-rule set small and exact",
+            )
+            value = value[:20]
+        binding_ids = {str(binding["id"]) for binding in bindings}
+        instances = self.references["workflow_instances"]
+        assert isinstance(instances, dict)
+        rules: list[dict[str, object]] = []
+        ids: set[str] = set()
+        for index, raw in enumerate(value):
+            pointer = f"/nudges/{index}"
+            if not isinstance(raw, dict):
+                self.diag(
+                    pointer, "wrong-type",
+                    "program nudge rule must be an object",
+                    "provide id, signal, binding, target, and finite bounds",
+                )
+                continue
+            self.exact_keys(raw, _PROGRAM_NUDGE_KEYS, pointer)
+            rule_id = self.string(
+                raw.get("id"), f"{pointer}/id", pattern=_SAFE_ID_RE,
+            )
+            if rule_id in ids:
+                self.diag(
+                    f"{pointer}/id", "duplicate-id",
+                    f"duplicate program nudge rule {rule_id!r}",
+                    "use a unique standing-rule id",
+                )
+            ids.add(rule_id)
+            signal = raw.get("signal")
+            if signal not in _PROGRAM_NUDGE_SIGNALS:
+                self.diag(
+                    f"{pointer}/signal", "unsupported-program-signal",
+                    f"program-level nudge signal {signal!r} is unsupported",
+                    "use ci-failed, changes-requested, or merge-conflict; "
+                    "keep waiting-input-timeout inside a bounded child score",
+                )
+                signal = _PROGRAM_NUDGE_SIGNALS[0]
+            binding = self.string(
+                raw.get("binding"),
+                f"{pointer}/binding",
+                pattern=_SAFE_ID_RE,
+            )
+            if binding not in binding_ids:
+                self.diag(
+                    f"{pointer}/binding", "dangling-nudge-binding",
+                    f"program nudge binding {binding!r} does not exist",
+                    "reference one declared program binding",
+                )
+            target = self.string(
+                raw.get("target"),
+                f"{pointer}/target",
+                pattern=_WORKFLOW_TARGET_RE,
+            )
+            instance = instances.get(binding)
+            if isinstance(instance, dict):
+                matches = [
+                    node for node in instance.get("expanded_nodes", [])
+                    if isinstance(node, dict) and node.get("address") == target
+                ]
+                if len(matches) != 1:
+                    self.diag(
+                        f"{pointer}/target", "dangling-nudge-target",
+                        f"program nudge target {target!r} does not resolve "
+                        f"uniquely in binding {binding!r}",
+                        "use one exact expanded workflow node address",
+                    )
+                elif matches[0].get("type") != "agent":
+                    self.diag(
+                        f"{pointer}/target", "unsafe-nudge-target",
+                        "a program nudge target must be an agent node",
+                        "target the exact already-declared agent to rerun",
+                    )
+                elif "{round}" in target:
+                    self.diag(
+                        f"{pointer}/target", "ambiguous-nudge-target",
+                        "a program nudge cannot target a round template",
+                        "target a stable agent outside a structural loop",
+                    )
+            expectation = raw.get("expectation")
+            if expectation is not None and (
+                not isinstance(expectation, str)
+                or not expectation
+                or len(expectation) > 500
+                or "\0" in expectation
+            ):
+                self.diag(
+                    f"{pointer}/expectation", "invalid-value",
+                    "nudge expectation must be a bounded non-empty string",
+                    "use at most 500 characters or remove it",
+                )
+                expectation = None
+            max_per_signal = self.positive_int(
+                raw.get("max_per_signal"),
+                f"{pointer}/max_per_signal",
+                1,
+                5,
+            )
+            max_total = self.positive_int(
+                raw.get("max_total"),
+                f"{pointer}/max_total",
+                1,
+                20,
+            )
+            if max_per_signal > max_total:
+                self.diag(
+                    f"{pointer}/max_per_signal",
+                    "invalid-bound",
+                    "per-signal ceiling exceeds the rule's total ceiling",
+                    "lower max_per_signal or raise max_total",
+                )
+            rule: dict[str, object] = {
+                "id": rule_id,
+                "signal": signal,
+                "binding": binding,
+                "target": target,
+                "max_per_signal": max_per_signal,
+                "max_total": max_total,
+            }
+            if expectation is not None:
+                rule["expectation"] = expectation
+            rules.append(rule)
+        return rules
+
     def compile(self) -> tuple[dict[str, object], list[dict[str, str]], dict[str, object]]:
         if not isinstance(self.raw, dict):
             self.diag("/", "wrong-type", "program must be an object", "provide a program object")
@@ -897,6 +1048,7 @@ class _Compiler:
         organization = self.normalize_organization(organization_slug)
         bindings, binding_by_story = self.normalize_bindings(raw.get("bindings"), scope, organization)
         phase_gates = self.normalize_phase_gates(raw.get("phase_gates", []), organization)
+        nudges = self.normalize_nudges(raw.get("nudges"), bindings)
         mode = raw.get("mode_ceiling", "advisory")
         if mode not in MODE_CEILINGS:
             self.diag("/mode_ceiling", "unsupported-mode", f"unsupported mode {mode!r}", "use advisory, checkpointed, or continuous")
@@ -909,6 +1061,32 @@ class _Compiler:
         ):
             self.diag("/requested_capabilities", "unsupported-capability", "requested capabilities must be a unique contracted list", "use only Phase 26 capability names")
             capabilities = []
+        if phase_gates:
+            missing_gate_capabilities = sorted(
+                {"agent:dispatch", "verdict:issue"} - set(capabilities)
+            )
+            if missing_gate_capabilities:
+                self.diag(
+                    "/phase_gates",
+                    "workflow-capability-missing",
+                    (
+                        "phase architecture gates require requested "
+                        "capabilities: "
+                        + ", ".join(missing_gate_capabilities)
+                    ),
+                    "request the exact architect dispatch/verdict authority or remove the gate",
+                )
+        missing_nudge_capabilities = sorted(
+            {"program:select", "nudge:deliver"} - set(capabilities)
+        )
+        if nudges and missing_nudge_capabilities:
+            self.diag(
+                "/requested_capabilities",
+                "workflow-capability-missing",
+                "program standing nudge rules require requested capabilities: "
+                + ", ".join(missing_nudge_capabilities),
+                "request exact observation/delivery authority or remove the standing rules",
+            )
         budgets_raw = raw.get("budgets", {})
         if not isinstance(budgets_raw, dict):
             self.diag("/budgets", "wrong-type", "budgets must be an object", "provide finite named limits")
@@ -922,6 +1100,14 @@ class _Compiler:
             self.diag("/budgets/max_phases", "scope-exceeds-budget", "phase scope exceeds max_phases", "raise the policy budget or narrow scope")
         if budgets["max_stories"] < len(scope["story_ids"]):
             self.diag("/budgets/max_stories", "scope-exceeds-budget", "story scope exceeds max_stories", "raise the policy budget or narrow scope")
+        nudge_ceiling = sum(int(rule["max_total"]) for rule in nudges)
+        if budgets["max_nudges"] < nudge_ceiling:
+            self.diag(
+                "/budgets/max_nudges", "workflow-exceeds-budget",
+                f"standing-rule worst case {nudge_ceiling} exceeds "
+                f"max_nudges={budgets['max_nudges']}",
+                "raise max_nudges or lower the finite rule ceilings",
+            )
         workflow_instances = self.references["workflow_instances"]
         assert isinstance(workflow_instances, dict)
         envelope_budget_keys = {
@@ -967,14 +1153,38 @@ class _Compiler:
                     "request every compiled workflow capability explicitly",
                 )
             envelope = workflow_instance["envelope"]
+            nudge_starts = sum(
+                int(rule["max_total"])
+                for rule in nudges
+                if rule.get("binding") == binding_id
+            )
             for envelope_key, budget_key in envelope_budget_keys.items():
-                if int(envelope[envelope_key]) > int(budgets[budget_key]):
+                effective = int(envelope[envelope_key])
+                if envelope_key in {"child_runs", "agent_starts"}:
+                    effective += nudge_starts
+                if effective > int(budgets[budget_key]):
                     self.diag(
                         f"/budgets/{budget_key}",
                         "workflow-exceeds-budget",
                         f"binding {binding_id!r} worst-case {envelope_key}="
-                        f"{envelope[envelope_key]} exceeds {budget_key}={budgets[budget_key]}",
+                        f"{effective} exceeds {budget_key}={budgets[budget_key]}",
                         "raise the finite program budget or lower workflow bounds",
+                    )
+            provider_starts = (
+                int(envelope["agent_starts"]) + nudge_starts
+            )
+            for budget_key in (
+                "max_provider_starts",
+                "max_model_starts",
+            ):
+                if provider_starts > int(budgets[budget_key]):
+                    self.diag(
+                        f"/budgets/{budget_key}",
+                        "workflow-exceeds-budget",
+                        f"binding {binding_id!r} worst-case agent starts="
+                        f"{provider_starts} exceeds {budget_key}="
+                        f"{budgets[budget_key]}",
+                        "raise the finite program budget or lower workflow/nudge bounds",
                     )
         stops = raw.get("stop_conditions", list(STOP_CONDITIONS))
         if (
@@ -998,6 +1208,7 @@ class _Compiler:
             "organization": organization_slug,
             "bindings": bindings,
             "phase_gates": phase_gates,
+            "nudges": nudges,
             "mode_ceiling": mode,
             "requested_capabilities": sorted(capabilities),
             "budgets": budgets,
@@ -1178,6 +1389,43 @@ def _assign_team(
             "code": "role-unavailable",
             "message": f"workflow instance for binding {binding['id']!r} is unavailable",
         }]
+    assignment_workflow = {
+        **workflow_instance,
+        "role_lanes": list(workflow_instance.get("role_lanes", [])),
+    }
+    team = next(
+        (
+            item for item in organization_compiled["organization"]["teams"]
+            if item["id"] == binding["team"]
+        ),
+        None,
+    )
+    for gate in compiled["program"].get("phase_gates", []):
+        duty = str(gate["role"])
+        matches = [
+            role for role in (team or {}).get("roles", [])
+            if role.get("duty") == duty
+        ]
+        if len(matches) != 1:
+            return None, [{
+                "code": "role-unavailable",
+                "message": (
+                    f"phase gate {gate['id']!r} requires exactly one "
+                    f"{duty!r} role in team {binding['team']!r}"
+                ),
+            }]
+        role_id = str(matches[0]["id"])
+        assignment_workflow["role_lanes"].append({
+            "address": f"phase-gate/{gate['id']}/role/{role_id}",
+            "artifact_reads": ["markdown"],
+            "artifact_writes": ["verdict"],
+            "capabilities": ["agent:dispatch", "verdict:issue"],
+            "context_reads": ["artifact"],
+            "duty": "architect-gate",
+            "node": f"phase-gate/{gate['id']}",
+            "role": role_id,
+            "workspace": "read-only",
+        })
     workflow_address = (
         f"program/{compiled['program']['slug']}/phase/{story['phase']}/"
         f"story/{story['id']}/workflow/{binding['id']}"
@@ -1190,7 +1438,7 @@ def _assign_team(
         story_id=str(story["id"]),
         workflow_address=workflow_address,
         program_capabilities=compiled["program"]["requested_capabilities"],
-        workflow=workflow_instance,
+        workflow=assignment_workflow,
     )
     issues = [
         {"code": str(issue["code"]), "message": str(issue["message"])}
@@ -1422,6 +1670,7 @@ def build_program_plan(
             "requested_capabilities": compiled["program"]["requested_capabilities"],  # type: ignore[index]
             "budgets": compiled["program"]["budgets"],  # type: ignore[index]
             "stop_conditions": compiled["program"]["stop_conditions"],  # type: ignore[index]
+            "nudges": compiled["program"]["nudges"],  # type: ignore[index]
         },
         "repository": repository,
         "roadmap": {

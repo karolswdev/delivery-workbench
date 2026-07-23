@@ -143,6 +143,36 @@ The full 297-test dual-Python, 32-render browser, distribution, optional-host,
 agent, docs, and history matrix is recorded in the
 [Phase 24 final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/final-summary.md).
 
+Phase 25 closes the outward loop without widening authority. Content-excluded,
+hash-chained SCM facts, honest driver activity, score-and-grant-bounded
+at-most-once nudges, cursor-replay ledger/signal streams, durable operator
+notifications, typed checkpoint survival, and a least-privilege Claude Code
+adapter all compose over the same run ledger. The wheel-installed exit exam
+walks red CI through repair, review, restart, checkpoint, notification, and
+operator-only certification while the no-authority observer and every refusal
+remain explicit. Full detail:
+[Phase 25](./pmo-roadmap/pm/roadmap/work-log-automation/phase-25-outward-signals/final-summary.md).
+
+Phase 26 is active and remains separately opt-in. Its delivered slices compile
+multi-phase scope, finite hierarchical workflows, separated delivery
+organizations, bounded councils, governed verdicts, lossless Program Studio
+policy, and an exact finite program grant over the resolved
+provider/model/auth roster. WLA-26-09 adds an embedded replay-first conductor:
+one tick reconciles before retry, claims at most one exact act, and conducts
+implementer/check/repair, independent verification, council/meta/obligation,
+typed structural loops, and final-story master-architect boundaries with
+crash-safe immutable receipts. It also consumes already-observed Phase 25 SCM
+facts through content-safe hashes, delivers finite program-declared nudges only
+to an already-run agent, reruns causally stale verification, freezes every
+scope-reachable seat/port, carries non-blocking obligations across exact
+story/phase selection, blocks on blocking obligations, and completes only
+through one claim-bound proof of the pure planner's full-scope result.
+Integration/evidence/certification/Git/roadmap rails and public runtime
+controls are still fail-closed phase work; ordinary and bounded run modes
+remain unchanged. Current detail:
+[Phase 26](./pmo-roadmap/pm/roadmap/work-log-automation/phase-26-autonomous-delivery-programs/current-phase-status.md)
+and the [program contract](./docs/programs.md).
+
 This section is release-ready input, not a publication claim: the package
 remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula
 change has been performed.

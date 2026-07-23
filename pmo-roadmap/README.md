@@ -402,15 +402,39 @@ create no grant, run state, program store, observer, or roadmap write.
 
 The shared finite program-authority core is a separate consent surface over
 that pure plan. Its start preview binds an accountable operator, exact scope,
-policy and roster hashes, every assigned seat's provider/model/auth execution
-identity, mode, capability set, finite budget, expiry, stop conditions, and
-permanent exclusions. Exact start creates only an immutable local grant plus a
+policy and roster hashes, every deterministic scope-reachable seat's
+provider/model/auth execution identity, mode, capability set, finite budget,
+expiry, stop conditions, and permanent exclusions. Exact start creates only
+an immutable local grant plus a
 hash-chained ledger under `.git/pmo-programs`; opening the Workbench, saving
 policy, installing/updating, or running ordinary/bounded commands never does.
 Exclusive claim, completion, child-grant, and pause/resume/revoke/cancel
 previews are generation/head-bound, and apply recomputes their scope, budget,
-authority intersection, facts, and legal transition. WLA-26-09 consumes this
-core to conduct work; WLA-26-11 exposes byte-equivalent live controls.
+authority intersection, facts, and legal transition. WLA-26-09 now consumes
+this core to conduct work; WLA-26-11 exposes byte-equivalent live controls.
+
+The embedded `program_conductor` performs that consumption through
+one deterministic `tick_program` and a supervisor that only repeats the same
+tick inside finite ceilings. It replays and locks the sole program ledger,
+verifies immutable receipts, reconciles already-dispatched operations before
+retry, rebuilds exact selection/team/workflow lineage, claims at most one act,
+and stops. The delivered path covers isolated implementation, collection,
+closed checks, independent verification and repair, bounded council rounds,
+separate council/meta decisions, obligation ingestion, and final-story
+master-architect review. It now also conducts finite structural workflow loops:
+each round is separately claimed and immutably receipts its typed predicate
+observation, producer and carried-artifact hashes, nested lineage, and compiled
+success/continue/exhaustion route. Program-declared standing rules can consume
+an already-observed exact Phase 25 signal channel, claim a content-safe
+outward-fact receipt, spend one `max_nudges` unit, and re-run only an
+already-executed declared agent plus its causally stale verification path.
+The same conductor freezes every scope-reachable seat at grant time, carries
+non-blocking obligations across story and phase selection, stops on blocking
+ones, and records one exact scope proof when the pure planner reports
+`scope-complete`. Integration/Git/roadmap rails and public program controls
+still stop closed. These are shared library APIs delivered by WLA-26-09; the
+public `dw program` commands remain the pure
+`list|validate|simulate|plan` surface.
 
 `run plan` is the separate orchestration consent preview: it binds the
 compiled score to current local Git/status/story facts, exact requested

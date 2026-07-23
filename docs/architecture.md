@@ -38,6 +38,12 @@ score writes), `orchestration_run` (grants and ledger),
 `orchestration_driver` (provider-neutral execution),
 `orchestration_conductor` (deterministic scheduling/checks/routes), and
 `orchestration_surface` (privacy-preserving adapter and Run-view models).
+Phase 26 adds `programs` (pure scope/planning), `program_workflow`
+(hierarchical finite workflows), `program_organization` (roles and
+separation), `program_deliberation`/`program_verdict` (governed judgments),
+`program_studio` (lossless authoring projections), `program_run` (finite grant
+and sole authority ledger), and `program_conductor` (replay-first hierarchical
+scheduling and recovery).
 
 `status` is the read-only composition root for an agent's first question. It
 joins doctor, roadmap validation, git/contract/gate state, current progress,
@@ -243,6 +249,49 @@ manually refreshed Workbench Run view. That view explains live graph state,
 sessions/checks, artifact lineage, budgets, routes, checkpoints, terminal
 meaning, and the ledger while keeping streams behind explicit bounded opens.
 The design and threat model are [orchestration.md](./orchestration.md).
+
+Phase 26's embedded program runtime is a composition over those cores, not a
+second authority store or a hidden `while` loop. `derive_program_frontier`
+replays the finite program grant and sole `program_run` ledger into one
+read-only next-act explanation. `tick_program` takes the run-local lock,
+verifies every ledger-bound immutable receipt, reconciles active external work
+before retry, rebuilds the exact program/phase/story/workflow/team lineage,
+claims at most one act, and stops. `supervise_program` only repeats that same
+tick within explicit tick and wall-time ceilings.
+
+The delivered path conducts isolated implementer work,
+fan-out/fan-in, built-in checks, independent verification and finite repair;
+reconstructs bounded council proposal/critique/rebuttal/judgment from receipts;
+separately issues the council decision, meta-verdict, and each obligation; and
+conducts finite structural workflow rounds before evaluating a bounded
+final-story phase snapshot through a preassigned read-only master architect.
+Each loop round records one claim-bound immutable predicate receipt over a
+typed check, verdict, decision, or artifact-validity source, exact producer and
+carried-artifact hashes, nested round lineage, and its compiled success,
+continuation, or exhaustion route. Rule decisions have no agent decider, judge
+decisions bind only the assigned seat and execution identity, and architecture
+approval reaches only the integration checkpoint. Crash-boundary and
+dual-Python proof lives in `ProgramConductorTest` and the combined
+planner/conductor/authority/deliberation matrix in
+`tests/dw-core-tests.py`.
+
+Before ordinary selection, the same conductor may replay one exact Phase 25
+signal channel selected by the grant's remote-tracking ref. It does not poll a
+forge. A matching declared SCM fact becomes a claim-bound content-safe
+outward-fact receipt; a second claim can deliver a finite rule-bound nudge only
+to an exact agent that has already run. That receipt is part of the target's
+next packet and drives causal downstream/verifier/architecture attempts
+without rewriting completed governance. Per-rule and global ceilings and all
+child/start/artifact budgets are replayed from the sole program ledger.
+
+The grant freezes the union of deterministic seats and checkpoint ports
+reachable across the whole scope. After separately authorized WLA-26-10 facts
+complete a story, the planner/conductor can therefore select the next binding,
+story, and phase without introducing new authority. Non-blocking obligations
+remain in the frontier, blocking obligations stop, and terminal completion
+requires one immutable claim-bound proof of the planner's exact
+`scope-complete` result. Integration/evidence/certification/Git/roadmap
+mutation remain WLA-26-10, and public transports remain WLA-26-11.
 
 Viewport rendering is smoke-tested headlessly at desktop and mobile
 (`tests/workbench-ui-smoke.sh`, CI-run where Firefox exists).

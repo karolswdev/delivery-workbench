@@ -652,8 +652,16 @@ nudging — CI, review, merge-state, and agent-activity facts recorded as
 durable signals and routed back to agents under grant authority — is
 specified in the [outward signals contract](./signals.md) (Phase 25).
 
-A second, separately opt-in extension is now contracted in
-[programs.md](./programs.md): multi-phase programs may compose bounded child
-runs, hierarchical workflows, independent verifiers, councils, and exact
-delivery rails under their own finite program grant. Existing scores and run
+A second, separately opt-in extension is now contracted and incrementally
+implemented in [programs.md](./programs.md): multi-phase programs may compose
+bounded child runs, hierarchical workflows, independent verifiers, councils,
+and exact delivery rails under their own finite program grant. Its embedded
+restart-safe conductor now composes agent/check/repair, deliberation,
+obligation, meta-review, typed structural-loop, phase-architect, content-safe
+outward-fact/nudge, cross-story/phase-selection, and exact scope-completion
+boundaries one replay-derived tick at a time. It reuses Phase 25's
+authority-free signal chain but never performs an observe pass; program
+standing rules accept only SCM signals, an exact already-run agent target, and
+finite grant/rule budgets. Integration/Git/roadmap rails and public program
+controls remain fail-closed work in the active phase. Existing scores and run
 grants acquire none of those semantics or capabilities.
