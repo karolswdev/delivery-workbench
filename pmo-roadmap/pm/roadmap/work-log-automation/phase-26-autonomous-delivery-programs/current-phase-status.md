@@ -150,6 +150,8 @@ floors; fresh-wheel packaging and canon/docs/parity checks pass. WLA-26-09 is
 next: conduct the reserved hierarchical work and recover it without duplicate
 dispatch, verdict, decision, or loop progress.
 
+Continuation snapshot: [Phase 26 handover](./handover.md).
+
 ## Active risks
 
 | Risk | Likelihood | Mitigation | Stop signal |
