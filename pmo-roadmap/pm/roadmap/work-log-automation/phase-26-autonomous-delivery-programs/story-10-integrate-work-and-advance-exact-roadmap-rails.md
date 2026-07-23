@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 26
-- **Status:** backlog
+- **Status:** done
   <!-- status vocabulary: roadmap-builder.md §2.3 -->
 - **Depends on:** WLA-26-07, WLA-26-08, WLA-26-09
 - **Unblocks:** WLA-26-11, WLA-26-12
@@ -33,34 +33,34 @@ turning “can write code” into ambient repository authority.
 
 ## Acceptance criteria
 
-- [ ] One pure preview binds exact program/ledger/proof/verdict/story/phase/
+- [x] One pure preview binds exact program/ledger/proof/verdict/story/phase/
   repository/index/diff/remote facts and lists each separately authorized act;
   absent capability or failed/pending/dissenting/stale proof makes the plan
   non-applicable before any partial write.
-- [ ] Integration claims each step in dependency order, writes only the exact
+- [x] Integration claims each step in dependency order, writes only the exact
   validated artifact/diff/evidence/roadmap/contract/message data, runs the real
   gate and range verification, and records content-safe result identities.
-- [ ] Machine certification is allowed only under an explicit capability and
+- [x] Machine certification is allowed only under an explicit capability and
   declared policy that maps every contract assertion to fresh mechanical or
   authorized governed-verdict evidence; the archive names program/grant/proof
   provenance and never pretends a human performed the attestation.
-- [ ] Commit and push are distinct finite capabilities; push requires the bound
+- [x] Commit and push are distinct finite capabilities; push requires the bound
   remote/branch and fast-forward relation, observes/rebinds the resulting fact,
   and refuses dirty/divergent/rewritten/cross-branch state without force.
-- [ ] Story completion, evidence link, next-story start, phase closure/current
+- [x] Story completion, evidence link, next-story start, phase closure/current
   transition and subsequent planning use the canonical roadmap mutation/step
   cores with fresh leases and atomic validation—never direct ad-hoc Markdown
   edits.
-- [ ] An open blocking council obligation prevents story/phase advancement.
+- [x] An open blocking council obligation prevents story/phase advancement.
   Non-blocking obligations remain ledger-visible without forcing roadmap
   mutation; an exact preview may create/update one traced roadmap story only
   with separate `roadmap:write` authority, stable source-decision/obligation
   ids and deduplication. Completion, supersession, waiver or escalation retains
   the original obligation and accountable disposition receipt.
-- [ ] Crash/restart at every integration boundary reconciles existing evidence,
+- [x] Crash/restart at every integration boundary reconciles existing evidence,
   status, contract archive, commit and remote ref before retry, producing zero
   duplicate evidence blocks, status flips, phase summaries, commits or pushes.
-- [ ] Red cases cover manual-only rubric, verifier dissent, missing meta-audit,
+- [x] Red cases cover manual-only rubric, verifier dissent, missing meta-audit,
   stale proof, dirty tree, changed diff, gate refusal, hook failure, remote
   divergence, open blocking debt, duplicate obligation materialization,
   unauthorized waiver, capability/budget exhaustion, revocation and phase

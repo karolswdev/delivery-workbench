@@ -431,9 +431,13 @@ already-executed declared agent plus its causally stale verification path.
 The same conductor freezes every scope-reachable seat at grant time, carries
 non-blocking obligations across story and phase selection, stops on blocking
 ones, and records one exact scope proof when the pure planner reports
-`scope-complete`. Integration/Git/roadmap rails and public program controls
-still stop closed. These are shared library APIs delivered by WLA-26-09; the
-public `dw program` commands remain the pure
+`scope-complete`. The separate `program_delivery` core now previews and claims
+exact candidate integration, canonical evidence/story/phase mutations,
+objective and governed contract certification, gated commit/range
+verification, and optional no-force fast-forward push. Its immutable intents
+and ledger-bound receipts reconcile every effect without widening conductor
+authority. Public program controls still stop closed. These are shared library
+APIs delivered through WLA-26-10; the public `dw program` commands remain the pure
 `list|validate|simulate|plan` surface.
 
 `run plan` is the separate orchestration consent preview: it binds the

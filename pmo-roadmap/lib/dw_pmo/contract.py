@@ -16,8 +16,10 @@ rules doc exists the embedded canonical set applies.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -164,11 +166,18 @@ def detect_story_ids(root: Path) -> tuple[list[str], list[str]]:
     return flipped, touched
 
 
-def collect_facts(root: Path) -> dict[str, object]:
+def collect_facts(
+    root: Path,
+    *,
+    generated_at: str | None = None,
+) -> dict[str, object]:
     staged = [path for _s, path, _o in staged_entries(root)]
     flipped, touched = detect_story_ids(root)
     return {
-        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated": (
+            generated_at
+            or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        ),
         "branch": current_branch(root),
         "head": head_sha(root) or "none",
         "index_tree": write_tree(root) or "unknown",
@@ -281,12 +290,14 @@ def build_contract(
     reasons: list[str] | None = None,
     tests_capture: str | None = None,
     tier: str = "auto",
+    generated_at: str | None = None,
+    program_provenance: dict[str, object] | None = None,
 ) -> str:
     resolved_tier = resolve_tier(root, tier)
     if tests_capture and resolved_tier == "short":
         # Discharging "Tests ran." only exists in the full rule set.
         resolved_tier = "full"
-    facts = collect_facts(root)
+    facts = collect_facts(root, generated_at=generated_at)
     declared = list(story_ids) if story_ids else []
     for sid in facts["flipped_story_ids"]:  # type: ignore[union-attr]
         if sid not in declared:
@@ -351,6 +362,22 @@ def build_contract(
         if not discharged:
             die(f"cannot discharge tests-ran mechanically: no box titled {TESTS_RAN_TITLE!r} in the rule set")
         text = "\n".join(lines) + "\n"
+    if program_provenance is not None:
+        provenance = json.dumps(
+            program_provenance,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=True,
+        )
+        text = (
+            text.rstrip()
+            + "\n\n## Program attestation provenance\n\n"
+            "This contract is certified by the named autonomous program "
+            "authorities below; it does not represent a human attestation.\n\n"
+            "```json\n"
+            f"{provenance}\n"
+            "```\n"
+        )
     return text
 
 
@@ -362,12 +389,23 @@ def write_contract(
     force: bool = False,
     tests_capture: str | None = None,
     tier: str = "auto",
+    generated_at: str | None = None,
+    program_provenance: dict[str, object] | None = None,
 ) -> Path:
     path = root / CONTRACT_REL
     if path.exists() and not force:
         die(f"contract already exists; pass --force to replace: {CONTRACT_REL}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_text(path, build_contract(root, story_ids, consent, reasons, tests_capture, tier))
+    write_text(path, build_contract(
+        root,
+        story_ids,
+        consent,
+        reasons,
+        tests_capture,
+        tier,
+        generated_at,
+        program_provenance,
+    ))
     from .events import emit
 
     emit(
@@ -407,6 +445,122 @@ def parse_contract_facts(text: str) -> dict[str, object] | None:
 
 def contract_digest(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def certify_contract_boxes(
+    text: str,
+    titles: list[str],
+    *,
+    attestor: str,
+    proof_hash: str,
+) -> str:
+    """Check only the named canonical boxes and append honest provenance.
+
+    The caller must separately prove that its capability and evidence map
+    authorizes each title.  This string-only helper prevents a certification
+    rail from checking an unknown, duplicate, or already-checked assertion.
+    """
+    requested = list(dict.fromkeys(titles))
+    if len(requested) != len(titles) or not requested:
+        die("contract certification titles must be non-empty and unique")
+    lines = text.splitlines()
+    found: set[str] = set()
+    for index, line in enumerate(lines):
+        title = box_title(line)
+        if title not in requested:
+            continue
+        if title in found:
+            die(f"contract assertion title is duplicated: {title}")
+        if not line.startswith("- [ ]"):
+            die(f"contract assertion is already certified: {title}")
+        lines[index] = (
+            f"- [x] **{title}** Machine/program certification of this "
+            f"canonical assertion; exact proof `{proof_hash}` under "
+            f"`{attestor}`. No human attestation is represented."
+        )
+        found.add(title)
+    missing = sorted(set(requested) - found)
+    if missing:
+        die("contract assertion title is absent: " + ", ".join(missing))
+    lines.extend([
+        "",
+        "### Machine certification receipt",
+        "",
+        f"- **Attestor:** `{attestor}`",
+        f"- **Proof:** `{proof_hash}`",
+        "- **Assertions:** " + ", ".join(f"`{title}`" for title in requested),
+    ])
+    return "\n".join(lines) + "\n"
+
+
+def apply_contract_certification(
+    root: Path,
+    *,
+    expected_before: str,
+    certified_content: str,
+) -> Path:
+    """Guard and apply one exact certification transformation."""
+    path = root / CONTRACT_REL
+    if not path.is_file():
+        die("contract is absent before certification")
+    current = read_text(path)
+    if current == certified_content:
+        return path
+    if current != expected_before:
+        die("contract changed after certification preview")
+    write_text(path, certified_content)
+    return path
+
+
+def archive_contract(
+    root: Path,
+    commit_sha: str,
+    *,
+    expected_content: str | None = None,
+) -> Path:
+    """Idempotently archive the consumed contract for an exact commit."""
+    if not re.fullmatch(r"[0-9a-f]{40,64}", commit_sha):
+        die("contract archive commit id is invalid")
+    git_dir_raw = subprocess.check_output(
+        ["git", "-C", str(root), "rev-parse", "--git-dir"],
+        text=True,
+        stderr=subprocess.DEVNULL,
+    ).strip()
+    git_dir = Path(git_dir_raw)
+    if not git_dir.is_absolute():
+        git_dir = (root / git_dir).resolve()
+    archive_dir = git_dir / "pmo-contract-archive" / commit_sha
+    archive = archive_dir / "CONTRACT.md"
+    contract_path = root / CONTRACT_REL
+    if archive.exists():
+        archived = read_text(archive)
+        if expected_content is not None and archived != expected_content:
+            die("archived contract content differs from the certified contract")
+        if contract_path.exists():
+            current = read_text(contract_path)
+            if current != archived:
+                die("working contract conflicts with its existing archive")
+            contract_path.unlink()
+        return archive
+    if not contract_path.is_file():
+        die("contract is absent before archival")
+    content = read_text(contract_path)
+    if expected_content is not None and content != expected_content:
+        die("contract changed before archival")
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    temporary = archive_dir / ".CONTRACT.md.tmp"
+    write_text(temporary, content)
+    os.replace(temporary, archive)
+    contract_path.unlink()
+    bundle = root / ".tmp/BUNDLE-OK.md"
+    if bundle.is_file():
+        shutil.copyfile(bundle, archive_dir / "BUNDLE-OK.md")
+        bundle.unlink()
+    try:
+        contract_path.parent.rmdir()
+    except OSError:
+        pass
+    return archive
 
 
 def append_trailers(

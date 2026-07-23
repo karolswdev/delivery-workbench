@@ -89,7 +89,7 @@ acts.
   stories/phases, and recovers across crash with no duplicate conductor claim,
   agent round, nudge, verdict, decision, loop, gate, or scope-completion act
   (WLA-26-09).
-- [ ] A fresh green governed verdict can drive only the exact separately
+- [x] A fresh green governed verdict can drive only the exact separately
   granted evidence, contract, integration, commit, push, story, and phase rails;
   blocking obligations stop advancement while non-blocking backlog, technical
   debt, risk, research, and follow-up obligations remain durable until completed,
@@ -121,62 +121,51 @@ acts.
 | WLA-26-07 | Turn quality and evidence into governed verdicts | done | [story-07-turn-quality-and-evidence-into-governed-verdicts](./story-07-turn-quality-and-evidence-into-governed-verdicts.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-26-08 | Grant continuous program authority explicitly | done | [story-08-grant-continuous-program-authority-explicitly](./story-08-grant-continuous-program-authority-explicitly.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-26-09 | Conduct and recover hierarchical multi-phase programs | done | [story-09-conduct-and-recover-hierarchical-multi-phase-programs](./story-09-conduct-and-recover-hierarchical-multi-phase-programs.md) | [evidence-story-09](./evidence-story-09.md) |
-| WLA-26-10 | Integrate work and advance exact roadmap rails | backlog | [story-10-integrate-work-and-advance-exact-roadmap-rails](./story-10-integrate-work-and-advance-exact-roadmap-rails.md) | - |
+| WLA-26-10 | Integrate work and advance exact roadmap rails | done | [story-10-integrate-work-and-advance-exact-roadmap-rails](./story-10-integrate-work-and-advance-exact-roadmap-rails.md) | [evidence-story-10](./evidence-story-10.md) |
 | WLA-26-11 | Operate the autonomous organization across every surface | backlog | [story-11-operate-the-autonomous-organization-across-every-surface](./story-11-operate-the-autonomous-organization-across-every-surface.md) | - |
 | WLA-26-12 | Prove a fully autonomous multi-phase program | backlog | [story-12-prove-a-fully-autonomous-multi-phase-program](./story-12-prove-a-fully-autonomous-multi-phase-program.md) | - |
 
 ## Where we are
 
-Phase open 9/12. Optional planning, finite workflow hierarchy, independent
-organization topology, deliberation, visual authoring, governed quality, and
-finite revocable program authority are evidence-backed. WLA-26-08 is done: one
-pure start preview freezes the exact roadmap scope, current candidate/team/
-workflow derivation, policy and roster hashes, operator intent, mode, finite
-budgets, capabilities, stop conditions, exclusions, and worst-case envelope.
-Each council records rule-versus-judge authority; judge mode binds the
-preassigned stable `decider_seat`, assignment generation, and complete
-harness/provider/model/auth/principal/workspace/session execution identity.
-Exact start re-plans under an exclusive lock and creates only an immutable
-local grant plus hash-chained ledger. Advisory permits no claims; checkpointed
-and continuous share exclusive idempotent claims with typed ports, strict scope
-and budget reservations, non-delegable child intersections, observed
-completion facts, expiry, exhaustion, pause/resume, and generation-bound
-revoke/cancel. Apply and replay independently recompute legal budgets and
-transitions instead of trusting caller-rehashed JSON. Policy, roster/provider/
-model, repository, or roadmap drift blocks future claims while safety revoke
-and bounded in-flight receipts remain possible. No-program install/update,
-Studio, ordinary commands, and Phase 24/25 runs create no program store or
-implicit mode. The WLA-26-08 slice passed 17/17 focused tests and 433/433 on
-both Python floors. WLA-26-09 is done. Its replay-first conductor locks one
-deterministic tick, revalidates ledger-bound immutable receipts, reserves at
-most one exact act, records dispatch before external start, and reconciles
-before retry. It
-conducts isolated implementer/check/repair and independent-verifier work,
-fan-out/fan-in, bounded councils and meta-review, durable obligations, typed
-structural loops, and final-story master-architect gates without a second
-authority store.
+Phase open 10/12. Optional planning, finite workflow hierarchy, independent
+organization topology, deliberation, visual authoring, governed quality,
+finite revocable program authority, the restart-safe conductor, and exact
+delivery rails are evidence-backed.
 
-The final layer validates finite program standing-nudge rules against one exact
-binding and agent target, charges their worst-case starts, requires a resolving
-remote-tracking ref, and freezes every deterministic scope-reachable seat and
-checkpoint port at grant time. Before selection, it consumes only
-already-observed Phase 25 SCM facts by hash, records a content-safe outward
-receipt, and delivers a separately claimed finite nudge only to an already-run
-target. Replay causally reruns dependent work and verification while refusing
-to silently rewrite a completed governance result.
+WLA-26-10 adds a pure `delivery-workbench-program-delivery-preview@1` and an
+immutable plan/receipt chain around the existing program authority ledger. It
+simulates the exact candidate Git tree without touching the working tree,
+requires fresh mechanical facts and explicitly authorized governed verdicts,
+and then claims only the individually granted evidence, diff, contract,
+certification, commit, push, story, phase, and next-story acts. Every apply
+rechecks repository, roadmap, program, proof, contract, remote, and lease
+freshness. The adapter uses fixed Git and Delivery Workbench commands only:
+there is no general shell runner, three-way apply, conflict resolution,
+`--no-verify`, force push, merge, release, deployment, or publication route.
 
-After WLA-26-10's separately authorized facts make a story complete, the next
-tick can select the next exact binding/story/phase. Non-blocking obligations
-remain in the frontier across that transition; blocking ones stop it. A final
-claim-bound immutable proof records terminal completion only when the pure
-planner reports the whole granted scope complete. Project-facing READMEs,
-solution/architecture/interop/program/orchestration guides and the Unreleased
-changelog now describe this boundary. WLA-26-10 still exclusively owns
-integration, evidence, certification, Git and roadmap mutation; WLA-26-11 owns
-public runtime controls. The focused combined matrix passes 65/65 and the full
-core suite passes 457/457 on both Python floors; fresh-wheel packaging,
-canon/docs/snippets, agent-surface, roadmap, rider, update parity, compile, and
-diff validation are green. WLA-26-10 is next.
+Machine certification maps each objective contract assertion to a fresh
+mechanical fact or authorized governed verdict and writes explicit
+machine/program provenance without implying human attestation. Commit runs the
+real gate and hooks, archive reconciliation recovers an already-created
+contract/commit, and optional push requires the bound remote URL, observed
+head, ref, and exact fast-forward lease before re-binding the local tracking
+fact. Canonical roadmap mutation cores materialize evidence, mark a story
+done, start the next story, and close/advance a completed phase as one guarded
+summary/pointer/header plan.
+
+Blocking obligations stop advancement. Non-blocking obligations remain
+durable in the program ledger and become roadmap work only through a separate
+deduplicated traced-story capability; completion, supersession, escalation, or
+an accountable exact waiver retains the original obligation history. Fixture
+proof covers two exact story commits, one phase transition, a local bare
+remote, planted crashes after effect/receipt boundaries, hook failure and
+remote divergence, stale artifact and objective-proof refusals, and obligation
+deduplication/waiver authority. The six focused delivery tests pass on Python
+3.14 and the Python 3.9 floor; the full core suite passes 464/464 on both
+floors, and fresh-wheel packaging plus the complete documentation/parity
+matrix is green. WLA-26-11 is next and owns public CLI/MCP/HTTP/Workbench
+program operations and the live control room; WLA-26-12 remains the installed
+multi-phase exit exam.
 
 Continuation snapshot: [Phase 26 handover](./handover.md).
 
@@ -400,6 +389,22 @@ Continuation snapshot: [Phase 26 handover](./handover.md).
   mutations entirely in WLA-26-10. The WLA-26-09 conductor consumes their
   fresh facts on replay but never substitutes for those separately claimed
   rails - WLA-26-09.
+- 2026-07-23 - Make delivery one immutable preview/plan/receipt protocol over
+  the existing program claim ledger. Each effect has its own capability and
+  claim; replay reconciles exact outward facts before retry and never converts
+  workflow success into ambient repository authority - WLA-26-10.
+- 2026-07-23 - Stage the candidate evidence/roadmap tree before generating and
+  certifying the PMO contract, so the real gate sees the same exact tree that
+  the program reviewed. Machine/program certification names its provenance
+  explicitly and never represents a human attestation - WLA-26-10.
+- 2026-07-23 - Permit optional push only against a grant-bound remote URL,
+  branch, observed remote head, and fast-forward lease. Divergence stops;
+  force, merge, rebase, automatic conflict resolution, release, deployment,
+  and publication remain impossible - WLA-26-10.
+- 2026-07-23 - Keep non-blocking obligations in the ledger unless a separate
+  roadmap-write claim creates one traced, deduplicated story. Every completion,
+  supersession, escalation, or exact authorized waiver preserves the source
+  decision and original obligation - WLA-26-10.
 
 ## Decisions deferred
 

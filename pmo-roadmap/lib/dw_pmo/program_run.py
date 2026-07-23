@@ -307,6 +307,7 @@ _CLAIM_RULES: dict[str, tuple[str, str, dict[str, int]]] = {
     ),
     "integration": ("integration:apply", "apply", {"max_integrations": 1}),
     "evidence": ("evidence:materialize", "apply", {}),
+    "contract": ("contract:generate", "apply", {}),
     "certification-objective": ("certification:objective", "apply", {}),
     "certification-verdict": ("certification:verdict", "apply", {}),
     "commit": ("git:commit", "apply", {"max_commits": 1}),

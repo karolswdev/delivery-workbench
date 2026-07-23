@@ -183,8 +183,9 @@ nudge, cross-story/phase-selection, and scope-completion acts through
 carried artifacts, exact lineage, and a finite route. Outward-fact receipts
 bind only content-safe Phase 25 event/channel hashes; separate nudge receipts
 bind one standing rule and an already-run exact agent attempt. No embedded
-program API observes the network or performs integration, evidence,
-certification, Git, or roadmap mutation. WLA-26-10 owns those delivery rails;
+conductor API observes the network or performs integration, evidence,
+certification, Git, or roadmap mutation. WLA-26-10's separate embedded
+`program_delivery` adapter owns those exact-token, claim-bound delivery rails;
 WLA-26-11 owns byte-equivalent CLI/MCP/HTTP projections and controls.
 
 ## Workbench HTTP (localhost/tailnet)

@@ -347,6 +347,63 @@ class DwCoreTest(unittest.TestCase):
             core.plan_phase_close(self.root, self.project, self.phase)
         self.assertIn("refusing to close phase with non-done stories", ctx.exception.message)
 
+    def test_phase_advance_is_one_guarded_summary_pointer_and_header_plan(self) -> None:
+        phase2_plan = core.plan_phase_create(
+            self.root,
+            self.project,
+            2,
+            "Beta Work",
+            status="planned",
+        )
+        core.apply_plan(phase2_plan, validate_after=False)
+        phase2 = core.get_phase(self.project, "2")
+        complete = core.plan_story_status(
+            self.root,
+            self.project,
+            self.phase,
+            "DM-1-02",
+            "done",
+            evidence_body="- exact fixture proof",
+            evidence_date="2026-07-22",
+        )
+        core.apply_plan(complete, validate_after=False)
+        before = self.snapshot()
+        advance = core.plan_phase_advance(
+            self.root,
+            self.project,
+            self.phase,
+            phase2,
+            summary_body="Exact fixture phase transition.",
+            summary_date="2026-07-22",
+        )
+        preview = core.preview_plan(advance)
+        self.assertEqual(before, self.snapshot(), "phase preview must be pure")
+        self.assertEqual(preview["kind"], "phase-advance")
+        self.assertEqual(preview["summary"]["next_phase_number"], 2)
+        result = core.apply_plan(advance, validate_after=False)
+        self.assertEqual(result["issues"], [])
+        readme = (self.project.path / "README.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "**Current phase:** [Phase 2 — Beta Work]"
+            "(./phase-2-beta-work/current-phase-status.md).",
+            readme,
+        )
+        self.assertIn(
+            "**Status:** done",
+            (self.phase.path / "current-phase-status.md").read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertIn(
+            "**Status:** in-progress",
+            (phase2.path / "current-phase-status.md").read_text(
+                encoding="utf-8"
+            ),
+        )
+        self.assertTrue((self.phase.path / "final-summary.md").is_file())
+
     # -- trace fallback ----------------------------------------------------
 
     def test_work_log_trace_fallback(self) -> None:
@@ -12845,6 +12902,786 @@ class ProgramConductorTest(unittest.TestCase):
             item for item in replayed["authority"]["claims"]
             if item["category"] == "checkpoint-request"
         ]), 1)
+
+
+class ProgramDeliveryTest(unittest.TestCase):
+    """WLA-26-10: exact integration, commit, push, and roadmap rails."""
+
+    now = "2026-07-22T12:02:00Z"
+
+    def setUp(self):
+        import dw_pmo.program_delivery as delivery
+
+        self.core = delivery
+        self.conductor = ProgramConductorTest(
+            "test_tick_conducts_implementer_then_independent_verifier"
+        )
+        self.conductor.setUp()
+        self.addCleanup(self.conductor.doCleanups)
+        self.root = self.conductor.root
+        self.authority = self.conductor.authority
+        self.config = self.conductor.config
+
+        # The delivery proof requires a real mechanical receipt before the
+        # independent governed verifier. The runner is a closed builtin, not
+        # an arbitrary command surface.
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        implement = workflow["nodes"][0]
+        implement.pop("on_success", None)
+        workflow["nodes"].append({
+            "id": "check-repository",
+            "type": "check",
+            "needs": ["implement"],
+            "inputs": {
+                "candidate": {
+                    "kind": "artifact",
+                    "name": "implement.candidate",
+                },
+            },
+            "runner": {
+                "kind": "builtin",
+                "name": "file-exists",
+                "path": "pm/programs/demo-program.json",
+                "output_bytes": 50_000,
+            },
+            "expect": {"exit_code": 0},
+            "timeout_seconds": 60,
+            "max_attempts": 1,
+            "outputs": [{
+                "id": "repository-fact",
+                "kind": "mechanical-fact",
+                "max_bytes": 20_000,
+            }],
+            "on_success": {"kind": "terminal", "target": "complete"},
+            "on_failure": {"kind": "action", "target": "block"},
+        })
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        # Phase 1's unscoped parked row is completed in the fixture so the
+        # exact phase-advance rail can prove that the whole phase, not merely
+        # the program subset, is closed.
+        from dw_pmo.mutations import apply_plan, plan_story_status
+        from dw_pmo.parse import get_phase, get_project
+
+        project = get_project(self.root, "demo")
+        phase1 = get_phase(project, "1")
+        apply_plan(
+            plan_story_status(
+                self.root,
+                project,
+                phase1,
+                "DM-1-03",
+                "done",
+                evidence_body="- fixture phase-closure prerequisite",
+                evidence_date="2026-07-22",
+            ),
+            validate_after=True,
+        )
+        (self.root / ".gitignore").write_text(".tmp/\n", encoding="utf-8")
+
+        program_path = self.root / "pm/programs/demo-program.json"
+        program = json.loads(program_path.read_text(encoding="utf-8"))
+        for capability in ("certification:objective", "git:push"):
+            if capability not in program["requested_capabilities"]:
+                program["requested_capabilities"].append(capability)
+            if capability not in self.authority.capabilities:
+                self.authority.capabilities.append(capability)
+        for counter in ("max_integrations", "max_commits", "max_pushes"):
+            program["budgets"][counter] = 3
+            self.authority.budgets[counter] = 3
+        program_path.write_text(
+            json.dumps(program, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture.program = program
+        self.authority.fixture._git("add", ".")
+        self.authority.fixture._git(
+            "commit", "-qm", "program delivery fixture"
+        )
+
+        self.remote = self.authority.fixture.tmp / "program-remote.git"
+        subprocess.run(
+            ["git", "init", "--bare", "-q", str(self.remote)],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.authority.fixture._git(
+            "remote", "add", "origin", str(self.remote)
+        )
+        self.authority.fixture._git(
+            "push", "-qu", "origin", "main"
+        )
+
+    def start_and_certify(self):
+        projection = self.conductor.start(
+            remote="origin",
+            remote_ref="refs/remotes/origin/main",
+        )
+        fixture = self.conductor.core.ProgramFixtureDriver()
+        result = self.conductor.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=12,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (result["state"], result["stop"]),
+            ("story-certified", "checkpoint"),
+        )
+        return projection, fixture
+
+    def preview_and_start(self, run_id):
+        preview = self.core.build_program_delivery_preview(
+            self.root,
+            run_id,
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertTrue(preview["applicable"], preview["issues"])
+        self.assertFalse(preview["mutates_repository"])
+        self.assertFalse(preview["mutates_roadmap"])
+        self.assertFalse(preview["creates_commit"])
+        self.assertFalse(preview["pushes_remote"])
+        frontier = self.core.start_program_delivery(
+            self.root,
+            preview,
+            delivery_token=preview["delivery_token"],
+            driver_config=self.config,
+        )
+        return preview, frontier
+
+    def test_preview_is_pure_and_refuses_missing_mechanical_or_dirty_facts(self):
+        projection, _fixture = self.start_and_certify()
+        run_id = projection["run_id"]
+        before_status = self.authority.fixture._git(
+            "status", "--porcelain=v1"
+        ).stdout
+        before_events = self.authority.core.replay_program(
+            self.root, run_id, now=self.now
+        )["event_count"]
+        preview = self.core.build_program_delivery_preview(
+            self.root,
+            run_id,
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertTrue(preview["applicable"], preview["issues"])
+        self.assertEqual(
+            [item["kind"] for item in preview["actions"]],
+            [
+                "integration",
+                "evidence",
+                "story-complete",
+                "phase-advance",
+                "story-start",
+                "contract",
+                "certification-objective",
+                "certification-verdict",
+                "commit",
+                "push",
+            ],
+        )
+        self.assertEqual(
+            before_status,
+            self.authority.fixture._git(
+                "status", "--porcelain=v1"
+            ).stdout,
+        )
+        self.assertEqual(
+            before_events,
+            self.authority.core.replay_program(
+                self.root, run_id, now=self.now
+            )["event_count"],
+        )
+        self.assertFalse(
+            (self.root / ".git/pmo-programs/runs" / run_id / "delivery").exists()
+        )
+
+        (self.root / "unexpected.txt").write_text(
+            "dirty\n", encoding="utf-8"
+        )
+        refused = self.core.build_program_delivery_preview(
+            self.root,
+            run_id,
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertFalse(refused["applicable"])
+        self.assertIn(
+            "repository-not-clean",
+            {item["code"] for item in refused["issues"]},
+        )
+
+    def test_blocking_obligation_and_missing_capability_refuse_before_write(self):
+        projection, _fixture = self.start_and_certify()
+        run_id = projection["run_id"]
+        self.conductor.record_fixture_obligation(
+            projection,
+            obligation_id="blocking-delivery-debt",
+            blocking=True,
+        )
+        blocked = self.core.build_program_delivery_preview(
+            self.root,
+            run_id,
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertFalse(blocked["applicable"])
+        self.assertIn(
+            "blocking-obligation-open",
+            {item["code"] for item in blocked["issues"]},
+        )
+        self.assertEqual(
+            self.authority.fixture._git(
+                "status", "--porcelain=v1"
+            ).stdout,
+            "",
+        )
+
+        capabilities = [
+            item for item in self.authority.capabilities
+            if item != "certification:objective"
+        ]
+        _plan, second = self.authority.start(
+            intent="delivery-without-objective-certification",
+            capabilities=capabilities,
+            budgets=self.authority.budgets,
+            remote="origin",
+            remote_ref="refs/remotes/origin/main",
+        )
+        fixture = self.conductor.core.ProgramFixtureDriver()
+        conducted = self.conductor.core.supervise_program(
+            self.root,
+            second["run_id"],
+            max_ticks=12,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(conducted["state"], "story-certified")
+        denied = self.core.build_program_delivery_preview(
+            self.root,
+            second["run_id"],
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertFalse(denied["applicable"])
+        self.assertIn(
+            "program grant lacks certification:objective",
+            [item["message"] for item in denied["issues"]],
+        )
+
+    def test_changed_candidate_artifact_refuses_as_stale_proof(self):
+        projection, _fixture = self.start_and_certify()
+        run_id = projection["run_id"]
+        replayed = self.conductor.core.replay_program_conductor(
+            self.root, run_id, now=self.now
+        )
+        artifact = next(
+            artifact
+            for receipt in replayed["receipts"]
+            for artifact in receipt.get("artifacts", [])
+            if artifact.get("artifact_kind") == "git-diff"
+        )
+        content = (
+            self.root
+            / ".git/pmo-programs/runs"
+            / run_id
+            / "conductor/artifacts"
+            / artifact["artifact_id"]
+            / "content"
+        )
+        content.chmod(0o600)
+        content.write_bytes(content.read_bytes() + b"\n")
+        refused = self.core.build_program_delivery_preview(
+            self.root,
+            run_id,
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertFalse(refused["applicable"])
+        self.assertIn(
+            "candidate-refused",
+            {item["code"] for item in refused["issues"]},
+        )
+
+    def test_two_story_commits_phase_transition_and_every_effect_recover(self):
+        projection, fixture = self.start_and_certify()
+        run_id = projection["run_id"]
+        initial_count = int(
+            self.authority.fixture._git(
+                "rev-list", "--count", "HEAD"
+            ).stdout.strip()
+        )
+        preview, frontier = self.preview_and_start(run_id)
+        delivery_id = frontier["delivery_id"]
+
+        # Crash after every durable effect, before its immutable receipt.
+        # Each following tick must reconcile that exact effect and complete
+        # the same ledger claim without a duplicate mutation/commit/push.
+        for expected in [item["kind"] for item in preview["actions"]]:
+            def crash(name, detail, action_kind=expected):
+                if (
+                    name == "after-effect"
+                    and detail.get("action_kind") == action_kind
+                ):
+                    raise RuntimeError(f"crash after {action_kind}")
+
+            with self.assertRaisesRegex(
+                RuntimeError, f"crash after {expected}"
+            ):
+                self.core.tick_program_delivery(
+                    self.root,
+                    run_id,
+                    delivery_id,
+                    driver_config=self.config,
+                    now=self.now,
+                    boundary_hook=crash,
+                )
+            recovered = self.core.tick_program_delivery(
+                self.root,
+                run_id,
+                delivery_id,
+                driver_config=self.config,
+                now=self.now,
+            )
+            self.assertEqual(recovered["action"]["kind"], expected)
+
+        first = self.core.replay_program_delivery(
+            self.root, run_id, delivery_id, now=self.now
+        )
+        self.assertTrue(first["complete"])
+        self.assertEqual(
+            len(first["receipts"]), len(preview["actions"])
+        )
+        self.assertEqual(
+            self.authority.fixture._git(
+                "rev-parse", "HEAD"
+            ).stdout.strip(),
+            subprocess.run(
+                ["git", "--git-dir", str(self.remote), "rev-parse", "main"],
+                check=True,
+                text=True,
+                stdout=subprocess.PIPE,
+            ).stdout.strip(),
+        )
+        readme = (
+            self.root / "pm/roadmap/demo/README.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "**Current phase:** [Phase 2 - Beta]"
+            "(./phase-2-beta/current-phase-status.md).",
+            readme,
+        )
+        self.assertTrue(
+            (
+                self.root
+                / "pm/roadmap/demo/phase-1-alpha/final-summary.md"
+            ).is_file()
+        )
+        next_story = (
+            self.root
+            / "pm/roadmap/demo/phase-2-beta/story-01-dependent-beta.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("- **Status:** in-progress", next_story)
+
+        second_conduction = self.conductor.core.supervise_program(
+            self.root,
+            run_id,
+            max_ticks=12,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(
+            (second_conduction["state"], second_conduction["stop"]),
+            ("story-certified", "checkpoint"),
+        )
+        second_preview, second_frontier = self.preview_and_start(run_id)
+        self.assertNotIn(
+            "phase-advance",
+            [item["kind"] for item in second_preview["actions"]],
+        )
+        for expected in [
+            item["kind"] for item in second_preview["actions"]
+        ]:
+            def crash_receipt(name, detail, action_kind=expected):
+                if (
+                    name == "after-receipt"
+                    and detail.get("action_kind") == action_kind
+                ):
+                    raise RuntimeError(
+                        f"receipt crash after {action_kind}"
+                    )
+
+            with self.assertRaisesRegex(
+                RuntimeError, f"receipt crash after {expected}"
+            ):
+                self.core.tick_program_delivery(
+                    self.root,
+                    run_id,
+                    second_frontier["delivery_id"],
+                    driver_config=self.config,
+                    now=self.now,
+                    boundary_hook=crash_receipt,
+                )
+            recovered = self.core.tick_program_delivery(
+                self.root,
+                run_id,
+                second_frontier["delivery_id"],
+                driver_config=self.config,
+                now=self.now,
+            )
+            self.assertEqual(recovered["action"]["kind"], expected)
+        completed = self.core.replay_program_delivery(
+            self.root,
+            run_id,
+            second_frontier["delivery_id"],
+            now=self.now,
+        )
+        self.assertTrue(completed["complete"])
+        self.assertEqual(
+            int(self.authority.fixture._git(
+                "rev-list", "--count", "HEAD"
+            ).stdout.strip()),
+            initial_count + 2,
+        )
+        self.assertEqual(
+            self.authority.fixture._git(
+                "rev-parse", "HEAD"
+            ).stdout.strip(),
+            subprocess.run(
+                ["git", "--git-dir", str(self.remote), "rev-parse", "main"],
+                check=True,
+                text=True,
+                stdout=subprocess.PIPE,
+            ).stdout.strip(),
+        )
+        phase2_story = (
+            self.root
+            / "pm/roadmap/demo/phase-2-beta/story-01-dependent-beta.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("- **Status:** done", phase2_story)
+        replayed = self.authority.core.replay_program(
+            self.root, run_id, now=self.now
+        )
+        categories = [
+            item["category"]
+            for item in replayed["claims"]
+            if str(item["idempotency_key"]).startswith(
+                "program-delivery/"
+            )
+        ]
+        self.assertEqual(categories.count("integration"), 2)
+        self.assertEqual(categories.count("contract"), 2)
+        self.assertEqual(categories.count("commit"), 2)
+        self.assertEqual(categories.count("push"), 2)
+        latest = self.authority.fixture._git(
+            "rev-parse", "HEAD"
+        ).stdout.strip()
+        archive = (
+            self.root / ".git/pmo-contract-archive"
+            / latest / "CONTRACT.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            '"human_attestation": false', archive
+        )
+        self.assertIn(
+            "Program attestation provenance", archive
+        )
+        from dw_pmo.parse import get_project
+        from dw_pmo.validate import check_project
+        from dw_pmo.verify import run_verify
+
+        self.assertEqual(
+            check_project(get_project(self.root, "demo"), self.root),
+            [],
+        )
+        verified = run_verify(self.root, all_history=True)
+        self.assertTrue(verified.ok, verified.violations)
+        self.assertEqual(verified.verified, 2)
+
+    def test_commit_hook_and_remote_divergence_fail_closed_without_force(self):
+        projection, _fixture = self.start_and_certify()
+        run_id = projection["run_id"]
+        preview, frontier = self.preview_and_start(run_id)
+        delivery_id = frontier["delivery_id"]
+        while True:
+            current = self.core.replay_program_delivery(
+                self.root, run_id, delivery_id, now=self.now
+            )
+            if current["next_action"]["kind"] == "commit":
+                break
+            self.core.tick_program_delivery(
+                self.root,
+                run_id,
+                delivery_id,
+                driver_config=self.config,
+                now=self.now,
+            )
+        parent = self.authority.fixture._git(
+            "rev-parse", "HEAD"
+        ).stdout.strip()
+        hook = self.root / ".git/hooks/pre-commit"
+        hook.write_text("#!/bin/sh\nexit 23\n", encoding="utf-8")
+        hook.chmod(0o755)
+        with self.assertRaisesRegex(DwError, "gated commit failed"):
+            self.core.tick_program_delivery(
+                self.root,
+                run_id,
+                delivery_id,
+                driver_config=self.config,
+                now=self.now,
+            )
+        self.assertEqual(
+            self.authority.fixture._git(
+                "rev-parse", "HEAD"
+            ).stdout.strip(),
+            parent,
+        )
+        hook.unlink()
+        committed = self.core.tick_program_delivery(
+            self.root,
+            run_id,
+            delivery_id,
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertEqual(committed["action"]["kind"], "commit")
+        commit = committed["receipt"]["result"]["commit"]
+
+        tree = self.authority.fixture._git(
+            "rev-parse", f"{parent}^{{tree}}"
+        ).stdout.strip()
+        environment = dict(os.environ)
+        environment.update({
+            "GIT_AUTHOR_NAME": "Divergence Fixture",
+            "GIT_AUTHOR_EMAIL": "divergence@example.test",
+            "GIT_COMMITTER_NAME": "Divergence Fixture",
+            "GIT_COMMITTER_EMAIL": "divergence@example.test",
+            "GIT_AUTHOR_DATE": "2026-07-22T12:02:30Z",
+            "GIT_COMMITTER_DATE": "2026-07-22T12:02:30Z",
+        })
+        divergent = subprocess.run(
+            [
+                "git", "-C", str(self.root),
+                "commit-tree", tree, "-p", parent,
+            ],
+            input="planted remote divergence\n",
+            text=True,
+            check=True,
+            env=environment,
+            stdout=subprocess.PIPE,
+        ).stdout.strip()
+        self.authority.fixture._git(
+            "push", "-q", "origin",
+            f"{divergent}:refs/heads/divergence-fixture",
+        )
+        subprocess.run(
+            [
+                "git", "--git-dir", str(self.remote),
+                "update-ref", "refs/heads/main", divergent, parent,
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        with self.assertRaisesRegex(DwError, "diverged"):
+            self.core.tick_program_delivery(
+                self.root,
+                run_id,
+                delivery_id,
+                driver_config=self.config,
+                now=self.now,
+            )
+        self.assertEqual(
+            subprocess.run(
+                ["git", "--git-dir", str(self.remote), "rev-parse", "main"],
+                text=True,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout.strip(),
+            divergent,
+        )
+        self.assertNotEqual(divergent, commit)
+        subprocess.run(
+            [
+                "git", "--git-dir", str(self.remote),
+                "update-ref", "refs/heads/main", parent, divergent,
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        pushed = self.core.tick_program_delivery(
+            self.root,
+            run_id,
+            delivery_id,
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertEqual(pushed["action"]["kind"], "push")
+        self.assertEqual(
+            subprocess.run(
+                ["git", "--git-dir", str(self.remote), "rev-parse", "main"],
+                text=True,
+                check=True,
+                stdout=subprocess.PIPE,
+            ).stdout.strip(),
+            commit,
+        )
+
+    def test_obligation_materialization_deduplicates_and_waiver_is_accountable(self):
+        projection, _fixture = self.start_and_certify()
+        run_id = projection["run_id"]
+        recorded = self.conductor.record_fixture_obligation(
+            projection,
+            obligation_id="trace-this-debt",
+            blocking=False,
+        )
+        preview = self.core.build_program_obligation_materialization_preview(
+            self.root,
+            run_id,
+            "trace-this-debt",
+            phase=2,
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertTrue(preview["applicable"], preview["issues"])
+        self.assertFalse(preview["no_op"])
+
+        def crash_effect(name, detail):
+            if name == "after-effect":
+                raise RuntimeError("materialization applied")
+
+        with self.assertRaisesRegex(
+            RuntimeError, "materialization applied"
+        ):
+            self.core.apply_program_obligation_materialization(
+                self.root,
+                preview,
+                materialization_token=preview["materialization_token"],
+                driver_config=self.config,
+                now=self.now,
+                boundary_hook=crash_effect,
+            )
+        materialized = self.core.apply_program_obligation_materialization(
+            self.root,
+            preview,
+            materialization_token=preview["materialization_token"],
+            driver_config=self.config,
+            now=self.now,
+        )
+        story_path = self.root / materialized["story_path"]
+        story = story_path.read_text(encoding="utf-8")
+        self.assertIn(
+            "- **Program obligation:** `trace-this-debt`", story
+        )
+        self.assertIn(
+            "- **Source decision:** "
+            f"`{recorded['obligation']['source_decision_hash']}`",
+            story,
+        )
+        duplicate = (
+            self.core.build_program_obligation_materialization_preview(
+                self.root,
+                run_id,
+                "trace-this-debt",
+                phase=2,
+                driver_config=self.config,
+                now=self.now,
+            )
+        )
+        self.assertTrue(duplicate["applicable"], duplicate["issues"])
+        self.assertTrue(duplicate["no_op"])
+        duplicate_result = (
+            self.core.apply_program_obligation_materialization(
+                self.root,
+                duplicate,
+                materialization_token=duplicate["materialization_token"],
+                driver_config=self.config,
+                now=self.now,
+            )
+        )
+        self.assertTrue(duplicate_result["idempotent"])
+        self.assertEqual(
+            len(list(
+                (
+                    self.root / "pm/roadmap/demo/phase-2-beta"
+                ).glob("story-*-obligation-trace-this-debt.md")
+            )),
+            1,
+        )
+
+        denied = self.core.build_program_obligation_disposition_preview(
+            self.root,
+            run_id,
+            "trace-this-debt",
+            to_state="waived",
+            actor="some-agent",
+            authority="self-asserted",
+            reason="Pretend this debt does not matter.",
+            now=self.now,
+        )
+        self.assertFalse(denied["applicable"])
+        self.assertIn(
+            "waiver-unauthorized",
+            {item["code"] for item in denied["issues"]},
+        )
+        operator = "operator-a"
+        expected_authority = denied["intent"][
+            "expected_waiver_authority"
+        ]
+        allowed = self.core.build_program_obligation_disposition_preview(
+            self.root,
+            run_id,
+            "trace-this-debt",
+            to_state="waived",
+            actor=operator,
+            authority=expected_authority,
+            reason="Accountable operator accepts this exact residual debt.",
+            now=self.now,
+        )
+        self.assertTrue(allowed["applicable"], allowed["issues"])
+
+        def crash_receipt(name, detail):
+            if name == "after-receipt":
+                raise RuntimeError("disposition receipt stored")
+
+        with self.assertRaisesRegex(
+            RuntimeError, "disposition receipt stored"
+        ):
+            self.core.apply_program_obligation_disposition(
+                self.root,
+                allowed,
+                disposition_token=allowed["disposition_token"],
+                driver_config=self.config,
+                now=self.now,
+                boundary_hook=crash_receipt,
+            )
+        disposed = self.core.apply_program_obligation_disposition(
+            self.root,
+            allowed,
+            disposition_token=allowed["disposition_token"],
+            driver_config=self.config,
+            now=self.now,
+        )
+        self.assertEqual(disposed["obligation"]["state"], "waived")
+        self.assertEqual(
+            disposed["obligation"]["history"][-1]["authority"],
+            expected_authority,
+        )
+        self.assertEqual(
+            disposed["obligation"]["source_decision_hash"],
+            recorded["obligation"]["source_decision_hash"],
+        )
 
 
 class ProgramOrganizationTest(unittest.TestCase):

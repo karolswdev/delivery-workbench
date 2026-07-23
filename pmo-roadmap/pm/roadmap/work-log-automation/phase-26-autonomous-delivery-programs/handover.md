@@ -1,19 +1,18 @@
 # Phase 26 continuation handover
 
-**Snapshot:** 2026-07-23, after WLA-26-09
-**Branch:** `main`
-**Starting HEAD:** `90e9b28` (`Document Phase 26 conductor handover`)
-**Roadmap state:** Phase 26 open, 9/12; WLA-26-10 is next
-**Worktree at snapshot:** contains the uncommitted WLA-26-09 implementation,
-tests, project documentation, story evidence, and roadmap closeout; `main` is
-13 commits ahead of `origin/main`; nothing from this sequence was pushed
+**Snapshot:** 2026-07-23, after WLA-26-10
+**Branch:** `agent/wla-26-09-conductor`
+**Roadmap state:** Phase 26 open, 10/12; WLA-26-11 is next
+**Delivery state:** WLA-26-09 is published on the draft PR branch; this
+checkpoint adds the WLA-26-10 implementation, tests, documentation, evidence,
+and roadmap closeout.
 
 This is a continuation snapshot, not a replacement for
 [current-phase-status](./current-phase-status.md),
-[story-09](./story-09-conduct-and-recover-hierarchical-multi-phase-programs.md),
-or [evidence-story-09](./evidence-story-09.md).
+[story-10](./story-10-integrate-work-and-advance-exact-roadmap-rails.md),
+or [evidence-story-10](./evidence-story-10.md).
 
-## Completed through WLA-26-09
+## Completed through WLA-26-10
 
 Phase 26 remains an explicitly configured layer above ordinary Delivery
 Workbench and one-score/one-run bounded orchestration. No program is inferred
@@ -34,11 +33,13 @@ The delivered sequence now includes:
    intersections, replay, and controls; and
 9. WLA-26-09 — the restart-safe hierarchical conductor, including outward
    facts/nudges, cross-story/phase selection, obligation gates, and exact scope
-   completion.
+   completion; and
+10. WLA-26-10 — exact separately claimed evidence, integration, contract,
+    certification, commit, push, obligation, story, and phase delivery rails.
 
-The product is not yet autonomously integrating or advancing roadmap files.
-WLA-26-10 owns those separately authorized delivery rails. WLA-26-11 owns
-public live controls, and WLA-26-12 owns the installed multi-phase exit exam.
+The embedded core can now conduct and integrate a governed autonomous program.
+WLA-26-11 owns public CLI/MCP/HTTP/Workbench program operations and the live
+control room; WLA-26-12 owns the installed multi-phase exit exam.
 
 ## WLA-26-09 delivered runtime
 
@@ -109,63 +110,77 @@ done, one exact `program-scope-proof` claim stores one immutable receipt and
 records one `program_scope_completed` event. Crash after that receipt recovers
 the same terminal `complete` result.
 
-## Immediate next story: WLA-26-10
+## WLA-26-10 delivered runtime
+
+`program_delivery.py` composes existing authority, evidence, contract, gate,
+verify, and roadmap-mutation cores without adding a second ledger:
+
+- `build_program_delivery_preview` is pure and binds the immutable program
+  grant/ledger, current claim, proof packet, mechanical and governed verdicts,
+  story/phase state, candidate artifact, repository/index/tree, contract,
+  optional remote, and every separately requested act;
+- `start_program_delivery` freezes
+  `delivery-workbench-program-delivery-plan@1`; tick/replay/supervise reserve
+  one dependent claim at a time, reconcile its outward effect, and store one
+  ledger-bound `delivery-workbench-program-delivery-receipt@1`;
+- the candidate diff is simulated in temporary Git object/index stores and is
+  applied exactly with fixed `git apply --index --binary`; changed base,
+  artifact, allowed paths, result tree, index, or worktree refuses before
+  advancement, with no three-way or conflict-resolution route;
+- evidence and canonical story/phase mutations are planned as exact guarded
+  content; contract generation sees the complete staged candidate tree,
+  objective/governed certification maps every assertion to current proof, and
+  the real gate, hooks, commit, and one-commit range verification execute
+  without bypass; and
+- optional push resolves only the grant-bound remote URL, head and branch,
+  re-observes the exact lease, requires fast-forward, uses no force option, and
+  records/rebinds the resulting tracking fact.
+
+Blocking obligations refuse delivery before any partial advance. Non-blocking
+items remain durable without forced roadmap mutation. Separate materialization
+may create exactly one traced, deduplicated roadmap story through the canonical
+story-create plan; separate disposition records completion, supersession,
+escalation, or an accountable exact waiver while retaining the original
+decision and obligation.
+
+The fixture proof executes two story commits and one phase transition against
+a local bare remote. Crashes after first-story effects and second-story
+receipts reconcile to the same evidence, archive, commits, remote ref, status,
+phase summary, pointer, and next-story start. Hook failure, planted remote
+divergence, dirty/stale/tampered state, blocking debt, missing objective
+capability, duplicate materialization, and unauthorized waiver all stop
+without a force or partial-advancement escape.
+
+## Immediate next story: WLA-26-11
 
 Read
-[story-10](./story-10-integrate-work-and-advance-exact-roadmap-rails.md)
-before implementation. Compose new rails around the existing program claim and
-conductor contracts; do not add a generic shell runner, direct Markdown
-mutation, or a second delivery ledger.
+[story-11](./story-11-operate-the-autonomous-organization-across-every-surface.md)
+before implementation. The shared embedded planner/conductor/delivery APIs are
+now present; WLA-26-11 should expose them byte-equivalently through CLI, MCP,
+HTTP, and the Workbench control room rather than reimplementing state or
+authority per surface.
 
-The useful dependency order is:
+Keep these boundaries:
 
-1. pure integration preview over exact run/claim/proof/verdict/story/phase,
-   repository/index/diff, evidence, contract, and optional remote facts;
-2. exact isolated-diff apply with allowed paths, expected base/result trees,
-   freshness, no partial write, and no automatic conflict resolution;
-3. separately claimed evidence materialization and PMO contract generation;
-4. explicit objective-versus-governed certification mapping with honest
-   machine/program provenance;
-5. separately claimed gated commit and optional fast-forward push to the bound
-   remote/ref;
-6. canonical roadmap story completion, next-story start, and phase transition
-   through existing preview/fingerprint/apply cores; and
-7. obligation materialization/disposition with stable decision/obligation ids,
-   separate capability, deduplication, and retained audit history.
-
-Exercise at least two stories and one phase transition in a clean fixture repo
-with a local bare remote. Plant crashes after every evidence, integration,
-contract, certification, commit, push, story, and phase receipt. Reconcile
-existing durable state before retry and prove no duplicate blocks, status
-flips, summaries, commits, or pushes.
-
-## Non-negotiable WLA-26-10 boundaries
-
-- A green check, verifier, council, meta-verifier, or architect result grants
-  no delivery act by implication.
-- Evidence, integration, objective certification, governed certification,
-  contract generation, commit, push, story completion, story start, phase
-  advancement, obligation materialization, and obligation disposition remain
-  separately claimed capabilities and receipts.
-- A blocking obligation prevents story/phase advancement. A non-blocking item
-  remains ledger-visible; it becomes roadmap work only through separate,
-  deduplicated authority.
-- Machine certification may assert only canonically declared fully mechanical
-  facts. Subjective certification remains an accountable rubric-backed
-  judgment; neither may claim a human acted when one did not.
-- Commit binds exact parent, staged tree, message/trailers, contract digest,
-  proof, and gate result. Push binds the exact commit, remote/ref, URL
-  fingerprint, observed head, and fast-forward lease. No force push.
-- Merge, rebase/conflict auto-resolution, release, deploy, publication,
-  arbitrary shell/network, policy edits, authority minting, and
-  cross-repository writes remain impossible in Phase 26.
-- The WLA-26-09 conductor may consume WLA-26-10 receipts/facts on replay but
-  must not perform an unclaimed shortcut around them.
+- previews/list/status/explain remain pure and create no program state;
+- every mutating public operation uses the same exact grant, claim, capability,
+  budget, freshness, idempotency, and receipt core;
+- the control room must explain current story/team/workflow/verdict/obligation/
+  loop/budget/authority and active recovery state, not infer it from prose;
+- no surface may add generic shell, provider-secret, certification, commit,
+  push, roadmap, merge, release, deploy, or publication authority;
+- vanilla and Phase 24/25 bounded-run surfaces remain complete independent
+  modes with no ambient program activation; and
+- WLA-26-12 still owns the fresh-wheel, no-human, multi-phase exit exam.
 
 ## Source map
 
 - `pmo-roadmap/lib/dw_pmo/program_conductor.py` — replay-first frontier, tick,
   receipts, drivers, work/council/loop/gate/outward/scope behavior.
+- `pmo-roadmap/lib/dw_pmo/program_delivery.py` — pure delivery preview,
+  immutable plan/receipt replay, exact candidate-tree integration,
+  evidence/contract/certification/commit/push/roadmap rails, and obligation
+  materialization/disposition.
 - `pmo-roadmap/lib/dw_pmo/program_run.py` — start/grant/ledger/claim/
   completion/control authority, scope-wide roster/ports, terminal scope event.
 - `pmo-roadmap/lib/dw_pmo/programs.py` — program schema/compiler/planner,
@@ -177,33 +192,31 @@ flips, summaries, commits, or pushes.
 - `pmo-roadmap/lib/dw_pmo/program_deliberation.py` — pure council protocol and
   decisions.
 - `pmo-roadmap/lib/dw_pmo/evidence.py`, `contract.py`, `gate.py`, `verify.py`,
-  `steps.py`, and guarded roadmap mutation helpers — existing rails to compose
-  in WLA-26-10, not duplicate.
+  `steps.py`, and guarded roadmap mutation helpers — canonical rails composed
+  by delivery, including honest machine/program contract certification and
+  one guarded phase summary/pointer/header transition.
 - `.githooks/dw_pmo/` — vendored package; keep byte-equivalent via
   `pmo-roadmap/update.sh .`.
 - `pmo-roadmap/tests/dw-core-tests.py` — 20 conductor tests plus planner,
   authority, deliberation, and wider regressions.
-- [docs/programs.md](../../../../../docs/programs.md) — normative program
-  contract and exact WLA-26-09/WLA-26-10 boundary.
+- [docs/programs.md](../../../../../docs/programs.md) — normative program,
+  delivery authority, recovery, refusal, and remaining public-surface
+  contract.
 
 ## Validation baseline
 
-WLA-26-09 closes with:
-
-- focused planner/conductor/authority/deliberation matrix: 65/65 on Python
-  3.14 and 65/65 on Python 3.9;
-- full core suite: 457/457 on Python 3.14 and 457/457 on Python 3.9;
-- fresh-wheel Python 3.9 package smoke, including guided, deliberate,
-  multi-agent, and outward-loop exams;
-- canon, all Markdown, executable snippets, agent surfaces, roadmap, rendered
-  rider, source/vendored update parity, compile, and diff checks.
-
-Exact assertions, commands, timings, and package outcomes are in
-[evidence-story-09](./evidence-story-09.md).
+WLA-26-10 adds six focused delivery/recovery/refusal tests on both supported
+Python floors. The full core suite passes 464/464 on Python 3.14 and 464/464
+on Python 3.9. Fresh-wheel package smoke, canon/docs/snippets, agent surfaces,
+roadmap, rendered rider, source/vendored parity, compilation, and diff checks
+complete the green closeout matrix captured in
+[evidence-story-10](./evidence-story-10.md).
 
 Useful commands:
 
 ```bash
+python3 pmo-roadmap/tests/dw-core-tests.py -q ProgramDeliveryTest
+/usr/bin/python3 pmo-roadmap/tests/dw-core-tests.py -q ProgramDeliveryTest
 python3 pmo-roadmap/tests/dw-core-tests.py -q
 /usr/bin/python3 pmo-roadmap/tests/dw-core-tests.py -q
 pmo-roadmap/tests/package-smoke.sh
@@ -219,25 +232,24 @@ git diff --check
 
 ## Repository and continuation notes
 
-- Last committed checkpoint is still `90e9b28`; WLA-26-09 is intentionally
-  uncommitted in this snapshot.
-- Source and vendored code, tests, root/framework READMEs, solution overview,
-  architecture, interop, program/orchestration contracts, changelog, story,
-  status, evidence, and this handover are all part of the active worktree.
-- No push was performed. Recheck branch/upstream state before any publication;
-  the snapshot observed `main...origin/main [ahead 13]`.
+- WLA-26-09 is commit `6f52011` on
+  `agent/wla-26-09-conductor`; the branch tracks its same-named origin and
+  draft PR.
+- WLA-26-10 source and vendored code, tests, root/framework READMEs, solution
+  overview, architecture, interop/program contracts, changelog, story, status,
+  evidence, and this handover belong to one delivery checkpoint.
 - Preserve unrelated user changes if a later session finds additional dirty
-  paths.
+  paths, and recheck branch/upstream/PR state before publication.
 
 ## First actions for the next session
 
-1. Read this handover, current phase status, WLA-26-10, WLA-26-09 evidence, and
-   the integration/advancement section of `docs/programs.md`.
+1. Read this handover, current phase status, WLA-26-11, WLA-26-10 evidence, and
+   the public-surface/control-room sections of `docs/programs.md`.
 2. Confirm `git status -sb`, recent commits, and source/vendored parity; do not
    assume the snapshot is still current.
-3. Keep WLA-26-09 green and use its exact program claims/receipts as the only
-   authority boundary for new rails.
-4. Contract WLA-26-10 previews and receipt schemas in docs/tests before adding
-   repository or roadmap mutation.
+3. Keep WLA-26-09/10 green and use their exact program claims/receipts as the
+   sole authority boundary for all public operations.
+4. Contract WLA-26-11 byte-equivalent CLI/MCP/HTTP documents and control-room
+   explanations before adding surface handlers or UI state.
 5. Preserve both Python floors, fresh-wheel packaging, no-program vanilla
-   behavior, and project-facing documentation from the first WLA-26-10 slice.
+   behavior, and project-facing documentation from the first WLA-26-11 slice.

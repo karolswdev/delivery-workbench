@@ -1097,12 +1097,13 @@ The WLA-26-08 authority directory is deliberately small:
   ledger.jsonl               authoritative hash-chained events
   conductor/                 subordinate immutable receipts/artifacts/child grants
     driver-sessions/         non-authoritative reconciliation journal
+  delivery/                  immutable delivery/obligation intents and receipts
 ```
 
 Child grants are mechanically derived documents and projections are replayed,
-not trusted caches. The delivered conductor uses the bounded subordinate
-storage shown above, and WLA-26-10 may add delivery receipts; neither may
-replace the three authoritative files or smuggle authority into them.
+not trusted caches. The delivered conductor and WLA-26-10 delivery adapter use
+bounded subordinate `conductor/` and `delivery/` storage; neither may replace
+the three authoritative files or smuggle authority into them.
 
 Every current `delivery-workbench-program-event@1` carries exact run id,
 sequence, timestamp, previous/event hash, grant generation, one closed event
@@ -1118,10 +1119,10 @@ budget, optional child-grant hash, and optional typed request port.
 
 Claim categories close over selection/assignment, child and agent work,
 checks, council/debate/loop rounds, verdict/gate/repair, all three obligation
-acts, evidence/integration/certification, commit/push, story/phase transitions,
+acts, evidence/integration/contract/certification, commit/push, story/phase transitions,
 outward facts, nudges/notifications, and checkpoint requests. Conductor
-receipts already originate in these reservations; WLA-26-10 delivery receipts
-must do the same. Neither can invent an unclaimed event family as a shortcut.
+and WLA-26-10 delivery receipts both originate in these reservations. Neither
+can invent an unclaimed event family as a shortcut.
 
 Before any external or mutation act, the conductor atomically appends an
 exclusive claim with an idempotency key over run/generation/phase/story/
@@ -1299,6 +1300,85 @@ Commit and push are exact rather than arbitrary Git shells. Commit binds the
 staged tree, message template, story trailer, certified contract digest, and
 expected parent. Push binds one remote/ref, exact commit, and observed
 fast-forward lease. Merge, release, deploy, and publication remain impossible.
+
+WLA-26-10 implements that boundary as
+`delivery-workbench-program-delivery-preview@1`. The preview is pure and
+content-addressed. It binds the immutable program/grant/ledger and conductor
+receipt set; exact story, phase, workflow lineage, mechanical checks, governed
+verdicts, and proof hash; candidate artifact id/hash/bytes/allowed paths; base
+commit/tree/index and simulated result tree; roadmap snapshot; final staged
+tree and paths; contract contents/digest/certification map; fixed commit
+subject/trailers; and, when `git:push` was granted, the remote, tracking ref,
+URL fingerprint, observed head, fast-forward observation, and destination ref.
+Every effect flag in the preview is false. A single-use `delivery_token`
+hashes the complete preview.
+
+Starting that preview stores
+`delivery-workbench-program-delivery-plan@1` below the program run. It grants
+nothing: each action still reserves its own existing program-ledger claim.
+The exact action vocabulary and dependency order are:
+
+| Action | Claim category | Capability | Durable effect |
+|---|---|---|---|
+| `integration` | `integration` | `integration:apply` | apply the one artifact patch with `git apply --index`, no 3-way fallback |
+| `evidence` | `evidence` | `evidence:materialize` | apply and stage one canonical paired evidence plan |
+| `story-complete` | `story-complete` | `roadmap:story-complete` | stage the exact guarded done transition |
+| `phase-advance` (when crossing phases) | `phase-advance` | `roadmap:phase-advance` | atomically close the complete phase, write its summary, move the current pointer, and open the next phase |
+| `story-start` (when work remains) | `story-start` | `roadmap:story-start` | stage the next planner-selected story as in progress |
+| `contract` | `contract` | `contract:generate` | generate the contract over the final staged tree |
+| `certification-objective` | `certification-objective` | `certification:objective` | check only canonically mechanical assertions |
+| `certification-verdict` | `certification-verdict` | `certification:verdict` | check only the fresh rubric-backed governed assertions |
+| `commit` | `commit` | `git:commit` | run the real gate, create one exact commit, archive the contract, and range-verify it |
+| `push` (when granted) | `push` | `git:push` | observe and perform one no-force fast-forward update, then rebind the tracking fact |
+
+Roadmap mutations precede contract generation because the existing gate must
+see the evidence, done flip, optional phase transition, and next-story start
+in the same staged tree it certifies. This ordering does not merge authority:
+every row above still has its own claim and
+`delivery-workbench-program-delivery-receipt@1`. The receipt binds delivery
+plan/action, claim/request/subject, capability, story/phase, and a content-safe
+result identity. A completed receipt is valid only when the program ledger
+names its exact hash.
+
+The canonical contract assertion map is closed. `Evidence, not vibes.`,
+`Master docs updated.`, `Tests ran.`, `Story → evidence pairing.`, and
+`One PR per story.` require objective proof, including at least one fresh green
+mechanical check. `Greenfield discipline (if applicable).` and `No bypasses.`
+require the separately granted governed-verdict authority and its exact
+independent verifier lineage. A custom rule set whose titles cannot be fully
+partitioned refuses. The contract archive embeds
+`delivery-workbench-program-attestation@1` provenance, names the program,
+grant, proof, diff, mechanical and governed receipts, and states
+`human_attestation: false`.
+
+Recovery is effect-aware. Before each effect, immutable intent is durable and
+the program claim is reserved. On restart, an all-old state applies once; an
+all-new exact state records or completes the existing receipt; mixed or
+unknown evidence, roadmap, index, contract, commit, archive, or remote state
+refuses rather than guessing. Commit reconciliation requires the exact parent,
+tree, message, trailers, contract archive, clean index/worktree, gate result,
+and one-commit range verification. Push reconciliation first observes the
+named remote ref: already-at-commit succeeds idempotently, the exact old lease
+may fast-forward, and every other head is `remote-diverged`. There is no force
+route.
+
+Open blocking obligations make the delivery preview non-applicable.
+Non-blocking obligations remain only in the program ledger unless
+`obligation:materialize` is separately claimed. The pure materialization
+preview uses `plan_story_create` plus guarded apply, carries stable program,
+decision, obligation, and obligation-hash markers, and detects an existing
+exact marker as a no-op; an id reused by a different decision refuses.
+`obligation:disposition` separately records `completed`, `superseded`,
+`escalated`, or `waived` while retaining the original obligation and history.
+A waiver additionally requires the grant's accountable operator and exact
+grant authority string; self-asserted waiver authority refuses.
+
+These rails still expose no general command runner. Patch application, closed
+mechanical checks, gate, commit, range verification, remote observation/push,
+and canonical roadmap mutations are fixed adapters. The autonomous contract
+path must already be ignored, and candidate policy edits, symlinks, gitlinks,
+overlapping paths, hook failures, stale proof, budget/capability loss,
+revocation, dirty state, and remote divergence all stop closed.
 
 ## Outward facts, nudges, and decision ports
 

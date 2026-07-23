@@ -317,9 +317,12 @@ pure planner proves the full granted scope done. Each completed loop round has
 its own claim and
 immutable receipt binding the typed predicate observation, producer receipt,
 carried artifact hashes, exact round lineage, and success/continue/exhaustion
-route; restart cannot spend or record that round twice. It never integrates,
-certifies, commits, or edits roadmap status; those rails remain WLA-26-10,
-while the public control room remains WLA-26-11.
+route; restart cannot spend or record that round twice. The conductor itself
+still never integrates, certifies, commits, or edits roadmap status. The
+separate WLA-26-10 `program_delivery` core now performs those acts only from a
+pure exact preview and one claim per patch/evidence/roadmap/contract/
+certification/commit/push effect, with crash reconciliation and no-force
+remote leases. The public control room remains WLA-26-11.
 
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 
