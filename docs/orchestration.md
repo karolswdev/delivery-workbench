@@ -662,6 +662,8 @@ outward-fact/nudge, cross-story/phase-selection, and exact scope-completion
 boundaries one replay-derived tick at a time. It reuses Phase 25's
 authority-free signal chain but never performs an observe pass; program
 standing rules accept only SCM signals, an exact already-run agent target, and
-finite grant/rule budgets. Integration/Git/roadmap rails and public program
-controls remain fail-closed work in the active phase. Existing scores and run
-grants acquire none of those semantics or capabilities.
+finite grant/rule budgets. Exact integration/Git/roadmap delivery and the
+canonical CLI/MCP/HTTP/Workbench program controls are now delivered as
+separate program-only adapters over the same ledger. Existing scores and run
+grants acquire none of those semantics or capabilities, and the bounded-run
+surface remains independently complete.

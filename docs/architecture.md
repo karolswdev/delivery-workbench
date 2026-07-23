@@ -296,8 +296,12 @@ planner-selected next story in the same gated commit. The planner/conductor can
 then select that exact binding, story, and phase without introducing new
 authority. Non-blocking obligations remain in the frontier, blocking
 obligations stop, and terminal completion requires one immutable claim-bound
-proof of the planner's exact `scope-complete` result. Public transports remain
-WLA-26-11.
+proof of the planner's exact `scope-complete` result. The WLA-26-11
+`program_surface` is the additive public seam over that same ledger: canonical
+inventory/view/tail/stream documents feed CLI, MCP, localhost HTTP, Workbench,
+and read-only SSE, while preview-bound acts route back through the existing
+grant/conductor/delivery cores. It stores no authority, starts no daemon, and
+accepts no runtime policy, prompt, command, credential, or retry override.
 
 Viewport rendering is smoke-tested headlessly at desktop and mobile
 (`tests/workbench-ui-smoke.sh`, CI-run where Firefox exists).

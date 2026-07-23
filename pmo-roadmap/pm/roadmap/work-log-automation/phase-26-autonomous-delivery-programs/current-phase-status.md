@@ -96,7 +96,7 @@ acts.
   superseded, escalated, or explicitly waived; stale, divergent, dissenting,
   exhausted, or under-authorized state stops without partial advancement
   (WLA-26-10).
-- [ ] CLI/MCP/HTTP/Workbench expose one byte-equivalent program model and a
+- [x] CLI/MCP/HTTP/Workbench expose one byte-equivalent program model and a
   control room explaining why this story/team/workflow/verdict/state is current,
   what each agent is doing, which loops remain, and what authority/budget can
   still be consumed (WLA-26-11).
@@ -122,50 +122,46 @@ acts.
 | WLA-26-08 | Grant continuous program authority explicitly | done | [story-08-grant-continuous-program-authority-explicitly](./story-08-grant-continuous-program-authority-explicitly.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-26-09 | Conduct and recover hierarchical multi-phase programs | done | [story-09-conduct-and-recover-hierarchical-multi-phase-programs](./story-09-conduct-and-recover-hierarchical-multi-phase-programs.md) | [evidence-story-09](./evidence-story-09.md) |
 | WLA-26-10 | Integrate work and advance exact roadmap rails | done | [story-10-integrate-work-and-advance-exact-roadmap-rails](./story-10-integrate-work-and-advance-exact-roadmap-rails.md) | [evidence-story-10](./evidence-story-10.md) |
-| WLA-26-11 | Operate the autonomous organization across every surface | backlog | [story-11-operate-the-autonomous-organization-across-every-surface](./story-11-operate-the-autonomous-organization-across-every-surface.md) | - |
+| WLA-26-11 | Operate the autonomous organization across every surface | done | [story-11-operate-the-autonomous-organization-across-every-surface](./story-11-operate-the-autonomous-organization-across-every-surface.md) | [evidence-story-11](./evidence-story-11.md) |
 | WLA-26-12 | Prove a fully autonomous multi-phase program | backlog | [story-12-prove-a-fully-autonomous-multi-phase-program](./story-12-prove-a-fully-autonomous-multi-phase-program.md) | - |
 
 ## Where we are
 
-Phase open 10/12. Optional planning, finite workflow hierarchy, independent
+Phase open 11/12. Optional planning, finite workflow hierarchy, independent
 organization topology, deliberation, visual authoring, governed quality,
 finite revocable program authority, the restart-safe conductor, and exact
-delivery rails are evidence-backed.
+delivery rails and public program operations are evidence-backed.
 
-WLA-26-10 adds a pure `delivery-workbench-program-delivery-preview@1` and an
-immutable plan/receipt chain around the existing program authority ledger. It
-simulates the exact candidate Git tree without touching the working tree,
-requires fresh mechanical facts and explicitly authorized governed verdicts,
-and then claims only the individually granted evidence, diff, contract,
-certification, commit, push, story, phase, and next-story acts. Every apply
-rechecks repository, roadmap, program, proof, contract, remote, and lease
-freshness. The adapter uses fixed Git and Delivery Workbench commands only:
-there is no general shell runner, three-way apply, conflict resolution,
-`--no-verify`, force push, merge, release, deployment, or publication route.
+WLA-26-11 adds one shared `delivery-workbench-program-surface@1` projection
+over the existing planner, authority ledger, conductor, and delivery rails.
+CLI JSON, MCP `structuredContent`, HTTP `data`, Workbench bootstrap, SSE replay,
+and bounded stream reads use that projection instead of surface-specific
+policy or state. Exact previews bind the current grant, ledger head,
+generation, operation frontier, capability, budget, and parameters; apply
+rechecks the binding under the owning lock, so concurrent adapters cannot both
+consume the same stale frontier. `supervise` remains a finite explicit loop
+over the same one-act tick and stops at checkpoints, terminal state, no
+progress, budget, or duration.
 
-Machine certification maps each objective contract assertion to a fresh
-mechanical fact or authorized governed verdict and writes explicit
-machine/program provenance without implying human attestation. Commit runs the
-real gate and hooks, archive reconciliation recovers an already-created
-contract/commit, and optional push requires the bound remote URL, observed
-head, ref, and exact fast-forward lease before re-binding the local tracking
-fact. Canonical roadmap mutation cores materialize evidence, mark a story
-done, start the next story, and close/advance a completed phase as one guarded
-summary/pointer/header plan.
+The responsive Workbench control room explains roadmap intent, organization
+and execution provenance, councils and decision authority, nested runs,
+artifacts, mechanical facts versus governed verdicts, dissent, obligations,
+gates, delivery, remaining budgets/capabilities, exact next acts, refusals, and
+timeline. Program Studio projects portable execution profiles through locally
+resolved registered adapters and fingerprints without credentials or arbitrary
+commands. Live SSE starts only on an explicit run route; output streams require
+an explicit bounded open, while an empty inventory remains healthy and starts
+no store, process, poller, stream, or notification.
 
-Blocking obligations stop advancement. Non-blocking obligations remain
-durable in the program ledger and become roadmap work only through a separate
-deduplicated traced-story capability; completion, supersession, escalation, or
-an accountable exact waiver retains the original obligation history. Fixture
-proof covers two exact story commits, one phase transition, a local bare
-remote, planted crashes after effect/receipt boundaries, hook failure and
-remote divergence, stale artifact and objective-proof refusals, and obligation
-deduplication/waiver authority. The six focused delivery tests pass on Python
-3.14 and the Python 3.9 floor; the full core suite passes 464/464 on both
-floors, and fresh-wheel packaging plus the complete documentation/parity
-matrix is green. WLA-26-11 is next and owns public CLI/MCP/HTTP/Workbench
-program operations and the live control room; WLA-26-12 remains the installed
-multi-phase exit exam.
+Typed notifications are derived only from verified program state and cover
+intervention, disagreement, decider/provider loss, architect veto, obligation
+state, budget exhaustion, integration refusal, and completion. A response is a
+closed approve/reject request document; transport is never authority and the
+fresh exact act token is minted only at the local apply boundary. Focused
+surface, conductor, browser, adapter, notification, and race tests plus the
+full two-floor/fresh-wheel closeout matrix are captured in
+[evidence-story-11](./evidence-story-11.md). WLA-26-12 is now the sole
+remaining story and owns the installed no-human multi-phase exit exam.
 
 Continuation snapshot: [Phase 26 handover](./handover.md).
 
@@ -405,6 +401,22 @@ Continuation snapshot: [Phase 26 handover](./handover.md).
   roadmap-write claim creates one traced, deduplicated story. Every completion,
   supersession, escalation, or exact authorized waiver preserves the source
   decision and original obligation - WLA-26-10.
+- 2026-07-23 - Project inventory, detail, tail, stream, preview, and apply from
+  one shared program surface. CLI, MCP, HTTP, SSE, and Workbench may frame that
+  document for their transports but cannot independently infer state, policy,
+  next work, or authority - WLA-26-11.
+- 2026-07-23 - Bind every public act preview to the exact grant, ledger head,
+  assignment generation, and derived operation, then recheck that binding
+  inside the conductor, delivery, or authority lock. Concurrent clients may
+  race for one frontier, but only one fresh claim can win - WLA-26-11.
+- 2026-07-23 - Keep observation dormant and bounded: opening inventory or the
+  Workbench starts no program machinery; SSE is an explicit verified ledger
+  replay on a run route; stdout/stderr is an explicit bounded read; supervision
+  is a finite local invocation of the same single-act tick - WLA-26-11.
+- 2026-07-23 - Treat notification delivery and phone response as untrusted
+  transport. Notifications are derived from verified content-safe state,
+  responses use closed typed documents, and only the local exact-preview/apply
+  boundary can mint and consume mutation authority - WLA-26-11.
 
 ## Decisions deferred
 

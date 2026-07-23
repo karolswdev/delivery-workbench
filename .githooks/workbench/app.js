@@ -2020,6 +2020,348 @@ async function viewOrchestration(name) {
   await refreshOrchValidation();
 }
 
+/* ── autonomous program control room (WLA-26-11) ─────────────────
+ * This browser view renders the canonical /api/programs documents. It does
+ * not infer scheduling or authority. A live tail is opened only while one
+ * explicit run route is active, and every act crosses preview + exact-token
+ * confirmation before the server delegates to the shared program surface. */
+
+let programState = {
+  inventory: null, runId: "", view: null, plan: null, planRequest: null,
+  act: null, stream: null, result: null, error: "", loading: false,
+  reason: "", maxTicks: 100, maxSeconds: 300, notifications: [],
+};
+let programLive = null;
+let programLiveTimer = null;
+
+function stopProgramLive() {
+  if (programLive) { programLive.close(); programLive = null; }
+  if (programLiveTimer) { clearTimeout(programLiveTimer); programLiveTimer = null; }
+}
+
+function programScalar(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function programStateBadge(state) {
+  const token = String(state || "unknown");
+  const cls = ["running", "ready", "complete", "succeeded"].includes(token) ? "ok"
+    : ["revoked", "cancelled", "exhausted", "stopped", "failed", "corrupt"].includes(token) ? "issue"
+      : ["checkpoint", "paused", "expired", "waiting"].includes(token) ? "warn" : "";
+  return badge(token, cls);
+}
+
+function programInventoryHtml() {
+  const inventory = programState.inventory || { programs: [], runs: [], healthy: true };
+  const programs = inventory.programs || [];
+  const runs = inventory.runs || [];
+  return `<div class="program-inventory" data-healthy="${inventory.healthy ? "true" : "false"}">
+    <header class="program-room-toolbar"><div><span class="orch-eyebrow">autonomous organization · inspect first</span><h1>Program control room</h1><p>Tracked policies and replayed local grants. Opening this view starts no store, process, stream, poller, or work.</p></div>${badge(inventory.healthy ? "healthy" : "attention", inventory.healthy ? "ok" : "issue")}</header>
+    <section class="program-room-grid" aria-label="program policies">${programs.map((item) => `<article class="program-card"><div><span>policy</span>${item.valid ? badge("valid", "ok") : badge("invalid", "issue")}</div><h2>${esc(item.title || item.slug || item.name)}</h2><code>${esc(item.path)}</code><p>${item.valid ? `semantic <code>${esc(item.semantic_hash)}</code>` : esc((item.diagnostics || []).map((d) => d.message).join("; "))}</p></article>`).join("") || '<article class="program-empty"><h2>Healthy empty inventory</h2><p>No program policy is configured. The control room remains dormant and creates no local program store.</p></article>'}</section>
+    ${programs.length ? programStartHtml(programs) : ""}
+    <section class="program-panel"><div class="program-panel-head"><div><span>local grants</span><strong>${runs.length} replayed program run${runs.length === 1 ? "" : "s"}</strong></div>${badge("read-only inventory", "ok")}</div>
+      <div class="tablewrap"><table class="run-table"><thead><tr><th>run</th><th>program / mode</th><th>authority</th><th>operational frontier</th><th>open gates</th><th>expiry</th></tr></thead><tbody>${runs.map((item) => `<tr><td><a href="#/programs/${encodeURIComponent(item.run_id)}"><code>${esc(item.run_id)}</code></a></td><td>${esc(item.program || "unknown")}<br><small>${esc(item.mode || "—")}</small></td><td>${programStateBadge(item.state)}</td><td>${programStateBadge(item.operational_state)} ${item.stop ? `<small>${esc(item.stop)}</small>` : ""}</td><td>${esc(item.outstanding_requests || 0)} requests · ${esc(item.blocking_obligations || 0)} blocking</td><td>${esc(item.expires_at || "—")}</td></tr>`).join("") || '<tr><td colspan="6">No local grants. Reading the inventory does not create one.</td></tr>'}</tbody></table></div>
+    </section>
+  </div>`;
+}
+
+function programStartHtml(programs) {
+  const plan = programState.plan;
+  const request = programState.planRequest || {};
+  return `<section class="program-start"><div><span class="orch-eyebrow">policy ≠ authority</span><h2>Plan one finite program grant</h2><p>The first action builds a pure, state-bound preview. A second explicit confirmation creates authority and still dispatches nothing.</p></div>
+    <form id="program-plan-form" class="program-plan-form">
+      <label>program policy<select name="program">${programs.filter((item) => item.valid).map((item) => `<option value="${esc(item.name)}"${request.program === item.name ? " selected" : ""}>${esc(item.title || item.slug || item.name)}</option>`).join("")}</select></label>
+      <label>mode<select name="mode">${["continuous", "checkpointed", "advisory"].map((mode) => `<option value="${mode}"${request.mode === mode ? " selected" : ""}>${mode}</option>`).join("")}</select></label>
+      <label>operator identity<input name="operator" required maxlength="200" value="${esc(request.operator || "")}" placeholder="accountable human or agent"></label>
+      <label>grant minutes<input name="minutes" type="number" min="1" max="1440" value="${esc(request.minutes || 60)}"></label>
+      <label class="program-plan-reason">approval reason<input name="reason" required maxlength="1000" value="${esc(request.reason || "")}" placeholder="single-line reviewed intent"></label>
+      <button type="submit">preview exact grant</button>
+    </form>
+    ${plan ? `<div class="program-consent ${plan.applicable ? "" : "refused"}" aria-live="polite"><div class="program-consent-head"><div><span>immutable grant preview</span><strong>${esc(plan.program?.slug || request.program)} · ${esc(plan.mode || request.mode)}</strong></div>${badge("starts no work", "ok")}</div>
+      <div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div>
+      <div class="program-facts"><div><span>selection</span><strong>${esc(plan.selection?.story?.id || plan.selection?.story || "—")}</strong></div><div><span>team</span><strong>${esc(plan.roster?.team || "—")}</strong></div><div><span>expires</span><strong>${esc(plan.request?.expires_at || request.expires_at)}</strong></div><div><span>capabilities</span><strong>${esc((plan.authority?.capabilities || []).length)}</strong></div></div>
+      ${(plan.issues || []).map((issue) => `<p class="guard">${esc(typeof issue === "object" ? issue.message || issue.code : issue)}</p>`).join("")}
+      <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="program-start-confirm">create this grant — dispatch nothing</button>' : ""}<button type="button" id="program-plan-close">close preview</button></div>
+    </div>` : ""}
+  </section>`;
+}
+
+function programWhyHtml(view) {
+  return `<section class="program-panel program-why"><div class="program-panel-head"><div><span>why this frontier</span><strong>Selection, workflow, team, and next derivable act</strong></div>${badge("ledger-derived", "ok")}</div>
+    <div class="program-why-grid"><article><span>story</span><strong>${esc(programScalar(view.current?.selection?.story || view.current?.lineage?.story))}</strong><p>${esc(programScalar(view.why?.story))}</p></article><article><span>phase</span><strong>${esc(programScalar(view.current?.selection?.phase || view.current?.lineage?.phase))}</strong><p>${esc(programScalar(view.why?.phase))}</p></article><article><span>workflow / team</span><strong>${esc(programScalar(view.why?.workflow))} · ${esc(programScalar(view.why?.team))}</strong><p>${esc(programScalar(view.current?.lineage))}</p></article><article><span>next or refusal</span><strong>${esc(programScalar(view.current?.next_action?.kind || view.current?.stop || view.state))}</strong><p>${esc(programScalar(view.why?.next))}</p></article></div>
+  </section>`;
+}
+
+function programOrganizationHtml(view) {
+  const org = view.organization || { roles: [], councils: [] };
+  return `<section class="program-panel"><div class="program-panel-head"><div><span>organization</span><strong>${esc(org.slug)} · ${esc(org.team)}</strong></div>${badge(`${(org.roles || []).length} seats`)}</div>
+    <div class="tablewrap"><table class="run-table program-role-table"><thead><tr><th>seat / duty</th><th>agent</th><th>execution port</th><th>identity boundary</th><th>activity</th></tr></thead><tbody>${(org.roles || []).map((seat) => { const x = seat.execution || {}; return `<tr><td><code>${esc(seat.address)}</code><br>${esc(seat.role)} · ${esc(seat.duty)}</td><td>${esc(seat.agent)}<br><small>${esc(seat.profile)}</small></td><td><strong>${esc(x.harness || "—")} / ${esc(x.adapter || "—")}</strong><br><small>${esc(x.provider || "—")} · ${esc(x.model || x.model_family || "—")}</small></td><td><code>${esc(x.auth_domain_fingerprint || "—")}</code><br><small>principal ${esc(seat.principal_fingerprint)}</small></td><td>${programStateBadge(seat.activity)}<br><small>${esc(programScalar(seat.last_result))}</small></td></tr>`; }).join("")}</tbody></table></div>
+    <div class="program-councils"><section><h3>councils / deciders</h3>${(org.councils || []).map((council) => `<article><div><strong>${esc(council.id)}</strong>${badge(council.primary_authority || council.method, council.primary_authority === "judge" ? "warn" : "ok")}</div><p>${esc((council.members || []).join(", "))} · quorum ${esc(council.quorum)} · tie ${esc(council.tie_authority)}</p><small>chair ${esc(council.chair_seat || "rule")} · decider ${esc(council.decider_seat || "deterministic rule")}</small></article>`).join("") || '<p class="hint">No council is assigned to this scope.</p>'}</section><section><h3>separation / diversity</h3><pre>${esc(JSON.stringify(org.separation || {}, null, 2))}</pre></section></div>
+  </section>`;
+}
+
+function programActivityHtml(view) {
+  const nodes = view.graph?.nodes || [];
+  const sessions = view.activities?.sessions || [];
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const depth = (node) => { let value = 0; let parent = node.parent; const seen = new Set(); while (parent && byId.has(parent) && !seen.has(parent)) { seen.add(parent); value += 1; parent = byId.get(parent).parent; } return value; };
+  return `<section class="program-panel"><div class="program-panel-head"><div><span>nested execution</span><strong>Compiled activity lineage and live session receipts</strong></div>${badge(`${nodes.length} activities`)}</div>
+    <div class="tablewrap"><table class="run-table"><thead><tr><th>address</th><th>kind / role</th><th>state</th><th>result</th></tr></thead><tbody>${nodes.map((node) => `<tr><td style="padding-left:${10 + depth(node) * 18}px"><code>${esc(node.address || node.id)}</code></td><td>${esc(node.kind)} · ${esc(node.role || "system")}</td><td>${programStateBadge(node.state)}</td><td>${esc(programScalar(node.result))}</td></tr>`).join("") || '<tr><td colspan="4">No conductor activity has completed. The first tick remains an explicit act.</td></tr>'}</tbody></table></div>
+    <div class="program-sessions">${sessions.map((session) => `<article><div><strong>${esc(session.profile)} · ${esc(session.adapter)}</strong>${programStateBadge(session.state)}</div><code>${esc(session.session_id || session.operation_id)}</code><p>${esc(programScalar(session.activity))}</p><div>${["stdout", "stderr"].filter((stream) => Number(session[`${stream}_bytes`] || 0) > 0).map((stream) => `<button type="button" data-program-stream="${stream}" data-session-id="${esc(session.session_id)}">open ${stream} · ${esc(session[`${stream}_bytes`])} B</button>`).join("")}</div></article>`).join("") || '<p class="hint">No driver session has crossed an execution port.</p>'}</div>
+    ${programStreamHtml(programState.stream)}
+  </section>`;
+}
+
+function programStreamHtml(stream) {
+  if (!stream) return "";
+  return `<div class="program-open-stream" aria-live="polite"><div><strong>${esc(stream.session_id)} · ${esc(stream.stream)}</strong><button type="button" id="program-stream-close">close explicit stream</button></div><small>${esc(stream.included_bytes)} / ${esc(stream.bytes)} bytes · ${stream.truncated ? "truncated" : "complete"} · ${esc(stream.sha256)}</small><pre>${esc(stream.content)}</pre></div>`;
+}
+
+function programQualityHtml(view) {
+  const artifactRows = (view.artifacts || []).map((item) => `<tr><td><code>${esc(item.name || item.artifact_id)}</code></td><td>${esc(item.artifact_kind || "artifact")}</td><td>${esc(item.bytes || 0)} B</td><td><code>${esc(item.sha256 || item.ref || "—")}</code></td></tr>`).join("");
+  const resultItems = (items, empty) => items.map((item) => `<li><div><strong>${esc(item.address || item.action_id)}</strong>${programStateBadge(item.result || item.outcome || item.action_kind)}</div><p>${esc(programScalar(item.verdict || item.decision || item.payload || item.result))}</p></li>`).join("") || `<li class="hint">${esc(empty)}</li>`;
+  return `<section class="program-panel"><div class="program-panel-head"><div><span>quality, dissent, and gates</span><strong>Evidence metadata, verdicts, councils, obligations, and delivery handoffs</strong></div></div>
+    <div class="program-quality-grid">
+      <section><h3>verdicts / gates</h3><ul>${resultItems([...(view.verdicts || []), ...(view.gates || [])], "No quality verdict or gate receipt yet.")}</ul></section>
+      <section><h3>decisions / dissent / rounds</h3><ul>${resultItems([...(view.decisions || []), ...(view.dissent || []), ...(view.rounds || [])], "No deliberation receipt yet.")}</ul></section>
+      <section><h3>obligations / debt</h3><ul>${(view.obligations?.all || []).map((item) => `<li><div><strong>${esc(item.id)}</strong>${programStateBadge(item.state)}${item.blocking ? badge("blocking", "issue") : ""}</div><p>${esc(item.statement || item.reason || programScalar(item))}</p></li>`).join("") || '<li class="hint">No decision obligation is recorded.</li>'}</ul></section>
+      <section><h3>deliveries / integrations</h3><ul>${[...(view.deliveries || []), ...(view.integrations || [])].map((item) => `<li><div><strong>${esc(item.delivery_id || item.action_kind || item.action_id)}</strong>${programStateBadge(item.state || item.result || (item.complete ? "complete" : "active"))}</div><p>${esc(programScalar(item.next_action || item.story || item.receipt_hash))}</p></li>`).join("") || '<li class="hint">No certified delivery handoff has started.</li>'}</ul></section>
+    </div>
+    <div class="tablewrap"><table class="run-table"><thead><tr><th>artifact</th><th>kind</th><th>size</th><th>digest / ref</th></tr></thead><tbody>${artifactRows || '<tr><td colspan="4">No content-safe artifact metadata yet.</td></tr>'}</tbody></table></div>
+  </section>`;
+}
+
+function programControlsHtml(view) {
+  const available = (view.controls || []).filter((item) => item.available);
+  const unavailable = (view.controls || []).filter((item) => !item.available);
+  return `<section class="program-controls"><div class="program-panel-head"><div><span>separate act boundary</span><strong>Preview, inspect, then confirm one exact program operation</strong></div>${badge("no auto-start daemon", "warn")}</div>
+    ${available.some((item) => item.reason_required) ? `<label class="run-reason">operator reason<input id="program-control-reason" maxlength="1000" value="${esc(programState.reason)}" placeholder="bounded single-line reason"></label>` : ""}
+    ${available.some((item) => item.action === "supervise") ? `<div class="program-ceilings"><label>supervise tick ceiling<input id="program-max-ticks" type="number" min="1" max="10000" value="${esc(programState.maxTicks)}"></label><label>duration ceiling (seconds)<input id="program-max-seconds" type="number" min="1" max="86400" value="${esc(programState.maxSeconds)}"></label></div>` : ""}
+    <div class="run-control-buttons">${available.map((item) => `<button type="button" data-program-act="${esc(item.action)}" data-program-decision="${esc(item.decision || "")}" data-program-request="${esc(item.request_id || "")}" class="${item.action === "cancel" || item.action === "revoke" || item.decision === "reject" ? "danger" : item.starts_work ? "starts-work" : ""}">preview ${esc(item.action)}${item.request_id ? ` · ${esc(item.request_id)}` : ""}${item.decision ? ` · ${esc(item.decision)}` : ""}${item.starts_work ? " (may start bounded work)" : ""}</button>`).join("") || '<span class="hint">No control is applicable in this authority state.</span>'}</div>
+    <div class="run-unavailable">${unavailable.map((item) => `<div><strong>${esc(item.action)}</strong><span>${esc(item.issue || "not applicable in the current authority state")}</span></div>`).join("")}</div>
+    ${programActHtml(programState.act)}
+  </section>`;
+}
+
+function programActHtml(preview) {
+  if (!preview) return "";
+  return `<div class="program-consent ${preview.applicable ? "" : "refused"}" aria-live="polite"><div class="program-consent-head"><div><span>exact act preview</span><strong>${esc(preview.action)}${preview.decision ? ` · ${esc(preview.decision)}` : ""}</strong></div>${badge(preview.starts_work ? "bounded work may start" : "one ledger act", preview.starts_work ? "warn" : "ok")}</div>
+    <div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>
+    ${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}
+    <div class="run-consent-actions">${preview.applicable ? '<button type="button" id="program-act-confirm">confirm this exact act</button>' : ""}<button type="button" id="program-act-close">close preview</button></div><small>Any ledger, generation, action, reason, request, decision, or ceiling change invalidates this token.</small>
+  </div>`;
+}
+
+function programTimelineHtml(view) {
+  return `<ol class="program-timeline">${(view.timeline || []).map((event) => `<li><div><strong>${esc(event.event)}</strong><time>${esc(event.at || event.ts)}</time>${badge(`#${event.seq}`)}</div><p>${Object.entries(event.detail || {}).map(([key, value]) => `<span><b>${esc(key)}</b> ${esc(programScalar(value))}</span>`).join("")}</p><code>${esc(event.event_hash)}</code></li>`).join("")}</ol>`;
+}
+
+function programNotificationsHtml(view) {
+  const items = (programState.notifications || []).filter(
+    (item) => item.run_id === view.run_id && item.kind.startsWith("program-"),
+  );
+  return `<section class="program-panel"><div class="program-panel-head"><div><span>operator notifications</span><strong>Derived facts and typed request documents</strong></div>${badge("transport ≠ authority", "ok")}</div>
+    <ul class="run-notifications">${items.map((item) => `<li><code>${esc(item.kind)}</code> ${item.unread ? badge("unread", "warn") : badge("acked", "ok")}<span>${esc(item.detail)}</span>${item.request ? `<small>typed response · <code>${esc(item.request.correlation_id)}</code> · ${esc((item.request.response_schema?.decision || []).join("|"))} · fresh local act token still required</small>` : ""}${item.unread ? `<button type="button" data-program-ntf-ack="${esc(item.id)}">ack</button>` : ""}</li>`).join("") || '<li class="hint">No derived program notification at this ledger head.</li>'}</ul>
+  </section>`;
+}
+
+function programRunHtml(view) {
+  const runs = programState.inventory?.runs || [];
+  const progress = view.phase_progress || {};
+  return `<div class="program-room" data-program-run="${esc(view.run_id)}">
+    <header class="program-room-toolbar"><div><span class="orch-eyebrow">live program · canonical ledger replay</span><h1>${esc(view.program?.title || view.program?.slug || "program")} ${programStateBadge(view.state)}</h1><p><code>${esc(view.run_id)}</code> · ${esc(view.mode)} · expires ${esc(view.expires_at)}</p></div><div><label>run<select id="program-run-select">${runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run_id)} · ${esc(item.state)}</option>`).join("")}</select></label><button type="button" id="program-refresh">refresh once</button></div></header>
+    ${programState.error ? `<div class="guard" role="alert">${esc(programState.error)}</div>` : ""}
+    ${programState.result ? `<div class="program-result" role="status"><strong>bounded operation completed</strong><span>${esc(programState.result.kind)} · ${esc(programState.result.stop || programState.result.state || programState.result.result || "recorded")}</span></div>` : ""}
+    <div class="program-summary"><div><span>authority</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>operational frontier</span><strong>${esc(view.operational_state)}</strong><small>${esc(view.current?.stop || "ready")}</small></div><div><span>ledger</span><strong>${esc(view.event_count)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>scope progress</span><strong>${esc((progress.selected_stories || []).length)} selected</strong><small>${esc(programScalar(progress.scope_completion))}</small></div></div>
+    ${programWhyHtml(view)}
+    ${runBudgetHtml(view.budgets)}
+    ${programOrganizationHtml(view)}
+    ${programActivityHtml(view)}
+    ${programQualityHtml(view)}
+    ${programNotificationsHtml(view)}
+    ${programControlsHtml(view)}
+    <section class="program-panel"><div class="program-panel-head"><div><span>phase and authority boundary</span><strong>Granted scope, selected progress, capabilities, and permanent exclusions</strong></div></div><div class="program-boundary"><section><h3>phase progress</h3><pre>${esc(JSON.stringify(progress, null, 2))}</pre></section><section><h3>capabilities</h3><p>${(view.capabilities || []).map((item) => badge(item, "ok")).join(" ") || "none"}</p><h3>permanently excluded</h3><p>${(view.permanent_exclusions || []).map((item) => badge(item, "warn")).join(" ") || "none"}</p></section></div></section>
+    <section class="program-panel"><div class="program-panel-head"><div><span>hash-chained receipts</span><strong>Program authority timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${programTimelineHtml(view)}</section>
+  </div>`;
+}
+
+function renderPrograms() {
+  if (programState.loading) {
+    app.innerHTML = stateHtml("Replaying the authoritative program ledger…");
+    return;
+  }
+  if (programState.error && !programState.inventory) {
+    app.innerHTML = stateHtml(programState.error, true);
+    return;
+  }
+  app.innerHTML = programState.view ? programRunHtml(programState.view) : programInventoryHtml();
+  wirePrograms();
+}
+
+async function refreshProgramView() {
+  if (!programState.runId) return;
+  programState.loading = true; programState.error = ""; renderPrograms();
+  try {
+    const [inventory, view, notifications] = await Promise.all([
+      api("/api/programs"),
+      api(`/api/programs/${encodeURIComponent(programState.runId)}/view`),
+      api("/api/notifications"),
+    ]);
+    programState.inventory = inventory.data;
+    programState.view = view.data;
+    programState.notifications = notifications.data.notifications || [];
+  } catch (err) {
+    programState.error = err.message; programState.view = null;
+  }
+  programState.loading = false; renderPrograms(); startProgramLive();
+}
+
+function startProgramLive() {
+  stopProgramLive();
+  if (!programState.runId || !programState.view || SNAPSHOT_MODE || typeof EventSource === "undefined") return;
+  const runId = programState.runId;
+  const cursor = Number(programState.view.event_count || 0);
+  programLive = new EventSource(`/api/programs/${encodeURIComponent(runId)}/events?from=${cursor}&follow=1`);
+  programLive.addEventListener("program-ledger", () => {
+    if (programLiveTimer) return;
+    programLiveTimer = setTimeout(async () => {
+      programLiveTimer = null;
+      if (programState.runId !== runId) return;
+      try {
+        programState.view = (await api(`/api/programs/${encodeURIComponent(runId)}/view`)).data;
+        programState.inventory = (await api("/api/programs")).data;
+        programState.notifications = (await api("/api/notifications")).data.notifications || [];
+        renderPrograms();
+      } catch (err) { /* keep last verified replay; explicit refresh remains */ }
+    }, 350);
+  });
+  programLive.onerror = () => { stopProgramLive(); };
+}
+
+async function previewProgramStart(form) {
+  const values = Object.fromEntries(new FormData(form).entries());
+  const minutes = Math.max(1, Math.min(1440, Number(values.minutes) || 60));
+  const issued = new Date();
+  const request = {
+    program: String(values.program || ""), mode: String(values.mode || "continuous"),
+    operator: String(values.operator || "").trim(), reason: String(values.reason || "").trim(),
+    intent_id: `workbench-${issued.getTime()}`, issued_at: issued.toISOString(),
+    expires_at: new Date(issued.getTime() + minutes * 60_000).toISOString(),
+  };
+  programState.planRequest = { ...request, minutes }; programState.plan = null; programState.error = ""; renderPrograms();
+  const { status, body } = await postJson("/api/programs/plan", request);
+  if (status >= 400 || body.ok === false) programState.error = (body.issues && body.issues[0]) || `program plan failed (${status})`;
+  else programState.plan = body.data;
+  renderPrograms();
+}
+
+async function confirmProgramStart() {
+  if (!programState.plan?.applicable || !programState.planRequest) return;
+  const request = { ...programState.planRequest, approve: true, expect: programState.plan.start_token };
+  delete request.minutes;
+  const { status, body } = await postJson("/api/programs/start", request);
+  if (status >= 400 || body.ok === false) {
+    programState.plan = null;
+    programState.error = (body.issues && body.issues[0]) || `program start failed (${status})`;
+    renderPrograms(); return;
+  }
+  programState.plan = null; programState.planRequest = null;
+  location.hash = `#/programs/${encodeURIComponent(body.data.run_id)}`;
+}
+
+async function previewProgramAct(button) {
+  const action = button.dataset.programAct;
+  const reasonRequired = ["request", "pause", "resume", "revoke", "cancel"].includes(action);
+  const request = {
+    run_id: programState.runId, action,
+    ...(reasonRequired ? { reason: programState.reason.trim() } : {}),
+    ...(button.dataset.programDecision ? { decision: button.dataset.programDecision } : {}),
+    ...(button.dataset.programRequest ? { request_id: button.dataset.programRequest } : {}),
+    ...(["tick", "supervise"].includes(action) ? {
+      max_ticks: action === "tick" ? 100 : Number(programState.maxTicks),
+      max_seconds: action === "tick" ? 300 : Number(programState.maxSeconds),
+    } : {}),
+  };
+  programState.act = null; programState.error = ""; programState.result = null; renderPrograms();
+  const { status, body } = await postJson("/api/programs/preview", request);
+  if (status >= 400 || body.ok === false) programState.error = (body.issues && body.issues[0]) || `program preview failed (${status})`;
+  else programState.act = body.data;
+  renderPrograms();
+}
+
+async function confirmProgramAct() {
+  const preview = programState.act;
+  if (!preview?.applicable) return;
+  const request = {
+    run_id: preview.run_id, expect: preview.act_token,
+    ...(preview.reason ? { reason: preview.reason } : {}),
+    ...(preview.decision ? { decision: preview.decision } : {}),
+    ...(preview.request_id ? { request_id: preview.request_id } : {}),
+    ...(preview.action === "supervise" ? { max_ticks: preview.max_ticks, max_seconds: preview.max_seconds } : {}),
+  };
+  const { status, body } = await postJson(`/api/programs/${encodeURIComponent(preview.action)}`, request);
+  if (status >= 400 || body.ok === false) {
+    programState.act = null;
+    programState.error = (body.issues && body.issues[0]) || `program act failed (${status})`;
+    renderPrograms(); return;
+  }
+  programState.result = body.data; programState.act = null; programState.reason = "";
+  await refreshProgramView();
+}
+
+async function openProgramStream(button) {
+  programState.stream = null; programState.error = ""; renderPrograms();
+  try {
+    programState.stream = (await api(`/api/programs/${encodeURIComponent(programState.runId)}/streams/${encodeURIComponent(button.dataset.sessionId)}/${encodeURIComponent(button.dataset.programStream)}?max_bytes=20000`)).data;
+  } catch (err) { programState.error = err.message; }
+  renderPrograms();
+}
+
+async function ackProgramNotification(id) {
+  const { status, body } = await postJson("/api/notifications/ack", { id });
+  if (status >= 400 || body.ok === false) {
+    programState.error = (body.issues && body.issues[0]) || `notification acknowledgement failed (${status})`;
+    renderPrograms(); return;
+  }
+  programState.notifications = (await api("/api/notifications")).data.notifications || [];
+  renderPrograms();
+}
+
+function wirePrograms() {
+  document.getElementById("program-plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewProgramStart(event.currentTarget); });
+  document.getElementById("program-start-confirm")?.addEventListener("click", confirmProgramStart);
+  document.getElementById("program-plan-close")?.addEventListener("click", () => { programState.plan = null; renderPrograms(); });
+  document.getElementById("program-refresh")?.addEventListener("click", refreshProgramView);
+  document.getElementById("program-run-select")?.addEventListener("change", (event) => { location.hash = `#/programs/${encodeURIComponent(event.target.value)}`; });
+  document.getElementById("program-control-reason")?.addEventListener("input", (event) => { programState.reason = event.target.value; });
+  document.getElementById("program-max-ticks")?.addEventListener("input", (event) => { programState.maxTicks = Number(event.target.value); });
+  document.getElementById("program-max-seconds")?.addEventListener("input", (event) => { programState.maxSeconds = Number(event.target.value); });
+  document.querySelectorAll("[data-program-act]").forEach((button) => button.addEventListener("click", () => previewProgramAct(button)));
+  document.getElementById("program-act-confirm")?.addEventListener("click", confirmProgramAct);
+  document.getElementById("program-act-close")?.addEventListener("click", () => { programState.act = null; renderPrograms(); });
+  document.querySelectorAll("[data-program-stream]").forEach((button) => button.addEventListener("click", () => openProgramStream(button)));
+  document.querySelectorAll("[data-program-ntf-ack]").forEach((button) => button.addEventListener("click", () => ackProgramNotification(button.dataset.programNtfAck)));
+  document.getElementById("program-stream-close")?.addEventListener("click", () => { programState.stream = null; renderPrograms(); });
+}
+
+async function viewPrograms(runId = "") {
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "program control", href: "#/programs" }, ...(runId ? [{ label: runId }] : [])]);
+  programState.runId = runId; programState.view = null; programState.act = null;
+  programState.stream = null; programState.result = null; programState.error = "";
+  const [inventory, notifications] = await Promise.all([
+    api("/api/programs"), api("/api/notifications"),
+  ]);
+  programState.inventory = inventory.data;
+  programState.notifications = notifications.data.notifications || [];
+  if (runId) {
+    programState.view = (await api(`/api/programs/${encodeURIComponent(runId)}/view`)).data;
+    startProgramLive();
+  }
+  renderPrograms();
+}
+
 /* ── optional Program / Workflow Studio (WLA-26-06) ────────────────
  * This route is deliberately additive: the ordinary Workbench stays at #/.
  * The browser owns interaction and layout only. Raw policy, diagnostics,
@@ -2161,9 +2503,23 @@ function studioProgramInspector() {
   </form>`;
 }
 
+function studioExecutionContractHtml(contract, compact = false) {
+  if (!contract) return '<p class="hint">No organization execution contract is reachable from this policy.</p>';
+  const ports = contract.ports || [];
+  const fallbacks = contract.fallbacks || [];
+  const councils = contract.councils || [];
+  const diversity = contract.diversity || {};
+  return `<div class="studio-execution-contract${compact ? " compact" : ""}">
+    <section><h3>portable execution ports / local resolution</h3>${ports.map((port) => { const local = port.local_resolution || {}; return `<article><div><strong>${esc(port.agent)}</strong>${badge(local.configured ? (local.available ? "available" : "unavailable") : "unconfigured", local.available ? "ok" : "warn")}</div><code>${esc(port.selector?.profile)}</code><span>${esc((port.constraints?.duties || []).join(", "))} · ${esc(local.harness || "unresolved")} / ${esc(local.provider || "—")} / ${esc(local.model || local.model_family || "—")}</span><small>auth <code>${esc(local.auth_domain_fingerprint || "—")}</code> · principal <code>${esc(local.principal_fingerprint || "—")}</code></small></article>`; }).join("") || '<p class="hint">This policy family declares no logical execution profile.</p>'}${contract.local_resolution_issue ? `<p class="guard">${esc(contract.local_resolution_issue)}</p>` : ""}</section>
+    <section><h3>fallback and replacement policy</h3>${fallbacks.map((item) => `<article><div><strong>${esc(item.team)} / ${esc(item.role)}</strong>${badge(`${esc(item.max_replacements)} replacement${Number(item.max_replacements) === 1 ? "" : "s"}`)}</div><span>${esc(item.primary_pool)} → ${esc((item.fallback_pools || []).join(", ") || "no fallback pool")}</span><small>${esc((item.reasons || []).join(", ") || "no eligible reason")} · exhausted → ${esc(item.on_exhausted)}</small></article>`).join("") || '<p class="hint">No replacement policy is reachable.</p>'}</section>
+    <section><h3>council perspectives / authority / obligations</h3>${councils.map((item) => `<article><div><strong>${esc(item.id)}</strong>${badge(item.decision_authority === "judge" ? "agent judge" : `rule · ${item.decision_authority}`, item.decision_authority === "judge" ? "warn" : "ok")}</div><span>${(item.perspectives || []).map((perspective) => `${esc(perspective.role)}:${esc(perspective.perspective)}`).join(" · ")}</span><small>quorum ${esc(item.quorum)} · principals ${esc(item.principal_diversity)} · meta ${esc(item.meta_verifier || "none")} · veto ${esc((item.veto_roles || []).join(", ") || "none")}</small><small>obligations required · ${esc((item.obligation_policy?.allowed_kinds || []).join(", "))} · blocking stops progress</small></article>`).join("") || '<p class="hint">No council policy is reachable.</p>'}</section>
+    <section><h3>diversity contract and observed roster</h3><dl class="studio-diversity"><div><dt>separation edges</dt><dd>${esc((diversity.independence || []).length)}</dd></div><div><dt>providers observed</dt><dd>${esc(diversity.resolved_provider_count || 0)}</dd></div><div><dt>model families observed</dt><dd>${esc(diversity.resolved_model_family_count || 0)}</dd></div><div><dt>principals observed</dt><dd>${esc(diversity.resolved_principal_count || 0)}</dd></div><div><dt>auth domains observed</dt><dd>${esc(diversity.resolved_auth_domain_count || 0)}</dd></div></dl><p class="hint">Provider/model counts are local observations. Exact logical profiles, principal separation, fallbacks, and council authority remain tracked policy; a later grant freezes resolved fingerprints.</p></section>
+  </div>`;
+}
+
 function studioOrganizationOverview() {
   const document = studioState.document;
-  return `<div class="studio-org-overview"><h3>team / verifier topology</h3>${(document.teams || []).map((team) => `<section><strong>${esc(team.id)}</strong><div>${(team.roles || []).map((role) => `${badge(`${role.duty} · ${role.cardinality}`, role.duty === "verifier" || role.duty === "meta-verifier" ? "ok" : "")} `).join("")}</div><small>${(team.roles || []).filter((role) => (role.independent_from || []).length).map((role) => `${role.id} independent from ${role.independent_from.join(", ")}`).join(" · ") || "No separation edge declared."}</small></section>`).join("") || '<p class="hint">No team policy yet; author agents, pools, teams, and councils in JSON.</p>'}<h3>councils / meta-verification</h3>${(document.councils || []).map((council) => `<section><strong>${esc(council.id)}</strong><span>${esc((council.members || []).join(" + "))}</span><small>judge ${esc(council.judge)} · quorum ${esc(council.quorum)} · meta ${esc(council.meta_verifier || "none")} · ${esc(council.decision?.method || "declared default")}</small></section>`).join("") || '<p class="hint">No council declared.</p>'}</div>`;
+  return `<div class="studio-org-overview"><h3>team / verifier topology</h3>${(document.teams || []).map((team) => `<section><strong>${esc(team.id)}</strong><div>${(team.roles || []).map((role) => `${badge(`${role.duty} · ${role.cardinality}`, role.duty === "verifier" || role.duty === "meta-verifier" ? "ok" : "")} `).join("")}</div><small>${(team.roles || []).filter((role) => (role.independent_from || []).length).map((role) => `${role.id} independent from ${role.independent_from.join(", ")}`).join(" · ") || "No separation edge declared."}</small></section>`).join("") || '<p class="hint">No team policy yet; author agents, pools, teams, and councils in JSON.</p>'}<h3>councils / meta-verification</h3>${(document.councils || []).map((council) => `<section><strong>${esc(council.id)}</strong><span>${esc((council.members || []).join(" + "))}</span><small>judge ${esc(council.judge)} · quorum ${esc(council.quorum)} · meta ${esc(council.meta_verifier || "none")} · ${esc(council.decision?.method || "declared default")}</small></section>`).join("") || '<p class="hint">No council declared.</p>'}<h3>execution contract</h3>${studioExecutionContractHtml(studioState.model?.authority?.execution_contract, true)}<p class="studio-help">Use the lossless JSON view to author logical profiles, packet constraints, independence, fallbacks, council rules, and obligation authority. Local availability is inspection-only and never saved into portable policy.</p></div>`;
 }
 
 function studioNodeInspector(node) {
@@ -2248,7 +2604,7 @@ function studioJsonView() {
 function studioAuthorityView() {
   const authority = studioState.model?.authority;
   if (!authority) return stateHtml("Waiting for authority explanation…");
-  return `<div class="studio-authority"><header><div><span class="orch-eyebrow">policy request ≠ runtime authority</span><h2>What a later exact grant could—and could not—authorize</h2></div>${badge("creates no grant", "ok")}</header><div class="studio-mode-grid">${authority.modes.map((mode) => `<article class="${mode.within_ceiling ? "within" : "denied"}"><span>${esc(mode.id)}</span><strong>${esc(mode.label)}</strong><p>${esc(mode.meaning)}</p><small>${mode.within_ceiling ? "within authored ceiling" : "above authored ceiling"} · ${mode.dispatch ? "bounded dispatch possible only after grant" : "no dispatch"}</small></article>`).join("")}</div><div class="studio-capability-groups">${authority.groups.map((group) => `<section><h3>${esc(group.label)}</h3>${group.capabilities.map((capability) => `<div class="studio-capability ${capability.requested ? "requested" : "absent"}"><code>${esc(capability.id)}</code>${badge(capability.requested ? "requested in policy" : "not requested", capability.requested ? "warn" : "")}</div>`).join("")}</section>`).join("")}</div><div class="studio-authority-foot"><section><h3>finite budgets</h3><pre>${esc(JSON.stringify(authority.budgets || {}, null, 2))}</pre></section><section><h3>declared stops</h3><p>${(authority.stop_conditions || []).map((stop) => badge(stop)).join(" ") || "None on this policy family."}</p></section></div><p class="studio-no-grant">This is an inspection-only preview. Save writes tracked policy only; neither view nor Save grants a capability, starts work, creates a run, or advances the roadmap.</p></div>`;
+  return `<div class="studio-authority"><header><div><span class="orch-eyebrow">policy request ≠ runtime authority</span><h2>What a later exact grant could—and could not—authorize</h2></div>${badge("creates no grant", "ok")}</header><div class="studio-mode-grid">${authority.modes.map((mode) => `<article class="${mode.within_ceiling ? "within" : "denied"}"><span>${esc(mode.id)}</span><strong>${esc(mode.label)}</strong><p>${esc(mode.meaning)}</p><small>${mode.within_ceiling ? "within authored ceiling" : "above authored ceiling"} · ${mode.dispatch ? "bounded dispatch possible only after grant" : "no dispatch"}</small></article>`).join("")}</div><div class="studio-capability-groups">${authority.groups.map((group) => `<section><h3>${esc(group.label)}</h3>${group.capabilities.map((capability) => `<div class="studio-capability ${capability.requested ? "requested" : "absent"}"><code>${esc(capability.id)}</code>${badge(capability.requested ? "requested in policy" : "not requested", capability.requested ? "warn" : "")}</div>`).join("")}</section>`).join("")}</div>${studioExecutionContractHtml(authority.execution_contract)}<div class="studio-authority-foot"><section><h3>finite budgets</h3><pre>${esc(JSON.stringify(authority.budgets || {}, null, 2))}</pre></section><section><h3>declared stops</h3><p>${(authority.stop_conditions || []).map((stop) => badge(stop)).join(" ") || "None on this policy family."}</p></section></div><p class="studio-no-grant">This is an inspection-only preview. Save writes tracked policy only; neither view nor Save grants a capability, starts work, creates a run, or advances the roadmap. Resolved profiles expose fingerprints, never credentials or arbitrary commands.</p></div>`;
 }
 
 function studioBody() {
@@ -2522,6 +2878,7 @@ async function viewProgramStudio(family = "program", name) {
 async function route() {
   stopMcPoll(); // leaving mission control stops its poll
   stopRunLive(); // leaving the run view closes its live tail
+  stopProgramLive(); // leaving an explicit program run closes its live tail
   app.innerHTML = stateHtml("Loading…");
   const hash = decodeURIComponent(location.hash.replace(/^#/, "")) || "/";
   const parts = hash.split("/").filter(Boolean);
@@ -2534,6 +2891,7 @@ async function route() {
     if (parts[0] === "wl") return await viewWorklog(parts.slice(1).join("/"));
     if (parts[0] === "board") return await viewBoard(parts[1]);
     if (parts[0] === "orchestration") return await viewOrchestration(parts[1]);
+    if (parts[0] === "programs") return await viewPrograms(parts[1]);
     if (parts[0] === "program-studio") return await viewProgramStudio(parts[1], parts[2]);
     if (parts[0] === "edit") return await viewEdit(parts[1]);
     if (parts[0] === "health") return await viewHealth();

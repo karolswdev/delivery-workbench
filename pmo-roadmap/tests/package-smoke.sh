@@ -133,6 +133,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_verdict.py" ] || fail "wheel omitted the governed verdict and quality-gate core"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_run.py" ] || fail "wheel omitted the finite program grant and ledger core"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_delivery.py" ] || fail "wheel omitted the exact autonomous program delivery rails"
+[ -f "$FIXTURE/.githooks/dw_pmo/program_surface.py" ] || fail "wheel omitted the canonical autonomous program surface"
 [ -f "$FIXTURE/pm/orchestration/research-build-review.json" ] \
   || fail "install did not seed the ordinary orchestration preset"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
@@ -155,6 +156,9 @@ PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
   'import sys; from pathlib import Path; from dw_pmo import PROGRAM_GRANT_KIND, PROGRAM_PERMANENT_EXCLUSIONS, PROGRAM_START_PLAN_KIND, apply_program_claim, apply_program_completion, apply_program_control, build_program_claim_preview, build_program_completion_preview, build_program_control_preview, build_program_start_plan, derive_child_grant, program_freshness_issues, program_run_inventory, replay_program, start_program, validate_child_grant; view=program_run_inventory(Path(sys.argv[1])); assert PROGRAM_START_PLAN_KIND == "delivery-workbench-program-start-plan" and PROGRAM_GRANT_KIND == "delivery-workbench-program-grant"; assert view["healthy"] and view["runs"] == [] and not view["starts_work"] and not view["creates_grant"]; assert "authority-minting" in PROGRAM_PERMANENT_EXCLUSIONS; assert all(callable(item) for item in (build_program_start_plan, start_program, replay_program, program_freshness_issues, derive_child_grant, validate_child_grant, build_program_claim_preview, apply_program_claim, build_program_completion_preview, apply_program_completion, build_program_control_preview, apply_program_control))' "$FIXTURE" \
   || fail "packaged core does not expose finite program grant and ledger parity"
+PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
+  'import sys; from pathlib import Path; from dw_pmo import PROGRAM_ACT_PREVIEW_KIND, PROGRAM_SURFACE_STREAM_KIND, PROGRAM_SURFACE_SUMMARY_KIND, PROGRAM_SURFACE_TAIL_KIND, PROGRAM_VIEW_KIND, apply_program_act, build_program_act_preview, build_program_view, program_summary_inventory, read_program_stream, start_program_by_id, tail_program_events; from dw_pmo.mcpserver import TOOLS; from dw_pmo.workbench import handle_api; root=Path(sys.argv[1]); view=program_summary_inventory(root); assert PROGRAM_ACT_PREVIEW_KIND == "delivery-workbench-program-act-preview" and PROGRAM_VIEW_KIND == "delivery-workbench-program-view" and PROGRAM_SURFACE_SUMMARY_KIND == "delivery-workbench-program-summary-list" and PROGRAM_SURFACE_TAIL_KIND == "delivery-workbench-program-tail" and PROGRAM_SURFACE_STREAM_KIND == "delivery-workbench-program-stream"; assert view["healthy"] and view["programs"] == [] and view["runs"] == [] and not view["starts_work"] and not view["creates_grant"] and not view["starts_stream"]; assert handle_api(root, "/api/programs", {})[1]["data"] == view; assert {"dw_program_list", "dw_program_show", "dw_program_validate", "dw_program_simulate", "dw_program_plan", "dw_program_start", "dw_program_preview", "dw_program_tick", "dw_program_supervise", "dw_program_request", "dw_program_pause", "dw_program_resume", "dw_program_revoke", "dw_program_cancel", "dw_program_tail", "dw_program_stream"} <= set(TOOLS); assert all(callable(item) for item in (apply_program_act, build_program_act_preview, build_program_view, program_summary_inventory, read_program_stream, start_program_by_id, tail_program_events))' "$FIXTURE" \
+  || fail "packaged core does not expose canonical autonomous program parity"
 (cd "$FIXTURE" && ./.githooks/dw orchestration validate research-build-review --json) \
   | grep -q '"valid": true' \
   || fail "packaged orchestration preset did not validate"
@@ -214,8 +218,8 @@ done
   | grep -q '"healthy": true.*"programs": \[\].*"starts_work": false' \
   || fail "packaged no-program inventory was not healthy and pure"
 (cd "$FIXTURE" && ./.githooks/dw program --help) \
-  | grep -q 'list,validate,simulate,plan' \
-  || fail "packaged pure program CLI is incomplete"
+  | grep -q 'list,validate,simulate,plan,start,show,preview,pause,resume,revoke,cancel,tick,supervise,request,stream,tail' \
+  || fail "packaged program CLI is incomplete"
 (cd "$FIXTURE" && ./.githooks/dw run --help) | grep -q 'plan,start,list,show,view,preview,pause,resume,revoke,cancel,tick,supervise,checkpoint,request,stream' \
   || fail "packaged run authority CLI is incomplete"
 set +e

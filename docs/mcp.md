@@ -108,6 +108,44 @@ commands, driver configuration, scheduling choices, or credentials.
 | `dw_run_view` | `orchestration_surface.build_run_view` | `{run_id}`; live graph, attempts, sessions/check receipts, artifact metadata/lineage, budgets, routes, controls, and ledger timeline |
 | `dw_run_preview` | `orchestration_surface.build_run_act_preview` | `{run_id, action, reason?, correlation_id?, decision?}`; binds the exact action, parameters, request correlation, and current ledger head in one `act_token` |
 
+### Autonomous programs (read-only and preview)
+
+These tools adapt the same canonical `program_surface` documents as CLI JSON,
+HTTP envelope `data`, Workbench bootstrap, and SSE replay. Inventory/view/tail
+reads start no program store, process, observer, notification, poller, or
+stream, and return no mutation token. The preview tool is the only source of a
+public program `act_token`.
+
+| Tool | Core function | Input schema |
+|---|---|---|
+| `dw_program_list` | `program_surface.program_summary_inventory` | `{}`; healthy empty policy/run inventory in ordinary mode |
+| `dw_program_show` | `program_surface.build_program_view` | `{run_id}`; content-safe why/current lineage, organization and exact execution fingerprints, activity, quality/dissent, gates, obligations, deliveries, budgets, controls, and verified timeline |
+| `dw_program_validate` | `programs.validate_program_path` | `{program}`; pure tracked-policy validation |
+| `dw_program_simulate` | `programs.simulate_program` | `{program}`; pure deterministic scope, workflow, team, and worst-case simulation |
+| `dw_program_plan` | `program_run.build_program_start_plan` | `{program, mode, operator, reason, intent_id, issued_at, expires_at, capabilities?, budgets?, remote?, remote_ref?}`; pure exact finite-grant preview |
+| `dw_program_preview` | `program_surface.build_program_act_preview` | `{run_id, action, reason?, decision?, request_id?, max_ticks?, max_seconds?}`; binds one closed operation and its finite ceilings to the current ledger head |
+| `dw_program_tail` | `program_surface.tail_program_events` | `{run_id, after?, limit?}`; verified bounded ledger suffix with no prompt, transcript, source, artifact content, or token |
+
+### Autonomous programs (exact-token acts)
+
+Each tool consumes an `act_token` from a fresh matching
+`dw_program_preview`, except start, which consumes the `start_token` from the
+matching pure plan. Inputs are closed and `additionalProperties: false`; no act
+accepts policy, assignments, prompts, rubrics, checks, driver configuration,
+credentials, commands, or retry overrides.
+
+| Tool | Core function | Input schema |
+|---|---|---|
+| `dw_program_start` | `program_surface.start_program_by_id` | `{program, mode, operator, reason, intent_id, issued_at, expires_at, approve, expect, capabilities?, budgets?, remote?, remote_ref?}`; rebuilds and consumes one exact grant, starts no child |
+| `dw_program_tick` | `program_surface.apply_program_act` | `{run_id, expect}`; one conductor, delivery-plan, or delivery tick under the existing grant |
+| `dw_program_supervise` | `program_surface.apply_program_act` | `{run_id, expect, max_ticks, max_seconds}`; explicit finite repetition that returns every tick and stops at no-progress/checkpoint/refusal/budget/duration/terminal |
+| `dw_program_request` | `program_surface.apply_program_act` | `{run_id, request_id, decision: "approve"\|"reject", reason, expect}`; one typed response to one exact outstanding request |
+| `dw_program_pause` | `program_surface.apply_program_act` | `{run_id, reason, expect}` |
+| `dw_program_resume` | `program_surface.apply_program_act` | `{run_id, reason, expect}`; re-observes grant facts |
+| `dw_program_revoke` | `program_surface.apply_program_act` | `{run_id, reason, expect}`; permanent for that grant |
+| `dw_program_cancel` | `program_surface.apply_program_act` | `{run_id, reason, expect}`; cancellation is ledgered before bounded interruption |
+| `dw_program_stream` | `program_surface.read_program_stream` | `{run_id, session_id, stream: "stdout"\|"stderr", max_bytes?}`; explicit independently bounded open only; list/view/tail never include its content |
+
 ### Bounded orchestration (exact-token acts)
 
 Every act is separate from preview. A ledger, action, reason, or checkpoint

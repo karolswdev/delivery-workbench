@@ -551,8 +551,18 @@ one decision/obligation-traced roadmap story, and accountable disposition
 retains the original history. Replay then selects the next exact
 story/binding/phase while carrying non-blocking obligations and stopping on a
 blocking one. An immutable proof and terminal event complete the program only
-after the pure planner proves the entire granted scope done. WLA-26-11 still
-owns public runtime controls and the control room.
+after the pure planner proves the entire granted scope done.
+
+WLA-26-11 now exposes one canonical public program surface over that grant,
+conductor, and delivery ledger. CLI JSON, MCP structured content, localhost
+HTTP, Workbench bootstrap, and read-only SSE cursor replay share the same
+content-safe inventory/view/tail documents. The optional control room explains
+scope selection, organization and resolved execution seats, nested activity,
+quality/dissent/obligation gates, integrations, progress, budgets, exact
+controls, and the replay-derived stop reason. Mutations accept only ids,
+bounded reasons, closed typed decisions, finite supervision ceilings, and
+fresh exact tokens; explicit bounded supervision returns every tick and never
+becomes an ambient scheduler.
 
 This does not redefine the product's ordinary mode. Vanilla Delivery Workbench
 remains complete with no program configured, and a Phase 24 score remains an

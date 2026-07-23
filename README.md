@@ -185,11 +185,14 @@ same bounded streams. See [docs/deliberate-step.md](./docs/deliberate-step.md).
 The specialist orientation commands
 support `--json` or `--porcelain` output.
 
-The public `dw program` namespace currently stops at the pure
-`list|validate|simulate|plan` boundary. Program grants and the embedded
-conductor are shared core APIs delivered through WLA-26-09;
-CLI/MCP/HTTP controls and the visual control room belong to WLA-26-11 and are
-not implied by the read commands above.
+The optional `dw program` namespace now spans pure
+`list|validate|simulate|plan`, exact grant `start`, canonical `show`, explicit
+`preview`→`tick|supervise|request|pause|resume|revoke|cancel`, verified
+`tail`, and bounded `stream`. MCP, localhost HTTP, SSE, and the progressively
+disclosed Workbench `#/programs` control room adapt the same content-safe
+projection and exact-token acts. No program configuration remains a healthy
+ordinary mode, and opening a read or the Workbench starts no program, poller,
+stream, process, or notification.
 
 Parked work is first-class: a story goes on-hold only with a
 recorded reason, whole phases pause and resume (`dw phase pause
@@ -322,7 +325,13 @@ still never integrates, certifies, commits, or edits roadmap status. The
 separate WLA-26-10 `program_delivery` core now performs those acts only from a
 pure exact preview and one claim per patch/evidence/roadmap/contract/
 certification/commit/push effect, with crash reconciliation and no-force
-remote leases. The public control room remains WLA-26-11.
+remote leases. WLA-26-11 now exposes this same state and authority boundary
+through CLI, MCP, HTTP, read-only SSE cursor replay, and the Workbench control
+room. Its view explains the selected story/workflow/team, resolved execution
+seats, active nested work, evidence/verdict/dissent/obligation gates, delivery,
+budgets, controls, and exact stop reason without exposing credentials or raw
+streams. Every mutation still requires a fresh matching exact token; bounded
+supervision is an explicit finite invocation, never a hidden scheduler.
 
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 

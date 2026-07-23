@@ -11,6 +11,7 @@ or a third-party content body.
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .model import DwError
@@ -31,6 +32,17 @@ NOTIFICATION_KINDS = (
     "run-blocked",
     "nudge-budget-exhausted",
     "branch-signal",
+    "program-intervention-required",
+    "program-disagreement",
+    "program-decider-loss",
+    "program-provider-loss",
+    "program-architect-veto",
+    "program-obligation-new",
+    "program-obligation-blocking",
+    "program-obligation-overdue",
+    "program-budget-exhausted",
+    "program-integration-refused",
+    "program-complete",
 )
 
 _DELIVERY_CEILING = 3
@@ -207,6 +219,348 @@ def _run_notifications(root, now=None):
     return facts
 
 
+def _program_notifications(root, now=None):
+    """Derive content-safe autonomous-program notifications from replay.
+
+    Program request documents deliberately reuse the existing typed outbound
+    envelope: the correlation is the immutable checkpoint claim id and the
+    only accepted response vocabulary is approve/reject. Transport still
+    carries no act token and cannot complete the request on its own.
+    """
+    from .program_surface import build_program_view, program_summary_inventory
+
+    facts = []
+    inventory = program_summary_inventory(root, now=now)
+    for summary in inventory.get("runs", []):
+        if not summary.get("valid"):
+            continue
+        run_id = str(summary["run_id"])
+        try:
+            view = build_program_view(root, run_id, now=now)
+        except DwError:
+            # A corrupt/ambiguous replay is already surfaced by the program
+            # inventory. Notifications never guess from an unverified ledger.
+            continue
+        event_count = int(view.get("event_count", 0))
+        stop = str((view.get("current") or {}).get("stop") or "")
+
+        for request in view.get("requests", []):
+            if request.get("status") != "open":
+                continue
+            request_id = str(request.get("claim_id") or "")
+            payload = {
+                "kind": "program-intervention-required",
+                "run_id": run_id,
+                "request_id": request_id,
+                "ledger_head": view["ledger_head"],
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "program-intervention-required",
+                "run_id": run_id,
+                "node": str(request.get("port") or "checkpoint-request"),
+                "detail": (
+                    "the autonomous program is waiting at a typed checkpoint; "
+                    "transport does not confer authority"
+                ),
+                "request": {
+                    "correlation_id": request_id,
+                    "response_schema": {
+                        "decision": ["approve", "reject"],
+                        "reason": "bounded single line",
+                    },
+                    "boundary": (
+                        "dw program request (fresh exact act token)"
+                    ),
+                },
+            })
+
+        if (
+            stop
+            and stop not in {"integration-required", "scope-complete"}
+            and view.get("state") not in {
+                "complete", "revoked", "cancelled", "expired", "exhausted",
+            }
+            and not view.get("requests")
+        ):
+            payload = {
+                "kind": "program-intervention-required",
+                "run_id": run_id,
+                "stop": stop,
+                "events": event_count,
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "program-intervention-required",
+                "run_id": run_id,
+                "node": stop,
+                "detail": (
+                    f"the program stopped at {stop}; inspect the canonical "
+                    "program view before choosing a new bounded act"
+                ),
+            })
+
+        disagreements = {}
+        for item in [
+            *view.get("dissent", []),
+            *view.get("verdicts", []),
+            *view.get("decisions", []),
+        ]:
+            result = str(
+                item.get("result")
+                or item.get("outcome")
+                or item.get("decision")
+                or item.get("verdict")
+                or ""
+            ).lower()
+            if any(
+                token in result
+                for token in (
+                    "dissent", "disagree", "fail", "reject", "overturn",
+                    "escalate", "quorum-lost", "quorum_lost",
+                )
+            ):
+                key = str(item.get("action_id") or item.get("address") or result)
+                disagreements[key] = (item, result)
+        for key, (item, result) in disagreements.items():
+            payload = {
+                "kind": "program-disagreement",
+                "run_id": run_id,
+                "action_id": key,
+                "result": result,
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "program-disagreement",
+                "run_id": run_id,
+                "node": str(item.get("address") or item.get("role") or key),
+                "detail": (
+                    "a verifier or council disagreement remains visible in "
+                    f"the immutable decision lineage ({result})"
+                ),
+            })
+
+        sessions = view.get("activities", {}).get("sessions", [])
+        for session in sessions:
+            state = str(session.get("state") or "")
+            if state not in {"lost", "refused"}:
+                continue
+            session_id = str(
+                session.get("session_id") or session.get("operation_id") or ""
+            )
+            payload = {
+                "kind": "program-provider-loss",
+                "run_id": run_id,
+                "session_id": session_id,
+                "state": state,
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "program-provider-loss",
+                "run_id": run_id,
+                "node": session_id,
+                "detail": (
+                    "a contracted execution provider session was lost or "
+                    "refused; no fallback is inferred at notification time"
+                ),
+            })
+
+        if any(
+            token in stop
+            for token in ("role-unavailable", "decider-unavailable", "quorum-lost")
+        ):
+            payload = {
+                "kind": "program-decider-loss",
+                "run_id": run_id,
+                "stop": stop,
+                "events": event_count,
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "program-decider-loss",
+                "run_id": run_id,
+                "node": stop,
+                "detail": (
+                    "the exact council decider or required role is unavailable; "
+                    "authority was not reassigned"
+                ),
+            })
+
+        architect_veto = stop == "architect-veto" or any(
+            str(item.get("result") or item.get("outcome") or "").lower()
+            == "veto"
+            and "architect" in str(item.get("action_kind") or item.get("address"))
+            for item in view.get("gates", [])
+        )
+        if architect_veto:
+            payload = {
+                "kind": "program-architect-veto",
+                "run_id": run_id,
+                "events": event_count,
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "program-architect-veto",
+                "run_id": run_id,
+                "node": stop or "architecture-gate",
+                "detail": (
+                    "the master-architect boundary vetoed progression; the "
+                    "program remains stopped"
+                ),
+            })
+
+        observed = now
+        if isinstance(observed, str):
+            try:
+                observed = datetime.fromisoformat(observed.replace("Z", "+00:00"))
+            except ValueError:
+                observed = None
+        if not isinstance(observed, datetime):
+            observed = datetime.now(timezone.utc)
+        elif observed.tzinfo is None:
+            observed = observed.replace(tzinfo=timezone.utc)
+        for obligation in view.get("obligations", {}).get("open", []):
+            obligation_id = str(obligation.get("id") or "")
+            obligation_hash = str(
+                obligation.get("obligation_hash")
+                or obligation.get("source_decision_hash")
+                or obligation_id
+            )
+            base = {
+                "run_id": run_id,
+                "obligation_id": obligation_id,
+                "obligation_hash": obligation_hash,
+            }
+            facts.append({
+                "id": _notification_id({
+                    "kind": "program-obligation-new", **base,
+                }),
+                "kind": "program-obligation-new",
+                "run_id": run_id,
+                "node": obligation_id,
+                "detail": (
+                    "a durable decision obligation is open and retains its "
+                    "source-decision provenance"
+                ),
+            })
+            if obligation.get("blocking"):
+                facts.append({
+                    "id": _notification_id({
+                        "kind": "program-obligation-blocking", **base,
+                    }),
+                    "kind": "program-obligation-blocking",
+                    "run_id": run_id,
+                    "node": obligation_id,
+                    "detail": (
+                        "a blocking decision obligation prevents program "
+                        "progression"
+                    ),
+                })
+            deadline = (
+                obligation.get("due_at")
+                or obligation.get("deadline")
+                or obligation.get("expires_at")
+            )
+            overdue = bool(obligation.get("overdue"))
+            if deadline and not overdue:
+                try:
+                    due = datetime.fromisoformat(
+                        str(deadline).replace("Z", "+00:00")
+                    )
+                    if due.tzinfo is None:
+                        due = due.replace(tzinfo=timezone.utc)
+                    overdue = observed >= due
+                except ValueError:
+                    overdue = False
+            if overdue:
+                facts.append({
+                    "id": _notification_id({
+                        "kind": "program-obligation-overdue", **base,
+                    }),
+                    "kind": "program-obligation-overdue",
+                    "run_id": run_id,
+                    "node": obligation_id,
+                    "detail": (
+                        "an open decision obligation is past its contracted "
+                        "deadline"
+                    ),
+                })
+
+        exhausted = [
+            name
+            for name, budget in view.get("budgets", {}).items()
+            if int(budget.get("used", 0)) > 0
+            and int(budget.get("remaining", 0)) <= 0
+        ]
+        if view.get("state") == "exhausted" and not exhausted:
+            exhausted = ["program-authority"]
+        for name in exhausted:
+            payload = {
+                "kind": "program-budget-exhausted",
+                "run_id": run_id,
+                "budget": name,
+                "events": event_count,
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "program-budget-exhausted",
+                "run_id": run_id,
+                "node": name,
+                "detail": (
+                    f"finite program budget {name} is exhausted; no "
+                    "notification can extend it"
+                ),
+            })
+
+        integration_refused = (
+            stop in {"integration-conflict", "remote-diverged"}
+            or (
+                stop.startswith("integration-")
+                and stop != "integration-required"
+            )
+            or any(
+                str(item.get("result") or "").lower()
+                in {"refused", "conflict", "remote-diverged"}
+                for item in view.get("integrations", [])
+            )
+        )
+        if integration_refused:
+            payload = {
+                "kind": "program-integration-refused",
+                "run_id": run_id,
+                "stop": stop,
+                "events": event_count,
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "program-integration-refused",
+                "run_id": run_id,
+                "node": stop or "integration",
+                "detail": (
+                    "the exact integration lane refused or conflicted; no "
+                    "commit, push, or advancement was inferred"
+                ),
+            })
+
+        if view.get("state") == "complete":
+            payload = {
+                "kind": "program-complete",
+                "run_id": run_id,
+                "ledger_head": view["ledger_head"],
+            }
+            facts.append({
+                "id": _notification_id(payload),
+                "kind": "program-complete",
+                "run_id": run_id,
+                "node": "",
+                "detail": (
+                    "the exact granted program scope completed with its final "
+                    "ledger head"
+                ),
+            })
+    return facts
+
+
 def _branch_signal_notifications(root):
     config = load_notification_config(root)
     if not config.get("branch_signals"):
@@ -244,7 +598,11 @@ def _branch_signal_notifications(root):
 def build_notifications(root, now=None):
     """The read model shared byte-for-byte by CLI, MCP, and HTTP."""
     root = Path(root)
-    derived = _run_notifications(root, now=now) + _branch_signal_notifications(root)
+    derived = (
+        _run_notifications(root, now=now)
+        + _program_notifications(root, now=now)
+        + _branch_signal_notifications(root)
+    )
     store = _store_dir(root)
     acked = {
         str(record.get("id")) for record in _read_jsonl(store / "acks.jsonl")
@@ -365,6 +723,17 @@ def resolve_correlation(root, correlation_id):
         None,
     )
     if match is None:
+        program_match = next(
+            (
+                item for item in inventory["notifications"]
+                if item["kind"] == "program-intervention-required"
+                and item.get("request", {}).get("correlation_id")
+                == correlation_id
+            ),
+            None,
+        )
+        if program_match is not None:
+            return program_match
         raise DwError(
             "stale or unknown checkpoint correlation id; no decision was applied"
         )

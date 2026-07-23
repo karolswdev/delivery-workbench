@@ -1,12 +1,11 @@
 # Optional autonomous delivery programs
 
-**Status:** Phase 26 contract and incremental implementation. Planning,
-workflow, organization, deliberation, Studio, governed quality-decision,
-finite program-grant/replay, and the restart-safe WLA-26-09 conductor are
-pinned by tests. The conductor includes typed structural loops, content-safe
-outward facts, finite nudges, causal verification reruns, cross-story/phase
-selection, obligation gates, and exact scope completion. Integration/Git/
-roadmap rails and the public control room remain explicit later work.
+**Status:** Phase 26 implementation through WLA-26-11. Planning, workflow,
+organization, deliberation, Studio, governed quality-decision, finite
+program-grant/replay, restart-safe conduction, exact integration/Git/roadmap
+delivery, and the canonical CLI/MCP/HTTP/Workbench control room are pinned by
+tests. The remaining Phase 26 work is the fresh-wheel autonomous multi-phase
+exit exam.
 **Product claim:** Delivery Workbench **can run** a governed delivery program
 across an explicit roadmap scope when tracked policy has compiled and an
 operator has issued a separate finite program grant. Delivery Workbench is not
@@ -1409,15 +1408,25 @@ but cannot add policy, authority, budget, prompt text, command, or assignment.
 Continuous policies may omit human ports; checkpointed policies must stop at
 the ones they declare.
 
+Operator notifications are derived from verified program projections, never
+accepted as authority. The closed program taxonomy covers required
+intervention, verifier/council disagreement, decider loss, provider loss,
+architect veto, new/blocking/overdue obligations, budget exhaustion,
+integration refusal, and program completion. A notification carries a typed
+request summary and tells a responder to obtain a fresh matching
+`dw program preview`; it never carries an act token. Phone or other transport
+delivery can move that document, but only an exact local `program request` act
+over the still-outstanding request changes the ledger.
+
 ## Surfaces and progressive disclosure
 
-One core compiler/planner/projection owns semantics. Intended adapters are:
+One core compiler/planner/projection owns semantics. Delivered adapters are:
 
 - CLI policy reads: `dw organization list|validate|simulate`,
   `dw workflow list|validate|simulate`, and
   `dw program list|validate|simulate|plan`;
 - CLI: `dw program list|show|validate|simulate|plan|start|tick|supervise|pause|
-  resume|revoke|cancel|tail`;
+  resume|revoke|cancel|request|tail|stream`;
 - MCP/HTTP: byte-equivalent reads plus exact-token, closed-parameter acts;
 - Workbench Program Studio: Design, Organization, Rubrics, Simulate, Validate,
   JSON, and Authority views over the shared compiler; and
@@ -1431,6 +1440,27 @@ status/MCP/HTTP/Workbench models stay behavior-compatible. Opening the
 Workbench does not create policy directories, start SSE, poll providers, send
 notifications, or show blocking setup. Program Studio is entered deliberately.
 
+The delivered control-room routes are `#/programs` and
+`#/programs/<program-run-id>`. Inventory separates tracked policies from local
+runs. A run view explains the current phase/story/binding selection, workflow
+and team choice, every implementer/verifier/deliberator/decider/meta-verifier/
+architect seat and its content-safe harness/provider/model/auth/principal
+fingerprints, active nested node/loop/round, sessions, artifact lineage,
+mechanical and governed verdicts, preserved dissent, councils, gates,
+obligations, deliveries/integrations, phase progress, budget consumption,
+capabilities/exclusions, outstanding requests, exact next/refusal, and the
+verified ledger timeline. Stream content opens only from an explicit session
+control. The browser starts SSE only while an exact run route is open, closes
+it on route exit, and never turns replay into ticking or supervision.
+
+Planning and lifecycle controls are preview-first. Start requires explicit
+approval of the exact finite plan. Tick performs one visible conductor or
+delivery-lane act. Supervise requires a separately previewed token and finite
+tick/time ceilings, returns every constituent tick, and stops on checkpoint,
+no progress, refusal, budget, duration, or terminal state. Pause, resume,
+revoke, cancel, and typed request responses accept only ids, bounded reasons,
+closed decisions, and a fresh exact token.
+
 The delivered authoring route is `#/program-studio`, with family documents at
 `#/program-studio/<program|workflow|organization>/<name>`. Its five initial
 views are Design, Simulate, Validate, JSON, and Authority; organization,
@@ -1443,6 +1473,14 @@ lossless config and proves semantic/document/layout hash identity on every
 round trip. Apply is direct-contained to one selected tracked JSON policy and
 returns explicit false facts for grant, run, agent, check, observer,
 notification, integration, roadmap, and background-polling effects.
+
+The Authority and Organization inspectors also project an execution contract:
+portable logical profiles, exact or closed-fallback execution ports, council
+seat mandates and perspectives, rule-versus-judge/checkpoint authority,
+independence and observed provider/model/principal diversity, obligation
+policy, and locally resolved availability plus opaque fingerprints. Local
+resolution is observational and content-safe; credentials remain in the
+harness-owned store, and Studio accepts no executable or arbitrary command.
 
 Graph/config round trips are lossless. Saving uses guarded
 preview→fingerprint→apply and starts nothing. Simulation is pure. Authority is

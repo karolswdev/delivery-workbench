@@ -43,6 +43,7 @@ apply = app[app.index("async function applyReviewedStep"):app.index("function wi
 panel = app[app.index("function statusPanel"):app.index("/* ── mission control")]
 overview = app[app.index("async function viewOverview"):app.index("async function viewProject")]
 run = app[app.index("function runStateBadge"):app.index("/* ── optional Program / Workflow Studio")]
+program = app[app.index("/* ── autonomous program control room"):app.index("/* ── optional Program / Workflow Studio")]
 studio = app[app.index("optional Program / Workflow Studio"):app.index("/* ── router")]
 assert "data-argv-index" in action and "manual act" in action
 assert "<button" not in action and "JSON.stringify" not in action
@@ -70,6 +71,24 @@ for token in ("live run · ledger replay", "fail checks", "failure routes",
 assert "setInterval" not in run and "driver_config" not in run and "argv:" not in run
 assert 'aria-labelledby="run-graph-title"' in run
 assert "@media (max-width: 520px)" in css and ".run-node.state-active" in css
+for token in ("Program control room", "why this frontier", "organization",
+              "councils / deciders", "separation / diversity",
+              "nested execution", "quality, dissent, and gates",
+              "obligations / debt", "phase progress", "permanently excluded",
+              "operator notifications", "transport ≠ authority",
+              "Preview, inspect, then confirm", "supervise tick ceiling",
+              "confirm this exact act", "close explicit stream",
+              "/api/programs", "program-ledger", "from=${cursor}"):
+    assert token in program, token
+assert "setInterval" not in program and "driver_config" not in program
+assert "argv:" not in program and "command:" not in program
+assert '"checkpointed"' in program and '"supervised"' not in program
+assert "new EventSource" in program and "stopProgramLive" in program
+assert "SNAPSHOT_MODE" in program  # viewport snapshots never open live SSE
+for token in (".program-room-grid", ".program-role-table",
+              ".program-quality-grid", ".program-controls",
+              ".program-timeline", ".program-open-stream"):
+    assert token in css, token
 for token in ("design", "simulate", "validate", "json", "authority",
               "/api/program-studio", "preview save", "preview delete",
               "candidate-assignment", "debate-active", "verifier-failed",
@@ -395,6 +414,12 @@ for spec in $VIEWS; do
   shot "$name-mobile" 390,844 "$BASE/?snapshot=1$extra$route"
 done
 
+# Program planning remains a deliberately entered optional workspace. These
+# renders exercise the policy inventory and pure finite-grant form without
+# creating local program authority.
+shot "program-planning-desktop" 1440,900 "$BASE/?snapshot=1#/programs"
+shot "program-planning-mobile" 390,844 "$BASE/?snapshot=1#/programs"
+
 # Red-path prominence: the same overview must render a broken rail as
 # attention while keeping execution behind deliberate-step review.
 mv "$REPO/.githooks/pre-commit" "$REPO/.githooks/pre-commit.off"
@@ -408,4 +433,79 @@ mv "$REPO/.githooks/pre-commit.off" "$REPO/.githooks/pre-commit"
 shot "overview-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
 shot "overview-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
 
-echo "workbench-ui-smoke.sh: ok (52 viewport renders: 23 data views + empty Studio + attention + ambiguity, desktop+mobile)"
+# A second exact fixture exercises the live control-room projection in both an
+# active nested-program state and a terminal authority stop. Reuse the
+# authority test builder so this browser proof cannot drift into a hand-written
+# fake ledger.
+kill "$SERVER_PID" 2>/dev/null || true
+wait "$SERVER_PID" 2>/dev/null || true
+SERVER_PID=""
+PROGRAM_FIXTURE_INFO="$TMP_ROOT/program-fixture.txt"
+TMPDIR="$TMP_ROOT" PYTHONPATH="$PMO_DIR/lib" python3 - \
+  "$PMO_DIR/tests/dw-core-tests.py" "$PROGRAM_FIXTURE_INFO" <<'PY'
+from datetime import datetime, timedelta, timezone
+import importlib.util
+from pathlib import Path
+import sys
+
+
+spec = importlib.util.spec_from_file_location("dw_ui_tests", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+fixture = module.ProgramRunAuthorityTest(
+    "test_start_is_exact_immutable_idempotent_and_creates_only_local_authority"
+)
+fixture.setUp()
+now = datetime.now(timezone.utc).replace(microsecond=0)
+fixture.issued_at = (now - timedelta(seconds=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+fixture.started_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+fixture.expires_at = (now + timedelta(seconds=3500)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+from dw_pmo.program_surface import (  # noqa: E402
+    apply_program_act,
+    build_program_act_preview,
+)
+
+_plan, active = fixture.start(
+    intent="ui-active", expires_at=fixture.expires_at
+)
+for _index in range(2):
+    preview = build_program_act_preview(fixture.root, active["run_id"], "tick")
+    apply_program_act(
+        fixture.root, active["run_id"], "tick", preview["act_token"]
+    )
+
+_plan, stopped = fixture.start(
+    intent="ui-revoked", expires_at=fixture.expires_at
+)
+reason = "Viewport fixture revocation."
+preview = build_program_act_preview(
+    fixture.root, stopped["run_id"], "revoke", reason=reason
+)
+apply_program_act(
+    fixture.root, stopped["run_id"], "revoke", preview["act_token"],
+    reason=reason,
+)
+Path(sys.argv[2]).write_text(
+    f"{fixture.root}\n{active['run_id']}\n{stopped['run_id']}\n",
+    encoding="utf-8",
+)
+PY
+PROGRAM_REPO="$(sed -n '1p' "$PROGRAM_FIXTURE_INFO")"
+PROGRAM_ACTIVE="$(sed -n '2p' "$PROGRAM_FIXTURE_INFO")"
+PROGRAM_REVOKED="$(sed -n '3p' "$PROGRAM_FIXTURE_INFO")"
+PORT=$(( (RANDOM % 2000) + 23001 ))
+"$PMO_DIR/bin/dw-workbench" --root "$PROGRAM_REPO" --port "$PORT" --quiet &
+SERVER_PID=$!
+i=0
+until curl -sf "http://127.0.0.1:$PORT/api/programs" >/dev/null 2>&1; do
+  i=$((i + 1)); [ "$i" -lt 40 ] || fail "program fixture server did not start"; sleep 0.25
+done
+BASE="http://127.0.0.1:$PORT"
+shot "program-active-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_ACTIVE"
+shot "program-active-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_ACTIVE"
+shot "program-revoked-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_REVOKED"
+shot "program-revoked-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_REVOKED"
+
+echo "workbench-ui-smoke.sh: ok (58 viewport renders: 23 data views + empty Studio + program planning/active/revoked + attention + ambiguity, desktop+mobile)"

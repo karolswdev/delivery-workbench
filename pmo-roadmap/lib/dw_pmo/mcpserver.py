@@ -484,11 +484,198 @@ def _tool_run_stream(root: Path, args: dict) -> tuple[str, dict]:
     ))
 
 
+def _tool_program_list(root: Path, _args: dict) -> tuple[str, dict]:
+    from .program_surface import program_summary_inventory
+
+    return _json_tool(program_summary_inventory(root))
+
+
+def _tool_program_show(root: Path, args: dict) -> tuple[str, dict]:
+    from .program_surface import build_program_view
+
+    return _json_tool(build_program_view(root, str(args["run_id"])))
+
+
+def _tool_program_validate(root: Path, args: dict) -> tuple[str, dict]:
+    from .programs import find_program_path, validate_program_path
+
+    return _json_tool(
+        validate_program_path(root, find_program_path(root, str(args["program"])))
+    )
+
+
+def _tool_program_simulate(root: Path, args: dict) -> tuple[str, dict]:
+    from .programs import simulate_program
+
+    return _json_tool(simulate_program(root, str(args["program"])))
+
+
+def _program_budget_args(value: object) -> dict[str, int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise DwError("program budgets must be an object")
+    budgets: dict[str, int] = {}
+    for key, amount in value.items():
+        if (
+            not isinstance(key, str)
+            or not key
+            or not isinstance(amount, int)
+            or isinstance(amount, bool)
+        ):
+            raise DwError(
+                "program budgets must map string names to integer ceilings"
+            )
+        budgets[key] = amount
+    return budgets
+
+
+def _tool_program_plan(root: Path, args: dict) -> tuple[str, dict]:
+    from .program_run import build_program_start_plan
+
+    return _json_tool(build_program_start_plan(
+        root,
+        str(args["program"]),
+        mode=str(args["mode"]),
+        operator=str(args["operator"]),
+        approval_reason=str(args["reason"]),
+        intent_id=str(args["intent_id"]),
+        capabilities=(
+            list(args["capabilities"])
+            if "capabilities" in args else None
+        ),
+        budgets=_program_budget_args(args.get("budgets")),
+        issued_at=str(args["issued_at"]),
+        expires_at=str(args["expires_at"]),
+        remote=str(args.get("remote") or "") or None,
+        remote_ref=str(args.get("remote_ref") or "") or None,
+    ))
+
+
+def _tool_program_start(root: Path, args: dict) -> tuple[str, dict]:
+    from .program_surface import start_program_by_id
+
+    if args.get("approve") is not True:
+        raise DwError("program start requires approve=true")
+    return _json_tool(start_program_by_id(
+        root,
+        str(args["program"]),
+        mode=str(args["mode"]),
+        operator=str(args["operator"]),
+        approval_reason=str(args["reason"]),
+        intent_id=str(args["intent_id"]),
+        capabilities=(
+            list(args["capabilities"])
+            if "capabilities" in args else None
+        ),
+        budgets=_program_budget_args(args.get("budgets")),
+        issued_at=str(args["issued_at"]),
+        expires_at=str(args["expires_at"]),
+        remote=str(args.get("remote") or "") or None,
+        remote_ref=str(args.get("remote_ref") or "") or None,
+        expect=str(args["expect"]),
+    ))
+
+
+def _tool_program_preview(root: Path, args: dict) -> tuple[str, dict]:
+    from .program_surface import build_program_act_preview
+
+    return _json_tool(build_program_act_preview(
+        root,
+        str(args["run_id"]),
+        str(args["action"]),
+        reason=str(args.get("reason") or ""),
+        decision=str(args.get("decision") or ""),
+        request_id=str(args.get("request_id") or ""),
+        max_ticks=int(args.get("max_ticks", 100)),
+        max_seconds=int(args.get("max_seconds", 300)),
+    ))
+
+
+def _apply_program_tool(
+    root: Path,
+    args: dict,
+    action: str,
+) -> tuple[str, dict]:
+    from .program_surface import apply_program_act
+
+    return _json_tool(apply_program_act(
+        root,
+        str(args["run_id"]),
+        action,
+        str(args["expect"]),
+        reason=str(args.get("reason") or ""),
+        decision=str(args.get("decision") or ""),
+        request_id=str(args.get("request_id") or ""),
+        max_ticks=int(args.get("max_ticks", 100)),
+        max_seconds=int(args.get("max_seconds", 300)),
+    ))
+
+
+def _tool_program_tick(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_program_tool(root, args, "tick")
+
+
+def _tool_program_supervise(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_program_tool(root, args, "supervise")
+
+
+def _tool_program_request(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_program_tool(root, args, "request")
+
+
+def _tool_program_pause(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_program_tool(root, args, "pause")
+
+
+def _tool_program_resume(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_program_tool(root, args, "resume")
+
+
+def _tool_program_revoke(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_program_tool(root, args, "revoke")
+
+
+def _tool_program_cancel(root: Path, args: dict) -> tuple[str, dict]:
+    return _apply_program_tool(root, args, "cancel")
+
+
+def _tool_program_tail(root: Path, args: dict) -> tuple[str, dict]:
+    from .program_surface import tail_program_events
+
+    return _json_tool(tail_program_events(
+        root,
+        str(args["run_id"]),
+        int(args.get("after", 0)),
+        int(args.get("limit", 1_000)),
+    ))
+
+
+def _tool_program_stream(root: Path, args: dict) -> tuple[str, dict]:
+    from .program_surface import read_program_stream
+
+    return _json_tool(read_program_stream(
+        root,
+        str(args["run_id"]),
+        str(args["session_id"]),
+        str(args["stream"]),
+        max_bytes=int(args.get("max_bytes", 20_000)),
+    ))
+
+
 _PROJECT_PROP = {"type": "string", "description": "Project slug (optional when the repo has exactly one project)"}
 _RUN_ID_PROP = {"type": "string", "description": "Local orchestration run id"}
 _RUN_EXPECT_PROP = {
     "type": "string",
     "description": "Exact act_token from a fresh matching dw_run_preview",
+}
+_PROGRAM_RUN_ID_PROP = {
+    "type": "string",
+    "description": "Local autonomous program run id",
+}
+_PROGRAM_EXPECT_PROP = {
+    "type": "string",
+    "description": "Exact act_token from a fresh matching dw_program_preview",
 }
 
 TOOLS: dict[str, dict] = {
@@ -784,6 +971,326 @@ TOOLS: dict[str, dict] = {
             "additionalProperties": False,
         },
         "handler": _tool_orchestration_simulate,
+    },
+    "dw_program_list": {
+        "description": (
+            "Pure healthy-empty program policy and local grant inventory; "
+            "starts no store, process, observer, notification, or stream."
+        ),
+        "inputSchema": {
+            "type": "object", "properties": {},
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_list,
+    },
+    "dw_program_show": {
+        "description": (
+            "Canonical content-safe program control-room projection over the "
+            "grant ledger, conductor receipts, delivery receipts, team, "
+            "verdicts, obligations, budgets, and exact next/refusal."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"run_id": _PROGRAM_RUN_ID_PROP},
+            "required": ["run_id"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_show,
+    },
+    "dw_program_validate": {
+        "description": "Pure shared-compiler validation of one tracked program.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"program": {"type": "string"}},
+            "required": ["program"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_validate,
+    },
+    "dw_program_simulate": {
+        "description": (
+            "Pure deterministic roadmap selection, workflow, team, and "
+            "worst-case simulation; creates no grant."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"program": {"type": "string"}},
+            "required": ["program"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_simulate,
+    },
+    "dw_program_plan": {
+        "description": (
+            "Pure exact finite grant preview over tracked program policy and "
+            "current repository, roadmap, roster, and execution fingerprints."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "program": {"type": "string"},
+                "mode": {
+                    "type": "string",
+                    "enum": ["advisory", "checkpointed", "continuous"],
+                },
+                "operator": {"type": "string"},
+                "reason": {"type": "string"},
+                "intent_id": {"type": "string"},
+                "capabilities": {
+                    "type": "array", "items": {"type": "string"},
+                },
+                "budgets": {
+                    "type": "object",
+                    "additionalProperties": {"type": "integer"},
+                },
+                "issued_at": {"type": "string"},
+                "expires_at": {"type": "string"},
+                "remote": {"type": "string"},
+                "remote_ref": {"type": "string"},
+            },
+            "required": [
+                "program", "mode", "operator", "reason", "intent_id",
+                "issued_at", "expires_at",
+            ],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_plan,
+    },
+    "dw_program_start": {
+        "description": (
+            "Rebuild and consume one exact program grant by ids, reviewed "
+            "scalars, explicit approval, and start token; starts no child."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "program": {"type": "string"},
+                "mode": {
+                    "type": "string",
+                    "enum": ["advisory", "checkpointed", "continuous"],
+                },
+                "operator": {"type": "string"},
+                "reason": {"type": "string"},
+                "intent_id": {"type": "string"},
+                "capabilities": {
+                    "type": "array", "items": {"type": "string"},
+                },
+                "budgets": {
+                    "type": "object",
+                    "additionalProperties": {"type": "integer"},
+                },
+                "issued_at": {"type": "string"},
+                "expires_at": {"type": "string"},
+                "remote": {"type": "string"},
+                "remote_ref": {"type": "string"},
+                "approve": {"type": "boolean"},
+                "expect": {"type": "string"},
+            },
+            "required": [
+                "program", "mode", "operator", "reason", "intent_id",
+                "issued_at", "expires_at", "approve", "expect",
+            ],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_start,
+    },
+    "dw_program_preview": {
+        "description": (
+            "Pure action+closed-parameters+ledger-bound preview required "
+            "before every public program operation."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "action": {
+                    "type": "string",
+                    "enum": [
+                        "tick", "supervise", "request", "pause", "resume",
+                        "revoke", "cancel",
+                    ],
+                },
+                "reason": {"type": "string"},
+                "decision": {
+                    "type": "string", "enum": ["", "approve", "reject"],
+                },
+                "request_id": {"type": "string"},
+                "max_ticks": {
+                    "type": "integer", "minimum": 1, "maximum": 10000,
+                },
+                "max_seconds": {
+                    "type": "integer", "minimum": 1, "maximum": 86400,
+                },
+            },
+            "required": ["run_id", "action"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_preview,
+    },
+    "dw_program_tick": {
+        "description": (
+            "Apply one fresh program tick through the existing conductor or "
+            "exact delivery lane; may start only already-granted bounded work."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "expect": _PROGRAM_EXPECT_PROP,
+            },
+            "required": ["run_id", "expect"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_tick,
+    },
+    "dw_program_supervise": {
+        "description": (
+            "Explicit finite repetition of the same public program tick; "
+            "returns every tick and stops on checkpoint, no progress, terminal, "
+            "refusal, budget, or duration."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "expect": _PROGRAM_EXPECT_PROP,
+                "max_ticks": {
+                    "type": "integer", "minimum": 1, "maximum": 10000,
+                },
+                "max_seconds": {
+                    "type": "integer", "minimum": 1, "maximum": 86400,
+                },
+            },
+            "required": ["run_id", "expect", "max_ticks", "max_seconds"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_supervise,
+    },
+    "dw_program_request": {
+        "description": (
+            "Apply one fresh closed approve/reject response to an exact "
+            "outstanding typed program request."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "request_id": {"type": "string"},
+                "decision": {
+                    "type": "string", "enum": ["approve", "reject"],
+                },
+                "reason": {"type": "string"},
+                "expect": _PROGRAM_EXPECT_PROP,
+            },
+            "required": [
+                "run_id", "request_id", "decision", "reason", "expect",
+            ],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_request,
+    },
+    "dw_program_pause": {
+        "description": "Apply one freshly previewed program pause.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "reason": {"type": "string"},
+                "expect": _PROGRAM_EXPECT_PROP,
+            },
+            "required": ["run_id", "reason", "expect"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_pause,
+    },
+    "dw_program_resume": {
+        "description": (
+            "Apply one freshly previewed resume after all grant facts are "
+            "re-observed."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "reason": {"type": "string"},
+                "expect": _PROGRAM_EXPECT_PROP,
+            },
+            "required": ["run_id", "reason", "expect"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_resume,
+    },
+    "dw_program_revoke": {
+        "description": "Apply one freshly previewed permanent program revocation.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "reason": {"type": "string"},
+                "expect": _PROGRAM_EXPECT_PROP,
+            },
+            "required": ["run_id", "reason", "expect"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_revoke,
+    },
+    "dw_program_cancel": {
+        "description": (
+            "Apply one freshly previewed cancellation before bounded child "
+            "interruption."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "reason": {"type": "string"},
+                "expect": _PROGRAM_EXPECT_PROP,
+            },
+            "required": ["run_id", "reason", "expect"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_cancel,
+    },
+    "dw_program_tail": {
+        "description": (
+            "Pure verified program ledger cursor replay; returns no mutation "
+            "token, prompt, transcript, source, or artifact content."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "after": {"type": "integer", "minimum": 0},
+                "limit": {
+                    "type": "integer", "minimum": 1, "maximum": 1000,
+                },
+            },
+            "required": ["run_id"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_tail,
+    },
+    "dw_program_stream": {
+        "description": (
+            "Explicitly open one bounded program-agent stdout/stderr stream; "
+            "list views never include its content."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": _PROGRAM_RUN_ID_PROP,
+                "session_id": {"type": "string"},
+                "stream": {
+                    "type": "string", "enum": ["stdout", "stderr"],
+                },
+                "max_bytes": {
+                    "type": "integer", "minimum": 1, "maximum": 100000,
+                },
+            },
+            "required": ["run_id", "session_id", "stream"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_program_stream,
     },
     "dw_run_plan": {
         "description": (

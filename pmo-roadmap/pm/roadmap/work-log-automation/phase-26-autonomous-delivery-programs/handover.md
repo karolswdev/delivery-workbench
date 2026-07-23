@@ -1,18 +1,18 @@
 # Phase 26 continuation handover
 
-**Snapshot:** 2026-07-23, after WLA-26-10
+**Snapshot:** 2026-07-23, after WLA-26-11
 **Branch:** `agent/wla-26-09-conductor`
-**Roadmap state:** Phase 26 open, 10/12; WLA-26-11 is next
-**Delivery state:** WLA-26-09 is published on the draft PR branch; this
-checkpoint adds the WLA-26-10 implementation, tests, documentation, evidence,
+**Roadmap state:** Phase 26 open, 11/12; WLA-26-12 is next
+**Delivery state:** WLA-26-09/10 are published on the draft PR branch; this
+checkpoint adds the WLA-26-11 implementation, tests, documentation, evidence,
 and roadmap closeout.
 
 This is a continuation snapshot, not a replacement for
 [current-phase-status](./current-phase-status.md),
-[story-10](./story-10-integrate-work-and-advance-exact-roadmap-rails.md),
-or [evidence-story-10](./evidence-story-10.md).
+[story-11](./story-11-operate-the-autonomous-organization-across-every-surface.md),
+or [evidence-story-11](./evidence-story-11.md).
 
-## Completed through WLA-26-10
+## Completed through WLA-26-11
 
 Phase 26 remains an explicitly configured layer above ordinary Delivery
 Workbench and one-score/one-run bounded orchestration. No program is inferred
@@ -35,11 +35,15 @@ The delivered sequence now includes:
    facts/nudges, cross-story/phase selection, obligation gates, and exact scope
    completion; and
 10. WLA-26-10 — exact separately claimed evidence, integration, contract,
-    certification, commit, push, obligation, story, and phase delivery rails.
+    certification, commit, push, obligation, story, and phase delivery rails;
+    and
+11. WLA-26-11 — one byte-equivalent program surface across CLI, MCP, HTTP,
+    SSE, Workbench control room, typed notifications, and bounded streams.
 
-The embedded core can now conduct and integrate a governed autonomous program.
-WLA-26-11 owns public CLI/MCP/HTTP/Workbench program operations and the live
-control room; WLA-26-12 owns the installed multi-phase exit exam.
+The embedded core and public surfaces can now plan, start, explain, operate,
+observe, and integrate a governed autonomous program without introducing a
+second scheduler or authority path. WLA-26-12 alone remains and owns the
+installed multi-phase exit exam.
 
 ## WLA-26-09 delivered runtime
 
@@ -151,30 +155,90 @@ divergence, dirty/stale/tampered state, blocking debt, missing objective
 capability, duplicate materialization, and unauthorized waiver all stop
 without a force or partial-advancement escape.
 
-## Immediate next story: WLA-26-11
+## WLA-26-11 delivered operations
+
+`program_surface.py` is the shared public projection over the pure planner,
+program authority ledger, conductor, and delivery protocol:
+
+- inventory, detail, tail, and explicit bounded stream reads are pure verified
+  observations; an absent program directory is healthy and creates nothing;
+- grant planning/start, exact action preview/apply, one-act tick, and bounded
+  supervision retain one canonical payload across CLI JSON, MCP
+  `structuredContent`, HTTP `data`, Workbench bootstrap, and SSE replay;
+- exact previews bind the grant, ledger head, generation, state, derived
+  operation, capability, budget, and closed parameters. Apply rechecks that
+  binding while holding the authority-owning lock, so concurrent surface
+  clients cannot both act from one stale frontier; and
+- `supervise` only repeats the same public tick for explicit finite tick and
+  duration ceilings, exposing every result and stopping on checkpoint,
+  terminal state, no progress, budget, or duration.
+
+The CLI now exposes `program list|show|validate|simulate|plan|start|preview|
+tick|supervise|request|pause|resume|revoke|cancel|tail|stream`. MCP exposes the
+same 16 operations through strict version-pinned tools. HTTP adds exact
+`/api/programs/*` reads, previews, acts, SSE, and bounded streams with scalar
+allowlists and no arbitrary policy, prompt, command, capability, credential,
+or retry inputs at act time.
+
+The responsive Workbench control room explains intent, workflow, organization,
+seat/provider/model/auth provenance, independence, councils/deciders, nested
+activity, artifacts, facts/verdicts/dissent, rounds, gates, obligations,
+delivery, budgets, capabilities, next actions, refusals, and the verified
+timeline. It opens SSE only on an explicit run route, closes it on route exit,
+never polls for authority, and opens output streams only on demand. Program
+Studio projects portable exact/constrained execution profiles against local
+registered adapter availability and fingerprints without credentials or
+arbitrary commands.
+
+Notifications are content-safe derivations of the same verified surface and
+cover intervention, disagreement, decider/provider loss, architect veto, new/
+blocking/overdue obligations, budget exhaustion, integration refusal, and
+completion. A response remains a closed approve/reject request document; the
+transport receives no act token and cannot become authority.
+
+## Immediate next story: WLA-26-12
 
 Read
-[story-11](./story-11-operate-the-autonomous-organization-across-every-surface.md)
-before implementation. The shared embedded planner/conductor/delivery APIs are
-now present; WLA-26-11 should expose them byte-equivalently through CLI, MCP,
-HTTP, and the Workbench control room rather than reimplementing state or
-authority per surface.
+[story-12](./story-12-prove-a-fully-autonomous-multi-phase-program.md) before
+implementation. The embedded authority/conductor/delivery core and its shared
+public operations are now present; WLA-26-12 should prove those exact packaged
+surfaces in the installed no-human, multi-phase exit exam rather than creating
+another runtime or test-only path.
 
 Keep these boundaries:
 
-- previews/list/status/explain remain pure and create no program state;
-- every mutating public operation uses the same exact grant, claim, capability,
-  budget, freshness, idempotency, and receipt core;
-- the control room must explain current story/team/workflow/verdict/obligation/
-  loop/budget/authority and active recovery state, not infer it from prose;
+- exercise more than one phase and story from a fresh wheel with no source-tree
+  imports or hidden human response;
+- include specialist implementation, independent verification, one bounded
+  debate and repair loop, meta-verifier and master-architect participation,
+  evidence/integration/commit/push, exact story/phase advancement, and planted
+  crash recovery;
+- prove the complete stale/divergent/exhausted/revoked/under-authorized/
+  obligation/refusal matrix through the same installed public operations;
+- run a separate fresh no-program consumer proving healthy vanilla behavior
+  and the absence of ambient program stores, streams, pollers, processes, or
+  notifications;
 - no surface may add generic shell, provider-secret, certification, commit,
   push, roadmap, merge, release, deploy, or publication authority;
 - vanilla and Phase 24/25 bounded-run surfaces remain complete independent
   modes with no ambient program activation; and
-- WLA-26-12 still owns the fresh-wheel, no-human, multi-phase exit exam.
+- keep the Python 3.9 floor, current interpreter, source/vendored parity, and
+  project-facing docs green through phase closeout.
 
 ## Source map
 
+- `pmo-roadmap/lib/dw_pmo/program_surface.py` — canonical inventory, control
+  room view, tail/stream reads, exact public previews/applies, tick, and bounded
+  supervision.
+- `pmo-roadmap/bin/dw`, `mcpserver.py`, and `workbench.py` — strict CLI, MCP,
+  HTTP, SSE, and Workbench transport framing over the shared surface.
+- `pmo-roadmap/workbench/` — responsive planning inventory and live program
+  control room; explicit run-route SSE and bounded on-demand output streams.
+- `pmo-roadmap/lib/dw_pmo/notifications.py` — verified program notification
+  derivation, typed request responses, and local exact-act correlation.
+- `pmo-roadmap/lib/dw_pmo/program_studio.py` — portable execution-port policy
+  plus safe local availability, diversity, fallback, and fingerprint
+  projection.
 - `pmo-roadmap/lib/dw_pmo/program_conductor.py` — replay-first frontier, tick,
   receipts, drivers, work/council/loop/gate/outward/scope behavior.
 - `pmo-roadmap/lib/dw_pmo/program_delivery.py` — pure delivery preview,
@@ -197,29 +261,34 @@ Keep these boundaries:
   one guarded phase summary/pointer/header transition.
 - `.githooks/dw_pmo/` — vendored package; keep byte-equivalent via
   `pmo-roadmap/update.sh .`.
-- `pmo-roadmap/tests/dw-core-tests.py` — 20 conductor tests plus planner,
-  authority, deliberation, and wider regressions.
+- `pmo-roadmap/tests/dw-core-tests.py` — seven public-surface/parity/race tests,
+  20 conductor tests, Studio/notification checks, plus planner, authority,
+  deliberation, delivery, and wider regressions.
 - [docs/programs.md](../../../../../docs/programs.md) — normative program,
-  delivery authority, recovery, refusal, and remaining public-surface
+  delivery authority, recovery, refusal, public-surface, and control-room
   contract.
 
 ## Validation baseline
 
-WLA-26-10 adds six focused delivery/recovery/refusal tests on both supported
-Python floors. The full core suite passes 464/464 on Python 3.14 and 464/464
-on Python 3.9. Fresh-wheel package smoke, canon/docs/snippets, agent surfaces,
-roadmap, rendered rider, source/vendored parity, compilation, and diff checks
-complete the green closeout matrix captured in
-[evidence-story-10](./evidence-story-10.md).
+WLA-26-11 adds seven focused public-surface/parity/race/request tests, expands
+the exact MCP/HTTP/CLI and Studio/notification contracts, and renders 58
+desktop/mobile browser states including real active and revoked program
+ledgers. The full two-floor core suite, fresh-wheel package smoke, Workbench
+explorer/UI smoke, canon/docs/snippets, agent surfaces, roadmap, rendered
+rider, source/vendored parity, compilation, ShellCheck, and diff checks form
+the green closeout matrix captured in
+[evidence-story-11](./evidence-story-11.md).
 
 Useful commands:
 
 ```bash
-python3 pmo-roadmap/tests/dw-core-tests.py -q ProgramDeliveryTest
-/usr/bin/python3 pmo-roadmap/tests/dw-core-tests.py -q ProgramDeliveryTest
+python3 pmo-roadmap/tests/dw-core-tests.py -q ProgramSurfaceTest
+/usr/bin/python3 pmo-roadmap/tests/dw-core-tests.py -q ProgramSurfaceTest
 python3 pmo-roadmap/tests/dw-core-tests.py -q
 /usr/bin/python3 pmo-roadmap/tests/dw-core-tests.py -q
 pmo-roadmap/tests/package-smoke.sh
+pmo-roadmap/tests/workbench-explorer.sh
+pmo-roadmap/tests/workbench-ui-smoke.sh
 pmo-roadmap/tests/canon-lint.sh
 pmo-roadmap/tests/docs-lint.sh
 pmo-roadmap/tests/docs-snippet-smoke.sh
@@ -235,21 +304,25 @@ git diff --check
 - WLA-26-09 is commit `6f52011` on
   `agent/wla-26-09-conductor`; the branch tracks its same-named origin and
   draft PR.
-- WLA-26-10 source and vendored code, tests, root/framework READMEs, solution
-  overview, architecture, interop/program contracts, changelog, story, status,
-  evidence, and this handover belong to one delivery checkpoint.
+- WLA-26-10 is commit `43aba10`, followed by its ShellCheck hardening commit
+  `4feb2d4`, on the same branch and draft PR.
+- WLA-26-11 source and vendored code, tests, Workbench assets, root/framework
+  READMEs, solution overview, architecture, interop/MCP/program contracts,
+  changelog, story, status, evidence, and this handover belong to one delivery
+  checkpoint.
 - Preserve unrelated user changes if a later session finds additional dirty
   paths, and recheck branch/upstream/PR state before publication.
 
 ## First actions for the next session
 
-1. Read this handover, current phase status, WLA-26-11, WLA-26-10 evidence, and
-   the public-surface/control-room sections of `docs/programs.md`.
+1. Read this handover, current phase status, WLA-26-12, WLA-26-11 evidence,
+   and the installed-exam/public-surface sections of `docs/programs.md`.
 2. Confirm `git status -sb`, recent commits, and source/vendored parity; do not
    assume the snapshot is still current.
-3. Keep WLA-26-09/10 green and use their exact program claims/receipts as the
-   sole authority boundary for all public operations.
-4. Contract WLA-26-11 byte-equivalent CLI/MCP/HTTP documents and control-room
-   explanations before adding surface handlers or UI state.
-5. Preserve both Python floors, fresh-wheel packaging, no-program vanilla
-   behavior, and project-facing documentation from the first WLA-26-11 slice.
+3. Keep WLA-26-09/10/11 green and use their exact installed program
+   claims/receipts and shared public surface as the sole authority boundary.
+4. Build WLA-26-12 as a fresh-wheel external exam over the shipped adapters;
+   do not import the source tree or add test-only runtime authority.
+5. Preserve both Python floors, no-program vanilla behavior, complete refusal
+   proof, crash idempotency, and project-facing documentation through phase
+   closeout.
