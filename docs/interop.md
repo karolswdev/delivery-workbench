@@ -69,6 +69,13 @@ is added when an external consumer asks for one.
 | Program control preview | `delivery-workbench-program-control-preview` v1 | `program_run.build_program_control_preview` |
 | Program child grant | `delivery-workbench-program-child-grant` v1 | `program_run.derive_child_grant` |
 | Program run inventory | `delivery-workbench-program-run-list` v1 | `program_run.program_run_inventory` |
+| Program act preview | `delivery-workbench-program-act-preview` v1 | `program_surface.build_program_act_preview` |
+| Program control-room view | `delivery-workbench-program-view` v1 | `program_surface.build_program_view` |
+| Program summary inventory | `delivery-workbench-program-summary-list` v1 | `program_surface.program_summary_inventory` |
+| Public program tick | `delivery-workbench-program-surface-tick` v1 | `program_surface.tick_program_surface` |
+| Public program supervision | `delivery-workbench-program-surface-supervision` v1 | `program_surface.supervise_program_surface` |
+| Verified program tail | `delivery-workbench-program-tail` v1 | `program_surface.tail_program_events` |
+| Explicit program stream | `delivery-workbench-program-stream` v1 | `program_surface.read_program_stream` |
 | Deliberation plan | `delivery-workbench-deliberation-plan` v1 | `program_deliberation.compile_deliberation_plan` |
 | Deliberation event | `delivery-workbench-deliberation-event` v1 | `program_deliberation` event chain |
 | Deliberation projection | `delivery-workbench-deliberation-projection` v1 | `program_deliberation.replay_deliberation` |
@@ -88,6 +95,7 @@ is added when an external consumer asks for one.
 | Program conductor tick | `delivery-workbench-program-tick` v1 | `program_conductor.tick_program` |
 | Program conductor supervision | `delivery-workbench-program-supervision` v1 | `program_conductor.supervise_program` |
 | Program conductor receipt | `delivery-workbench-program-conductor-receipt` v1 | `program_conductor.replay_program_conductor` |
+| Typed program request result | `delivery-workbench-program-request-result` v1 | `program_conductor.respond_program_request` |
 | Program artifact receipt | `delivery-workbench-program-artifact-receipt` v1 | `program_conductor.ProgramDriverManager` |
 | Program driver operation | `delivery-workbench-program-driver-operation` v1 | `program_conductor.ProgramDriverManager` |
 | Orchestration run plan | `delivery-workbench-run-plan` v1 | `orchestration_run.build_run_plan` |
@@ -134,7 +142,20 @@ is added when an external consumer asks for one.
 | `dw program list --json` | `programs.program_inventory` | healthy empty inventory when no program is configured; otherwise contained policy validation/hashes; pure |
 | `dw program validate <program> --json` | `programs.validate_program` | exact-key policy/reference/scope/binding verdict plus source-aware diagnostics; exit 1 invalid |
 | `dw program simulate <program> --json` | `programs.simulate_program` | every roadmap candidate reason plus deterministic workflow/team/role assignment; explicitly no work/state/grant |
-| `dw program plan <program> --json` | `programs.build_program_plan` | repository HEAD/index/operation, roadmap snapshot/health, policy/roster hashes, selected story, workflow/rubrics, independent verifier, optional meta/architect/council policy, and complete derivation; pure |
+| `dw program plan <program> --json` | `programs.build_program_plan` | without `--mode`: repository/roadmap snapshot, selected story, workflow/team/roles, policy/roster hashes, and complete derivation; pure |
+| `dw program plan <program> --mode <mode> … --json` | `program_run.build_program_start_plan` | pure exact finite-grant preview with a single-use `start_token`; creates no grant or child |
+| `dw program start --plan <file> --expect <token> --approve --json` | `program_surface.start_program_by_id` | rebuilds the reviewed plan from its ids and bounded scalar request, then issues exactly one local grant; starts no child |
+| `dw program show <run> --json` | `program_surface.build_program_view` | canonical content-safe control-room projection: why/current lineage, resolved organization, activity, quality/dissent, gates, obligations, deliveries, budgets, controls, and verified timeline |
+| `dw program preview <run> <action> --json` | `program_surface.build_program_act_preview` | pure action/closed-parameters/ledger-bound preview and exact `act_token` |
+| `dw program tick <run> --expect <act-token> --json` | `program_surface.apply_program_act` | exactly one conductor, delivery-plan, or delivery tick through the existing grant and ledger |
+| `dw program supervise <run> --max-ticks <n> --max-seconds <s> --expect <act-token> --json` | `program_surface.apply_program_act` | explicit finite repetition of the same public tick; returns every tick and stops on no-progress, checkpoint, refusal, budget, duration, or terminal state |
+| `dw program request <run> <request> approve\|reject --reason <text> --expect <act-token> --json` | `program_surface.apply_program_act` | one closed typed response to one exact outstanding request |
+| `dw program pause <run> --reason <text> --expect <act-token> --json` | `program_surface.apply_program_act` | one freshly previewed pause |
+| `dw program resume <run> --reason <text> --expect <act-token> --json` | `program_surface.apply_program_act` | one freshly previewed resume after grant facts are re-observed |
+| `dw program revoke <run> --reason <text> --expect <act-token> --json` | `program_surface.apply_program_act` | one permanent, ledgered revocation |
+| `dw program cancel <run> --reason <text> --expect <act-token> --json` | `program_surface.apply_program_act` | one ledgered cancellation before bounded interruption |
+| `dw program tail <run> [--after N] [--follow]` | `program_surface.tail_program_events` | verified canonical ledger suffix; `--json` returns the stamped bounded tail and is intentionally incompatible with follow |
+| `dw program stream <run> <session> stdout\|stderr --json` | `program_surface.read_program_stream` | one explicitly opened content-safe log, independently bounded to 100,000 bytes |
 | `dw notifications list --json` | `notifications.build_notifications` | derived operator notifications (pending/republished/expired requests, terminals, blocked stops, opt-in branch signals) with unread and delivery state; pure (exit 2 when none) |
 | `dw notifications ack <id>` | `notifications.acknowledge_notification` | idempotent, receipted acknowledgement in the local ack log |
 | `dw notifications delivered <id> [--channel C] [--failed reason]` | `notifications.record_delivery` | one recorded delivery-attempt outcome for a channel consumer (ceiling-bounded retries) |
@@ -168,25 +189,22 @@ The individual lifecycle spellings are `dw run show`, `dw run pause`,
 `dw run resume`, `dw run revoke`, and `dw run cancel`; the grouped rows above
 do not imply a combined command.
 
-## Embedded Phase 26 core (no transport yet)
+## Delivered Phase 26 program surface
 
-The program authority, deliberation, and conductor documents named above are
-shared-core contracts, not ambient CLI authority. The current public
-`dw program` surface ends at pure `list|validate|simulate|plan`.
-`program_deliberation.compile_deliberation_plan` and
-`simulate_deliberation` are pure; their event transitions dispatch nothing on
-their own. WLA-26-09 reconstructs those transitions under the finite program
-grant and sole program ledger, then conducts agent/check/repair, council,
-obligation, meta-verifier, structural-loop, phase-architect, outward-fact,
-nudge, cross-story/phase-selection, and scope-completion acts through
-`tick_program`. Structural-loop receipts bind typed predicate provenance,
-carried artifacts, exact lineage, and a finite route. Outward-fact receipts
-bind only content-safe Phase 25 event/channel hashes; separate nudge receipts
-bind one standing rule and an already-run exact agent attempt. No embedded
-conductor API observes the network or performs integration, evidence,
-certification, Git, or roadmap mutation. WLA-26-10's separate embedded
-`program_delivery` adapter owns those exact-token, claim-bound delivery rails;
-WLA-26-11 owns byte-equivalent CLI/MCP/HTTP projections and controls.
+`program_surface` is the one public projection and exact-act seam over the
+existing program compiler, grant, conductor, and delivery cores. CLI JSON, MCP
+`structuredContent`, HTTP envelope `data`, Workbench bootstrap, and SSE cursor
+replay adapt its canonical documents instead of reconstructing program state.
+Reads start no store, process, observer, notification, poller, or stream.
+
+Every public mutation is a preview→exact-token act over the sole program
+ledger. Act schemas accept ids, bounded reasons, closed approve/reject
+decisions, finite supervision ceilings, reviewed grant scalars, and exact
+tokens only. They do not accept policy documents, role assignments, prompts,
+rubrics, checks, capabilities at tick time, credentials, commands, or retry
+overrides. The conductor still owns agent/check/council/loop work;
+`program_delivery` still owns separately claimed integration/Git/roadmap acts.
+The surface adds no authority or hidden scheduler.
 
 ## Workbench HTTP (localhost/tailnet)
 
@@ -215,6 +233,21 @@ or provider argv.
 | `POST /api/orchestration/apply` | `orchestration_edit.apply_score_mutation` | one fresh atomic score save/delete with read-back verification and rollback; never starts a run |
 | `POST /api/program-studio/preview` | `program_studio.build_studio_mutation_plan` | one selected policy save/delete diff, compiler projections and stale fingerprint; no grant/run/agent/check/roadmap effect |
 | `POST /api/program-studio/apply` | `program_studio.apply_studio_mutation` | one fresh direct-contained policy save/delete with read-back validation and explicit false runtime effects |
+| `GET /api/programs` | `program_surface.program_summary_inventory` | healthy empty policy/run inventory in ordinary mode, otherwise canonical content-safe run summaries; pure |
+| `GET /api/programs/<run>` / `GET /api/programs/<run>/view` | `program_surface.build_program_view` | the same canonical control-room document returned by CLI and MCP |
+| `GET /api/programs/<run>/act/<action>` / `POST /api/programs/preview` | `program_surface.build_program_act_preview` | pure exact action preview; POST carries bounded reason/decision/request/ceiling fields outside the URL |
+| `GET /api/programs/<run>/tail?after=N&limit=N` | `program_surface.tail_program_events` | stamped bounded verified ledger suffix; no token or mutation authority |
+| `GET /api/programs/<run>/streams/<session>/<stdout\|stderr>` | `program_surface.read_program_stream` | one explicit independently bounded session log; never included in list/view/event payloads |
+| `GET /api/programs/<run>/events` (SSE) | `program_surface.tail_program_events` | `program-ledger` events with `Last-Event-ID`/`from` replay of the exact missed suffix; read-only and never a scheduler |
+| `POST /api/programs/plan` | `program_run.build_program_start_plan` | exact pure grant preview from a program id and reviewed scalar bounds |
+| `POST /api/programs/start` | `program_surface.start_program_by_id` | rebuilds and consumes one exact approved start token; grant creation dispatches nothing |
+| `POST /api/programs/tick` | `program_surface.apply_program_act` | one exact public program tick |
+| `POST /api/programs/supervise` | `program_surface.apply_program_act` | explicit finite repetition under the previewed tick/time ceilings |
+| `POST /api/programs/request` | `program_surface.apply_program_act` | one exact closed response to one outstanding typed request |
+| `POST /api/programs/pause` | `program_surface.apply_program_act` | one exact pause with a bounded reason |
+| `POST /api/programs/resume` | `program_surface.apply_program_act` | one exact fresh resume with a bounded reason |
+| `POST /api/programs/revoke` | `program_surface.apply_program_act` | one exact permanent revocation with a bounded reason |
+| `POST /api/programs/cancel` | `program_surface.apply_program_act` | one exact ledgered cancellation with a bounded reason |
 | `GET /api/run-plan?score=…&project=…&story=…` | `orchestration_run.build_run_plan` | exact pure grant/start preview; identifiers and timestamps only |
 | `GET /api/runs` | `orchestration_run.run_inventory` | authoritative local projections; no prompts, argv, source, transcripts, or artifact bytes |
 | `GET /api/runs/<run>` | `orchestration_run.replay_run` | byte-identical projection in `data` |
@@ -248,14 +281,19 @@ this is the inventory. Read-only: `dw_status`, `dw_step`, `dw_context`,
 `dw_next`, `dw_check`, `dw_doctor`, `dw_board`, `dw_holds`,
 `dw_story_show`, `dw_verify`, `dw_gate`, `dw_orchestration_list`,
 `dw_signals`, `dw_notifications`, `dw_orchestration_show`,
-`dw_orchestration_simulate`,
+`dw_orchestration_simulate`, `dw_program_list`, `dw_program_show`,
+`dw_program_validate`, `dw_program_simulate`, `dw_program_plan`,
+`dw_program_preview`, `dw_program_tail`,
 `dw_run_plan`, `dw_run_list`, `dw_run_show`, `dw_run_view`, and
 `dw_run_preview`.
-Exact-token actions: `dw_step_apply`, `dw_run_start`, `dw_run_tick`,
+Exact-token actions: `dw_step_apply`, `dw_program_start`, `dw_program_tick`,
+`dw_program_supervise`, `dw_program_request`, `dw_program_pause`,
+`dw_program_resume`, `dw_program_revoke`, `dw_program_cancel`,
+`dw_run_start`, `dw_run_tick`,
 `dw_run_pause`, `dw_run_resume`, `dw_run_revoke`, `dw_run_cancel`,
 `dw_run_request`, and the checkpoint-compatible `dw_run_checkpoint`. The
-explicitly opened and bounded `dw_run_stream` is
-the only run tool returning log content. Other guarded mutations:
+explicitly opened and bounded `dw_program_stream` and `dw_run_stream` are
+the only program/run tools returning log content. Other guarded mutations:
 `dw_story_status`, `dw_evidence_capture`, `dw_contract_new`, and the
 receipted idempotent `dw_notifications_ack`.
 Certification and commit are never tool calls.

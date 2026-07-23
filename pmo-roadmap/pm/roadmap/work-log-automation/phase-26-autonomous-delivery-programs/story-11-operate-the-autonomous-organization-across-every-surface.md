@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 26
-- **Status:** backlog
+- **Status:** done
   <!-- status vocabulary: roadmap-builder.md §2.3 -->
 - **Depends on:** WLA-26-06, WLA-26-08, WLA-26-09, WLA-26-10
 - **Unblocks:** WLA-26-12
@@ -33,35 +33,35 @@ must not become a second consent or scheduler path.
 
 ## Acceptance criteria
 
-- [ ] CLI JSON, MCP `structuredContent`, HTTP `data`, Workbench bootstrap and
+- [x] CLI JSON, MCP `structuredContent`, HTTP `data`, Workbench bootstrap and
   SSE replay expose byte-equivalent program state at one observation instant;
   reads and stream carry no token or mutation authority.
-- [ ] Program routes and views are additive and dormant: with no program
+- [x] Program routes and views are additive and dormant: with no program
   configured, inventory is a healthy empty result, ordinary CLI/MCP/HTTP/
   Workbench behavior remains compatible, and no stream, poller, notification,
   process, or program store starts merely because a surface opens.
-- [ ] The control room answers: why this story/phase, why this workflow/team,
+- [x] The control room answers: why this story/phase, why this workflow/team,
   who implements/verifies/deliberates/decides/meta-verifies/architects, which
   exact harness/provider/model/auth domain filled each seat, which loop/round
   is active, which evidence/verdict/dissent/obligation gates progress, and what
   next action/refusal is derivable from the ledger.
-- [ ] Program Studio authors portable, exact or constrained execution ports;
+- [x] Program Studio authors portable, exact or constrained execution ports;
   council seats/perspectives, rule-versus-judge decision authority, provider/
   model/principal diversity, explicit fallback and obligation policy. It shows
   resolved local availability/fingerprints without exposing credentials or
   accepting arbitrary commands.
-- [ ] Applying routes accept only program/run ids, bounded reasons or closed
+- [x] Applying routes accept only program/run ids, bounded reasons or closed
   typed decisions and fresh exact tokens; no adapter accepts policy documents,
   role assignments, prompts, rubrics, checks, capabilities, credentials,
   commands or retry overrides at act time.
-- [ ] Bounded `supervise` repeats the core tick only under an existing grant and
+- [x] Bounded `supervise` repeats the core tick only under an existing grant and
   explicit local invocation, stops on checkpoint/no-progress/terminal/budget/
   duration, and exposes every tick rather than creating a hidden scheduler.
-- [ ] Notifications cover required intervention, verifier/council disagreement,
+- [x] Notifications cover required intervention, verifier/council disagreement,
   decider/provider loss, architect veto, new/blocking/overdue obligations,
   budget/exhaustion, integration refusal and program completion; phone responses
   remain typed request documents and transport never equals authority.
-- [ ] Desktop/mobile states cover planning, team assignment, nested execution,
+- [x] Desktop/mobile states cover planning, team assignment, nested execution,
   active debate, verifier repair, meta-overturn, phase transition, revocation,
   budget stop and complete, with accessible labels and content-safe streams.
 

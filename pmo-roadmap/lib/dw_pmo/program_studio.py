@@ -27,6 +27,7 @@ from typing import Callable
 
 from .model import DwError
 from .orchestration import canonical_json
+from .orchestration_driver import driver_capability, load_driver_config
 from .program_organization import (
     compile_organization,
     find_organization_path,
@@ -742,6 +743,8 @@ def build_authority_preview(
     family: str,
     document: dict[str, object],
     compiled: dict[str, object] | None,
+    *,
+    root: Path | None = None,
 ) -> dict[str, object]:
     requested = _requested_capabilities(family, document, compiled)
     known = set(WORK_AND_VERDICT_CAPABILITIES) | set(DELIVERY_CAPABILITIES)
@@ -768,6 +771,9 @@ def build_authority_preview(
             "meaning": "Finite authority continues only until a declared stop, refusal, expiry, revocation, or exhaustion.",
         },
     ]
+    execution_contract = _studio_execution_contract(
+        root, family, document, compiled
+    )
     return {
         "kind": STUDIO_AUTHORITY_KIND,
         "schema_version": STUDIO_SCHEMA_VERSION,
@@ -793,12 +799,235 @@ def build_authority_preview(
         "unknown_capabilities": sorted(set(requested) - known),
         "budgets": document.get("budgets", {}) if family == "program" else {},
         "stop_conditions": document.get("stop_conditions", []) if family == "program" else [],
+        "execution_contract": execution_contract,
         "requested_only": True,
         "grant_required": True,
         "starts_work": False,
         "writes_policy": False,
         "writes_run_state": False,
         "creates_grant": False,
+    }
+
+
+def _studio_execution_contract(
+    root: Path | None,
+    family: str,
+    document: dict[str, object],
+    compiled: dict[str, object] | None,
+) -> dict[str, object]:
+    """Project portable organization ports and safe local resolution facts.
+
+    Tracked policies select logical profiles and govern duties, packet
+    visibility, fallbacks, separation, councils, and obligation authority.
+    Operator-local driver configuration resolves those portable selectors to
+    harness/provider/model/auth-domain fingerprints.  The projection never
+    returns the principal name, auth-domain name, credentials, argv, or
+    commands.
+    """
+    organization: dict[str, object] | None = None
+    if family == "organization":
+        organization = (
+            compiled.get("organization")
+            if isinstance(compiled, dict)
+            and isinstance(compiled.get("organization"), dict)
+            else document
+        )
+    elif family == "program" and isinstance(compiled, dict):
+        references = compiled.get("references")
+        if isinstance(references, dict):
+            candidate = references.get("organization")
+            if isinstance(candidate, dict):
+                organization = candidate
+
+    local_config: dict[str, object] | None = None
+    local_issue = ""
+    if root is not None:
+        try:
+            local_config = load_driver_config(root)
+        except DwError as exc:
+            local_issue = exc.message[:500]
+
+    ports: list[dict[str, object]] = []
+    fallbacks: list[dict[str, object]] = []
+    independence: list[dict[str, object]] = []
+    councils: list[dict[str, object]] = []
+    if isinstance(organization, dict):
+        for agent in organization.get("agents", []):
+            if not isinstance(agent, dict):
+                continue
+            profile = str(agent.get("profile") or "")
+            resolution: dict[str, object] = {
+                "configured": False,
+                "available": False,
+                "harness": None,
+                "adapter": None,
+                "router": None,
+                "provider": None,
+                "model_vendor": None,
+                "model_family": None,
+                "model": None,
+                "model_revision": None,
+                "model_binding": None,
+                "auth_domain_fingerprint": None,
+                "principal_fingerprint": None,
+                "capability_fingerprint": None,
+            }
+            if local_config is not None and profile:
+                try:
+                    capability = driver_capability(local_config, profile)
+                    resolution.update({
+                        "configured": True,
+                        "available": bool(capability["available"]),
+                        "harness": capability["harness"],
+                        "adapter": capability["adapter"],
+                        "router": capability["router"],
+                        "provider": capability["provider"],
+                        "model_vendor": capability["model_vendor"],
+                        "model_family": capability["model_family"],
+                        "model": capability["model"],
+                        "model_revision": capability["model_revision"],
+                        "model_binding": capability["model_binding"],
+                        "auth_domain_fingerprint": (
+                            capability["auth_domain_fingerprint"]
+                        ),
+                        "principal_fingerprint": (
+                            capability["principal_fingerprint"]
+                        ),
+                        "capability_fingerprint": (
+                            capability["capability_fingerprint"]
+                        ),
+                    })
+                except DwError:
+                    pass
+            ports.append({
+                "agent": agent.get("id"),
+                "selector": {
+                    "kind": "logical-profile",
+                    "profile": profile,
+                    "portable": True,
+                    "resolution": "operator-local",
+                },
+                "constraints": {
+                    "duties": list(agent.get("duties", [])),
+                    "workspace_domain": agent.get("workspace_domain"),
+                    "capability_ceiling": list(
+                        agent.get("capability_ceiling", [])
+                    ),
+                    "max_concurrency": agent.get("max_concurrency"),
+                },
+                "local_resolution": resolution,
+            })
+        for team in organization.get("teams", []):
+            if not isinstance(team, dict):
+                continue
+            for role in team.get("roles", []):
+                if not isinstance(role, dict):
+                    continue
+                replacement = role.get("replacement")
+                if isinstance(replacement, dict):
+                    fallbacks.append({
+                        "team": team.get("id"),
+                        "role": role.get("id"),
+                        "primary_pool": role.get("pool"),
+                        "fallback_pools": list(
+                            replacement.get("fallback_pools", [])
+                        ),
+                        "reasons": list(replacement.get("reasons", [])),
+                        "max_replacements": replacement.get(
+                            "max_replacements"
+                        ),
+                        "on_exhausted": replacement.get("on_exhausted"),
+                    })
+                for other in role.get("independent_from", []):
+                    independence.append({
+                        "team": team.get("id"),
+                        "role": role.get("id"),
+                        "independent_from": other,
+                        "principal": "must-differ",
+                        "profile": "must-differ",
+                        "workspace_domain": "must-differ",
+                        "session_binding": "must-differ",
+                    })
+        for council in organization.get("councils", []):
+            if not isinstance(council, dict):
+                continue
+            members = list(council.get("members", []))
+            councils.append({
+                "id": council.get("id"),
+                "members": members,
+                "perspectives": [
+                    {"role": role, "perspective": role}
+                    for role in members
+                ],
+                "judge": council.get("judge"),
+                "meta_verifier": council.get("meta_verifier"),
+                "quorum": council.get("quorum"),
+                "principal_diversity": (
+                    "distinct"
+                    if council.get("distinct_principals")
+                    else "not-declared"
+                ),
+                "decision_authority": (
+                    council.get("decision", {}).get("method")
+                    if isinstance(council.get("decision"), dict)
+                    else None
+                ),
+                "veto_roles": (
+                    list(council.get("decision", {}).get("veto_roles", []))
+                    if isinstance(council.get("decision"), dict)
+                    else []
+                ),
+                "audit": council.get("audit", {}),
+                "obligation_policy": {
+                    "required_on_judgment": True,
+                    "allowed_kinds": [
+                        "backlog", "technical-debt", "risk",
+                        "research", "follow-up",
+                    ],
+                    "blocking_prevents_progress": True,
+                    "record_authority_role": council.get("judge"),
+                },
+            })
+
+    resolved = [
+        item["local_resolution"]
+        for item in ports
+        if item["local_resolution"]["configured"]
+    ]
+    diversity = {
+        "independence": independence,
+        "councils_require_distinct_principals": all(
+            item["principal_diversity"] == "distinct"
+            for item in councils
+        ) if councils else False,
+        "resolved_provider_count": len({
+            item["provider"] for item in resolved if item["provider"]
+        }),
+        "resolved_model_family_count": len({
+            item["model_family"] for item in resolved
+            if item["model_family"]
+        }),
+        "resolved_principal_count": len({
+            item["principal_fingerprint"] for item in resolved
+            if item["principal_fingerprint"]
+        }),
+        "resolved_auth_domain_count": len({
+            item["auth_domain_fingerprint"] for item in resolved
+            if item["auth_domain_fingerprint"]
+        }),
+        "observed_only_until_grant": True,
+    }
+    return {
+        "ports": ports,
+        "fallbacks": fallbacks,
+        "councils": councils,
+        "diversity": diversity,
+        "local_resolution_available": local_config is not None,
+        "local_resolution_issue": local_issue,
+        "content_safe": True,
+        "credentials_exposed": False,
+        "commands_accepted": False,
+        "starts_work": False,
     }
 
 
@@ -845,7 +1074,9 @@ def build_studio_document(root: Path, family: str, selector: str) -> dict[str, o
         "simulation": simulation,
         "simulation_scenarios": _simulation_scenarios(family, graph),
         "graph": graph,
-        "authority": build_authority_preview(family, document, compiled),
+        "authority": build_authority_preview(
+            family, document, compiled, root=root
+        ),
         "round_trip": round_trip,
         "starts_work": False,
         "writes_policy": False,
@@ -1046,7 +1277,7 @@ def studio_mutation_preview(plan: StudioMutationPlan) -> dict[str, object]:
             "simulation_scenarios": _simulation_scenarios(plan.family, graph),
             "graph": graph,
             "authority": build_authority_preview(
-                plan.family, plan.document, plan.compiled,
+                plan.family, plan.document, plan.compiled, root=plan.root,
             ),
             "round_trip": graph_config_round_trip(
                 plan.root, plan.family, plan.document,

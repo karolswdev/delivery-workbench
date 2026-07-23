@@ -118,10 +118,10 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 10,
+            len(post_routes), 13,
             "only deliberate-step, guarded roadmap/score/Studio edits, run "
-            "preview/start, and the receipted notification ack use direct POST "
-            "equality routes; "
+            "preview/start, program grant preview/start/plan, and the receipted "
+            "notification ack use direct POST equality routes; "
             f"found: {post_routes}",
         )
         self.assertTrue(any('/api/step/apply' in line for line in post_routes))
@@ -133,6 +133,9 @@ class DwCoreTest(unittest.TestCase):
         self.assertTrue(any('/api/program-studio/apply' in line for line in post_routes))
         self.assertTrue(any('/api/runs/preview' in line for line in post_routes))
         self.assertTrue(any('/api/runs/start' in line for line in post_routes))
+        self.assertTrue(any('/api/programs/plan' in line for line in post_routes))
+        self.assertTrue(any('/api/programs/preview' in line for line in post_routes))
+        self.assertTrue(any('/api/programs/start' in line for line in post_routes))
         self.assertTrue(any('/api/notifications/ack' in line for line in post_routes))
 
     def test_missioncontrol_readonly_guard_catches_a_planted_write(self):
@@ -1596,6 +1599,11 @@ class DwCoreTest(unittest.TestCase):
                 "/api/mutations/preview", "/api/mutations/apply",
                 "/api/orchestration/preview", "/api/orchestration/apply",
                 "/api/program-studio/preview", "/api/program-studio/apply",
+                "/api/programs/plan", "/api/programs/start",
+                "/api/programs/preview", "/api/programs/tick",
+                "/api/programs/supervise", "/api/programs/request",
+                "/api/programs/pause", "/api/programs/resume",
+                "/api/programs/revoke", "/api/programs/cancel",
                 "/api/runs/preview", "/api/runs/start", "/api/runs/tick",
                 "/api/runs/pause", "/api/runs/resume", "/api/runs/revoke",
                 "/api/runs/cancel", "/api/runs/checkpoint", "/api/runs/request",
@@ -1613,7 +1621,11 @@ class DwCoreTest(unittest.TestCase):
             "dw workflow list", "dw workflow validate", "dw workflow simulate",
             "dw rubric list", "dw rubric validate",
             "dw program list", "dw program validate", "dw program simulate",
-            "dw program plan",
+            "dw program plan", "dw program show", "dw program start",
+            "dw program preview", "dw program tick", "dw program supervise",
+            "dw program request", "dw program pause", "dw program resume",
+            "dw program revoke", "dw program cancel", "dw program tail",
+            "dw program stream",
             "dw signals list", "dw signals observe",
             "dw notifications list", "dw notifications ack",
             "dw notifications delivered",
@@ -1660,8 +1672,16 @@ class DwCoreTest(unittest.TestCase):
                       "delivery-workbench-program-tick",
                       "delivery-workbench-program-supervision",
                       "delivery-workbench-program-conductor-receipt",
+                      "delivery-workbench-program-request-result",
                       "delivery-workbench-program-artifact-receipt",
                       "delivery-workbench-program-driver-operation",
+                      "delivery-workbench-program-act-preview",
+                      "delivery-workbench-program-view",
+                      "delivery-workbench-program-summary-list",
+                      "delivery-workbench-program-surface-tick",
+                      "delivery-workbench-program-surface-supervision",
+                      "delivery-workbench-program-tail",
+                      "delivery-workbench-program-stream",
                       "feed_schema"):
             self.assertIn(stamp, doc)
         # the pin must actually bite: a planted surface reads as missing
@@ -2800,7 +2820,14 @@ class MCPServerTest(unittest.TestCase):
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",
             "dw_orchestration_list", "dw_notifications", "dw_notifications_ack",
             "dw_signals", "dw_orchestration_show",
-            "dw_orchestration_simulate", "dw_run_plan", "dw_run_list",
+            "dw_orchestration_simulate",
+            "dw_program_list", "dw_program_show", "dw_program_validate",
+            "dw_program_simulate", "dw_program_plan", "dw_program_start",
+            "dw_program_preview", "dw_program_tick", "dw_program_supervise",
+            "dw_program_request", "dw_program_pause", "dw_program_resume",
+            "dw_program_revoke", "dw_program_cancel", "dw_program_tail",
+            "dw_program_stream",
+            "dw_run_plan", "dw_run_list",
             "dw_run_show", "dw_run_view", "dw_run_preview", "dw_run_start",
             "dw_run_tick", "dw_run_pause", "dw_run_resume", "dw_run_revoke",
             "dw_run_cancel", "dw_run_checkpoint", "dw_run_request", "dw_run_stream",
@@ -9078,10 +9105,12 @@ class ProgramPlannerTest(unittest.TestCase):
     """WLA-26-02: pure multi-phase program compilation and selection."""
 
     def setUp(self):
+        import dw_pmo.program_surface as program_surface
         import dw_pmo.programs as programs
         from dw_pmo.orchestration_driver import write_driver_config
 
         self.programs_core = programs
+        self.program_surface = program_surface
         self.tmp = Path(tempfile.mkdtemp(prefix="dw-program-test.")).resolve()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.root = self.tmp / "repo"
@@ -9857,7 +9886,10 @@ class ProgramPlannerTest(unittest.TestCase):
         core = self.programs_core
         listed = self.cli("list", "--json")
         self.assertEqual(listed.returncode, 0, listed.stderr)
-        self.assertEqual(json.loads(listed.stdout), core.program_inventory(self.root))
+        self.assertEqual(
+            json.loads(listed.stdout),
+            self.program_surface.program_summary_inventory(self.root),
+        )
         valid = self.cli("validate", "demo-program", "--json")
         self.assertEqual(valid.returncode, 0, valid.stderr)
         self.assertEqual(
@@ -13684,6 +13716,579 @@ class ProgramDeliveryTest(unittest.TestCase):
         )
 
 
+class ProgramSurfaceTest(unittest.TestCase):
+    """WLA-26-11: one exact program control room across every adapter."""
+
+    def setUp(self):
+        import dw_pmo.program_surface as surface
+
+        self.core = surface
+        self.authority = ProgramRunAuthorityTest(
+            "test_start_is_exact_immutable_idempotent_and_creates_only_local_authority"
+        )
+        self.authority.setUp()
+        self.addCleanup(self.authority.doCleanups)
+        self.root = self.authority.root
+        self.intent = 0
+        observed = datetime.now(timezone.utc).replace(microsecond=0)
+        self.authority.issued_at = (
+            observed - timedelta(seconds=30)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.authority.started_at = observed.strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.expires_at = (
+            observed + timedelta(seconds=3_000)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def start(self):
+        self.intent += 1
+        _plan, projection = self.authority.start(
+            intent=f"surface-{self.intent}",
+            expires_at=self.expires_at,
+        )
+        return projection
+
+    def _serve_workbench(self):
+        import threading
+        from http.server import ThreadingHTTPServer
+
+        import dw_pmo.workbench as wb
+
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", 0), wb.create_handler(self.root, None)
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        return server.server_address[1]
+
+    @staticmethod
+    def _sse_frames(body):
+        frames = []
+        for block in body.split("\n\n"):
+            fields = {}
+            for line in block.splitlines():
+                if ":" in line and not line.startswith(":"):
+                    key, _, value = line.partition(":")
+                    fields[key.strip()] = value.strip()
+            if "data" in fields:
+                frames.append((int(fields["id"]), json.loads(fields["data"])))
+        return frames
+
+    def test_empty_inventory_is_healthy_dormant_and_creates_nothing(self):
+        root = Path(tempfile.mkdtemp(prefix="dw-program-surface-empty."))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        subprocess.run(
+            ["git", "init", "-q", str(root)],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        before = list(root.rglob("*"))
+        inventory = self.core.program_summary_inventory(root)
+        self.assertEqual(inventory["programs"], [])
+        self.assertEqual(inventory["runs"], [])
+        self.assertTrue(inventory["healthy"])
+        for key in (
+            "starts_work", "writes_events", "creates_grant",
+            "creates_program_store", "starts_process", "starts_stream",
+            "starts_poller", "sends_notifications",
+        ):
+            self.assertFalse(inventory[key])
+        self.assertEqual(before, list(root.rglob("*")))
+
+    def test_plan_and_start_adapters_rebuild_one_exact_grant(self):
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.workbench as wb
+
+        request = {
+            "program": "demo-program",
+            "mode": "continuous",
+            "operator": "operator-a",
+            "reason": "Run the reviewed finite autonomous fixture.",
+            "intent_id": "surface-adapter-start",
+            "issued_at": self.authority.issued_at,
+            "expires_at": self.expires_at,
+        }
+        expected = self.authority.core.build_program_start_plan(
+            self.root,
+            request["program"],
+            mode=request["mode"],
+            operator=request["operator"],
+            approval_reason=request["reason"],
+            intent_id=request["intent_id"],
+            capabilities=None,
+            budgets=None,
+            issued_at=request["issued_at"],
+            expires_at=request["expires_at"],
+        )
+        cli_plan = subprocess.run(
+            [
+                sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+                "--root", str(self.root), "program", "plan",
+                request["program"], "--mode", request["mode"],
+                "--operator", request["operator"],
+                "--reason", request["reason"],
+                "--intent", request["intent_id"],
+                "--issued-at", request["issued_at"],
+                "--expires-at", request["expires_at"], "--json",
+            ],
+            check=True, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        tool_plan = mcp.call_tool(self.root, "dw_program_plan", request)
+        status, http_plan = wb.handle_mutation(
+            self.root, "/api/programs/plan", request
+        )
+        self.assertEqual(status, 200)
+        for document in (
+            json.loads(cli_plan.stdout),
+            tool_plan["structuredContent"],
+            http_plan["data"],
+        ):
+            self.assertEqual(
+                self.core.document_bytes(document),
+                self.core.document_bytes(expected),
+            )
+
+        plan_path = self.root / ".git" / "surface-start-plan.json"
+        plan_path.write_text(json.dumps(expected), encoding="utf-8")
+        cli_start = subprocess.run(
+            [
+                sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+                "--root", str(self.root), "program", "start",
+                "--plan", str(plan_path), "--expect",
+                expected["start_token"], "--approve", "--json",
+            ],
+            check=True, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        start_args = {
+            **request,
+            "approve": True,
+            "expect": expected["start_token"],
+        }
+        tool_start = mcp.call_tool(
+            self.root, "dw_program_start", start_args
+        )
+        status, http_start = wb.handle_mutation(
+            self.root, "/api/programs/start", start_args
+        )
+        self.assertEqual(status, 200)
+        started = json.loads(cli_start.stdout)
+        self.assertEqual(tool_start["structuredContent"], started)
+        self.assertEqual(http_start["data"], started)
+        self.assertEqual(started["state"], "running")
+        self.assertEqual(started["active_claims"], [])
+
+    def test_cli_mcp_http_view_tail_and_sse_are_one_canonical_document(self):
+        import http.client
+
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.workbench as wb
+
+        projection = self.start()
+        run_id = projection["run_id"]
+        ledger = (
+            self.root / ".git" / "pmo-programs" / "runs" / run_id
+            / "ledger.jsonl"
+        )
+        before = ledger.read_bytes()
+        expected = self.core.build_program_view(self.root, run_id)
+
+        cli = subprocess.run(
+            [
+                sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+                "--root", str(self.root), "program", "show", run_id, "--json",
+            ],
+            check=True, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        cli_doc = json.loads(cli.stdout)
+        tool = mcp.call_tool(
+            self.root, "dw_program_show", {"run_id": run_id}
+        )
+        status, http_doc = wb.handle_api(
+            self.root, f"/api/programs/{run_id}/view", {}
+        )
+        self.assertEqual(status, 200)
+        for document in (
+            cli_doc, tool["structuredContent"], http_doc["data"],
+        ):
+            self.assertEqual(
+                self.core.document_bytes(document),
+                self.core.document_bytes(expected),
+            )
+        self.assertEqual(ledger.read_bytes(), before)
+        rendered = json.dumps(expected, sort_keys=True)
+        for excluded in (
+            '"start_token":', '"act_token":', '"credentials":',
+            '"prompt":', '"command":', '"argv":', '"principal":',
+            '"auth_domain":', '"artifact_content":',
+        ):
+            self.assertNotIn(excluded, rendered)
+        self.assertFalse(expected["starts_work"])
+        self.assertFalse(expected["writes_events"])
+
+        tail = self.core.tail_program_events(self.root, run_id)
+        tail_tool = mcp.call_tool(
+            self.root, "dw_program_tail",
+            {"run_id": run_id, "after": 0, "limit": 1000},
+        )
+        status, tail_http = wb.handle_api(
+            self.root, f"/api/programs/{run_id}/tail",
+            {"after": ["0"], "limit": ["1000"]},
+        )
+        tail_cli = subprocess.run(
+            [
+                sys.executable, str(TESTS_DIR.parent / "bin" / "dw"),
+                "--root", str(self.root), "program", "tail", run_id,
+                "--after", "0", "--json",
+            ],
+            check=True, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(
+            [
+                tail_tool["structuredContent"],
+                tail_http["data"],
+                json.loads(tail_cli.stdout),
+            ],
+            [tail, tail, tail],
+        )
+
+        port = self._serve_workbench()
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        conn.request(
+            "GET", f"/api/programs/{run_id}/events?from=0&follow=0"
+        )
+        response = conn.getresponse()
+        body = response.read().decode("utf-8")
+        conn.close()
+        self.assertEqual(response.status, 200)
+        self.assertIn("text/event-stream", response.getheader("Content-Type"))
+        frames = self._sse_frames(body)
+        self.assertEqual(
+            [document for _seq, document in frames], tail["events"]
+        )
+        self.assertEqual(
+            [seq for seq, _document in frames],
+            [event["seq"] for event in tail["events"]],
+        )
+        self.assertNotIn("act_token", body)
+        self.assertNotIn("start_token", body)
+
+    def test_exact_act_tokens_strict_allowlists_and_bounded_supervision(self):
+        import dw_pmo.mcpserver as mcp
+        import dw_pmo.workbench as wb
+
+        projection = self.start()
+        run_id = projection["run_id"]
+        ledger = (
+            self.root / ".git" / "pmo-programs" / "runs" / run_id
+            / "ledger.jsonl"
+        )
+        preview = self.core.build_program_act_preview(
+            self.root, run_id, "tick"
+        )
+        self.assertTrue(preview["applicable"], preview["issues"])
+        before = ledger.read_bytes()
+        with self.assertRaisesRegex(DwError, "stale or altered"):
+            self.core.apply_program_act(
+                self.root, run_id, "tick", "sha256:" + "0" * 64
+            )
+        self.assertEqual(ledger.read_bytes(), before)
+
+        result = self.core.apply_program_act(
+            self.root, run_id, "tick", preview["act_token"]
+        )
+        self.assertEqual(result["kind"], self.core.PROGRAM_TICK_SURFACE_KIND)
+        self.assertEqual(result["lane"], "conductor")
+        self.assertTrue(result["progressed"])
+        with self.assertRaisesRegex(DwError, "stale or altered"):
+            self.core.apply_program_act(
+                self.root, run_id, "tick", preview["act_token"]
+            )
+
+        supervise = self.core.build_program_act_preview(
+            self.root, run_id, "supervise", max_ticks=1, max_seconds=30
+        )
+        bounded = self.core.apply_program_act(
+            self.root, run_id, "supervise", supervise["act_token"],
+            max_ticks=1, max_seconds=30,
+        )
+        self.assertEqual(bounded["tick_count"], 1)
+        self.assertEqual(len(bounded["ticks"]), 1)
+        self.assertTrue(bounded["bounded"])
+        self.assertEqual(bounded["max_ticks"], 1)
+
+        rejected = mcp.call_tool(
+            self.root, "dw_program_tick",
+            {
+                "run_id": run_id,
+                "expect": "sha256:" + "0" * 64,
+                "policy": {},
+            },
+        )
+        self.assertTrue(rejected["isError"])
+        self.assertIn("unknown parameter", rejected["content"][0]["text"])
+        status, body = wb.handle_mutation(
+            self.root,
+            "/api/programs/preview",
+            {"run_id": run_id, "action": "tick", "adapter": "fixture"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("unknown program preview parameter", body["issues"][0])
+        status, body = wb.handle_mutation(
+            self.root,
+            "/api/programs/preview",
+            {"run_id": run_id, "action": "tick", "reason": {"prompt": "x"}},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("must be a non-empty string", body["issues"][0])
+        nested = mcp.call_tool(
+            self.root,
+            "dw_program_plan",
+            {
+                "program": "demo-program",
+                "mode": "continuous",
+                "operator": "operator-a",
+                "reason": "bounded",
+                "intent_id": "nested-budget-refusal",
+                "issued_at": self.authority.issued_at,
+                "expires_at": self.expires_at,
+                "budgets": {"max_agent_starts": {"retry": 99}},
+            },
+        )
+        self.assertTrue(nested["isError"])
+        self.assertIn("integer ceilings", nested["content"][0]["text"])
+        forbidden = {
+            "policy", "prompt", "command", "argv", "credentials",
+            "assignment", "rubric", "checks", "retry",
+        }
+        for name, spec in mcp.TOOLS.items():
+            if not name.startswith("dw_program_"):
+                continue
+            self.assertFalse(
+                forbidden & set(spec["inputSchema"]["properties"]),
+                name,
+            )
+            self.assertFalse(spec["inputSchema"]["additionalProperties"])
+
+    def test_concurrent_public_ticks_consume_one_exact_frontier(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import threading
+
+        projection = self.start()
+        run_id = projection["run_id"]
+        preview = self.core.build_program_act_preview(
+            self.root, run_id, "tick"
+        )
+        barrier = threading.Barrier(2)
+        original = self.core.build_program_act_preview
+
+        def synchronized_preview(*args, **kwargs):
+            document = original(*args, **kwargs)
+            barrier.wait(timeout=10)
+            return document
+
+        def invoke():
+            try:
+                return (
+                    "ok",
+                    self.core.apply_program_act(
+                        self.root,
+                        run_id,
+                        "tick",
+                        preview["act_token"],
+                    ),
+                )
+            except DwError as exc:
+                return ("refused", exc.message)
+
+        with mock.patch.object(
+            self.core,
+            "build_program_act_preview",
+            side_effect=synchronized_preview,
+        ):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(lambda _index: invoke(), range(2)))
+        self.assertEqual(
+            sorted(item[0] for item in results),
+            ["ok", "refused"],
+            results,
+        )
+        refusal = next(item[1] for item in results if item[0] == "refused")
+        self.assertIn("stale", refusal)
+        view = self.core.build_program_view(self.root, run_id)
+        self.assertEqual(len(view["activities"]["completed"]), 1)
+
+    def test_typed_program_request_and_notification_never_confer_authority(self):
+        import dw_pmo.notifications as ntf
+
+        projection = self.start()
+        run_id = projection["run_id"]
+        action_id = "act-" + "a" * 24
+        selection = projection["selection"]
+        workflow = str(selection["workflow"]["slug"])
+        address = (
+            f"program/{run_id}/phase/{selection['phase']}"
+            f"/story/{selection['story']}/workflow/{workflow}"
+            "/checkpoint/phase-boundary/attempt/1"
+        )
+        claim_preview = self.authority.claim_preview(
+            run_id,
+            "checkpoint-request",
+            key=f"program-conductor/{action_id}/checkpoint",
+            subject={
+                "kind": "program-decision-checkpoint",
+                "id": address,
+                "hash": self.authority.h("c"),
+                "phase": selection["phase"],
+                "story": selection["story"],
+            },
+            port="phase-boundary",
+            at=self.authority.started_at,
+        )
+        claimed = self.authority.apply_claim(
+            claim_preview, at=self.authority.started_at
+        )
+        request_id = claimed["active_claims"][0]["claim_id"]
+
+        inventory = ntf.build_notifications(self.root)
+        notification = next(
+            item for item in inventory["notifications"]
+            if item["kind"] == "program-intervention-required"
+            and item["run_id"] == run_id
+        )
+        self.assertEqual(
+            notification["request"]["correlation_id"], request_id
+        )
+        self.assertEqual(
+            notification["request"]["response_schema"]["decision"],
+            ["approve", "reject"],
+        )
+        self.assertNotIn("act_token", notification["outbound"])
+        self.assertEqual(
+            ntf.resolve_correlation(self.root, request_id)["id"],
+            notification["id"],
+        )
+
+        with self.assertRaisesRegex(DwError, "approve or reject"):
+            self.core.build_program_act_preview(
+                self.root, run_id, "request",
+                request_id=request_id, decision="maybe",
+                reason="Use a closed response only.",
+            )
+        preview = self.core.build_program_act_preview(
+            self.root, run_id, "request",
+            request_id=request_id, decision="approve",
+            reason="Approve this exact typed checkpoint.",
+        )
+        response = self.core.apply_program_act(
+            self.root, run_id, "request", preview["act_token"],
+            request_id=request_id, decision="approve",
+            reason="Approve this exact typed checkpoint.",
+        )
+        self.assertEqual(response["decision"], "approve")
+        self.assertEqual(
+            self.authority.core.replay_program(
+                self.root, run_id
+            )["outstanding_requests"],
+            [],
+        )
+        with self.assertRaises(DwError):
+            ntf.resolve_correlation(self.root, request_id)
+
+    def test_program_notification_taxonomy_covers_all_required_stops(self):
+        import dw_pmo.notifications as ntf
+        import dw_pmo.program_surface as surface
+
+        common = {
+            "event_count": 7,
+            "ledger_head": "sha256:" + "a" * 64,
+            "requests": [],
+            "dissent": [],
+            "verdicts": [],
+            "decisions": [],
+            "activities": {"sessions": []},
+            "gates": [],
+            "obligations": {"open": []},
+            "budgets": {},
+            "integrations": [],
+        }
+        complete = {
+            **common,
+            "run_id": "program-" + "1" * 24,
+            "state": "complete",
+            "current": {"stop": "architect-veto"},
+            "requests": [{
+                "claim_id": "claim-" + "1" * 24,
+                "status": "open", "port": "phase-boundary",
+            }],
+            "dissent": [{
+                "action_id": "decision-1",
+                "address": "council/design",
+                "result": "dissent",
+            }],
+            "activities": {"sessions": [{
+                "session_id": "session-" + "1" * 24,
+                "state": "lost",
+            }]},
+            "obligations": {"open": [{
+                "id": "debt-1",
+                "obligation_hash": "sha256:" + "b" * 64,
+                "blocking": True,
+                "due_at": "2026-01-01T00:00:00Z",
+            }]},
+            "budgets": {
+                "max_tokens": {"used": 10, "limit": 10, "remaining": 0},
+            },
+            "integrations": [{"result": "refused"}],
+        }
+        decider = {
+            **common,
+            "run_id": "program-" + "2" * 24,
+            "state": "running",
+            "current": {"stop": "role-unavailable"},
+        }
+        summaries = {
+            "runs": [
+                {"run_id": complete["run_id"], "valid": True},
+                {"run_id": decider["run_id"], "valid": True},
+            ],
+        }
+        views = {
+            complete["run_id"]: complete,
+            decider["run_id"]: decider,
+        }
+        with (
+            mock.patch.object(
+                surface, "program_summary_inventory",
+                return_value=summaries,
+            ),
+            mock.patch.object(
+                surface, "build_program_view",
+                side_effect=lambda _root, run_id, now=None: views[run_id],
+            ),
+        ):
+            facts = ntf._program_notifications(  # noqa: protected-access
+                self.root, now="2026-07-23T00:00:00Z"
+            )
+        kinds = {item["kind"] for item in facts}
+        self.assertTrue({
+            "program-intervention-required",
+            "program-disagreement",
+            "program-decider-loss",
+            "program-provider-loss",
+            "program-architect-veto",
+            "program-obligation-new",
+            "program-obligation-blocking",
+            "program-obligation-overdue",
+            "program-budget-exhausted",
+            "program-integration-refused",
+            "program-complete",
+        } <= kinds)
+
+
 class ProgramOrganizationTest(unittest.TestCase):
     """WLA-26-04: role topology, separation, visibility, and replacement."""
 
@@ -14140,6 +14745,90 @@ class ProgramStudioTest(unittest.TestCase):
         self.assertIn("max_rounds", council["summary"]["budgets"])
         self.assertFalse(detail["simulation"]["starts_work"])
         self.assertFalse(detail["authority"]["creates_grant"])
+
+    def test_studio_projects_portable_ports_fallbacks_and_safe_local_fingerprints(self):
+        from dw_pmo.orchestration_driver import write_driver_config
+
+        raw = json.loads(
+            (
+                self.root
+                / "pm/organizations/autonomous-story-cell.json"
+            ).read_text(encoding="utf-8")
+        )
+        subprocess.run(
+            ["git", "init", "-q", str(self.root)],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        profiles = {}
+        for agent in raw["agents"]:
+            writer = "workspace:write" in agent["capability_ceiling"]
+            profiles[agent["profile"]] = {
+                "adapter": "fixture",
+                "adapter_version": "fixture-studio-v1",
+                "principal": agent["profile"],
+                "available": True,
+                "max_concurrency": agent["max_concurrency"],
+                "capabilities": (
+                    ["repository-read", "repository-write"]
+                    if writer else ["repository-read"]
+                ),
+                "workspace_modes": (
+                    ["isolated-worktree"] if writer else ["read-only"]
+                ),
+                "router": "fixture-router",
+                "provider": (
+                    "provider-a"
+                    if "builder" in agent["id"] else "provider-b"
+                ),
+                "model_vendor": "fixture-vendor",
+                "model_family": (
+                    "builder-family"
+                    if "builder" in agent["id"] else "review-family"
+                ),
+                "model": f"fixture/{agent['profile']}",
+                "model_binding": "requested-alias",
+                "auth_domain": f"auth-{agent['profile']}",
+            }
+        write_driver_config(self.root, {
+            "kind": "delivery-workbench-driver-config",
+            "schema_version": 1,
+            "workspace_root": None,
+            "profiles": profiles,
+        })
+        detail = self.core.build_studio_document(
+            self.root, "organization", "autonomous-story-cell"
+        )
+        contract = detail["authority"]["execution_contract"]
+        self.assertTrue(contract["content_safe"])
+        self.assertFalse(contract["credentials_exposed"])
+        self.assertFalse(contract["commands_accepted"])
+        self.assertTrue(contract["local_resolution_available"])
+        self.assertEqual(len(contract["ports"]), len(raw["agents"]))
+        self.assertTrue(all(
+            item["selector"]["kind"] == "logical-profile"
+            and item["selector"]["portable"]
+            and item["local_resolution"]["available"]
+            for item in contract["ports"]
+        ))
+        self.assertTrue(any(
+            item["fallback_pools"] for item in contract["fallbacks"]
+        ))
+        council = contract["councils"][0]
+        self.assertEqual(council["principal_diversity"], "distinct")
+        self.assertEqual(council["decision_authority"], "unanimous")
+        self.assertTrue(council["perspectives"])
+        self.assertTrue(
+            council["obligation_policy"]["blocking_prevents_progress"]
+        )
+        self.assertGreaterEqual(
+            contract["diversity"]["resolved_provider_count"], 2
+        )
+        for port in contract["ports"]:
+            self.assertNotIn("principal", port["local_resolution"])
+            self.assertNotIn("auth_domain", port["local_resolution"])
+        rendered = json.dumps(contract, sort_keys=True)
+        for secret_key in ('"token":', '"password":', '"secret":'):
+            self.assertNotIn(secret_key, rendered.lower())
 
     def test_diagnostics_link_exact_graph_node_and_json_pointer(self):
         document = self.core.new_studio_document("workflow", "broken-flow")

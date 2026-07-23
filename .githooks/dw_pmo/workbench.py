@@ -232,6 +232,82 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
             return 200, envelope(build_program_studio(root))
 
+        if parts == ["api", "programs"]:
+            from .program_surface import program_summary_inventory
+
+            return 200, envelope(program_summary_inventory(root))
+
+        if (
+            len(parts) in {3, 4}
+            and parts[:2] == ["api", "programs"]
+            and (len(parts) == 3 or parts[3] == "view")
+        ):
+            from .program_surface import build_program_view
+
+            return 200, envelope(build_program_view(root, parts[2]))
+
+        if (
+            len(parts) == 5
+            and parts[:2] == ["api", "programs"]
+            and parts[3] == "act"
+        ):
+            from .program_surface import build_program_act_preview
+
+            try:
+                max_ticks = int(query.get("max_ticks", ["100"])[0])
+                max_seconds = int(query.get("max_seconds", ["300"])[0])
+            except ValueError as exc:
+                raise DwError(
+                    "program preview ceilings must be integers"
+                ) from exc
+            return 200, envelope(build_program_act_preview(
+                root,
+                parts[2],
+                parts[4],
+                reason=query.get("reason", [""])[0],
+                decision=query.get("decision", [""])[0],
+                request_id=query.get("request_id", [""])[0],
+                max_ticks=max_ticks,
+                max_seconds=max_seconds,
+            ))
+
+        if (
+            len(parts) == 4
+            and parts[:2] == ["api", "programs"]
+            and parts[3] == "tail"
+        ):
+            from .program_surface import tail_program_events
+
+            try:
+                after = int(query.get("after", ["0"])[0])
+                limit = int(query.get("limit", ["1000"])[0])
+            except ValueError as exc:
+                raise DwError(
+                    "program tail cursor and limit must be integers"
+                ) from exc
+            return 200, envelope(tail_program_events(
+                root, parts[2], after_seq=after, limit=limit
+            ))
+
+        if (
+            len(parts) == 6
+            and parts[:2] == ["api", "programs"]
+            and parts[3] == "streams"
+        ):
+            from .program_surface import read_program_stream
+
+            try:
+                max_bytes = int(query.get("max_bytes", ["20000"])[0])
+            except ValueError as exc:
+                raise DwError("stream max_bytes must be an integer") from exc
+            return 200, envelope(read_program_stream(
+                root,
+                parts[2],
+                parts[4],
+                parts[5],
+                max_bytes=max_bytes,
+            ))
+
         if len(parts) == 4 and parts[:2] == ["api", "program-studio"]:
             from .program_studio import build_studio_document
 
@@ -597,6 +673,60 @@ def _issues_guard(root: Path, body: dict[str, object], plan) -> tuple[int, dict[
     )
 
 
+def _program_http_string(
+    body: dict[str, object],
+    key: str,
+    *,
+    required: bool = False,
+) -> str:
+    value = body.get(key, "")
+    if not isinstance(value, str) or (required and not value):
+        raise DwError(f"program {key} must be a non-empty string")
+    return value
+
+
+def _program_http_budgets(value: object) -> dict[str, int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise DwError("program budgets must be an object")
+    budgets: dict[str, int] = {}
+    for key, amount in value.items():
+        if (
+            not isinstance(key, str)
+            or not key
+            or not isinstance(amount, int)
+            or isinstance(amount, bool)
+        ):
+            raise DwError(
+                "program budgets must map string names to integer ceilings"
+            )
+        budgets[key] = amount
+    return budgets
+
+
+def _program_http_capabilities(value: object) -> list[str] | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, list)
+        or any(not isinstance(item, str) or not item for item in value)
+    ):
+        raise DwError("program capabilities must be an array of strings")
+    return list(value)
+
+
+def _program_http_integer(
+    body: dict[str, object],
+    key: str,
+    default: int,
+) -> int:
+    value = body.get(key, default)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise DwError(f"program {key} must be an integer")
+    return value
+
+
 def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
     """POST routes: deliberate step, roadmap edits, and score content edits."""
     route = path.rstrip("/")
@@ -613,6 +743,178 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
             return 200, envelope(
                 acknowledge_notification(root, notification_id, now_ts)
             )
+        except DwError as err:
+            return _run_error(err)
+
+    if route == "/api/programs/plan":
+        allowed = {
+            "program", "mode", "operator", "reason", "intent_id",
+            "capabilities", "budgets", "issued_at", "expires_at",
+            "remote", "remote_ref",
+        }
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(
+                400,
+                f"unknown program plan parameter(s): {', '.join(unknown)}",
+            )
+        try:
+            program = _program_http_string(body, "program", required=True)
+            mode = _program_http_string(body, "mode", required=True)
+            operator = _program_http_string(body, "operator", required=True)
+            reason = _program_http_string(body, "reason", required=True)
+            intent_id = _program_http_string(body, "intent_id", required=True)
+            issued_at = _program_http_string(body, "issued_at", required=True)
+            expires_at = _program_http_string(
+                body, "expires_at", required=True
+            )
+            capabilities = _program_http_capabilities(
+                body.get("capabilities")
+            )
+            budgets = _program_http_budgets(body.get("budgets"))
+            remote = _program_http_string(body, "remote")
+            remote_ref = _program_http_string(body, "remote_ref")
+            from .program_run import build_program_start_plan
+
+            return 200, envelope(build_program_start_plan(
+                root,
+                program,
+                mode=mode,
+                operator=operator,
+                approval_reason=reason,
+                intent_id=intent_id,
+                capabilities=capabilities,
+                budgets=budgets,
+                issued_at=issued_at,
+                expires_at=expires_at,
+                remote=remote or None,
+                remote_ref=remote_ref or None,
+            ))
+        except DwError as err:
+            return _run_error(err)
+
+    if route == "/api/programs/start":
+        allowed = {
+            "program", "mode", "operator", "reason", "intent_id",
+            "capabilities", "budgets", "issued_at", "expires_at",
+            "remote", "remote_ref", "approve", "expect",
+        }
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(
+                400,
+                f"unknown program start parameter(s): {', '.join(unknown)}",
+            )
+        try:
+            program = _program_http_string(body, "program", required=True)
+            mode = _program_http_string(body, "mode", required=True)
+            operator = _program_http_string(body, "operator", required=True)
+            reason = _program_http_string(body, "reason", required=True)
+            intent_id = _program_http_string(body, "intent_id", required=True)
+            issued_at = _program_http_string(body, "issued_at", required=True)
+            expires_at = _program_http_string(
+                body, "expires_at", required=True
+            )
+            expect = _program_http_string(body, "expect", required=True)
+            if body.get("approve") is not True:
+                raise DwError(
+                    "program start requires approve=true for the exact preview"
+                )
+            capabilities = _program_http_capabilities(
+                body.get("capabilities")
+            )
+            budgets = _program_http_budgets(body.get("budgets"))
+            remote = _program_http_string(body, "remote")
+            remote_ref = _program_http_string(body, "remote_ref")
+            from .program_surface import start_program_by_id
+
+            return 200, envelope(start_program_by_id(
+                root,
+                program,
+                mode=mode,
+                operator=operator,
+                approval_reason=reason,
+                intent_id=intent_id,
+                capabilities=capabilities,
+                budgets=budgets,
+                issued_at=issued_at,
+                expires_at=expires_at,
+                remote=remote or None,
+                remote_ref=remote_ref or None,
+                expect=expect,
+            ))
+        except DwError as err:
+            return _run_error(err)
+
+    if route == "/api/programs/preview":
+        allowed = {
+            "run_id", "action", "reason", "decision", "request_id",
+            "max_ticks", "max_seconds",
+        }
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(
+                400,
+                f"unknown program preview parameter(s): {', '.join(unknown)}",
+            )
+        try:
+            run_id = _program_http_string(body, "run_id", required=True)
+            action = _program_http_string(body, "action", required=True)
+            from .program_surface import build_program_act_preview
+
+            return 200, envelope(build_program_act_preview(
+                root,
+                run_id,
+                action,
+                reason=_program_http_string(body, "reason"),
+                decision=_program_http_string(body, "decision"),
+                request_id=_program_http_string(body, "request_id"),
+                max_ticks=_program_http_integer(body, "max_ticks", 100),
+                max_seconds=_program_http_integer(
+                    body, "max_seconds", 300
+                ),
+            ))
+        except DwError as err:
+            return _run_error(err)
+
+    if route in {
+        "/api/programs/tick", "/api/programs/supervise",
+        "/api/programs/request", "/api/programs/pause",
+        "/api/programs/resume", "/api/programs/revoke",
+        "/api/programs/cancel",
+    }:
+        action = route.rsplit("/", 1)[-1]
+        allowed = {"run_id", "expect"}
+        if action in {"pause", "resume", "revoke", "cancel", "request"}:
+            allowed.add("reason")
+        if action == "request":
+            allowed.update({"decision", "request_id"})
+        if action == "supervise":
+            allowed.update({"max_ticks", "max_seconds"})
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(
+                400,
+                f"unknown program {action} parameter(s): {', '.join(unknown)}",
+            )
+        try:
+            run_id = _program_http_string(body, "run_id", required=True)
+            expect = _program_http_string(body, "expect", required=True)
+            from .program_surface import apply_program_act
+
+            return 200, envelope(apply_program_act(
+                root,
+                run_id,
+                action,
+                expect,
+                reason=_program_http_string(body, "reason"),
+                decision=_program_http_string(body, "decision"),
+                request_id=_program_http_string(body, "request_id"),
+                max_ticks=_program_http_integer(body, "max_ticks", 100),
+                max_seconds=_program_http_integer(
+                    body, "max_seconds", 300
+                ),
+            ))
         except DwError as err:
             return _run_error(err)
 
@@ -929,7 +1231,7 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
         "unsupported method or route; use /api/step/apply, guarded roadmap "
         "/api/mutations/preview|apply, or guarded score "
         "/api/orchestration/preview|apply, /api/program-studio/preview|apply, "
-        "or exact-token /api/runs/* routes",
+        "or exact-token /api/runs/* and /api/programs/* routes",
     )
 
 def create_handler(root: Path, static_dir: Path | None):
@@ -1006,6 +1308,20 @@ def create_handler(root: Path, static_dir: Path | None):
 
                 def fetch(cursor: int) -> dict[str, object]:
                     return tail_run_events(root, run_id, cursor)
+                default_cursor = "-1"
+            elif (
+                len(parts) == 4
+                and parts[:2] == ["api", "programs"]
+                and parts[3] == "events"
+            ):
+                from .program_surface import tail_program_events
+
+                run_id = parts[2]
+                event_name = "program-ledger"
+
+                def fetch(cursor: int) -> dict[str, object]:
+                    return tail_program_events(root, run_id, cursor)
+                default_cursor = "0"
             elif parts == ["api", "signals", "events"]:
                 from .orchestration_surface import tail_signal_events
 
@@ -1015,12 +1331,13 @@ def create_handler(root: Path, static_dir: Path | None):
 
                 def fetch(cursor: int) -> dict[str, object]:
                     return tail_signal_events(root, remote, branch, cursor)
+                default_cursor = "-1"
             else:
                 return False
             raw_cursor = (
                 self.headers.get("Last-Event-ID", "").strip()
                 or query.get("from", [""])[0].strip()
-                or "-1"
+                or default_cursor
             )
             try:
                 cursor = int(raw_cursor)
@@ -1153,7 +1470,7 @@ def serve(root: Path, port: int = 8377, quiet: bool = False) -> None:
     print(f"dw-workbench: http://127.0.0.1:{port}/ (localhost or your own .ts.net tailnet; Ctrl-C to stop)")
     print(
         "dw-workbench: writes require a guarded preview→apply content boundary "
-        "or an exact step/run token; never stages, certifies, or commits"
+        "or an exact step/run/program token; never stages, certifies, or commits"
     )
 
     def _term(_sig, _frame):  # graceful SIGTERM

@@ -175,8 +175,15 @@ range verification, and optional no-force fast-forward push; all-old/exact-new
 crash reconciliation; and deduplicated obligation materialization plus
 accountable disposition. A two-story bare-remote fixture plants crashes after
 every effect and receipt while proving one phase transition and zero duplicate
-commits or pushes. Public runtime controls remain fail-closed phase work;
-ordinary and bounded run modes remain unchanged. Current detail:
+commits or pushes. WLA-26-11 adds the canonical content-safe program surface:
+byte-equivalent CLI/MCP/HTTP/Workbench inventory and control-room views,
+verified ledger tail and explicit bounded streams, read-only SSE cursor replay,
+preview-bound grant/tick/supervision/request/control acts, resolved
+organization/execution/diversity projections, and typed intervention,
+disagreement, loss, obligation, budget, integration, and completion
+notifications. Supervision is an explicit finite invocation returning every
+tick; no read, Workbench open, or SSE connection starts a program or confers
+authority. Ordinary and bounded run modes remain unchanged. Current detail:
 [Phase 26](./pmo-roadmap/pm/roadmap/work-log-automation/phase-26-autonomous-delivery-programs/current-phase-status.md)
 and the [program contract](./docs/programs.md).
 

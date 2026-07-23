@@ -104,6 +104,7 @@ PROGRAM_FRONTIER_KIND = "delivery-workbench-program-frontier"
 PROGRAM_RECEIPT_KIND = "delivery-workbench-program-conductor-receipt"
 PROGRAM_ARTIFACT_KIND = "delivery-workbench-program-artifact-receipt"
 PROGRAM_DRIVER_OPERATION_KIND = "delivery-workbench-program-driver-operation"
+PROGRAM_REQUEST_RESULT_KIND = "delivery-workbench-program-request-result"
 
 TERMINAL_AUTHORITY_STATES = {
     "advisory", "complete", "expired", "exhausted", "revoked", "cancelled",
@@ -3147,6 +3148,35 @@ def _architecture_checkpoint_action(
     return action
 
 
+def _checkpoint_resolution(
+    receipts: list[dict[str, object]],
+    action: dict[str, object],
+) -> dict[str, object] | None:
+    """Return one validated public response to a derived checkpoint action."""
+    receipt = _receipt_for(
+        receipts,
+        str(action["action_id"]),
+        action_kind="checkpoint-request",
+    )
+    if receipt is None:
+        return None
+    _require(
+        receipt.get("result") in {"approve", "reject"}
+        and receipt.get("route") == receipt.get("result")
+        and receipt.get("outcome") == "succeeded",
+        "program checkpoint response receipt is invalid",
+    )
+    payload = receipt.get("payload")
+    _require(
+        isinstance(payload, dict)
+        and payload.get("request_id") == receipt.get("claim_id")
+        and payload.get("port") == action.get("request_port")
+        and payload.get("decision") == receipt.get("result"),
+        "program checkpoint response binding changed",
+    )
+    return receipt
+
+
 def _derive_architecture_gate_step(
     root: Path,
     run_id: str,
@@ -3271,15 +3301,25 @@ def _derive_architecture_gate_step(
         if result == "pass":
             continue
         if result == "fail" and gate["on_fail"] == "checkpoint":
+            checkpoint = _architecture_checkpoint_action(
+                plan,
+                gate,
+                evaluation,
+                attempt=attempt,
+            )
+            resolution = _checkpoint_resolution(receipts, checkpoint)
+            if resolution is not None:
+                if resolution["result"] == "approve":
+                    continue
+                return {
+                    "completed": False,
+                    "required": True,
+                    "stop": "checkpoint-rejected",
+                }
             return {
                 "completed": False,
                 "required": True,
-                "action": _architecture_checkpoint_action(
-                    plan,
-                    gate,
-                    evaluation,
-                    attempt=attempt,
-                ),
+                "action": checkpoint,
             }
         if result == "fail" and gate["on_fail"] == "abort":
             return {
@@ -3882,10 +3922,26 @@ def _derive_deliberation_step(
     if route.get("kind") == "action":
         if route.get("target") == "checkpoint":
             _require(isinstance(decision, dict), "checkpoint route has no council decision")
+            checkpoint = _checkpoint_request_action(
+                program_plan, protocol, decision
+            )
+            resolution = _checkpoint_resolution(receipts, checkpoint)
+            if resolution is not None:
+                if resolution["result"] == "approve":
+                    return {
+                        "action": None,
+                        "completed": True,
+                        "stop": None,
+                        "result": "approved",
+                        "route": {"kind": "terminal", "target": "complete"},
+                    }
+                return {
+                    "action": None,
+                    "completed": False,
+                    "stop": "checkpoint-rejected",
+                }
             return {
-                "action": _checkpoint_request_action(
-                    program_plan, protocol, decision
-                ),
+                "action": checkpoint,
                 "completed": False,
                 "stop": None,
             }
@@ -5865,6 +5921,175 @@ def _execute_checkpoint_request(
     }
 
 
+def respond_program_request(
+    root: Path,
+    run_id: str,
+    request_id: str,
+    decision: str,
+    *,
+    reason: str,
+    now: str | datetime | None = None,
+    driver_config: object | None = None,
+    _expected_binding: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Resolve one exact typed program checkpoint through its existing claim.
+
+    This is intentionally narrower than the low-level completion API.  The
+    caller may name only the active request, one closed decision, and a bounded
+    reason.  Receipt shape, responder identity, fact binding, and route remain
+    owned by the conductor and immutable grant.
+    """
+    root = root.resolve()
+    observed = _time(now, "now")
+    request_id = _safe(request_id, "program request id")
+    decision = str(decision or "").strip().lower()
+    _require(
+        decision in {"approve", "reject"},
+        "program request decision must be approve or reject",
+    )
+    normalized_reason = _bounded_text(
+        str(reason or "").strip(),
+        "program request reason",
+        1_000,
+    )
+    # Resolving a request is a conductor-owned receipt transition, so serialize
+    # it with ticks as well as the authority ledger's own append lock.
+    with _conductor_lock(root, run_id):
+        projection = replay_program(root, run_id, now=observed)
+        if _expected_binding is not None:
+            _require(
+                all(
+                    projection.get(key) == _expected_binding.get(key)
+                    for key in (
+                        "grant_hash", "ledger_head", "generation", "state",
+                    )
+                ),
+                "program act token is stale at the request lock",
+            )
+        matches = [
+            item
+            for item in projection["outstanding_requests"]
+            if item.get("claim_id") == request_id
+        ]
+        _require(
+            len(matches) == 1,
+            "program request is stale, unknown, or no longer outstanding",
+        )
+        claim = next(
+            (
+                item
+                for item in projection["active_claims"]
+                if item.get("claim_id") == request_id
+                and item.get("category") == "checkpoint-request"
+            ),
+            None,
+        )
+        _require(
+            isinstance(claim, dict),
+            "program request has no active checkpoint claim",
+        )
+        _path, grant, _plan = _load_documents(root, run_id)
+        key = str(claim["idempotency_key"])
+        pieces = key.split("/")
+        _require(
+            len(pieces) == 3
+            and pieces[0] == "program-conductor"
+            and pieces[2] == "checkpoint",
+            "program request is outside the conductor checkpoint boundary",
+        )
+        action_id = _safe(pieces[1], "program request action id")
+        subject = claim["subject"]
+        _require(
+            isinstance(subject, dict),
+            "program request subject is invalid",
+        )
+        address = _safe(subject.get("id"), "program request address")
+        workflow_address = str(
+            grant.get("selection", {})
+            .get("workflow", {})
+            .get("slug", "")
+        )
+        assignment = grant.get("selection")
+        if isinstance(assignment, dict):
+            # The durable address is the canonical source.  Keep the compact
+            # workflow lineage used by all other conductor receipts.
+            marker = "/workflow/"
+            if marker in address:
+                prefix, tail = address.split(marker, 1)
+                workflow_slug = tail.split("/", 1)[0]
+                workflow_address = f"{prefix}{marker}{workflow_slug}"
+        attempt_match = re.search(r"/attempt/([1-9][0-9]*)$", address)
+        _require(
+            attempt_match is not None,
+            "program request address has no bounded attempt",
+        )
+        attempt = int(attempt_match.group(1))
+        responder = grant["operator"]
+        receipt = _store_receipt(root, run_id, {
+            "action_id": action_id,
+            "address": address,
+            "action_kind": "checkpoint-request",
+            "phase": subject.get("phase"),
+            "story": subject.get("story"),
+            "workflow_address": workflow_address,
+            "node": None,
+            "role": None,
+            "role_address": None,
+            "attempt": attempt,
+            "claim_id": claim["claim_id"],
+            "request_hash": claim["request_hash"],
+            "outcome": "succeeded",
+            "result": decision,
+            "route": decision,
+            "operation": None,
+            "artifacts": [],
+            "verdict": None,
+            "decision": {
+                "kind": "typed-checkpoint-response",
+                "option": decision,
+                "responder": responder,
+            },
+            "obligation_ids": [],
+            "payload": {
+                "request_id": request_id,
+                "port": claim["request_port"],
+                "decision": decision,
+                "reason": normalized_reason,
+                "generation": projection["generation"],
+                "ledger_head": projection["ledger_head"],
+            },
+            "issued_at": _format_time(observed),
+        })
+        after = _complete_claim(
+            root,
+            run_id,
+            claim,
+            str(receipt["receipt_hash"]),
+            result="succeeded",
+            reason="Recorded one closed typed program checkpoint response.",
+            now=observed,
+        )
+    # Rebuild once so a corrupt/mismatched response cannot hide until the next
+    # tick.  This remains a read after the exact receipt transition.
+    frontier = derive_program_frontier(
+        root,
+        run_id,
+        driver_config=driver_config,
+        now=observed,
+    )
+    return {
+        "kind": PROGRAM_REQUEST_RESULT_KIND,
+        "schema_version": PROGRAM_CONDUCTOR_SCHEMA_VERSION,
+        "run_id": run_id,
+        "request_id": request_id,
+        "decision": decision,
+        "receipt_hash": receipt["receipt_hash"],
+        "state": after["state"],
+        "frontier": frontier,
+        "content_safe": True,
+    }
+
+
 def _execute_deliberation_local_action(
     root: Path,
     run_id: str,
@@ -6233,6 +6458,7 @@ def tick_program(
     adapters: dict[str, object] | None = None,
     now: str | datetime | None = None,
     boundary_hook: BoundaryHook | None = None,
+    _expected_binding: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Perform one deterministic program scheduling/reconciliation turn."""
     root = root.resolve()
@@ -6241,6 +6467,16 @@ def tick_program(
     with _conductor_lock(root, run_id):
         before = replay_program_conductor(root, run_id, now=observed)
         before_projection = before["authority"]
+        if _expected_binding is not None:
+            _require(
+                all(
+                    before_projection.get(key) == _expected_binding.get(key)
+                    for key in (
+                        "grant_hash", "ledger_head", "generation", "state",
+                    )
+                ),
+                "program act token is stale at the conductor lock",
+            )
         before_head = str(before_projection["ledger_head"])
         before_receipts = len(before["receipts"])
         if before_projection["state"] != "running":

@@ -2172,6 +2172,7 @@ def tick_program_delivery(
     driver_config: object | None = None,
     now: str | datetime | None = None,
     boundary_hook: BoundaryHook | None = None,
+    _expected_binding: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Perform at most one claimed delivery effect or reconciliation."""
     root = root.resolve()
@@ -2179,6 +2180,17 @@ def tick_program_delivery(
     config = load_driver_config(root, driver_config)
     lock = _run_dir(root, run_id) / ".program-delivery.lock"
     with _file_lock(lock):
+        if _expected_binding is not None:
+            authority = replay_program(root, run_id, now=observed)
+            _require(
+                all(
+                    authority.get(key) == _expected_binding.get(key)
+                    for key in (
+                        "grant_hash", "ledger_head", "generation", "state",
+                    )
+                ),
+                "program act token is stale at the delivery lock",
+            )
         before = replay_program_delivery(
             root,
             run_id,

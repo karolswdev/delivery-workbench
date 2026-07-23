@@ -38,6 +38,7 @@ try:
         __version__ as DW_VERSION,
         append_trailers,
         apply_plan,
+        apply_program_act,
         apply_run_act,
         apply_step,
         board_model,
@@ -55,6 +56,9 @@ try:
         build_step,
         build_run_plan,
         build_program_plan,
+        build_program_start_plan,
+        build_program_act_preview,
+        build_program_view,
         build_run_act_preview,
         build_run_view,
         contract_digest,
@@ -78,7 +82,9 @@ try:
         plan_story_evidence,
         plan_story_status,
         read_text,
+        read_program_stream,
         read_run_stream,
+        tail_program_events,
         tail_run_events,
         tail_signal_events,
         next_story,
@@ -112,6 +118,8 @@ try:
         validate_workflow,
         load_score,
         program_inventory,
+        program_summary_inventory,
+        start_program_by_id,
         rubric_inventory,
         organization_inventory,
         workflow_inventory,
@@ -479,12 +487,13 @@ def command_workflow_simulate(args: argparse.Namespace) -> int:
 
 
 def command_program_list(args: argparse.Namespace) -> int:
-    inventory = program_inventory(args.root)
+    inventory = program_summary_inventory(args.root)
     if args.json:
         print(json.dumps(inventory, sort_keys=True))
         return 0
     programs = inventory["programs"]
-    if not programs:
+    runs = inventory["runs"]
+    if not programs and not runs:
         print("dw program list: no programs configured (ordinary mode is healthy)")
         return 0
     for program in programs:
@@ -492,6 +501,12 @@ def command_program_list(args: argparse.Namespace) -> int:
         print(
             f"{program['slug'] or program['name']}\t{state}\t{program['path']}"
             f"\t{program.get('semantic_hash', '-')}\t{program['title'] or '-'}"
+        )
+    for run in runs:
+        print(
+            f"run\t{run['run_id']}\t{run['state']}\t"
+            f"{run.get('operational_state', '-')}\t"
+            f"{run.get('program') or '-'}\t{run.get('stop') or '-'}"
         )
     return 0
 
@@ -576,11 +591,255 @@ def command_program_simulate(args: argparse.Namespace) -> int:
 
 
 def command_program_plan(args: argparse.Namespace) -> int:
-    document = build_program_plan(args.root, args.program)
+    if args.mode is None:
+        document = build_program_plan(args.root, args.program)
+    else:
+        if not args.operator or not args.reason or not args.intent:
+            die("--mode requires --operator, --reason, and --intent")
+        issued = _program_time(args.issued_at)
+        if args.expires_at and args.expires_in is not None:
+            die("pass either --expires-at or --expires-in, not both")
+        expires = (
+            args.expires_at
+            or issued + timedelta(seconds=args.expires_in or 3600)
+        )
+        document = build_program_start_plan(
+            args.root,
+            args.program,
+            mode=args.mode,
+            operator=args.operator,
+            approval_reason=args.reason,
+            intent_id=args.intent,
+            capabilities=args.capability,
+            budgets=_program_budgets(args.budget),
+            issued_at=issued,
+            expires_at=expires,
+            remote=args.remote,
+            remote_ref=args.remote_ref,
+        )
+    if args.json:
+        print(json.dumps(document, sort_keys=True))
+    elif document["kind"] == "delivery-workbench-program-start-plan":
+        print(
+            f"{document['request']['program']}\t{document['request']['mode']}\t"
+            f"{'applicable' if document['applicable'] else 'refused'}"
+        )
+        print(f"start-token\t{document['start_token']}")
+        print("starts-work\tfalse")
+        for issue in document["issues"]:
+            print(f"REFUSE\t{issue['code']}\t{issue['message']}")
+    else:
+        print(_render_program_selection(document), end="")
+    return 0 if document.get("applicable", True) else 1
+
+
+def _program_time(raw: str | None) -> datetime:
+    if raw:
+        try:
+            value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise DwError("program timestamp must be ISO-8601") from exc
+        if value.tzinfo is None:
+            raise DwError("program timestamp must include a timezone")
+        return value.astimezone(timezone.utc).replace(microsecond=0)
+    return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _program_budgets(values: list[str] | None) -> dict[str, int] | None:
+    if values is None:
+        return None
+    budgets: dict[str, int] = {}
+    for raw in values:
+        name, separator, amount = raw.partition("=")
+        if not separator or not name or not amount:
+            raise DwError("program budget must use NAME=INTEGER")
+        if name in budgets:
+            raise DwError(f"program budget repeated: {name}")
+        try:
+            budgets[name] = int(amount)
+        except ValueError as exc:
+            raise DwError(f"program budget is not an integer: {name}") from exc
+    return budgets
+
+
+def command_program_start(args: argparse.Namespace) -> int:
+    if not args.approve:
+        raise DwError("program start requires --approve")
+    plan = _read_run_plan(args.plan)
+    request = plan.get("request")
+    if (
+        plan.get("kind") != "delivery-workbench-program-start-plan"
+        or not isinstance(request, dict)
+    ):
+        raise DwError("program start plan file has the wrong kind")
+    projection = start_program_by_id(
+        args.root,
+        str(request["program"]),
+        mode=str(request["mode"]),
+        operator=request["operator"],
+        approval_reason=str(request["approval_reason"]),
+        intent_id=str(request["intent_id"]),
+        capabilities=list(request["capabilities"]),
+        budgets=dict(request["budgets"]),
+        issued_at=str(request["issued_at"]),
+        expires_at=str(request["expires_at"]),
+        remote=request["remote"],
+        remote_ref=request["remote_ref"],
+        expect=args.expect,
+    )
+    if args.json:
+        print(json.dumps(projection, sort_keys=True))
+    else:
+        print(
+            f"{projection['run_id']}\t{projection['state']}\t"
+            f"{projection['program']['slug']}\t{projection['ledger_head']}"
+        )
+    return 0
+
+
+def command_program_show(args: argparse.Namespace) -> int:
+    document = build_program_view(args.root, args.run_id)
     if args.json:
         print(json.dumps(document, sort_keys=True))
     else:
-        print(_render_program_selection(document), end="")
+        current = document["current"]
+        lineage = current["lineage"] or {}
+        print(
+            f"{document['run_id']}\t{document['state']}\t"
+            f"{document['operational_state']}\t"
+            f"{lineage.get('story') or '-'}\t{current['stop'] or '-'}"
+        )
+        print(
+            f"organization\t{document['organization']['slug']}\t"
+            f"team={document['organization']['team']}\t"
+            f"roles={len(document['organization']['roles'])}"
+        )
+    return 0
+
+
+def command_program_preview(args: argparse.Namespace) -> int:
+    preview = build_program_act_preview(
+        args.root,
+        args.run_id,
+        args.action,
+        reason=args.reason or "",
+        decision=args.decision or "",
+        request_id=args.request_id or "",
+        max_ticks=args.max_ticks,
+        max_seconds=args.max_seconds,
+    )
+    if args.json:
+        print(json.dumps(preview, sort_keys=True))
+    else:
+        print(
+            f"{preview['run_id']}\t{preview['action']}\t"
+            f"{'applicable' if preview['applicable'] else 'refused'}\t"
+            f"lane={preview['operation'].get('lane') if preview['operation'] else '-'}"
+        )
+        print(f"act-token\t{preview['act_token']}")
+        print(f"starts-work\t{str(preview['starts_work']).lower()}")
+        for issue in preview["issues"]:
+            print(f"REFUSE\t{issue}")
+    return 0 if preview["applicable"] else 1
+
+
+def _apply_program_args(args: argparse.Namespace, action: str) -> dict[str, object]:
+    return apply_program_act(
+        args.root,
+        args.run_id,
+        action,
+        args.expect,
+        reason=getattr(args, "reason", "") or "",
+        decision=getattr(args, "decision", "") or "",
+        request_id=getattr(args, "request_id", "") or "",
+        max_ticks=getattr(args, "max_ticks", 100),
+        max_seconds=getattr(args, "max_seconds", 300),
+    )
+
+
+def command_program_act(args: argparse.Namespace) -> int:
+    result = _apply_program_args(args, args.program_command)
+    if args.json:
+        print(json.dumps(result, sort_keys=True))
+    elif result.get("kind") == "delivery-workbench-program-surface-tick":
+        action = result.get("action") or {}
+        print(
+            f"{result['run_id']}\t{result['state']}\t"
+            f"lane={result['lane']}\t"
+            f"action={action.get('kind') or '-'}\t"
+            f"progressed={str(result['progressed']).lower()}"
+        )
+    else:
+        print(
+            f"{result.get('run_id', args.run_id)}\t"
+            f"{result.get('state', result.get('decision', 'complete'))}\t"
+            f"{result.get('ledger_head', result.get('receipt_hash', '-'))}"
+        )
+    return 0
+
+
+def command_program_supervise(args: argparse.Namespace) -> int:
+    result = _apply_program_args(args, "supervise")
+    if args.json:
+        print(json.dumps(result, sort_keys=True))
+    else:
+        print(
+            f"{result['run_id']}\t{result['state']}\t"
+            f"ticks={result['tick_count']}\tstop={result['stop']}\t"
+            f"progressed={str(result['progressed']).lower()}"
+        )
+        for index, tick in enumerate(result["ticks"], start=1):
+            action = tick.get("action") or {}
+            print(
+                f"tick\t{index}\t{tick['lane']}\t"
+                f"{action.get('kind') or '-'}\t{tick.get('stop') or '-'}"
+            )
+    return 0
+
+
+def command_program_tail(args: argparse.Namespace) -> int:
+    import time as time_module
+
+    cursor = args.after
+    if args.json:
+        if args.follow:
+            raise DwError("program tail --json cannot be combined with --follow")
+        print(json.dumps(
+            tail_program_events(args.root, args.run_id, cursor),
+            sort_keys=True,
+        ))
+        return 0
+    while True:
+        tail = tail_program_events(args.root, args.run_id, cursor)
+        for event in tail["events"]:
+            print(json.dumps(event, sort_keys=True))
+            cursor = int(event["seq"])
+        sys.stdout.flush()
+        if not args.follow:
+            return 0
+        time_module.sleep(max(0.1, args.interval))
+
+
+def command_program_stream(args: argparse.Namespace) -> int:
+    document = read_program_stream(
+        args.root,
+        args.run_id,
+        args.session_id,
+        args.stream,
+        max_bytes=args.max_bytes,
+    )
+    if args.json:
+        print(json.dumps(document, sort_keys=True))
+    else:
+        print(
+            document["content"],
+            end="" if str(document["content"]).endswith("\n") else "\n",
+        )
+        if document["truncated"]:
+            print(
+                f"[truncated: {document['included_bytes']}/{document['bytes']} bytes]",
+                file=sys.stderr,
+            )
     return 0
 
 
@@ -1626,7 +1885,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     program = sub.add_parser(
         "program",
-        help="validate and plan optional multi-phase programs (pure; starts no work)",
+        help="plan, authorize, operate, and inspect optional multi-phase programs",
     )
     program_sub = program.add_subparsers(dest="program_command", required=True)
     program_list = program_sub.add_parser(
@@ -1647,11 +1906,181 @@ def build_parser() -> argparse.ArgumentParser:
     program_simulate.add_argument("--json", action="store_true", help="emit the pure simulation")
     program_simulate.set_defaults(func=command_program_simulate)
     program_plan = program_sub.add_parser(
-        "plan", help="bind one pure selection to repository, roadmap, policy, and roster facts"
+        "plan", help="bind a pure selection; with --mode, build an exact finite grant preview"
     )
     program_plan.add_argument("program", help="program slug or filename stem")
+    program_plan.add_argument(
+        "--mode", choices=("advisory", "checkpointed", "continuous"),
+        help="build an exact start plan at this policy-bounded mode",
+    )
+    program_plan.add_argument("--operator", help="accountable local operator id")
+    program_plan.add_argument("--reason", help="bounded grant approval reason")
+    program_plan.add_argument("--intent", help="idempotent grant intent id")
+    program_plan.add_argument("--issued-at", help="exact ISO-8601 issuance")
+    program_plan_expiry = program_plan.add_mutually_exclusive_group()
+    program_plan_expiry.add_argument(
+        "--expires-in", type=int, default=None,
+        help="finite grant lifetime in seconds (default: 3600)",
+    )
+    program_plan_expiry.add_argument(
+        "--expires-at", help="exact ISO-8601 expiry",
+    )
+    program_plan.add_argument(
+        "--capability", action="append", default=None,
+        help="exact granted capability (repeatable; default: tracked policy)",
+    )
+    program_plan.add_argument(
+        "--budget", action="append", default=None, metavar="NAME=INTEGER",
+        help="finite grant budget (repeatable; default: tracked policy)",
+    )
+    program_plan.add_argument("--remote", help="exact configured Git remote")
+    program_plan.add_argument(
+        "--remote-ref", help="exact observed remote-tracking ref",
+    )
     program_plan.add_argument("--json", action="store_true", help="emit the pure program plan")
     program_plan.set_defaults(func=command_program_plan)
+
+    program_start = program_sub.add_parser(
+        "start",
+        help="atomically issue one grant from an exact fresh start plan",
+    )
+    program_start.add_argument(
+        "--plan", type=Path, required=True,
+        help="start-plan JSON file, or - for stdin",
+    )
+    program_start.add_argument(
+        "--expect", required=True,
+        help="exact start_token from that plan",
+    )
+    program_start.add_argument(
+        "--approve", action="store_true",
+        help="explicitly approve this exact local grant",
+    )
+    program_start.add_argument("--json", action="store_true")
+    program_start.set_defaults(func=command_program_start)
+
+    program_show = program_sub.add_parser(
+        "show",
+        help="show the canonical content-safe program control-room view",
+    )
+    program_show.add_argument("run_id")
+    program_show.add_argument("--json", action="store_true")
+    program_show.set_defaults(func=command_program_show)
+
+    program_preview = program_sub.add_parser(
+        "preview",
+        help="pure exact-token preview for one program operation",
+    )
+    program_preview.add_argument("run_id")
+    program_preview.add_argument(
+        "action",
+        choices=(
+            "tick", "supervise", "request", "pause", "resume",
+            "revoke", "cancel",
+        ),
+    )
+    program_preview.add_argument(
+        "--reason", default="",
+        help="bounded reason for request/control operations",
+    )
+    program_preview.add_argument(
+        "--decision", default="",
+        help="closed approve/reject request decision",
+    )
+    program_preview.add_argument(
+        "--request-id", default="",
+        help="exact outstanding program request id",
+    )
+    program_preview.add_argument("--max-ticks", type=int, default=100)
+    program_preview.add_argument("--max-seconds", type=int, default=300)
+    program_preview.add_argument("--json", action="store_true")
+    program_preview.set_defaults(func=command_program_preview)
+
+    for transition in ("pause", "resume", "revoke", "cancel"):
+        command = program_sub.add_parser(
+            transition,
+            help=f"append one exact {transition} program transition",
+        )
+        command.add_argument("run_id")
+        command.add_argument(
+            "--reason", required=True,
+            help="bounded content-safe reason",
+        )
+        command.add_argument(
+            "--expect", required=True,
+            help=f"act_token from a fresh program preview {transition}",
+        )
+        command.add_argument("--json", action="store_true")
+        command.set_defaults(func=command_program_act)
+
+    program_tick = program_sub.add_parser(
+        "tick",
+        help="perform one exact conductor or delivery lane tick",
+    )
+    program_tick.add_argument("run_id")
+    program_tick.add_argument(
+        "--expect", required=True,
+        help="act_token from a fresh program preview tick",
+    )
+    program_tick.add_argument("--json", action="store_true")
+    program_tick.set_defaults(func=command_program_act)
+
+    program_supervise = program_sub.add_parser(
+        "supervise",
+        help="explicitly repeat the same program tick inside finite ceilings",
+    )
+    program_supervise.add_argument("run_id")
+    program_supervise.add_argument("--max-ticks", type=int, default=100)
+    program_supervise.add_argument("--max-seconds", type=int, default=300)
+    program_supervise.add_argument(
+        "--expect", required=True,
+        help="act_token from a fresh matching supervise preview",
+    )
+    program_supervise.add_argument("--json", action="store_true")
+    program_supervise.set_defaults(func=command_program_supervise)
+
+    program_request = program_sub.add_parser(
+        "request",
+        help="apply one exact typed response to an outstanding program request",
+    )
+    program_request.add_argument("run_id")
+    program_request.add_argument("request_id")
+    program_request.add_argument("decision", choices=("approve", "reject"))
+    program_request.add_argument("--reason", required=True)
+    program_request.add_argument(
+        "--expect", required=True,
+        help="act_token from a fresh matching request preview",
+    )
+    program_request.add_argument("--json", action="store_true")
+    program_request.set_defaults(func=command_program_act)
+
+    program_stream = program_sub.add_parser(
+        "stream",
+        help="explicitly open one bounded program-agent stdout or stderr log",
+    )
+    program_stream.add_argument("run_id")
+    program_stream.add_argument("session_id")
+    program_stream.add_argument("stream", choices=("stdout", "stderr"))
+    program_stream.add_argument("--max-bytes", type=int, default=20_000)
+    program_stream.add_argument("--json", action="store_true")
+    program_stream.set_defaults(func=command_program_stream)
+
+    program_tail = program_sub.add_parser(
+        "tail",
+        help="tail the verified program ledger from a cursor (read-only)",
+    )
+    program_tail.add_argument("run_id")
+    program_tail.add_argument(
+        "--after", type=int, default=0,
+        help="emit events with seq greater than this cursor (default: all)",
+    )
+    program_tail.add_argument("--follow", action="store_true")
+    program_tail.add_argument("--interval", type=float, default=1.0)
+    program_tail.add_argument(
+        "--json", action="store_true",
+        help="emit the canonical bounded tail document (non-follow only)",
+    )
+    program_tail.set_defaults(func=command_program_tail)
 
     run = sub.add_parser(
         "run",

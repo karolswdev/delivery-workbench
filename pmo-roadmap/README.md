@@ -410,8 +410,9 @@ hash-chained ledger under `.git/pmo-programs`; opening the Workbench, saving
 policy, installing/updating, or running ordinary/bounded commands never does.
 Exclusive claim, completion, child-grant, and pause/resume/revoke/cancel
 previews are generation/head-bound, and apply recomputes their scope, budget,
-authority intersection, facts, and legal transition. WLA-26-09 now consumes
-this core to conduct work; WLA-26-11 exposes byte-equivalent live controls.
+authority intersection, facts, and legal transition. WLA-26-09 consumes this
+core to conduct work; WLA-26-11 now exposes byte-equivalent live controls
+through CLI, MCP, localhost HTTP, read-only SSE cursor replay, and Workbench.
 
 The embedded `program_conductor` performs that consumption through
 one deterministic `tick_program` and a supervisor that only repeats the same
@@ -436,9 +437,13 @@ exact candidate integration, canonical evidence/story/phase mutations,
 objective and governed contract certification, gated commit/range
 verification, and optional no-force fast-forward push. Its immutable intents
 and ledger-bound receipts reconcile every effect without widening conductor
-authority. Public program controls still stop closed. These are shared library
-APIs delivered through WLA-26-10; the public `dw program` commands remain the pure
-`list|validate|simulate|plan` surface.
+authority. WLA-26-11's canonical `program_surface` composes those shared
+library APIs without adding another scheduler or authority store. Public
+`dw program` operations now include the pure reads, exact grant start,
+canonical control-room view, preview-bound tick/supervision/request/control
+acts, verified ledger tail, and explicit bounded session streams. MCP and HTTP
+accept the same ids, bounded reasons, closed decisions, finite ceilings, and
+fresh tokens; Workbench starts live SSE only while an exact run route is open.
 
 `run plan` is the separate orchestration consent preview: it binds the
 compiled score to current local Git/status/story facts, exact requested
