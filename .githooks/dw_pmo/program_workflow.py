@@ -55,7 +55,9 @@ TERMINAL_MEANINGS = (
 )
 ROUTE_ACTIONS = ("block", "escalate", "checkpoint", "abort")
 PROGRAM_CAPABILITIES = (
-    "agent:dispatch", "check:execute", "workspace:write", "nudge:deliver",
+    "program:select", "agent:dispatch", "check:execute", "workspace:write",
+    "verdict:issue", "council:decide", "obligation:record",
+    "obligation:materialize", "obligation:disposition", "nudge:deliver",
     "notification:send", "evidence:materialize", "integration:apply",
     "contract:generate", "certification:objective", "certification:verdict",
     "git:commit", "git:push", "roadmap:story-start",
@@ -1653,9 +1655,12 @@ class _RegistryCompiler:
             elif node_type == "check":
                 capabilities.add("check:execute")
             elif node_type == "debate":
-                capabilities.add("agent:dispatch")
+                capabilities.update({
+                    "agent:dispatch", "verdict:issue", "council:decide",
+                    "obligation:record",
+                })
             elif node_type == "verdict":
-                capabilities.update({"agent:dispatch", "certification:verdict"})
+                capabilities.update({"agent:dispatch", "verdict:issue"})
             elif node_type == "bounded_run":
                 capabilities.update(node.get("capability_ceiling", []))
             elif node_type == "subflow":
@@ -1722,6 +1727,10 @@ class _RegistryCompiler:
                     "artifact_writes": artifact_writes,
                 })
             elif node_type == "debate":
+                speaker_capabilities = sorted(
+                    set(capabilities)
+                    - {"verdict:issue", "council:decide", "obligation:record"}
+                )
                 role_lanes.extend([
                     {
                         "address": f"{node_address}/role/{role}",
@@ -1729,7 +1738,7 @@ class _RegistryCompiler:
                         "role": str(role),
                         "duty": "debate-speaker",
                         "workspace": "read-only",
-                        "capabilities": sorted(capabilities),
+                        "capabilities": speaker_capabilities,
                         "context_reads": context_reads,
                         "artifact_reads": artifact_reads,
                         "artifact_writes": artifact_writes,

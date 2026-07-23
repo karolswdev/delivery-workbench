@@ -66,18 +66,24 @@ FAMILIES = ("program", "workflow", "organization")
 _SAFE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$")
 
 WORK_AND_VERDICT_CAPABILITIES = (
+    "program:select",
     "agent:dispatch",
     "check:execute",
     "workspace:write",
+    "verdict:issue",
+    "council:decide",
+    "obligation:record",
     "nudge:deliver",
     "notification:send",
-    "certification:verdict",
 )
 DELIVERY_CAPABILITIES = (
+    "obligation:materialize",
+    "obligation:disposition",
     "evidence:materialize",
     "integration:apply",
     "contract:generate",
     "certification:objective",
+    "certification:verdict",
     "git:commit",
     "git:push",
     "roadmap:story-start",

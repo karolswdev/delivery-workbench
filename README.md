@@ -269,6 +269,19 @@ preassigned seat and full execution provenance, and every decision carries an
 explicit obligations list. A green proof still starts nothing and grants no
 integration, evidence, Git, or roadmap authority.
 
+The optional program authority core now supplies the missing consent boundary:
+one pure start preview freezes scope, policy hashes, worst-case budgets,
+operator intent, exact assigned seats, and each seat's provider/model/auth
+execution binding; exact start creates only a finite local grant and
+hash-chained ledger under `.git`. Advisory grants permit no claims;
+checkpointed and continuous grants reserve only named capabilities through
+exclusive idempotent claims. Replay re-derives budgets and legal transitions,
+child grants are strict non-delegable intersections, and pause/resume/revoke/
+cancel use current-head generation-bound decisions. This remains invisible to
+ordinary and bounded-run use unless a program is explicitly planned and
+granted; the live conductor and control-room surfaces are subsequent Phase 26
+slices.
+
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 
 More screenshots and two terminal recordings are in

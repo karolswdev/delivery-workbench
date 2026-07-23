@@ -1,0 +1,2181 @@
+"""Finite local authority and replay ledger for Phase 26 programs.
+
+The program compiler and planner are policy and observation only.  This module
+adds the separate consent boundary required by WLA-26-08: one pure start
+preview, one immutable grant, and one hash-chained ledger whose replay is the
+only runtime authority.  It deliberately does not conduct workflow nodes or
+perform repository/roadmap acts; WLA-26-09/10 consume these claims later.
+"""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import shutil
+import subprocess
+import tempfile
+from typing import Iterator
+
+from .gitio import current_branch, head_sha, in_rewrite_state, run_git, write_tree
+from .model import DwError
+from .orchestration import canonical_json
+from .orchestration_driver import driver_inventory, load_driver_config
+from .programs import (
+    BUDGET_DEFAULTS,
+    MODE_CEILINGS,
+    PROGRAM_CAPABILITIES,
+    build_program_plan,
+    compile_program_path,
+    find_program_path,
+)
+
+
+PROGRAM_RUN_SCHEMA_VERSION = 1
+PROGRAM_START_PLAN_KIND = "delivery-workbench-program-start-plan"
+PROGRAM_GRANT_KIND = "delivery-workbench-program-grant"
+PROGRAM_EVENT_KIND = "delivery-workbench-program-event"
+PROGRAM_PROJECTION_KIND = "delivery-workbench-program-projection"
+PROGRAM_CLAIM_PREVIEW_KIND = "delivery-workbench-program-claim-preview"
+PROGRAM_COMPLETION_PREVIEW_KIND = "delivery-workbench-program-completion-preview"
+PROGRAM_CONTROL_PREVIEW_KIND = "delivery-workbench-program-control-preview"
+PROGRAM_CHILD_GRANT_KIND = "delivery-workbench-program-child-grant"
+PROGRAM_RUN_LIST_KIND = "delivery-workbench-program-run-list"
+
+PROGRAM_STATES = (
+    "advisory", "running", "checkpoint", "paused", "expired",
+    "exhausted", "revoked", "cancelled", "complete",
+)
+CONTROL_ACTIONS = ("pause", "resume", "revoke", "cancel")
+CONTROL_DECISIONS = ("approve", "deny")
+COMPLETION_RESULTS = ("succeeded", "failed", "refused", "lost", "cancelled")
+
+_CONTROL_ALLOWED_STATES = {
+    "pause": {"running", "checkpoint"},
+    "resume": {"paused"},
+    "revoke": {"running", "checkpoint", "paused", "expired", "exhausted", "advisory"},
+    "cancel": {"running", "checkpoint", "paused", "expired", "exhausted"},
+}
+
+PROGRAM_PERMANENT_EXCLUSIONS = (
+    "arbitrary-command",
+    "arbitrary-network-destination",
+    "authority-minting",
+    "conflict-resolution",
+    "credential-read",
+    "cross-repository-write",
+    "git-merge",
+    "policy-edit",
+    "publication",
+    "release",
+    "deployment",
+)
+
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,255}$")
+_RUN_ID_RE = re.compile(r"^program-[0-9a-f]{24}$")
+_HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_./:@+-]{0,511}$")
+_MODE_RANK = {mode: index for index, mode in enumerate(MODE_CEILINGS)}
+_MAX_GRANT_SECONDS = 31_536_000
+
+_START_PLAN_KEYS = {
+    "kind", "schema_version", "applicable", "issues", "request",
+    "planning", "program", "repository", "roadmap", "scope", "selection",
+    "roster", "authority", "worst_case", "approval", "plan_hash",
+    "start_token", "starts_work", "writes_policy", "writes_roadmap",
+    "writes_run_state", "creates_grant",
+}
+_START_REQUEST_KEYS = {
+    "program", "mode", "operator", "approval_reason", "intent_id",
+    "capabilities", "budgets", "issued_at", "expires_at", "remote",
+    "remote_ref",
+}
+_OPERATOR_KEYS = {"id", "principal_fingerprint"}
+_APPROVAL_KEYS = {"action", "decision", "reason", "operator", "intent_id"}
+_REPOSITORY_KEYS = {
+    "id", "branch", "head", "index_tree", "operation", "clean",
+    "change_count", "worktree_hash", "remote", "remote_ref",
+    "remote_url_hash", "remote_head", "fast_forward_observed",
+}
+_ROADMAP_KEYS = {"project", "snapshot_hash", "healthy", "warning_count"}
+_ROSTER_KEYS = {
+    "roster_hash", "assignment_hash", "organization", "team", "seats",
+    "councils", "separation",
+}
+_SEAT_KEYS = {
+    "address", "role", "duty", "slot", "agent", "profile",
+    "principal_fingerprint", "assignment_generation", "workspace_domain",
+    "session_binding_key", "execution", "authority_ceiling",
+}
+_EXECUTION_KEYS = {
+    "harness", "adapter", "adapter_version", "router", "provider",
+    "model_vendor", "model_family", "model", "model_revision",
+    "model_binding", "auth_domain_fingerprint", "capability_fingerprint",
+}
+_COUNCIL_KEYS = {
+    "id", "members", "quorum", "method", "chair_seat", "decider_seat",
+    "primary_authority", "tie_authority", "audit",
+}
+_AUTHORITY_KEYS = {
+    "mode", "capabilities", "budgets", "stop_conditions",
+    "checkpoint_ports", "child_capability_ceiling", "permanent_exclusions",
+    "cost_accounting",
+}
+_GRANT_KEYS = {
+    "kind", "schema_version", "run_id", "grant_hash", "plan_hash",
+    "start_token", "program_selector", "program", "repository", "roadmap",
+    "scope", "selection", "roster", "authority", "operator", "approval",
+    "issued_at", "expires_at", "revocation_generation",
+    "permanent_exclusions",
+}
+_EVENT_KEYS = {
+    "kind", "schema_version", "run_id", "seq", "event", "generation",
+    "at", "prev_hash", "detail", "event_hash",
+}
+_EVENT_DETAIL_KEYS = {
+    "program_started": {
+        "plan_hash", "grant_hash", "program_bundle_hash", "roster_hash",
+        "mode", "expires_at",
+    },
+    "claim_reserved": {
+        "claim_id", "idempotency_key", "request_hash", "category",
+        "subject", "capability", "decision", "reason", "budget",
+        "resource_estimate", "child_grant_hash", "request_port",
+    },
+    "claim_completed": {
+        "claim_id", "request_hash", "result", "receipt_hash", "reason",
+        "fact_binding",
+    },
+    "program_paused": {
+        "action", "reason", "decision", "token_hash", "from_state",
+        "to_state", "new_generation", "expired_request_ids",
+        "interrupt_claim_ids",
+    },
+    "program_resumed": {
+        "action", "reason", "decision", "token_hash", "from_state",
+        "to_state", "new_generation", "expired_request_ids",
+        "interrupt_claim_ids",
+    },
+    "program_revoked": {
+        "action", "reason", "decision", "token_hash", "from_state",
+        "to_state", "new_generation", "expired_request_ids",
+        "interrupt_claim_ids",
+    },
+    "program_cancelled": {
+        "action", "reason", "decision", "token_hash", "from_state",
+        "to_state", "new_generation", "expired_request_ids",
+        "interrupt_claim_ids",
+    },
+    "program_exhausted": {
+        "counter", "used", "limit", "request_hash",
+    },
+}
+_CLAIM_PREVIEW_KEYS = {
+    "kind", "schema_version", "run_id", "applicable", "issues", "request",
+    "binding", "budget", "child_grant", "exhaustion", "claim_token",
+    "starts_work", "writes_state", "dispatches_child", "mutates_repository",
+    "mutates_roadmap",
+}
+_CLAIM_REQUEST_KEYS = {
+    "category", "subject", "idempotency_key", "decision", "reason",
+    "resource_estimate", "request_port",
+}
+_SUBJECT_KEYS = {"kind", "id", "hash", "phase", "story"}
+_RESOURCE_KEYS = {
+    "artifact_bytes", "tokens", "observed_cost_microunits",
+}
+_BINDING_KEYS = {
+    "grant_hash", "ledger_head", "generation", "state", "observed_at",
+}
+_COMPLETION_PREVIEW_KEYS = {
+    "kind", "schema_version", "run_id", "applicable", "issues", "request",
+    "binding", "fact_binding", "completion_token", "starts_work",
+    "writes_state", "mutates_repository", "mutates_roadmap",
+}
+_COMPLETION_REQUEST_KEYS = {
+    "claim_id", "result", "receipt_hash", "reason",
+}
+_CONTROL_PREVIEW_KEYS = {
+    "kind", "schema_version", "run_id", "applicable", "issues", "request",
+    "binding", "effect", "control_token", "starts_work", "writes_state",
+    "dispatches_child", "mutates_repository", "mutates_roadmap",
+}
+_CONTROL_REQUEST_KEYS = {"action", "decision", "reason"}
+_CONTROL_EFFECT_KEYS = {
+    "from_state", "to_state", "new_generation", "expired_request_ids",
+    "interrupt_claim_ids",
+}
+_CHILD_GRANT_KEYS = {
+    "kind", "schema_version", "parent_run_id", "parent_grant_hash",
+    "parent_ledger_head", "generation", "role", "node_address",
+    "repository", "roadmap", "capabilities", "budgets", "expires_at",
+    "permanent_exclusions", "grant_hash", "starts_work", "writes_state",
+}
+_FACT_BINDING_KEYS = {"repository", "roadmap"}
+
+_ROLE_CAPABILITIES = {
+    "implementer": {"agent:dispatch", "workspace:write"},
+    "repairer": {"agent:dispatch", "workspace:write"},
+    "researcher": {"agent:dispatch"},
+    "critic": {"agent:dispatch", "verdict:issue"},
+    "reviewer": {"agent:dispatch", "verdict:issue"},
+    "verifier": {"agent:dispatch", "verdict:issue"},
+    "meta-verifier": {"agent:dispatch", "verdict:issue"},
+    "master-architect": {"agent:dispatch", "verdict:issue"},
+    "judge": {"agent:dispatch", "council:decide", "obligation:record"},
+}
+_NON_DELEGABLE = {
+    "program:select", "obligation:materialize", "obligation:disposition",
+    "evidence:materialize", "integration:apply", "contract:generate",
+    "certification:objective", "certification:verdict", "git:commit",
+    "git:push", "roadmap:story-start", "roadmap:story-complete",
+    "roadmap:phase-advance",
+}
+
+# category -> (required capability, decision, fixed budget reservations)
+_CLAIM_RULES: dict[str, tuple[str, str, dict[str, int]]] = {
+    "selection": ("program:select", "select", {"max_stories": 1}),
+    "assignment": ("program:select", "bind", {}),
+    "child-grant": ("agent:dispatch", "delegate", {"max_child_runs": 1}),
+    "agent": (
+        "agent:dispatch", "execute",
+        {"max_agent_starts": 1, "max_provider_starts": 1, "max_model_starts": 1},
+    ),
+    "check": ("check:execute", "execute", {"max_check_starts": 1}),
+    "council": ("council:decide", "deliberate", {"max_councils": 1}),
+    "debate-round": (
+        "council:decide", "continue",
+        {"max_loop_rounds": 1, "max_debate_rounds": 1},
+    ),
+    "loop-round": ("agent:dispatch", "continue", {"max_loop_rounds": 1}),
+    "verdict": ("verdict:issue", "evaluate", {"max_verdicts": 1}),
+    "gate": ("verdict:issue", "evaluate", {}),
+    "repair": ("agent:dispatch", "repair", {"max_repairs_per_story": 1}),
+    "obligation-record": ("obligation:record", "record", {"max_obligations": 1}),
+    "obligation-materialize": (
+        "obligation:materialize", "materialize",
+        {"max_obligation_materializations": 1},
+    ),
+    "obligation-disposition": (
+        "obligation:disposition", "dispose",
+        {"max_obligation_dispositions": 1},
+    ),
+    "integration": ("integration:apply", "apply", {"max_integrations": 1}),
+    "evidence": ("evidence:materialize", "apply", {}),
+    "certification-objective": ("certification:objective", "apply", {}),
+    "certification-verdict": ("certification:verdict", "apply", {}),
+    "commit": ("git:commit", "apply", {"max_commits": 1}),
+    "push": ("git:push", "apply", {"max_pushes": 1}),
+    "story-start": ("roadmap:story-start", "apply", {}),
+    "story-complete": ("roadmap:story-complete", "apply", {}),
+    "phase-advance": ("roadmap:phase-advance", "apply", {}),
+    "nudge": ("nudge:deliver", "deliver", {"max_nudges": 1}),
+    "notification": ("notification:send", "send", {}),
+    "checkpoint-request": ("program:select", "request", {}),
+}
+
+
+def _sha(value: object) -> str:
+    return "sha256:" + hashlib.sha256(
+        canonical_json(value).encode("utf-8")
+    ).hexdigest()
+
+
+def _difference_paths(left: object, right: object, path: str = "") -> list[str]:
+    """Return bounded structural difference pointers for stale-plan diagnostics."""
+    if type(left) is not type(right):
+        return [path or "/"]
+    if isinstance(left, dict):
+        differences: list[str] = []
+        for key in sorted(set(left) | set(right)):
+            pointer = f"{path}/{key}"
+            if key not in left or key not in right:
+                differences.append(pointer)
+            else:
+                differences.extend(_difference_paths(left[key], right[key], pointer))
+            if len(differences) >= 8:
+                break
+        return differences[:8]
+    if isinstance(left, list):
+        if len(left) != len(right):
+            return [path or "/"]
+        differences = []
+        for index, (left_item, right_item) in enumerate(zip(left, right)):
+            differences.extend(
+                _difference_paths(left_item, right_item, f"{path}/{index}")
+            )
+            if len(differences) >= 8:
+                break
+        return differences[:8]
+    return [] if left == right else [path or "/"]
+
+
+def _require(condition: bool, message: str) -> None:
+    if not condition:
+        raise DwError(message)
+
+
+def _exact(value: object, keys: set[str], label: str) -> dict[str, object]:
+    _require(isinstance(value, dict), f"{label} must be an object")
+    unknown = sorted(set(value) - keys)
+    missing = sorted(keys - set(value))
+    _require(
+        not unknown and not missing,
+        f"{label} must use exact keys"
+        + (f"; unknown: {', '.join(unknown)}" if unknown else "")
+        + (f"; missing: {', '.join(missing)}" if missing else ""),
+    )
+    return value
+
+
+def _hash(value: object, label: str) -> str:
+    _require(isinstance(value, str) and bool(_HASH_RE.fullmatch(value)), f"{label} must be a sha256 hash")
+    return value
+
+
+def _safe(value: object, label: str, *, reference: bool = False) -> str:
+    pattern = _REF_RE if reference else _SAFE_ID_RE
+    _require(isinstance(value, str) and bool(pattern.fullmatch(value)), f"{label} is unsafe")
+    return value
+
+
+def _text(value: object, label: str, maximum: int = 1_000) -> str:
+    _require(
+        isinstance(value, str) and 0 < len(value.encode("utf-8")) <= maximum
+        and "\x00" not in value,
+        f"{label} must be non-empty and at most {maximum} bytes",
+    )
+    return value
+
+
+def _time(value: str | datetime | None, label: str, default: datetime | None = None) -> datetime:
+    if value is None:
+        parsed = default or datetime.now(timezone.utc)
+    elif isinstance(value, datetime):
+        parsed = value
+    else:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (TypeError, ValueError) as exc:
+            raise DwError(f"{label} must be an ISO-8601 timestamp") from exc
+    _require(parsed.tzinfo is not None, f"{label} must include a timezone")
+    return parsed.astimezone(timezone.utc).replace(microsecond=0)
+
+
+def _format_time(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _git_dir(root: Path) -> Path:
+    raw = (run_git(root, "rev-parse", "--git-dir") or "").strip()
+    _require(bool(raw), "program authority requires a Git repository")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = root.resolve() / path
+    return path.resolve()
+
+
+def program_store_dir(root: Path) -> Path:
+    return _git_dir(root) / "pmo-programs"
+
+
+def _run_dir(root: Path, run_id: str) -> Path:
+    _require(bool(_RUN_ID_RE.fullmatch(run_id or "")), "unsafe program run id")
+    runs = (program_store_dir(root) / "runs").resolve()
+    path = (runs / run_id).resolve()
+    _require(path.parent == runs, "program run path escapes the store")
+    return path
+
+
+def _repository_id(root: Path) -> str:
+    return _sha({"root": str(root.resolve()), "git_dir": str(_git_dir(root))})
+
+
+def _remote_observation(root: Path, remote: str | None, remote_ref: str | None) -> dict[str, object]:
+    if remote is None and remote_ref is None:
+        return {
+            "remote": None, "remote_ref": None, "remote_url_hash": None,
+            "remote_head": None, "fast_forward_observed": None,
+        }
+    _require(remote is not None and remote_ref is not None, "remote and remote_ref must be supplied together")
+    _safe(remote, "remote")
+    _safe(remote_ref, "remote_ref", reference=True)
+    url = (run_git(root, "remote", "get-url", remote) or "").strip()
+    _require(bool(url), f"Git remote {remote!r} is not configured")
+    remote_head = (run_git(root, "rev-parse", "--verify", remote_ref) or "").strip() or None
+    head = head_sha(root)
+    fast_forward: bool | None = None
+    if remote_head and head:
+        try:
+            completed = subprocess.run(
+                ["git", "-C", str(root), "merge-base", "--is-ancestor", remote_head, head],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            fast_forward = completed.returncode == 0
+        except OSError:
+            fast_forward = None
+    return {
+        "remote": remote,
+        "remote_ref": remote_ref,
+        "remote_url_hash": _sha({"remote": remote, "url": url}),
+        "remote_head": remote_head,
+        "fast_forward_observed": fast_forward,
+    }
+
+
+def _repository_facts(root: Path, remote: str | None = None, remote_ref: str | None = None) -> dict[str, object]:
+    porcelain = run_git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+    _require(porcelain is not None, "cannot observe repository status")
+    changes = len([item for item in porcelain.split("\x00") if item])
+    return {
+        "id": _repository_id(root),
+        "branch": current_branch(root),
+        "head": head_sha(root) or "none",
+        "index_tree": write_tree(root) or "unknown",
+        "operation": "rewrite" if in_rewrite_state(root) else "normal",
+        "clean": changes == 0,
+        "change_count": changes,
+        "worktree_hash": _sha({"porcelain": porcelain}),
+        **_remote_observation(root, remote, remote_ref),
+    }
+
+
+def _operator(value: object) -> dict[str, str]:
+    if isinstance(value, str):
+        operator_id = _safe(value, "operator")
+        return {
+            "id": operator_id,
+            "principal_fingerprint": _sha({"operator": operator_id}),
+        }
+    raw = _exact(value, _OPERATOR_KEYS, "operator")
+    return {
+        "id": _safe(raw["id"], "operator.id"),
+        "principal_fingerprint": _hash(raw["principal_fingerprint"], "operator.principal_fingerprint"),
+    }
+
+
+def _normalize_capabilities(value: object) -> list[str]:
+    _require(isinstance(value, list), "program capabilities must be a list")
+    _require(
+        len(value) == len(set(value))
+        and all(isinstance(item, str) and item in PROGRAM_CAPABILITIES for item in value),
+        "program capabilities must be unique contracted names",
+    )
+    return sorted(value)
+
+
+def _normalize_budgets(value: object, policy: dict[str, object]) -> tuple[dict[str, int], list[str]]:
+    raw = value if value is not None else {}
+    _require(isinstance(raw, dict), "grant budgets must be an object")
+    _require(not (set(raw) - set(BUDGET_DEFAULTS)), "grant budgets contain an unknown counter")
+    issues: list[str] = []
+    normalized: dict[str, int] = {}
+    for key in BUDGET_DEFAULTS:
+        maximum = policy.get(key)
+        _require(isinstance(maximum, int) and not isinstance(maximum, bool) and maximum > 0, f"policy budget {key} is invalid")
+        candidate = raw.get(key, maximum)
+        if isinstance(candidate, bool) or not isinstance(candidate, int) or candidate <= 0:
+            issues.append(f"grant budget {key} must be finite and positive")
+            candidate = int(maximum)
+        if int(candidate) > int(maximum):
+            issues.append(f"grant budget {key} exceeds policy ceiling")
+        normalized[key] = int(candidate)
+    return normalized, issues
+
+
+def _capability_issues(mode: str, capabilities: list[str], requested: list[str]) -> list[str]:
+    issues: list[str] = []
+    chosen = set(capabilities)
+    policy = set(requested)
+    if not chosen <= policy:
+        issues.append("grant capabilities exceed tracked program policy")
+    if mode == "advisory" and chosen:
+        issues.append("advisory mode authorizes no dispatch or mutation capability")
+    if mode != "advisory":
+        for required in ("program:select", "agent:dispatch"):
+            if required not in chosen:
+                issues.append(f"{mode} mode requires {required}")
+    prerequisites = {
+        "workspace:write": {"agent:dispatch"},
+        "verdict:issue": {"agent:dispatch"},
+        "council:decide": {"agent:dispatch", "verdict:issue"},
+        "obligation:record": {"council:decide"},
+        "obligation:materialize": {"obligation:record"},
+        "obligation:disposition": {"obligation:record"},
+        "certification:verdict": {"verdict:issue"},
+        "git:commit": {"contract:generate"},
+        "git:push": {"git:commit"},
+        "roadmap:phase-advance": {"roadmap:story-complete"},
+    }
+    for capability, required in prerequisites.items():
+        if capability in chosen and not required <= chosen:
+            issues.append(
+                f"{capability} is missing prerequisite(s): "
+                + ", ".join(sorted(required - chosen))
+            )
+    if "roadmap:story-complete" in chosen:
+        if "evidence:materialize" not in chosen:
+            issues.append("roadmap:story-complete requires evidence:materialize")
+        if not ({"certification:objective", "certification:verdict"} & chosen):
+            issues.append("roadmap:story-complete requires an explicit certification capability")
+    return issues
+
+
+def _checkpoint_ports(compiled: dict[str, object], binding_id: str | None) -> list[dict[str, object]]:
+    ports: list[dict[str, object]] = [
+        {"id": "program-start", "kind": "system", "address": "program/start"},
+        {"id": "story-boundary", "kind": "system", "address": "program/story-boundary"},
+        {"id": "phase-boundary", "kind": "system", "address": "program/phase-boundary"},
+    ]
+    instances = compiled.get("references", {}).get("workflow_instances", {})  # type: ignore[union-attr]
+    instance = instances.get(binding_id) if isinstance(instances, dict) and binding_id else None
+    if isinstance(instance, dict):
+        for node in instance.get("expanded_nodes", []):
+            if isinstance(node, dict) and node.get("type") == "checkpoint":
+                ports.append({
+                    "id": str(node["address"]),
+                    "kind": "workflow",
+                    "address": str(node["address"]),
+                })
+    ports.sort(key=lambda item: (str(item["kind"]), str(item["id"])))
+    return ports
+
+
+def _roster(assignment: dict[str, object], capabilities: list[str], workflow: dict[str, object] | None) -> dict[str, object]:
+    selected = set(capabilities)
+    seats: list[dict[str, object]] = []
+    role_map: dict[str, dict[str, object]] = {}
+    council_judge_roles = {
+        str(council.get("judge"))
+        for council in assignment.get("councils", [])
+        if isinstance(council, dict) and council.get("judge") is not None
+    }
+    for role in assignment.get("roles", []):
+        if not isinstance(role, dict):
+            continue
+        role_id = str(role["role"])
+        role_map[role_id] = role
+        packet = role.get("packet_policy", {})
+        packet_caps = set(packet.get("effective_capability_ceiling", [])) if isinstance(packet, dict) else set()
+        duty_caps = set(_ROLE_CAPABILITIES.get(str(role.get("duty")), {"agent:dispatch"}))
+        if role_id in council_judge_roles:
+            duty_caps.update({"council:decide", "obligation:record"})
+        declared_caps = set(role.get("capability_ceiling", packet_caps))
+        ceiling = sorted(selected & declared_caps & (packet_caps | duty_caps))
+        for member in role.get("members", []):
+            if not isinstance(member, dict):
+                continue
+            execution = _exact(member.get("execution"), _EXECUTION_KEYS, "assignment execution")
+            seats.append({
+                "address": str(member["address"]),
+                "role": role_id,
+                "duty": str(role["duty"]),
+                "slot": int(member["slot"]),
+                "agent": str(member["agent"]),
+                "profile": str(member["profile"]),
+                "principal_fingerprint": _hash(member["principal_fingerprint"], "seat principal"),
+                "assignment_generation": int(member["assignment_generation"]),
+                "workspace_domain": str(member["workspace_domain"]),
+                "session_binding_key": _hash(member["session_binding_key"], "seat session"),
+                "execution": dict(execution),
+                "authority_ceiling": ceiling,
+            })
+    seats.sort(key=lambda item: str(item["address"]))
+    by_role = {
+        role: [seat for seat in seats if seat["role"] == role]
+        for role in role_map
+    }
+    debates = workflow.get("debates", []) if isinstance(workflow, dict) else []
+    councils: list[dict[str, object]] = []
+    for council in assignment.get("councils", []):
+        if not isinstance(council, dict):
+            continue
+        judge_role = str(council.get("judge"))
+        chair = by_role.get(judge_role, [None])[0]
+        chair_address = chair.get("address") if isinstance(chair, dict) else None
+        decision = council.get("decision", {})
+        method = str(decision.get("method", "majority")) if isinstance(decision, dict) else "majority"
+        council_roles = set(council.get("members", []))
+        matching_ties = {
+            str(debate.get("tie_policy"))
+            for debate in debates
+            if isinstance(debate, dict)
+            and debate.get("judge_role") == judge_role
+            and set(debate.get("participants", [])) | {judge_role} == council_roles
+        }
+        _require(len(matching_ties) <= 1, "one council cannot have conflicting tie authorities in the selected workflow")
+        tie_authority = next(iter(matching_ties), "none")
+        _require(tie_authority in {"none", "judge", "checkpoint", "dissent"}, "council tie authority is unsupported")
+        uses_agent_decider = method == "judge" or tie_authority == "judge"
+        councils.append({
+            "id": str(council["id"]),
+            "members": list(council.get("assigned_members", [])),
+            "quorum": int(council["quorum"]),
+            "method": method,
+            "chair_seat": chair_address,
+            "decider_seat": chair_address if uses_agent_decider else None,
+            "primary_authority": "judge" if method == "judge" else "rule",
+            "tie_authority": tie_authority,
+            "audit": dict(council.get("audit", {})),
+        })
+    councils.sort(key=lambda item: str(item["id"]))
+    return {
+        "roster_hash": _hash(assignment["roster_hash"], "roster hash"),
+        "assignment_hash": _hash(assignment["assignment_hash"], "assignment hash"),
+        "organization": str(assignment["organization"]),
+        "team": str(assignment["team"]),
+        "seats": seats,
+        "councils": councils,
+        "separation": dict(assignment.get("separation", {})),
+    }
+
+
+def _validate_roster(value: object) -> dict[str, object]:
+    roster = _exact(value, _ROSTER_KEYS, "program roster")
+    _hash(roster["roster_hash"], "roster.roster_hash")
+    _hash(roster["assignment_hash"], "roster.assignment_hash")
+    seats = roster["seats"]
+    _require(isinstance(seats, list) and seats, "program roster must contain seats")
+    addresses: set[str] = set()
+    for index, item in enumerate(seats):
+        seat = _exact(item, _SEAT_KEYS, f"roster.seats[{index}]")
+        address = _safe(seat["address"], f"roster.seats[{index}].address", reference=True)
+        _require(address not in addresses, "program roster seat addresses must be unique")
+        addresses.add(address)
+        _exact(seat["execution"], _EXECUTION_KEYS, f"roster.seats[{index}].execution")
+        _normalize_capabilities(seat["authority_ceiling"])
+    councils = roster["councils"]
+    _require(isinstance(councils, list), "program roster councils must be a list")
+    for index, item in enumerate(councils):
+        council = _exact(item, _COUNCIL_KEYS, f"roster.councils[{index}]")
+        decider = council["decider_seat"]
+        _require(decider is None or decider in addresses, "council decider seat is not assigned")
+        _require(council["primary_authority"] in {"rule", "judge"}, "council primary authority is unsupported")
+        _require(council["tie_authority"] in {"none", "judge", "checkpoint", "dissent"}, "council tie authority is unsupported")
+        needs_decider = council["primary_authority"] == "judge" or council["tie_authority"] == "judge"
+        _require((decider is not None) == needs_decider, "council decider seat does not match its declared authority")
+    return roster
+
+
+def _policy_for_plan(root: Path, selector: str) -> dict[str, object]:
+    return compile_program_path(root, find_program_path(root, selector))
+
+
+def build_program_start_plan(
+    root: Path,
+    program: str,
+    *,
+    mode: str,
+    operator: object,
+    approval_reason: str,
+    intent_id: str,
+    capabilities: list[str] | None = None,
+    budgets: dict[str, int] | None = None,
+    issued_at: str | datetime | None = None,
+    expires_at: str | datetime | None = None,
+    remote: str | None = None,
+    remote_ref: str | None = None,
+    driver_config: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Build an exact, pure grant preview over one current program plan."""
+    root = root.resolve()
+    _require(isinstance(program, str), "program start requires a tracked program selector")
+    _safe(program, "program")
+    _require(mode in MODE_CEILINGS, "unsupported program mode")
+    normalized_operator = _operator(operator)
+    reason = _text(approval_reason, "approval_reason", 1_000)
+    intent = _safe(intent_id, "intent_id")
+    issued = _time(issued_at, "issued_at")
+
+    planning = build_program_plan(root, program, driver_config=driver_config)
+    compiled = _policy_for_plan(root, program)
+    policy_caps = list(planning["program"]["requested_capabilities"])  # type: ignore[index]
+    chosen_caps = _normalize_capabilities(
+        [] if mode == "advisory" and capabilities is None
+        else list(policy_caps) if capabilities is None
+        else capabilities
+    )
+    policy_budgets = dict(planning["program"]["budgets"])  # type: ignore[index]
+    chosen_budgets, budget_issues = _normalize_budgets(budgets, policy_budgets)
+    if expires_at is None:
+        expiry = issued + timedelta(seconds=min(3_600, chosen_budgets["max_wall_seconds"]))
+    else:
+        expiry = _time(expires_at, "expires_at")
+
+    issues: list[dict[str, str]] = [
+        {"code": str(item["code"]), "message": str(item["message"])}
+        for item in planning.get("issues", [])
+        if item.get("code") != "scope-complete"
+    ]
+    if not planning.get("applicable"):
+        issues.append({"code": "program-not-applicable", "message": "pure program planning found no grantable current selection"})
+    ceiling = str(planning["program"]["mode_ceiling"])  # type: ignore[index]
+    if _MODE_RANK[mode] > _MODE_RANK[ceiling]:
+        issues.append({"code": "mode-denied", "message": f"{mode} exceeds tracked mode ceiling {ceiling}"})
+    for message in _capability_issues(mode, chosen_caps, policy_caps):
+        issues.append({"code": "capability-denied", "message": message})
+    for message in budget_issues:
+        issues.append({"code": "budget-denied", "message": message})
+    if expiry <= issued:
+        issues.append({"code": "grant-expired", "message": "grant expiry must be later than issuance"})
+    lifetime = int((expiry - issued).total_seconds())
+    if lifetime > min(_MAX_GRANT_SECONDS, chosen_budgets["max_wall_seconds"]):
+        issues.append({"code": "budget-denied", "message": "grant lifetime exceeds its wall-time ceiling"})
+
+    repository = _repository_facts(root, remote, remote_ref)
+    if repository["operation"] != "normal":
+        issues.append({"code": "repository-stale", "message": "repository is in a rewrite operation"})
+    if repository["clean"] is not True:
+        issues.append({"code": "repository-stale", "message": "repository worktree must be clean at program start"})
+    if "git:push" in chosen_caps:
+        if remote is None or remote_ref is None:
+            issues.append({"code": "capability-denied", "message": "git:push requires one exact remote and ref observation"})
+        elif repository["fast_forward_observed"] is not True:
+            issues.append({"code": "remote-diverged", "message": "remote/ref is absent, divergent, or not observed as a fast-forward base"})
+
+    assignment = planning.get("assignment")
+    _require(isinstance(assignment, dict), "program planning produced no assignment document")
+    selection = planning.get("selection")
+    _require(isinstance(selection, dict), "program planning produced no selection document")
+    binding_id = str(selection.get("binding"))
+    instances = compiled["references"]["workflow_instances"]  # type: ignore[index]
+    workflow_instance = instances.get(binding_id) if isinstance(instances, dict) else None
+    roster = _roster(assignment, chosen_caps, workflow_instance if isinstance(workflow_instance, dict) else None)
+    checkpoint_ports = _checkpoint_ports(compiled, binding_id)
+
+    roadmap = {
+        "project": str(planning["roadmap"]["project"]),  # type: ignore[index]
+        "snapshot_hash": _hash(planning["roadmap"]["snapshot_hash"], "roadmap snapshot"),  # type: ignore[index]
+        "healthy": bool(planning["roadmap"]["healthy"]),  # type: ignore[index]
+        "warning_count": len(planning["roadmap"].get("warnings", [])),  # type: ignore[index]
+    }
+    authority = {
+        "mode": mode,
+        "capabilities": chosen_caps,
+        "budgets": chosen_budgets,
+        "stop_conditions": list(planning["program"]["stop_conditions"]),  # type: ignore[index]
+        "checkpoint_ports": checkpoint_ports,
+        "child_capability_ceiling": sorted(set(chosen_caps) - _NON_DELEGABLE),
+        "permanent_exclusions": list(PROGRAM_PERMANENT_EXCLUSIONS),
+        "cost_accounting": "observed-only",
+    }
+    approval = {
+        "action": "start-program",
+        "decision": "approve",
+        "reason": reason,
+        "operator": normalized_operator,
+        "intent_id": intent,
+    }
+    request = {
+        "program": program,
+        "mode": mode,
+        "operator": normalized_operator,
+        "approval_reason": reason,
+        "intent_id": intent,
+        "capabilities": chosen_caps,
+        "budgets": chosen_budgets,
+        "issued_at": _format_time(issued),
+        "expires_at": _format_time(expiry),
+        "remote": remote,
+        "remote_ref": remote_ref,
+    }
+    workflow_envelope = selection.get("workflow", {}).get("envelope", {})  # type: ignore[union-attr]
+    unsigned: dict[str, object] = {
+        "kind": PROGRAM_START_PLAN_KIND,
+        "schema_version": PROGRAM_RUN_SCHEMA_VERSION,
+        "applicable": not issues,
+        "issues": issues,
+        "request": request,
+        "planning": planning,
+        "program": dict(planning["program"]),
+        "repository": repository,
+        "roadmap": roadmap,
+        "scope": planning["scope"],
+        "selection": selection,
+        "roster": roster,
+        "authority": authority,
+        "worst_case": {
+            "grant_budgets": chosen_budgets,
+            "selected_workflow_envelope": dict(workflow_envelope),
+            "includes_failure_branches": True,
+        },
+        "approval": approval,
+        "starts_work": False,
+        "writes_policy": False,
+        "writes_roadmap": False,
+        "writes_run_state": False,
+        "creates_grant": False,
+    }
+    plan_hash = _sha(unsigned)
+    start_token = _sha({
+        "action": "start-program", "plan_hash": plan_hash,
+        "approval": approval,
+    })
+    return {**unsigned, "plan_hash": plan_hash, "start_token": start_token}
+
+
+def _validate_start_plan(value: object) -> dict[str, object]:
+    plan = _exact(value, _START_PLAN_KEYS, "program start plan")
+    _require(plan["kind"] == PROGRAM_START_PLAN_KIND and plan["schema_version"] == PROGRAM_RUN_SCHEMA_VERSION, "unsupported program start plan")
+    _exact(plan["request"], _START_REQUEST_KEYS, "program start request")
+    _exact(plan["repository"], _REPOSITORY_KEYS, "program start repository")
+    _exact(plan["roadmap"], _ROADMAP_KEYS, "program start roadmap")
+    _validate_roster(plan["roster"])
+    _exact(plan["authority"], _AUTHORITY_KEYS, "program start authority")
+    _exact(plan["approval"], _APPROVAL_KEYS, "program start approval")
+    _require(isinstance(plan["applicable"], bool) and isinstance(plan["issues"], list), "program start applicability is invalid")
+    for effect in ("starts_work", "writes_policy", "writes_roadmap", "writes_run_state", "creates_grant"):
+        _require(plan[effect] is False, f"program start preview {effect} must be false")
+    unsigned = {key: value for key, value in plan.items() if key not in {"plan_hash", "start_token"}}
+    expected_hash = _sha(unsigned)
+    _require(plan["plan_hash"] == expected_hash, "program start plan hash is invalid")
+    _require(
+        plan["start_token"] == _sha({"action": "start-program", "plan_hash": expected_hash, "approval": plan["approval"]}),
+        "program start token is invalid",
+    )
+    return plan
+
+
+def _write_new(path: Path, value: object, mode: int = 0o600) -> None:
+    data = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    with path.open("xb") as handle:
+        os.chmod(path, mode)
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _grant_hash(grant: dict[str, object]) -> str:
+    return _sha({key: value for key, value in grant.items() if key != "grant_hash"})
+
+
+def _event_document(
+    run_id: str,
+    seq: int,
+    event: str,
+    generation: int,
+    at: datetime,
+    detail: dict[str, object],
+    prev_hash: str | None,
+) -> dict[str, object]:
+    _require(event in _EVENT_DETAIL_KEYS, f"unsupported program event {event!r}")
+    _exact(detail, _EVENT_DETAIL_KEYS[event], f"{event} detail")
+    unsigned = {
+        "kind": PROGRAM_EVENT_KIND,
+        "schema_version": PROGRAM_RUN_SCHEMA_VERSION,
+        "run_id": run_id,
+        "seq": seq,
+        "event": event,
+        "generation": generation,
+        "at": _format_time(at),
+        "prev_hash": prev_hash,
+        "detail": detail,
+    }
+    return {**unsigned, "event_hash": _sha(unsigned)}
+
+
+@contextmanager
+def _lock(path: Path) -> Iterator[None]:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with path.open("a+b") as handle:
+        os.chmod(path, 0o600)
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _load_json(path: Path, label: str) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DwError(f"cannot read {label}: {exc}") from exc
+    _require(isinstance(value, dict), f"{label} must be an object")
+    return value
+
+
+def _load_documents(root: Path, run_id: str) -> tuple[Path, dict[str, object], dict[str, object]]:
+    path = _run_dir(root, run_id)
+    _require(path.is_dir(), f"program run not found: {run_id}")
+    grant = _exact(_load_json(path / "grant.json", "program grant"), _GRANT_KEYS, "program grant")
+    plan = _validate_start_plan(_load_json(path / "plan.json", "program start plan"))
+    _require(grant["kind"] == PROGRAM_GRANT_KIND and grant["schema_version"] == PROGRAM_RUN_SCHEMA_VERSION, "unsupported program grant")
+    _require(grant["run_id"] == run_id, "program grant run id mismatch")
+    _require(grant["grant_hash"] == _grant_hash(grant), "program grant integrity check failed")
+    _require(grant["plan_hash"] == plan["plan_hash"] and grant["start_token"] == plan["start_token"], "program grant does not match its immutable plan")
+    expected_from_plan = {
+        "program_selector": plan["request"]["program"],
+        "program": plan["program"],
+        "repository": plan["repository"],
+        "roadmap": plan["roadmap"],
+        "scope": plan["scope"],
+        "selection": plan["selection"],
+        "roster": plan["roster"],
+        "authority": plan["authority"],
+        "operator": plan["approval"]["operator"],
+        "approval": plan["approval"],
+        "issued_at": plan["request"]["issued_at"],
+        "expires_at": plan["request"]["expires_at"],
+        "revocation_generation": 0,
+    }
+    for key, expected in expected_from_plan.items():
+        _require(grant[key] == expected, f"program grant {key} differs from its reviewed plan")
+    _require(grant["permanent_exclusions"] == list(PROGRAM_PERMANENT_EXCLUSIONS), "program grant exclusions were altered")
+    return path, grant, plan
+
+
+def _find_start_token(root: Path, token: str) -> str | None:
+    runs = program_store_dir(root) / "runs"
+    if not runs.is_dir():
+        return None
+    for path in sorted(runs.iterdir(), key=lambda item: item.name):
+        if not path.is_dir() or not _RUN_ID_RE.fullmatch(path.name):
+            continue
+        _path, grant, _plan = _load_documents(root, path.name)
+        if grant.get("start_token") == token:
+            return path.name
+    return None
+
+
+def start_program(
+    root: Path,
+    plan: object,
+    *,
+    start_token: str,
+    now: str | datetime | None = None,
+    driver_config: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Issue exactly one immutable local grant after a byte-exact re-plan."""
+    root = root.resolve()
+    submitted = _validate_start_plan(plan)
+    _require(start_token == submitted["start_token"], "program start token does not match the submitted plan")
+    request = submitted["request"]
+    _require(bool(submitted["applicable"]), "program start plan is not applicable")
+    observed = _time(now, "now")
+    _require(observed >= _time(str(submitted["request"]["issued_at"]), "issued_at"), "program start plan is not issued yet")
+    _require(observed < _time(str(submitted["request"]["expires_at"]), "expires_at"), "program start plan already expired")
+
+    store = program_store_dir(root)
+    # The race lock sits beside, not inside, the program store.  A stale or
+    # refused first start therefore creates no run/grant/ledger directory.
+    with _lock(_git_dir(root) / "pmo-programs.start.lock"):
+        existing = _find_start_token(root, start_token)
+        if existing is not None:
+            return replay_program(root, existing, now=observed)
+        fresh = build_program_start_plan(
+            root,
+            str(request["program"]),
+            mode=str(request["mode"]),
+            operator=request["operator"],
+            approval_reason=str(request["approval_reason"]),
+            intent_id=str(request["intent_id"]),
+            capabilities=list(request["capabilities"]),
+            budgets=dict(request["budgets"]),
+            issued_at=str(request["issued_at"]),
+            expires_at=str(request["expires_at"]),
+            remote=request["remote"],
+            remote_ref=request["remote_ref"],
+            driver_config=driver_config,
+        )
+        differences = _difference_paths(submitted, fresh)
+        _require(
+            not differences,
+            "program start facts changed before grant issuance at "
+            + ", ".join(differences),
+        )
+        runs = store / "runs"
+        runs.mkdir(parents=True, exist_ok=True, mode=0o700)
+        run_id = "program-" + secrets.token_hex(12)
+        while (runs / run_id).exists():
+            run_id = "program-" + secrets.token_hex(12)
+        grant: dict[str, object] = {
+            "kind": PROGRAM_GRANT_KIND,
+            "schema_version": PROGRAM_RUN_SCHEMA_VERSION,
+            "run_id": run_id,
+            "grant_hash": "",
+            "plan_hash": submitted["plan_hash"],
+            "start_token": submitted["start_token"],
+            "program_selector": request["program"],
+            "program": submitted["program"],
+            "repository": submitted["repository"],
+            "roadmap": submitted["roadmap"],
+            "scope": submitted["scope"],
+            "selection": submitted["selection"],
+            "roster": submitted["roster"],
+            "authority": submitted["authority"],
+            "operator": submitted["approval"]["operator"],  # type: ignore[index]
+            "approval": submitted["approval"],
+            "issued_at": request["issued_at"],
+            "expires_at": request["expires_at"],
+            "revocation_generation": 0,
+            "permanent_exclusions": list(PROGRAM_PERMANENT_EXCLUSIONS),
+        }
+        grant["grant_hash"] = _grant_hash(grant)
+        first = _event_document(
+            run_id, 1, "program_started", 0, observed,
+            {
+                "plan_hash": submitted["plan_hash"],
+                "grant_hash": grant["grant_hash"],
+                "program_bundle_hash": submitted["program"]["bundle_hash"],  # type: ignore[index]
+                "roster_hash": submitted["roster"]["roster_hash"],  # type: ignore[index]
+                "mode": submitted["authority"]["mode"],  # type: ignore[index]
+                "expires_at": request["expires_at"],
+            },
+            None,
+        )
+        temporary = Path(tempfile.mkdtemp(prefix=".program.", dir=str(runs)))
+        try:
+            os.chmod(temporary, 0o700)
+            _write_new(temporary / "plan.json", submitted, 0o400)
+            _write_new(temporary / "grant.json", grant, 0o400)
+            ledger = temporary / "ledger.jsonl"
+            with ledger.open("xb") as handle:
+                os.chmod(ledger, 0o600)
+                handle.write((canonical_json(first) + "\n").encode("utf-8"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, runs / run_id)
+        finally:
+            if temporary.exists():
+                shutil.rmtree(temporary, ignore_errors=True)
+    return replay_program(root, run_id, now=observed)
+
+
+def _events(path: Path, run_id: str) -> list[dict[str, object]]:
+    ledger = path / "ledger.jsonl"
+    try:
+        data = ledger.read_bytes()
+    except OSError as exc:
+        raise DwError(f"cannot read program ledger: {exc}") from exc
+    _require(data.endswith(b"\n"), "program ledger is truncated")
+    result: list[dict[str, object]] = []
+    previous: str | None = None
+    prior_at: datetime | None = None
+    for index, line in enumerate(data.splitlines(), start=1):
+        try:
+            raw = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise DwError(f"program ledger line {index} is invalid JSON") from exc
+        event = _exact(raw, _EVENT_KEYS, f"program ledger event {index}")
+        _require(event["kind"] == PROGRAM_EVENT_KIND and event["schema_version"] == PROGRAM_RUN_SCHEMA_VERSION, "unsupported program ledger event")
+        _require(event["run_id"] == run_id and event["seq"] == index, "program ledger sequence or run id is invalid")
+        _require(event["event"] in _EVENT_DETAIL_KEYS, "program ledger event type is unsupported")
+        _exact(event["detail"], _EVENT_DETAIL_KEYS[str(event["event"])], f"program ledger event {index} detail")
+        _require(event["prev_hash"] == previous, "program ledger hash chain is broken")
+        unsigned = {key: value for key, value in event.items() if key != "event_hash"}
+        _require(event["event_hash"] == _sha(unsigned), "program ledger event hash is invalid")
+        at = _time(str(event["at"]), "event.at")
+        _require(prior_at is None or at >= prior_at, "program ledger timestamps moved backwards")
+        previous = str(event["event_hash"])
+        prior_at = at
+        result.append(event)
+    _require(bool(result), "program ledger is empty")
+    return result
+
+
+def _budget_map(value: object) -> dict[str, int]:
+    _require(isinstance(value, dict), "claim budget must be an object")
+    _require(not (set(value) - set(BUDGET_DEFAULTS)), "claim budget contains an unknown counter")
+    result: dict[str, int] = {}
+    for key, raw in value.items():
+        _require(isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0, f"claim budget {key} must be non-negative")
+        if raw:
+            result[str(key)] = int(raw)
+    return result
+
+
+def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None) -> dict[str, object]:
+    """Validate immutable documents and derive the complete disposable view."""
+    path, grant, _plan = _load_documents(root.resolve(), run_id)
+    events = _events(path, run_id)
+    first = events[0]
+    _require(first["event"] == "program_started", "program ledger does not start with program_started")
+    _require(first["generation"] == 0, "program_started uses the wrong generation")
+    expected_first = {
+        "plan_hash": grant["plan_hash"],
+        "grant_hash": grant["grant_hash"],
+        "program_bundle_hash": grant["program"]["bundle_hash"],  # type: ignore[index]
+        "roster_hash": grant["roster"]["roster_hash"],  # type: ignore[index]
+        "mode": grant["authority"]["mode"],  # type: ignore[index]
+        "expires_at": grant["expires_at"],
+    }
+    _require(first["detail"] == expected_first, "program_started does not match the grant")
+    first_at = _time(str(first["at"]), "program_started.at")
+    _require(
+        _time(str(grant["issued_at"]), "issued_at") <= first_at
+        < _time(str(grant["expires_at"]), "expires_at"),
+        "program_started is outside the grant issuance window",
+    )
+
+    mode = str(grant["authority"]["mode"])  # type: ignore[index]
+    state = "advisory" if mode == "advisory" else "running"
+    generation = int(grant["revocation_generation"])
+    counters = {key: 0 for key in BUDGET_DEFAULTS}
+    active: dict[str, dict[str, object]] = {}
+    completed: list[dict[str, object]] = []
+    claims: list[dict[str, object]] = []
+    controls: list[dict[str, object]] = []
+    selected_stories: set[str] = set()
+    selected_phases: set[int] = set()
+    idempotency_keys: set[str] = set()
+    expected_repository = dict(grant["repository"])
+    expected_roadmap = dict(grant["roadmap"])
+    exhaustion: dict[str, object] | None = None
+    expires = _time(str(grant["expires_at"]), "expires_at")
+
+    for event in events[1:]:
+        detail = event["detail"]
+        event_name = str(event["event"])
+        event_at = _time(str(event["at"]), "event.at")
+        if event_at >= expires and state in {"running", "checkpoint", "paused"}:
+            state = "expired"
+        event_generation = event["generation"]
+        _require(isinstance(event_generation, int) and not isinstance(event_generation, bool), "program event generation is invalid")
+        if event_name == "claim_reserved":
+            _require(event_generation == generation, "claim uses the wrong revocation generation")
+            _require(state == "running", "claim was reserved while program was not running")
+            category = str(detail["category"])
+            _require(category in _CLAIM_RULES, "claim uses an unsupported category")
+            subject = _subject(detail["subject"])
+            _require(not _claim_scope_issues(grant, subject), "claim subject is outside the granted scope")
+            idempotency_key = _safe(detail["idempotency_key"], "claim idempotency key")
+            _require(idempotency_key not in idempotency_keys, "program claim idempotency key was reused")
+            idempotency_keys.add(idempotency_key)
+            capability, decision, _fixed = _CLAIM_RULES[category]
+            _require(detail["capability"] == capability and capability in grant["authority"]["capabilities"], "claim capability differs from its grant/category")  # type: ignore[index]
+            _require(detail["decision"] == decision, "claim decision differs from its category")
+            _text(detail["reason"], "claim reason", 1_000)
+            estimate = _resource_estimate(detail["resource_estimate"])
+            if category == "checkpoint-request":
+                declared_ports = {
+                    str(item["id"])
+                    for item in grant["authority"]["checkpoint_ports"]  # type: ignore[index]
+                    if isinstance(item, dict) and "id" in item
+                }
+                _require(detail["request_port"] in declared_ports, "claim uses an undeclared checkpoint port")
+            else:
+                _require(detail["request_port"] is None, "non-checkpoint claim names a request port")
+            if detail["child_grant_hash"] is not None:
+                _hash(detail["child_grant_hash"], "claim child grant hash")
+                _require(category == "child-grant", "non-child claim names a child grant")
+            else:
+                _require(category != "child-grant", "child-grant claim omits its authority hash")
+            claim_id = str(detail["claim_id"])
+            _require(claim_id not in active and all(item["claim_id"] != claim_id for item in completed), "program claim id was reused")
+            expected_claim_id = "claim-" + hashlib.sha256(
+                f"{run_id}|{idempotency_key}".encode("utf-8")
+            ).hexdigest()[:24]
+            _require(claim_id == expected_claim_id, "program claim id is not deterministic")
+            budget = _budget_map(detail["budget"])
+            expected_budget = _claim_budget(
+                category,
+                subject,
+                estimate,
+                {
+                    "selected_phases": selected_phases,
+                    "selected_stories": selected_stories,
+                },
+            )
+            _require(budget == expected_budget, "claim ledger budget differs from its request")
+            expected_request = {
+                "category": category,
+                "subject": subject,
+                "idempotency_key": idempotency_key,
+                "decision": decision,
+                "reason": detail["reason"],
+                "resource_estimate": estimate,
+                "request_port": detail["request_port"],
+            }
+            _require(detail["request_hash"] == _sha(expected_request), "claim request hash is invalid")
+            for key, amount in budget.items():
+                counters[key] += amount
+                _require(counters[key] <= int(grant["authority"]["budgets"][key]), f"program ledger exceeds {key}")  # type: ignore[index]
+            claim = {
+                "claim_id": claim_id,
+                "idempotency_key": idempotency_key,
+                "request_hash": detail["request_hash"],
+                "category": category,
+                "subject": subject,
+                "capability": capability,
+                "decision": decision,
+                "reason": detail["reason"],
+                "budget": budget,
+                "resource_estimate": estimate,
+                "child_grant_hash": detail["child_grant_hash"],
+                "request_port": detail["request_port"],
+                "reserved_at": event["at"],
+                "status": "active",
+            }
+            active[claim_id] = claim
+            claims.append(claim)
+            if category == "selection":
+                if subject.get("story") is not None:
+                    selected_stories.add(str(subject["story"]))
+                if subject.get("phase") is not None:
+                    selected_phases.add(int(subject["phase"]))
+            if category == "checkpoint-request":
+                state = "checkpoint"
+        elif event_name == "claim_completed":
+            _require(event_generation == generation, "completion uses the wrong revocation generation")
+            claim_id = _safe(detail["claim_id"], "completion claim id")
+            _require(claim_id in active, "completion does not match one active claim")
+            claim = active.pop(claim_id)
+            _require(claim["request_hash"] == detail["request_hash"], "completion request hash differs from claim")
+            _require(detail["result"] in COMPLETION_RESULTS, "completion result is unsupported")
+            _hash(detail["receipt_hash"], "completion receipt hash")
+            _text(detail["reason"], "completion reason", 1_000)
+            fact_binding = _exact(detail["fact_binding"], _FACT_BINDING_KEYS, "claim fact binding")
+            _exact(fact_binding["repository"], _REPOSITORY_KEYS, "claim repository facts")
+            _exact(fact_binding["roadmap"], _ROADMAP_KEYS, "claim roadmap facts")
+            completion = {
+                **claim,
+                "status": str(detail["result"]),
+                "receipt_hash": detail["receipt_hash"],
+                "completion_reason": detail["reason"],
+                "completed_at": event["at"],
+                "fact_binding": detail["fact_binding"],
+            }
+            completed.append(completion)
+            for item in claims:
+                if item["claim_id"] == claim_id:
+                    item.update({
+                        "status": detail["result"],
+                        "receipt_hash": detail["receipt_hash"],
+                        "completed_at": event["at"],
+                    })
+                    break
+            if detail["result"] == "succeeded":
+                expected_repository = dict(fact_binding["repository"])
+                expected_roadmap = dict(fact_binding["roadmap"])
+            if claim["category"] == "checkpoint-request" and state == "checkpoint":
+                state = "running"
+        elif event_name in {"program_paused", "program_resumed", "program_revoked", "program_cancelled"}:
+            _require(detail["from_state"] == state, "program control source state is stale")
+            expected_action = event_name.removeprefix("program_")
+            if expected_action.endswith("d"):
+                expected_action = {"paused": "pause", "resumed": "resume", "revoked": "revoke", "cancelled": "cancel"}[expected_action]
+            _require(detail["action"] == expected_action, "program control action and event differ")
+            _require(state in _CONTROL_ALLOWED_STATES[expected_action], "program control source state is not allowed")
+            _require(detail["decision"] == "approve", "program control event was not approved")
+            _text(detail["reason"], "program control reason", 1_000)
+            _hash(detail["token_hash"], "program control token hash")
+            expected_to_state = {
+                "pause": "paused",
+                "resume": "checkpoint" if any(
+                    claim["category"] == "checkpoint-request"
+                    for claim in active.values()
+                ) else "running",
+                "revoke": "revoked", "cancel": "cancelled",
+            }[expected_action]
+            _require(detail["to_state"] == expected_to_state, "program control target state is invalid")
+            expected_expired = sorted(
+                claim_id for claim_id, claim in active.items()
+                if claim["category"] == "checkpoint-request"
+                and expected_action in {"revoke", "cancel"}
+            )
+            expected_interrupts = sorted(active) if expected_action == "cancel" else []
+            _require(detail["expired_request_ids"] == expected_expired, "program control request-expiry set is invalid")
+            _require(detail["interrupt_claim_ids"] == expected_interrupts, "program control interrupt set is invalid")
+            new_generation = int(detail["new_generation"])
+            if event_name in {"program_revoked", "program_cancelled"}:
+                _require(new_generation == generation + 1, "revocation generation did not increase exactly once")
+            else:
+                _require(new_generation == generation, "pause/resume changed revocation generation")
+            _require(event_generation == new_generation, "program control event uses the wrong generation")
+            generation = new_generation
+            state = str(detail["to_state"])
+            controls.append({"event": event_name, "at": event["at"], **detail})
+        elif event_name == "program_exhausted":
+            _require(event_generation == generation, "program exhaustion uses the wrong generation")
+            _require(state == "running", "program exhausted outside running state")
+            counter = str(detail["counter"])
+            _require(counter in counters, "program exhausted an unknown counter")
+            _hash(detail["request_hash"], "program exhaustion request hash")
+            _require(detail["used"] == counters[counter] and detail["limit"] == grant["authority"]["budgets"][counter], "program exhaustion facts are invalid")  # type: ignore[index]
+            state = "exhausted"
+            exhaustion = dict(detail)
+
+    observed = _time(now, "now")
+    expired = observed >= expires
+    if expired and state in {"running", "checkpoint", "paused"}:
+        state = "expired"
+    outstanding_requests = [
+        {
+            "claim_id": item["claim_id"],
+            "port": item["request_port"],
+            "status": (
+                "expired" if state in {"revoked", "cancelled", "expired", "exhausted"}
+                else "open"
+            ),
+        }
+        for item in active.values()
+        if item["category"] == "checkpoint-request"
+    ]
+    budget_state = {
+        key: {
+            "used": counters[key],
+            "limit": int(grant["authority"]["budgets"][key]),  # type: ignore[index]
+            "remaining": int(grant["authority"]["budgets"][key]) - counters[key],  # type: ignore[index]
+        }
+        for key in BUDGET_DEFAULTS
+    }
+    return {
+        "kind": PROGRAM_PROJECTION_KIND,
+        "schema_version": PROGRAM_RUN_SCHEMA_VERSION,
+        "run_id": run_id,
+        "grant_hash": grant["grant_hash"],
+        "plan_hash": grant["plan_hash"],
+        "program": grant["program"],
+        "mode": mode,
+        "state": state,
+        "generation": generation,
+        "ledger_head": events[-1]["event_hash"],
+        "event_count": len(events),
+        "capabilities": list(grant["authority"]["capabilities"]),  # type: ignore[index]
+        "budgets": budget_state,
+        "scope": grant["scope"],
+        "selection": grant["selection"],
+        "roster": grant["roster"],
+        "expected_repository": expected_repository,
+        "expected_roadmap": expected_roadmap,
+        "claims": claims,
+        "active_claims": sorted(active.values(), key=lambda item: str(item["claim_id"])),
+        "completed_claims": completed,
+        "outstanding_requests": outstanding_requests,
+        "selected_stories": sorted(selected_stories),
+        "selected_phases": sorted(selected_phases),
+        "controls": controls,
+        "exhaustion": exhaustion,
+        "issued_at": grant["issued_at"],
+        "expires_at": grant["expires_at"],
+        "expired": expired,
+        "future_claims_allowed": state == "running" and mode != "advisory",
+        "completion_receipts_allowed": bool(active),
+        "interrupt_claim_ids": (
+            sorted(active) if state in {"revoked", "cancelled"} else []
+        ),
+        "permanent_exclusions": list(grant["permanent_exclusions"]),
+        "starts_work": False,
+        "writes_repository": False,
+        "writes_roadmap": False,
+        "creates_grant": False,
+    }
+
+
+def _append_event(path: Path, event: dict[str, object]) -> None:
+    ledger = path / "ledger.jsonl"
+    with ledger.open("ab") as handle:
+        handle.write((canonical_json(event) + "\n").encode("utf-8"))
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _current_roster_hash(root: Path, driver_config: dict[str, object] | None = None) -> str:
+    config = load_driver_config(root, driver_config)
+    return _sha(driver_inventory(config))
+
+
+def program_freshness_issues(
+    root: Path,
+    grant: dict[str, object],
+    projection: dict[str, object],
+    *,
+    driver_config: dict[str, object] | None = None,
+) -> list[str]:
+    """Re-observe policy, roster, repository, and roadmap grant bindings."""
+    issues: list[str] = []
+    try:
+        compiled = _policy_for_plan(root, str(grant["program_selector"]))
+        if compiled["semantic_hash"] != grant["program"]["semantic_hash"]:  # type: ignore[index]
+            issues.append("program semantic hash changed")
+        if compiled["policy_bundle_hash"] != grant["program"]["policy_bundle_hash"]:  # type: ignore[index]
+            issues.append("program policy bundle changed")
+    except DwError as exc:
+        issues.append(f"program policy cannot be recompiled: {exc.message}")
+    try:
+        if _current_roster_hash(root, driver_config) != grant["roster"]["roster_hash"]:  # type: ignore[index]
+            issues.append("resolved driver roster changed")
+    except DwError as exc:
+        issues.append(f"driver roster cannot be re-observed: {exc.message}")
+    expected_repository = projection["expected_repository"]
+    try:
+        current_repository = _repository_facts(
+            root,
+            expected_repository.get("remote"),  # type: ignore[union-attr]
+            expected_repository.get("remote_ref"),  # type: ignore[union-attr]
+        )
+        for key in _REPOSITORY_KEYS:
+            if current_repository[key] != expected_repository.get(key):  # type: ignore[union-attr]
+                issues.append(f"repository {key} changed")
+    except DwError as exc:
+        issues.append(f"repository cannot be re-observed: {exc.message}")
+    try:
+        plan = build_program_plan(root, str(grant["program_selector"]), driver_config=driver_config)
+        if plan["roadmap"]["snapshot_hash"] != projection["expected_roadmap"]["snapshot_hash"]:  # type: ignore[index]
+            issues.append("roadmap snapshot changed")
+    except DwError as exc:
+        issues.append(f"roadmap cannot be re-observed: {exc.message}")
+    return issues
+
+
+def _subject(value: object) -> dict[str, object]:
+    raw = _exact(value, _SUBJECT_KEYS, "program claim subject")
+    phase = raw["phase"]
+    _require(phase is None or (isinstance(phase, int) and not isinstance(phase, bool) and phase >= 0), "claim subject phase is invalid")
+    story = raw["story"]
+    _require(story is None or (isinstance(story, str) and _REF_RE.fullmatch(story)), "claim subject story is invalid")
+    return {
+        "kind": _safe(raw["kind"], "subject.kind"),
+        "id": _safe(raw["id"], "subject.id", reference=True),
+        "hash": _hash(raw["hash"], "subject.hash"),
+        "phase": phase,
+        "story": story,
+    }
+
+
+def _resource_estimate(value: object) -> dict[str, int]:
+    raw = _exact(value, _RESOURCE_KEYS, "resource estimate")
+    result: dict[str, int] = {}
+    for key in _RESOURCE_KEYS:
+        candidate = raw[key]
+        _require(isinstance(candidate, int) and not isinstance(candidate, bool) and candidate >= 0, f"resource estimate {key} is invalid")
+        result[key] = int(candidate)
+    return result
+
+
+def _claim_budget(
+    category: str,
+    subject: dict[str, object],
+    estimate: dict[str, int],
+    projection: dict[str, object],
+) -> dict[str, int]:
+    budget = dict(_CLAIM_RULES[category][2])
+    if category == "selection":
+        phase = subject["phase"]
+        story = subject["story"]
+        if phase is not None and int(phase) not in projection["selected_phases"]:
+            budget["max_phases"] = 1
+        if story is not None and str(story) in projection["selected_stories"]:
+            budget["max_stories"] = 0
+    resource_map = {
+        "artifact_bytes": "max_artifact_bytes",
+        "tokens": "max_tokens",
+        "observed_cost_microunits": "max_observed_cost_microunits",
+    }
+    for source, target in resource_map.items():
+        if estimate[source]:
+            budget[target] = budget.get(target, 0) + estimate[source]
+    return {key: amount for key, amount in budget.items() if amount}
+
+
+def _binding(projection: dict[str, object], observed: datetime) -> dict[str, object]:
+    return {
+        "grant_hash": projection["grant_hash"],
+        "ledger_head": projection["ledger_head"],
+        "generation": projection["generation"],
+        "state": projection["state"],
+        "observed_at": _format_time(observed),
+    }
+
+
+def validate_child_grant(value: object) -> dict[str, object]:
+    grant = _exact(value, _CHILD_GRANT_KEYS, "program child grant")
+    _require(grant["kind"] == PROGRAM_CHILD_GRANT_KIND and grant["schema_version"] == PROGRAM_RUN_SCHEMA_VERSION, "unsupported child grant")
+    expected = _sha({key: item for key, item in grant.items() if key != "grant_hash"})
+    _require(grant["grant_hash"] == expected, "child grant hash is invalid")
+    role = _exact(grant["role"], _SEAT_KEYS, "program child role")
+    _exact(role["execution"], _EXECUTION_KEYS, "program child role execution")
+    _exact(grant["repository"], _REPOSITORY_KEYS, "program child repository")
+    _exact(grant["roadmap"], _ROADMAP_KEYS, "program child roadmap")
+    _normalize_capabilities(grant["capabilities"])
+    _budget_map(grant["budgets"])
+    exclusions = grant["permanent_exclusions"]
+    _require(
+        isinstance(exclusions, list)
+        and set(PROGRAM_PERMANENT_EXCLUSIONS) <= set(exclusions)
+        and _NON_DELEGABLE <= set(exclusions),
+        "child grant permanent exclusions are incomplete",
+    )
+    _require(grant["starts_work"] is False and grant["writes_state"] is False, "child grant preview effects must be false")
+    return grant
+
+
+def derive_child_grant(
+    root: Path,
+    run_id: str,
+    *,
+    role_address: str,
+    node_address: str,
+    capabilities: list[str],
+    budgets: dict[str, int],
+    now: str | datetime | None = None,
+    driver_config: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Derive a non-stored strict intersection for one declared child."""
+    observed = _time(now, "now")
+    _path, grant, _plan = _load_documents(root.resolve(), run_id)
+    projection = replay_program(root, run_id, now=observed)
+    _require(projection["state"] == "running" and projection["mode"] != "advisory", "program does not currently permit child authority")
+    freshness = program_freshness_issues(root, grant, projection, driver_config=driver_config)
+    _require(not freshness, "program grant is stale: " + "; ".join(freshness))
+    role = next(
+        (seat for seat in grant["roster"]["seats"] if seat["address"] == role_address),  # type: ignore[index]
+        None,
+    )
+    _require(isinstance(role, dict), "child role address is not assigned by the grant")
+    requested = _normalize_capabilities(capabilities)
+    allowed = set(grant["authority"]["child_capability_ceiling"]) & set(role["authority_ceiling"])  # type: ignore[index]
+    _require(set(requested) <= allowed, "child capabilities exceed the program/role intersection")
+    _require(not (set(requested) & _NON_DELEGABLE), "child grant contains a non-delegable rail")
+    _require(bool(requested), "child grant needs at least one capability")
+    _safe(node_address, "node_address", reference=True)
+    normalized_budgets = _budget_map(budgets)
+    _require(bool(normalized_budgets), "child grant needs finite local budgets")
+    for key, amount in normalized_budgets.items():
+        _require(amount > 0, f"child budget {key} must be positive")
+        _require(amount <= projection["budgets"][key]["remaining"], f"child budget {key} exceeds remaining program authority")  # type: ignore[index]
+    unsigned = {
+        "kind": PROGRAM_CHILD_GRANT_KIND,
+        "schema_version": PROGRAM_RUN_SCHEMA_VERSION,
+        "parent_run_id": run_id,
+        "parent_grant_hash": grant["grant_hash"],
+        "parent_ledger_head": projection["ledger_head"],
+        "generation": projection["generation"],
+        "role": {key: role[key] for key in _SEAT_KEYS},
+        "node_address": node_address,
+        "repository": projection["expected_repository"],
+        "roadmap": projection["expected_roadmap"],
+        "capabilities": requested,
+        "budgets": normalized_budgets,
+        "expires_at": grant["expires_at"],
+        "permanent_exclusions": sorted(set(PROGRAM_PERMANENT_EXCLUSIONS) | _NON_DELEGABLE),
+        "starts_work": False,
+        "writes_state": False,
+    }
+    return {**unsigned, "grant_hash": _sha(unsigned)}
+
+
+def _claim_scope_issues(
+    grant: dict[str, object], subject: dict[str, object]
+) -> list[str]:
+    scope = grant["scope"]
+    _require(isinstance(scope, dict), "program grant scope is invalid")
+    issues: list[str] = []
+    phase = subject["phase"]
+    story = subject["story"]
+    if phase is not None and phase not in scope.get("phases", []):
+        issues.append(f"phase {phase} is outside the granted roadmap scope")
+    if story is not None and story not in scope.get("story_ids", []):
+        issues.append(f"story {story} is outside the granted roadmap scope")
+    return issues
+
+
+def _derived_child_for_claim(
+    root: Path,
+    run_id: str,
+    child: dict[str, object],
+    *,
+    now: datetime,
+    driver_config: dict[str, object] | None,
+) -> dict[str, object]:
+    role = child["role"]
+    _require(isinstance(role, dict), "child grant role is invalid")
+    return derive_child_grant(
+        root,
+        run_id,
+        role_address=str(role["address"]),
+        node_address=str(child["node_address"]),
+        capabilities=list(child["capabilities"]),
+        budgets=dict(child["budgets"]),
+        now=now,
+        driver_config=driver_config,
+    )
+
+
+def build_program_claim_preview(
+    root: Path,
+    run_id: str,
+    *,
+    category: str,
+    subject: object,
+    idempotency_key: str,
+    reason: str,
+    resource_estimate: object | None = None,
+    request_port: str | None = None,
+    child_grant: dict[str, object] | None = None,
+    now: str | datetime | None = None,
+    driver_config: dict[str, object] | None = None,
+) -> dict[str, object]:
+    observed = _time(now, "now")
+    _require(category in _CLAIM_RULES, "unsupported program claim category")
+    normalized_subject = _subject(subject)
+    idem = _safe(idempotency_key, "idempotency_key")
+    normalized_reason = _text(reason, "claim reason", 1_000)
+    estimate = _resource_estimate(resource_estimate or {
+        "artifact_bytes": 0, "tokens": 0, "observed_cost_microunits": 0,
+    })
+    if request_port is not None:
+        _safe(request_port, "request_port", reference=True)
+    if category == "checkpoint-request":
+        _require(request_port is not None, "checkpoint request needs a typed port")
+    else:
+        _require(request_port is None, "only checkpoint requests may name a request port")
+    if category == "child-grant":
+        _require(child_grant is not None, "child-grant claim needs one derived child grant")
+        validate_child_grant(child_grant)
+    else:
+        _require(child_grant is None, "non-child claim cannot carry child authority")
+
+    _path, grant, _plan = _load_documents(root.resolve(), run_id)
+    projection = replay_program(root, run_id, now=observed)
+    capability, decision, _fixed = _CLAIM_RULES[category]
+    issues: list[dict[str, str]] = []
+    if projection["state"] != "running" or projection["mode"] == "advisory":
+        issues.append({"code": "grant-inactive", "message": f"program state {projection['state']} cannot reserve a claim"})
+    if capability not in projection["capabilities"]:
+        issues.append({"code": "capability-denied", "message": f"program grant lacks {capability}"})
+    for message in _claim_scope_issues(grant, normalized_subject):
+        issues.append({"code": "scope-violation", "message": message})
+    if category == "checkpoint-request":
+        declared_ports = {
+            str(item["id"])
+            for item in grant["authority"]["checkpoint_ports"]  # type: ignore[index]
+            if isinstance(item, dict) and "id" in item
+        }
+        if request_port not in declared_ports:
+            issues.append({"code": "request-port-denied", "message": "checkpoint request port is not declared by the grant"})
+    for message in program_freshness_issues(root, grant, projection, driver_config=driver_config):
+        issues.append({"code": "program-stale", "message": message})
+    budget = _claim_budget(category, normalized_subject, estimate, projection)
+    exhaustion: dict[str, object] | None = None
+    for key, amount in budget.items():
+        state = projection["budgets"][key]
+        if amount > state["remaining"]:
+            exhaustion = {"counter": key, "used": state["used"], "limit": state["limit"]}
+            issues.append({"code": "budget-exhausted", "message": f"claim would exceed {key}"})
+            break
+    if child_grant is not None:
+        if child_grant["parent_ledger_head"] != projection["ledger_head"] or child_grant["generation"] != projection["generation"]:
+            issues.append({"code": "child-grant-stale", "message": "derived child grant no longer matches the program ledger"})
+        try:
+            expected_child = _derived_child_for_claim(
+                root.resolve(), run_id, child_grant, now=observed,
+                driver_config=driver_config,
+            )
+            if expected_child != child_grant:
+                issues.append({"code": "child-grant-denied", "message": "child grant differs from the mechanical authority intersection"})
+        except DwError as exc:
+            issues.append({"code": "child-grant-denied", "message": exc.message})
+    request = {
+        "category": category,
+        "subject": normalized_subject,
+        "idempotency_key": idem,
+        "decision": decision,
+        "reason": normalized_reason,
+        "resource_estimate": estimate,
+        "request_port": request_port,
+    }
+    unsigned = {
+        "kind": PROGRAM_CLAIM_PREVIEW_KIND,
+        "schema_version": PROGRAM_RUN_SCHEMA_VERSION,
+        "run_id": run_id,
+        "applicable": not issues,
+        "issues": issues,
+        "request": request,
+        "binding": _binding(projection, observed),
+        "budget": budget,
+        "child_grant": child_grant,
+        "exhaustion": exhaustion,
+        "starts_work": False,
+        "writes_state": False,
+        "dispatches_child": False,
+        "mutates_repository": False,
+        "mutates_roadmap": False,
+    }
+    return {**unsigned, "claim_token": _sha(unsigned)}
+
+
+def _validate_claim_preview(value: object) -> dict[str, object]:
+    preview = _exact(value, _CLAIM_PREVIEW_KEYS, "program claim preview")
+    _require(preview["kind"] == PROGRAM_CLAIM_PREVIEW_KIND and preview["schema_version"] == PROGRAM_RUN_SCHEMA_VERSION, "unsupported program claim preview")
+    request = _exact(preview["request"], _CLAIM_REQUEST_KEYS, "program claim request")
+    category = request["category"]
+    _require(category in _CLAIM_RULES, "unsupported program claim category")
+    _subject(request["subject"])
+    _safe(request["idempotency_key"], "idempotency_key")
+    _require(request["decision"] == _CLAIM_RULES[str(category)][1], "program claim decision differs from its contracted category")
+    _text(request["reason"], "claim reason", 1_000)
+    _resource_estimate(request["resource_estimate"])
+    if category == "checkpoint-request":
+        _safe(request["request_port"], "request_port", reference=True)
+    else:
+        _require(request["request_port"] is None, "only checkpoint requests may name a request port")
+    _exact(preview["binding"], _BINDING_KEYS, "program claim binding")
+    _budget_map(preview["budget"])
+    if category == "child-grant":
+        _require(preview["child_grant"] is not None, "child-grant claim needs derived authority")
+        validate_child_grant(preview["child_grant"])
+    else:
+        _require(preview["child_grant"] is None, "non-child claim cannot carry child authority")
+    _require(isinstance(preview["applicable"], bool) and isinstance(preview["issues"], list), "program claim applicability is invalid")
+    for effect in ("starts_work", "writes_state", "dispatches_child", "mutates_repository", "mutates_roadmap"):
+        _require(preview[effect] is False, f"program claim preview {effect} must be false")
+    unsigned = {key: item for key, item in preview.items() if key != "claim_token"}
+    _require(preview["claim_token"] == _sha(unsigned), "program claim token is invalid")
+    return preview
+
+
+def apply_program_claim(
+    root: Path,
+    preview: object,
+    *,
+    claim_token: str,
+    now: str | datetime | None = None,
+    driver_config: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Reserve exactly one ledger claim; this still dispatches or mutates nothing."""
+    submitted = _validate_claim_preview(preview)
+    _require(claim_token == submitted["claim_token"], "claim token does not match preview")
+    observed = _time(now, "now")
+    run_id = str(submitted["run_id"])
+    path, grant, _plan = _load_documents(root.resolve(), run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        request = submitted["request"]
+        request_hash = _sha(request)
+        duplicate = next(
+            (item for item in projection["claims"] if item["idempotency_key"] == request["idempotency_key"]),
+            None,
+        )
+        if duplicate is not None:
+            _require(duplicate["request_hash"] == request_hash, "idempotency key was reused for a different program claim")
+            return {**projection, "claim": duplicate, "idempotent": True}
+        binding = submitted["binding"]
+        _require(
+            binding["grant_hash"] == projection["grant_hash"]
+            and binding["ledger_head"] == projection["ledger_head"]
+            and binding["generation"] == projection["generation"]
+            and binding["state"] == projection["state"],
+            "program claim token is stale",
+        )
+        _require(projection["state"] == "running" and projection["mode"] != "advisory", "program grant does not permit a new claim")
+        freshness = program_freshness_issues(root, grant, projection, driver_config=driver_config)
+        _require(not freshness, "program claim facts are stale: " + "; ".join(freshness))
+        category = str(request["category"])
+        capability = _CLAIM_RULES[category][0]
+        _require(capability in projection["capabilities"], "program claim capability is no longer granted")
+        scope_issues = _claim_scope_issues(grant, request["subject"])
+        _require(not scope_issues, "program claim is outside scope: " + "; ".join(scope_issues))
+        if category == "checkpoint-request":
+            declared_ports = {
+                str(item["id"])
+                for item in grant["authority"]["checkpoint_ports"]  # type: ignore[index]
+                if isinstance(item, dict) and "id" in item
+            }
+            _require(request["request_port"] in declared_ports, "checkpoint request port is not declared by the grant")
+        budget = _budget_map(submitted["budget"])
+        expected_budget = _claim_budget(
+            category,
+            request["subject"],
+            request["resource_estimate"],
+            projection,
+        )
+        _require(budget == expected_budget, "program claim budget differs from the mechanical reservation")
+        child = submitted["child_grant"]
+        if isinstance(child, dict):
+            expected_child = _derived_child_for_claim(
+                root.resolve(), run_id, child, now=observed,
+                driver_config=driver_config,
+            )
+            _require(child == expected_child, "child grant differs from the mechanical authority intersection")
+        if not submitted["applicable"]:
+            exhaustion = submitted["exhaustion"]
+            issue_codes = {
+                str(item.get("code"))
+                for item in submitted["issues"]
+                if isinstance(item, dict)
+            }
+            _require(
+                isinstance(exhaustion, dict)
+                and issue_codes == {"budget-exhausted"},
+                "only a purely budget-exhausted claim may append exhaustion",
+            )
+            counter = str(exhaustion["counter"])
+            _require(
+                counter in budget
+                and budget[counter] > projection["budgets"][counter]["remaining"]
+                and exhaustion["used"] == projection["budgets"][counter]["used"]
+                and exhaustion["limit"] == projection["budgets"][counter]["limit"],
+                "program exhaustion preview does not match current budget facts",
+            )
+            event = _event_document(
+                run_id, projection["event_count"] + 1, "program_exhausted",
+                int(projection["generation"]), observed,
+                {
+                    "counter": exhaustion["counter"],
+                    "used": exhaustion["used"],
+                    "limit": exhaustion["limit"],
+                    "request_hash": request_hash,
+                },
+                str(projection["ledger_head"]),
+            )
+            _append_event(path, event)
+            return {**replay_program(root, run_id, now=observed), "claim": None, "idempotent": False}
+        for key, amount in budget.items():
+            _require(amount <= projection["budgets"][key]["remaining"], f"program claim budget {key} is exhausted")
+        child_hash = child["grant_hash"] if isinstance(child, dict) else None
+        claim_id = "claim-" + hashlib.sha256(
+            f"{run_id}|{request['idempotency_key']}".encode("utf-8")
+        ).hexdigest()[:24]
+        event = _event_document(
+            run_id, projection["event_count"] + 1, "claim_reserved",
+            int(projection["generation"]), observed,
+            {
+                "claim_id": claim_id,
+                "idempotency_key": request["idempotency_key"],
+                "request_hash": request_hash,
+                "category": request["category"],
+                "subject": request["subject"],
+                "capability": capability,
+                "decision": request["decision"],
+                "reason": request["reason"],
+                "budget": budget,
+                "resource_estimate": request["resource_estimate"],
+                "child_grant_hash": child_hash,
+                "request_port": request["request_port"],
+            },
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    after = replay_program(root, run_id, now=observed)
+    claim = next(item for item in after["claims"] if item["claim_id"] == claim_id)
+    return {**after, "claim": claim, "idempotent": False}
+
+
+def _completion_fact_binding(
+    root: Path,
+    grant: dict[str, object],
+    projection: dict[str, object],
+) -> tuple[dict[str, object], list[dict[str, str]]]:
+    issues: list[dict[str, str]] = []
+    repository = _repository_facts(
+        root,
+        projection["expected_repository"].get("remote"),  # type: ignore[union-attr]
+        projection["expected_repository"].get("remote_ref"),  # type: ignore[union-attr]
+    )
+    try:
+        current_plan = build_program_plan(root, str(grant["program_selector"]))
+        roadmap = {
+            "project": str(current_plan["roadmap"]["project"]),
+            "snapshot_hash": str(current_plan["roadmap"]["snapshot_hash"]),
+            "healthy": bool(current_plan["roadmap"]["healthy"]),
+            "warning_count": len(current_plan["roadmap"].get("warnings", [])),
+        }
+    except DwError:
+        roadmap = dict(projection["expected_roadmap"])
+        issues.append({"code": "roadmap-unobservable", "message": "completion cannot re-observe the program roadmap"})
+    return {"repository": repository, "roadmap": roadmap}, issues
+
+
+def build_program_completion_preview(
+    root: Path,
+    run_id: str,
+    *,
+    claim_id: str,
+    result: str,
+    receipt_hash: str,
+    reason: str,
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    observed = _time(now, "now")
+    _safe(claim_id, "claim_id")
+    _require(result in COMPLETION_RESULTS, "unsupported program claim result")
+    _hash(receipt_hash, "receipt_hash")
+    normalized_reason = _text(reason, "completion reason", 1_000)
+    root = root.resolve()
+    _path, grant, _plan = _load_documents(root, run_id)
+    projection = replay_program(root, run_id, now=observed)
+    claim = next((item for item in projection["active_claims"] if item["claim_id"] == claim_id), None)
+    issues: list[dict[str, str]] = []
+    if claim is None:
+        issues.append({"code": "claim-not-active", "message": "completion names no active program claim"})
+    fact_binding, observation_issues = _completion_fact_binding(root, grant, projection)
+    issues.extend(observation_issues)
+    request = {
+        "claim_id": claim_id,
+        "result": result,
+        "receipt_hash": receipt_hash,
+        "reason": normalized_reason,
+    }
+    unsigned = {
+        "kind": PROGRAM_COMPLETION_PREVIEW_KIND,
+        "schema_version": PROGRAM_RUN_SCHEMA_VERSION,
+        "run_id": run_id,
+        "applicable": not issues,
+        "issues": issues,
+        "request": request,
+        "binding": _binding(projection, observed),
+        "fact_binding": fact_binding,
+        "starts_work": False,
+        "writes_state": False,
+        "mutates_repository": False,
+        "mutates_roadmap": False,
+    }
+    return {**unsigned, "completion_token": _sha(unsigned)}
+
+
+def _validate_completion_preview(value: object) -> dict[str, object]:
+    preview = _exact(value, _COMPLETION_PREVIEW_KEYS, "program completion preview")
+    _require(preview["kind"] == PROGRAM_COMPLETION_PREVIEW_KIND and preview["schema_version"] == PROGRAM_RUN_SCHEMA_VERSION, "unsupported completion preview")
+    request = _exact(preview["request"], _COMPLETION_REQUEST_KEYS, "completion request")
+    _safe(request["claim_id"], "claim_id")
+    _require(request["result"] in COMPLETION_RESULTS, "unsupported program claim result")
+    _hash(request["receipt_hash"], "receipt_hash")
+    _text(request["reason"], "completion reason", 1_000)
+    _exact(preview["binding"], _BINDING_KEYS, "completion binding")
+    binding = _exact(preview["fact_binding"], _FACT_BINDING_KEYS, "completion fact binding")
+    _exact(binding["repository"], _REPOSITORY_KEYS, "completion repository facts")
+    _exact(binding["roadmap"], _ROADMAP_KEYS, "completion roadmap facts")
+    _require(isinstance(preview["applicable"], bool) and isinstance(preview["issues"], list), "program completion applicability is invalid")
+    for effect in ("starts_work", "writes_state", "mutates_repository", "mutates_roadmap"):
+        _require(preview[effect] is False, f"program completion preview {effect} must be false")
+    unsigned = {key: item for key, item in preview.items() if key != "completion_token"}
+    _require(preview["completion_token"] == _sha(unsigned), "completion token is invalid")
+    return preview
+
+
+def apply_program_completion(
+    root: Path,
+    preview: object,
+    *,
+    completion_token: str,
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    """Record one bounded receipt, even after revocation, for an active claim."""
+    submitted = _validate_completion_preview(preview)
+    _require(completion_token == submitted["completion_token"], "completion token does not match preview")
+    _require(bool(submitted["applicable"]), "program completion preview is not applicable")
+    observed = _time(now, "now")
+    run_id = str(submitted["run_id"])
+    root = root.resolve()
+    path, grant, _plan = _load_documents(root, run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        binding = submitted["binding"]
+        _require(
+            binding["grant_hash"] == projection["grant_hash"]
+            and binding["ledger_head"] == projection["ledger_head"]
+            and binding["generation"] == projection["generation"]
+            and binding["state"] == projection["state"],
+            "program completion token is stale",
+        )
+        request = submitted["request"]
+        claim = next((item for item in projection["active_claims"] if item["claim_id"] == request["claim_id"]), None)
+        _require(claim is not None, "program claim is no longer active")
+        current_facts, observation_issues = _completion_fact_binding(root, grant, projection)
+        _require(not observation_issues, "program completion facts cannot be observed")
+        _require(submitted["fact_binding"] == current_facts, "program completion facts changed after preview")
+        event = _event_document(
+            run_id, projection["event_count"] + 1, "claim_completed",
+            int(projection["generation"]), observed,
+            {
+                "claim_id": request["claim_id"],
+                "request_hash": claim["request_hash"],
+                "result": request["result"],
+                "receipt_hash": request["receipt_hash"],
+                "reason": request["reason"],
+                "fact_binding": submitted["fact_binding"],
+            },
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    return replay_program(root, run_id, now=observed)
+
+
+def _control_effect(projection: dict[str, object], action: str) -> dict[str, object]:
+    to_state = {
+        "pause": "paused",
+        "resume": "checkpoint" if projection["outstanding_requests"] else "running",
+        "revoke": "revoked", "cancel": "cancelled",
+    }[action]
+    new_generation = int(projection["generation"]) + (1 if action in {"revoke", "cancel"} else 0)
+    return {
+        "from_state": projection["state"],
+        "to_state": to_state,
+        "new_generation": new_generation,
+        "expired_request_ids": sorted(
+            item["claim_id"] for item in projection["outstanding_requests"]
+            if action in {"revoke", "cancel"}
+        ),
+        "interrupt_claim_ids": sorted(
+            item["claim_id"] for item in projection["active_claims"]
+            if action == "cancel"
+        ),
+    }
+
+
+def build_program_control_preview(
+    root: Path,
+    run_id: str,
+    *,
+    action: str,
+    decision: str,
+    reason: str,
+    now: str | datetime | None = None,
+    driver_config: dict[str, object] | None = None,
+) -> dict[str, object]:
+    observed = _time(now, "now")
+    _require(action in CONTROL_ACTIONS, "unsupported program control action")
+    _require(decision in CONTROL_DECISIONS, "unsupported program control decision")
+    normalized_reason = _text(reason, "control reason", 1_000)
+    _path, grant, _plan = _load_documents(root.resolve(), run_id)
+    projection = replay_program(root, run_id, now=observed)
+    issues: list[dict[str, str]] = []
+    if projection["state"] not in _CONTROL_ALLOWED_STATES[action]:
+        issues.append({"code": "control-state", "message": f"cannot {action} program state {projection['state']}"})
+    if decision != "approve":
+        issues.append({"code": "control-denied", "message": "denied control previews do not mutate the ledger"})
+    if action == "resume":
+        for message in program_freshness_issues(root, grant, projection, driver_config=driver_config):
+            issues.append({"code": "program-stale", "message": message})
+    request = {"action": action, "decision": decision, "reason": normalized_reason}
+    effect = _control_effect(projection, action)
+    unsigned = {
+        "kind": PROGRAM_CONTROL_PREVIEW_KIND,
+        "schema_version": PROGRAM_RUN_SCHEMA_VERSION,
+        "run_id": run_id,
+        "applicable": not issues,
+        "issues": issues,
+        "request": request,
+        "binding": _binding(projection, observed),
+        "effect": effect,
+        "starts_work": False,
+        "writes_state": False,
+        "dispatches_child": False,
+        "mutates_repository": False,
+        "mutates_roadmap": False,
+    }
+    return {**unsigned, "control_token": _sha(unsigned)}
+
+
+def _validate_control_preview(value: object) -> dict[str, object]:
+    preview = _exact(value, _CONTROL_PREVIEW_KEYS, "program control preview")
+    _require(preview["kind"] == PROGRAM_CONTROL_PREVIEW_KIND and preview["schema_version"] == PROGRAM_RUN_SCHEMA_VERSION, "unsupported control preview")
+    request = _exact(preview["request"], _CONTROL_REQUEST_KEYS, "control request")
+    _require(request["action"] in CONTROL_ACTIONS, "unsupported program control action")
+    _require(request["decision"] in CONTROL_DECISIONS, "unsupported program control decision")
+    _text(request["reason"], "control reason", 1_000)
+    _exact(preview["binding"], _BINDING_KEYS, "control binding")
+    _exact(preview["effect"], _CONTROL_EFFECT_KEYS, "program control effect")
+    _require(isinstance(preview["applicable"], bool) and isinstance(preview["issues"], list), "program control applicability is invalid")
+    for effect in ("starts_work", "writes_state", "dispatches_child", "mutates_repository", "mutates_roadmap"):
+        _require(preview[effect] is False, f"program control preview {effect} must be false")
+    unsigned = {key: item for key, item in preview.items() if key != "control_token"}
+    _require(preview["control_token"] == _sha(unsigned), "control token is invalid")
+    return preview
+
+
+def apply_program_control(
+    root: Path,
+    preview: object,
+    *,
+    control_token: str,
+    now: str | datetime | None = None,
+    driver_config: dict[str, object] | None = None,
+) -> dict[str, object]:
+    submitted = _validate_control_preview(preview)
+    _require(control_token == submitted["control_token"], "control token does not match preview")
+    _require(bool(submitted["applicable"]), "program control preview is not applicable")
+    observed = _time(now, "now")
+    run_id = str(submitted["run_id"])
+    path, grant, _plan = _load_documents(root.resolve(), run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        binding = submitted["binding"]
+        _require(
+            binding["grant_hash"] == projection["grant_hash"]
+            and binding["ledger_head"] == projection["ledger_head"]
+            and binding["generation"] == projection["generation"]
+            and binding["state"] == projection["state"],
+            "program control token is stale",
+        )
+        request = submitted["request"]
+        action = str(request["action"])
+        _require(request["decision"] == "approve", "only an approved control decision may mutate the ledger")
+        _require(projection["state"] in _CONTROL_ALLOWED_STATES[action], f"cannot {action} program state {projection['state']}")
+        if action == "resume":
+            freshness = program_freshness_issues(root, grant, projection, driver_config=driver_config)
+            _require(not freshness, "program resume facts are stale: " + "; ".join(freshness))
+        effect = submitted["effect"]
+        _require(effect == _control_effect(projection, action), "program control effect differs from current authority state")
+        event_name = {
+            "pause": "program_paused", "resume": "program_resumed",
+            "revoke": "program_revoked", "cancel": "program_cancelled",
+        }[action]
+        event = _event_document(
+            run_id, projection["event_count"] + 1, event_name,
+            int(effect["new_generation"]), observed,
+            {
+                "action": action,
+                "reason": request["reason"],
+                "decision": request["decision"],
+                "token_hash": _sha({"control_token": control_token}),
+                "from_state": effect["from_state"],
+                "to_state": effect["to_state"],
+                "new_generation": effect["new_generation"],
+                "expired_request_ids": effect["expired_request_ids"],
+                "interrupt_claim_ids": effect["interrupt_claim_ids"],
+            },
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    return replay_program(root, run_id, now=observed)
+
+
+def program_run_inventory(root: Path, *, now: str | datetime | None = None) -> dict[str, object]:
+    """Return a pure inventory; an absent program store is healthy and empty."""
+    root = root.resolve()
+    store = program_store_dir(root)
+    runs_dir = store / "runs"
+    runs: list[dict[str, object]] = []
+    healthy = True
+    if runs_dir.is_dir():
+        for path in sorted(runs_dir.iterdir(), key=lambda item: item.name):
+            if not path.is_dir() or not _RUN_ID_RE.fullmatch(path.name):
+                continue
+            try:
+                projection = replay_program(root, path.name, now=now)
+                runs.append({
+                    "run_id": path.name,
+                    "program": projection["program"]["slug"],
+                    "mode": projection["mode"],
+                    "state": projection["state"],
+                    "grant_hash": projection["grant_hash"],
+                    "ledger_head": projection["ledger_head"],
+                })
+            except DwError as exc:
+                healthy = False
+                runs.append({
+                    "run_id": path.name, "program": None, "mode": None,
+                    "state": "corrupt", "grant_hash": None,
+                    "ledger_head": None, "error": exc.message,
+                })
+    return {
+        "kind": PROGRAM_RUN_LIST_KIND,
+        "schema_version": PROGRAM_RUN_SCHEMA_VERSION,
+        "runs": runs,
+        "healthy": healthy,
+        "starts_work": False,
+        "writes_state": False,
+        "creates_grant": False,
+    }

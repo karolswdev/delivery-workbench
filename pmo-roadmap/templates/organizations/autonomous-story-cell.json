@@ -28,7 +28,7 @@
       "profile": "verifier-primary",
       "duties": ["verifier"],
       "workspace_domain": "verifier-primary",
-      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "capability_ceiling": ["agent:dispatch", "verdict:issue"],
       "max_concurrency": 1,
       "weight": 2
     },
@@ -37,7 +37,7 @@
       "profile": "verifier-backup",
       "duties": ["verifier"],
       "workspace_domain": "verifier-backup",
-      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "capability_ceiling": ["agent:dispatch", "verdict:issue"],
       "max_concurrency": 1,
       "weight": 1
     },
@@ -73,7 +73,7 @@
       "profile": "judge",
       "duties": ["judge"],
       "workspace_domain": "judge",
-      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "capability_ceiling": ["agent:dispatch", "verdict:issue", "council:decide", "obligation:record"],
       "max_concurrency": 1,
       "weight": 1
     },
@@ -82,7 +82,7 @@
       "profile": "meta-verifier",
       "duties": ["meta-verifier"],
       "workspace_domain": "meta-verifier",
-      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "capability_ceiling": ["agent:dispatch", "verdict:issue"],
       "max_concurrency": 1,
       "weight": 1
     },
@@ -91,7 +91,7 @@
       "profile": "master-architect",
       "duties": ["master-architect"],
       "workspace_domain": "master-architect",
-      "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+      "capability_ceiling": ["agent:dispatch", "verdict:issue"],
       "max_concurrency": 1,
       "weight": 1
     }
@@ -151,7 +151,7 @@
           "pool": "verifiers",
           "required": true,
           "cardinality": 1,
-          "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+          "capability_ceiling": ["agent:dispatch", "verdict:issue"],
           "driver_capabilities": ["repository-read"],
           "workspace": "read-only",
           "context": {
@@ -287,7 +287,7 @@
           "pool": "judges",
           "required": false,
           "cardinality": 1,
-          "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+          "capability_ceiling": ["agent:dispatch", "verdict:issue", "council:decide", "obligation:record"],
           "driver_capabilities": ["repository-read"],
           "workspace": "read-only",
           "context": {
@@ -321,7 +321,7 @@
           "pool": "meta-verifiers",
           "required": false,
           "cardinality": 1,
-          "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+          "capability_ceiling": ["agent:dispatch", "verdict:issue"],
           "driver_capabilities": ["repository-read"],
           "workspace": "read-only",
           "context": {
@@ -355,7 +355,7 @@
           "pool": "architects",
           "required": false,
           "cardinality": 1,
-          "capability_ceiling": ["agent:dispatch", "certification:verdict"],
+          "capability_ceiling": ["agent:dispatch", "verdict:issue"],
           "driver_capabilities": ["repository-read"],
           "workspace": "read-only",
           "context": {

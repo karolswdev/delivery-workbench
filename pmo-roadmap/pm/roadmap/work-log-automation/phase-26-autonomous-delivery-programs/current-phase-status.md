@@ -76,7 +76,7 @@ acts.
   deliberative-council decision separately proves its declared outcome
   authority (`rule`, preassigned `decider_seat`, or external checkpoint), exact
   execution provenance, and an explicit carried-obligations list (WLA-26-07).
-- [ ] Advisory, checkpointed, and continuous modes are exact profiles of one
+- [x] Advisory, checkpointed, and continuous modes are exact profiles of one
   finite, expiring, revocable program grant with story/phase/round/agent/check/
   nudge/integration/wall budgets and separately named evidence, certification,
   commit, push, obligation-disposition, and roadmap capabilities; the grant is
@@ -118,7 +118,7 @@ acts.
 | WLA-26-05 | Run debates, councils, and meta-verification | done | [story-05-run-debates-councils-and-meta-verification](./story-05-run-debates-councils-and-meta-verification.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-26-06 | Build the visual program and workflow studio | done | [story-06-build-the-visual-program-and-workflow-studio](./story-06-build-the-visual-program-and-workflow-studio.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-26-07 | Turn quality and evidence into governed verdicts | done | [story-07-turn-quality-and-evidence-into-governed-verdicts](./story-07-turn-quality-and-evidence-into-governed-verdicts.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-26-08 | Grant continuous program authority explicitly | backlog | [story-08-grant-continuous-program-authority-explicitly](./story-08-grant-continuous-program-authority-explicitly.md) | - |
+| WLA-26-08 | Grant continuous program authority explicitly | done | [story-08-grant-continuous-program-authority-explicitly](./story-08-grant-continuous-program-authority-explicitly.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-26-09 | Conduct and recover hierarchical multi-phase programs | backlog | [story-09-conduct-and-recover-hierarchical-multi-phase-programs](./story-09-conduct-and-recover-hierarchical-multi-phase-programs.md) | - |
 | WLA-26-10 | Integrate work and advance exact roadmap rails | backlog | [story-10-integrate-work-and-advance-exact-roadmap-rails](./story-10-integrate-work-and-advance-exact-roadmap-rails.md) | - |
 | WLA-26-11 | Operate the autonomous organization across every surface | backlog | [story-11-operate-the-autonomous-organization-across-every-surface](./story-11-operate-the-autonomous-organization-across-every-surface.md) | - |
@@ -126,28 +126,29 @@ acts.
 
 ## Where we are
 
-Phase open 7/12. Optional planning, finite workflow hierarchy, independent
-organization topology, deliberation, visual authoring, and governed quality
-decisions are evidence-backed. WLA-26-07 is done: mechanical facts and declared
-agent judgments are closed, distinct types; rubric-bound verifier verdicts carry
-exact work, evidence, assignment, and execution provenance; independent votes
-compose only as `panel-verdict`; and a deliberative council emits a separately
-validated replay-derived `delivery-workbench-decision@1`. Every council charter
-declares its final authority before discussion. A clear rule outcome has no
-agent decider, judge mode binds one preassigned stable seat plus its assignment
-generation and complete provider/model/auth execution stack, and checkpoint
-mode names the external decision port. Every decision carries an explicit
-obligations array; blocking obligations refuse green while non-blocking backlog,
-technical-debt, risk, research, and follow-up work carries the source decision
-hash. Router/provider/model/auth resolution now participates in capability,
-roster, and assignment freshness, so runtime drift invalidates old authority.
-The pure quality gate preserves superseded red history, dissent, meta-review,
-architect veto, citations, repair/exhaustion routes, and exact proof lineage
-while starting and writing nothing. The slice passes 40/40 focused tests and
-416/416 on both Python floors; fresh-wheel packaging and canon/docs/parity
-checks pass. WLA-26-08 is next: bind these exact seats, decisions, obligations,
-quality proofs, and separately named mutation rails into a finite revocable
-program grant.
+Phase open 8/12. Optional planning, finite workflow hierarchy, independent
+organization topology, deliberation, visual authoring, governed quality, and
+finite revocable program authority are evidence-backed. WLA-26-08 is done: one
+pure start preview freezes the exact roadmap scope, current candidate/team/
+workflow derivation, policy and roster hashes, operator intent, mode, finite
+budgets, capabilities, stop conditions, exclusions, and worst-case envelope.
+Each council records rule-versus-judge authority; judge mode binds the
+preassigned stable `decider_seat`, assignment generation, and complete
+harness/provider/model/auth/principal/workspace/session execution identity.
+Exact start re-plans under an exclusive lock and creates only an immutable
+local grant plus hash-chained ledger. Advisory permits no claims; checkpointed
+and continuous share exclusive idempotent claims with typed ports, strict scope
+and budget reservations, non-delegable child intersections, observed
+completion facts, expiry, exhaustion, pause/resume, and generation-bound
+revoke/cancel. Apply and replay independently recompute legal budgets and
+transitions instead of trusting caller-rehashed JSON. Policy, roster/provider/
+model, repository, or roadmap drift blocks future claims while safety revoke
+and bounded in-flight receipts remain possible. No-program install/update,
+Studio, ordinary commands, and Phase 24/25 runs create no program store or
+implicit mode. The slice passes 17/17 focused tests and 433/433 on both Python
+floors; fresh-wheel packaging and canon/docs/parity checks pass. WLA-26-09 is
+next: conduct the reserved hierarchical work and recover it without duplicate
+dispatch, verdict, decision, or loop progress.
 
 ## Active risks
 
@@ -320,6 +321,27 @@ program grant.
   embeds provider credentials or arbitrary argv; the resolved model/provider
   inputs must participate in roster and grant fingerprints - portability and
   command-safety boundary.
+- 2026-07-22 - Make program activation one separate exact consent act: a pure
+  preview binds current policy, scope, roster, operator intent, mode, capability
+  set, finite budgets, expiry, and exclusions; exact start re-plans under an
+  exclusive lock and writes only local immutable grant/ledger state - WLA-26-08.
+- 2026-07-22 - Freeze council decision authority inside that grant. Rule mode
+  carries no agent decider; judge mode carries the preassigned stable seat,
+  assignment generation, and complete provider/model/auth execution binding;
+  checkpoint mode carries a typed external port - WLA-26-08.
+- 2026-07-22 - Treat preview hashes as integrity bindings rather than secret
+  signatures. Every apply independently re-derives current scope, capability,
+  typed port, budget, child intersection, completion facts, and control
+  transition, and replay validates the same deterministic ledger facts -
+  WLA-26-08.
+- 2026-07-22 - Keep child authority strictly non-delegable for evidence,
+  integration, certification, obligation materialization/disposition, Git, and
+  roadmap rails; dispatch or workspace write never inherits delivery authority
+  - WLA-26-08.
+- 2026-07-22 - Make revoke/cancel generation changes immediate for future
+  claims while retaining bounded in-flight receipts and explicit interruption/
+  request-expiry sets; safety revoke remains available through stale policy or
+  provider/model state - WLA-26-08.
 
 ## Decisions deferred
 

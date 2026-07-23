@@ -8859,7 +8859,10 @@ class ProgramContractTest(unittest.TestCase):
         )[1].split("\n\nCapabilities are independent bits", 1)[0]
         actual = self._backtick_first_column(capability_table)
         expected = {
-            "agent:dispatch", "check:execute", "workspace:write",
+            "program:select", "agent:dispatch", "check:execute",
+            "workspace:write", "verdict:issue", "council:decide",
+            "obligation:record", "obligation:materialize",
+            "obligation:disposition",
             "nudge:deliver", "notification:send", "evidence:materialize",
             "integration:apply", "contract:generate",
             "certification:objective", "certification:verdict", "git:commit",
@@ -9154,7 +9157,9 @@ class ProgramPlannerTest(unittest.TestCase):
             if writer:
                 capabilities.append("workspace:write")
             elif any(duty in {"verifier", "meta-verifier", "master-architect", "judge"} for duty in duties):
-                capabilities.append("certification:verdict")
+                capabilities.append("verdict:issue")
+                if "judge" in duties:
+                    capabilities.extend(["council:decide", "obligation:record"])
             return {
                 "id": agent_id,
                 "profile": profile,
@@ -9172,7 +9177,9 @@ class ProgramPlannerTest(unittest.TestCase):
             if writer:
                 capabilities.append("workspace:write")
             elif judgment:
-                capabilities.append("certification:verdict")
+                capabilities.append("verdict:issue")
+                if duty in {"verifier", "judge"}:
+                    capabilities.extend(["council:decide", "obligation:record"])
             return {
                 "id": role_id,
                 "duty": duty,
@@ -9629,6 +9636,881 @@ class ProgramPlannerTest(unittest.TestCase):
         self.assertEqual(before, list(empty_root.rglob("*")))
 
 
+class ProgramRunAuthorityTest(unittest.TestCase):
+    """WLA-26-08: exact finite program grants and replay authority."""
+
+    issued_at = "2026-07-22T12:00:00Z"
+    expires_at = "2026-07-22T13:00:00Z"
+    started_at = "2026-07-22T12:01:00Z"
+
+    def setUp(self):
+        import dw_pmo.program_run as program_run
+        from dw_pmo.orchestration_driver import load_driver_config, write_driver_config
+        from dw_pmo.programs import BUDGET_DEFAULTS
+
+        self.core = program_run
+        self.fixture = ProgramPlannerTest("test_program_compiles_policy_references_scope_and_hashes")
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.root = self.fixture.root
+
+        organization_path = self.root / "pm/organizations/delivery-core.json"
+        organization = json.loads(organization_path.read_text(encoding="utf-8"))
+        organization["councils"][0]["decision"] = {"method": "judge"}
+        self.fixture._write_json("pm/organizations/delivery-core.json", organization)
+
+        self.capabilities = [
+            "program:select", "agent:dispatch", "check:execute",
+            "workspace:write", "verdict:issue", "council:decide",
+            "obligation:record", "obligation:materialize",
+            "obligation:disposition", "evidence:materialize",
+            "integration:apply", "contract:generate",
+            "certification:verdict", "git:commit",
+            "roadmap:story-start", "roadmap:story-complete",
+            "roadmap:phase-advance",
+        ]
+        budgets = dict(BUDGET_DEFAULTS)
+        budgets.update({
+            "max_phases": 2,
+            "max_stories": 3,
+            "max_child_runs": 2,
+            "max_agent_starts": 1,
+            "max_provider_starts": 1,
+            "max_model_starts": 1,
+            "max_check_starts": 2,
+            "max_loop_rounds": 2,
+            "max_debate_rounds": 2,
+            "max_councils": 2,
+            "max_repairs_per_story": 1,
+            "max_verdicts": 3,
+            "max_obligations": 3,
+            "max_obligation_materializations": 1,
+            "max_obligation_dispositions": 3,
+            "max_integrations": 1,
+            "max_commits": 1,
+            "max_pushes": 1,
+            "max_nudges": 1,
+            "max_artifact_bytes": 2_000_000,
+            "max_tokens": 100_000,
+            "max_observed_cost_microunits": 100_000,
+            "max_wall_seconds": 3_600,
+        })
+        self.budgets = budgets
+        program = json.loads(json.dumps(self.fixture.program))
+        program["requested_capabilities"] = list(self.capabilities)
+        program["budgets"] = dict(budgets)
+        self.fixture._write_json("pm/programs/demo-program.json", program)
+        self.fixture.program = program
+
+        driver = load_driver_config(self.root)
+        execution = {
+            "builder-a": ("openai", "openai", "gpt-5", "openai/gpt-5"),
+            "builder-b": ("openai", "openai", "gpt-5", "openai/gpt-5"),
+            "verifier-a": (
+                "anthropic", "anthropic", "claude-sonnet", "claude/sonnet-5",
+            ),
+            "meta-a": ("openrouter", "moonshot", "kimi-k3", "kimi/k3"),
+            "architect-a": (
+                "openai", "openai", "gpt-5", "openai/gpt-5",
+            ),
+        }
+        for profile, (provider, vendor, family, model) in execution.items():
+            raw = driver["profiles"][profile]
+            raw.update({
+                "router": "openrouter" if provider == "openrouter" else "direct",
+                "provider": provider,
+                "model_vendor": vendor,
+                "model_family": family,
+                "model": model,
+                "model_binding": "requested-alias",
+                "auth_domain": f"auth-{profile}",
+            })
+        write_driver_config(self.root, driver)
+        self.fixture._git("add", "pm")
+        self.fixture._git("commit", "-qm", "authority fixture")
+
+    @staticmethod
+    def h(character):
+        return "sha256:" + character * 64
+
+    def subject(self, kind="story", identifier="DM-1-02", *, phase=1, story="DM-1-02", hash_char="a"):
+        return {
+            "kind": kind,
+            "id": identifier,
+            "hash": self.h(hash_char),
+            "phase": phase,
+            "story": story,
+        }
+
+    def plan(self, *, mode="continuous", capabilities=None, budgets=None,
+             intent="authority-1", expires_at=None):
+        return self.core.build_program_start_plan(
+            self.root,
+            "demo-program",
+            mode=mode,
+            operator="operator-a",
+            approval_reason="Run the reviewed finite autonomous fixture.",
+            intent_id=intent,
+            capabilities=capabilities,
+            budgets=budgets,
+            issued_at=self.issued_at,
+            expires_at=expires_at or self.expires_at,
+        )
+
+    def start(self, *, mode="continuous", intent="authority-1",
+              capabilities=None, budgets=None, expires_at=None):
+        plan = self.plan(
+            mode=mode, intent=intent, capabilities=capabilities,
+            budgets=budgets, expires_at=expires_at,
+        )
+        self.assertTrue(plan["applicable"], plan["issues"])
+        return plan, self.core.start_program(
+            self.root, plan, start_token=plan["start_token"],
+            now=self.started_at,
+        )
+
+    def claim_preview(self, run_id, category, *, key=None, subject=None,
+                      child_grant=None, at="2026-07-22T12:02:00Z",
+                      estimate=None, port=None):
+        return self.core.build_program_claim_preview(
+            self.root,
+            run_id,
+            category=category,
+            subject=subject or self.subject(),
+            idempotency_key=key or f"{category}-1",
+            reason=f"Reserve exact {category} fixture work.",
+            resource_estimate=estimate or {
+                "artifact_bytes": 0,
+                "tokens": 0,
+                "observed_cost_microunits": 0,
+            },
+            request_port=port,
+            child_grant=child_grant,
+            now=at,
+        )
+
+    def apply_claim(self, preview, *, at="2026-07-22T12:02:00Z"):
+        return self.core.apply_program_claim(
+            self.root,
+            preview,
+            claim_token=preview["claim_token"],
+            now=at,
+        )
+
+    def test_pure_preview_binds_decider_execution_scope_and_zero_effects(self):
+        before = list((self.root / ".git").glob("pmo-programs*"))
+        plan = self.plan()
+        after = list((self.root / ".git").glob("pmo-programs*"))
+        self.assertTrue(plan["applicable"], plan["issues"])
+        self.assertEqual(before, after)
+        self.assertEqual(plan["authority"]["mode"], "continuous")
+        self.assertEqual(plan["approval"]["decision"], "approve")
+        self.assertEqual(plan["roadmap"]["snapshot_hash"], plan["planning"]["roadmap"]["snapshot_hash"])
+        self.assertEqual(plan["program"]["bundle_hash"], plan["planning"]["program"]["bundle_hash"])
+        self.assertTrue(plan["worst_case"]["includes_failure_branches"])
+        council = plan["roster"]["councils"][0]
+        self.assertEqual(council["primary_authority"], "judge")
+        self.assertEqual(council["decider_seat"], council["chair_seat"])
+        decider = next(
+            seat for seat in plan["roster"]["seats"]
+            if seat["address"] == council["decider_seat"]
+        )
+        self.assertEqual(decider["profile"], "verifier-a")
+        self.assertEqual(decider["execution"]["provider"], "anthropic")
+        self.assertEqual(decider["execution"]["model"], "claude/sonnet-5")
+        self.assertEqual(decider["execution"]["model_binding"], "requested-alias")
+        kimi = next(seat for seat in plan["roster"]["seats"] if seat["profile"] == "meta-a")
+        self.assertEqual(kimi["execution"]["router"], "openrouter")
+        self.assertEqual(kimi["execution"]["model"], "kimi/k3")
+        rule_assignment = json.loads(json.dumps(plan["planning"]["assignment"]))
+        rule_council = rule_assignment["councils"][0]
+        rule_council["decision"]["method"] = "majority"
+        no_tie = self.core._roster(rule_assignment, self.capabilities, {"debates": []})
+        self.assertEqual(no_tie["councils"][0]["primary_authority"], "rule")
+        self.assertEqual(no_tie["councils"][0]["tie_authority"], "none")
+        self.assertIsNone(no_tie["councils"][0]["decider_seat"])
+        judge_role = rule_council["judge"]
+        tie_judge = self.core._roster(rule_assignment, self.capabilities, {
+            "debates": [{
+                "participants": [
+                    role for role in rule_council["members"]
+                    if role != judge_role
+                ],
+                "judge_role": judge_role,
+                "tie_policy": "judge",
+            }],
+        })
+        self.assertEqual(tie_judge["councils"][0]["primary_authority"], "rule")
+        self.assertEqual(tie_judge["councils"][0]["tie_authority"], "judge")
+        self.assertEqual(
+            tie_judge["councils"][0]["decider_seat"],
+            tie_judge["councils"][0]["chair_seat"],
+        )
+        for flag in (
+            "starts_work", "writes_policy", "writes_roadmap",
+            "writes_run_state", "creates_grant",
+        ):
+            self.assertFalse(plan[flag])
+
+    def test_modes_are_explicit_profiles_and_empty_inventory_is_dormant(self):
+        before = list((self.root / ".git").glob("pmo-programs*"))
+        inventory = self.core.program_run_inventory(
+            self.root, now=self.started_at
+        )
+        self.assertEqual(inventory["runs"], [])
+        self.assertTrue(inventory["healthy"])
+        self.assertEqual(before, list((self.root / ".git").glob("pmo-programs*")))
+
+        advisory = self.plan(mode="advisory", intent="advisory-1")
+        self.assertTrue(advisory["applicable"], advisory["issues"])
+        self.assertEqual(advisory["authority"]["capabilities"], [])
+        checkpointed = self.plan(mode="checkpointed", intent="checkpoint-1")
+        self.assertTrue(checkpointed["applicable"], checkpointed["issues"])
+        self.assertEqual(
+            {port["id"] for port in checkpointed["authority"]["checkpoint_ports"]},
+            {"program-start", "story-boundary", "phase-boundary"},
+        )
+        _, advisory_run = self.start(mode="advisory", intent="advisory-start")
+        self.assertEqual(advisory_run["state"], "advisory")
+        self.assertFalse(advisory_run["future_claims_allowed"])
+
+    def test_mode_capability_budget_expiry_and_remote_widening_refuse(self):
+        wider = self.plan(capabilities=self.capabilities + ["git:push"], intent="wider-cap")
+        self.assertFalse(wider["applicable"])
+        self.assertIn("capability-denied", {item["code"] for item in wider["issues"]})
+
+        budgets = dict(self.budgets)
+        budgets["max_agent_starts"] += 1
+        over = self.plan(budgets=budgets, intent="wider-budget")
+        self.assertFalse(over["applicable"])
+        self.assertIn("budget-denied", {item["code"] for item in over["issues"]})
+
+        perpetual = self.plan(
+            intent="perpetual",
+            expires_at="2026-07-23T12:00:01Z",
+        )
+        self.assertFalse(perpetual["applicable"])
+        self.assertIn("budget-denied", {item["code"] for item in perpetual["issues"]})
+
+        missing = [item for item in self.capabilities if item != "verdict:issue"]
+        denied = self.plan(capabilities=missing, intent="missing-prereq")
+        self.assertFalse(denied["applicable"])
+        self.assertTrue(any("verdict:issue" in item["message"] for item in denied["issues"]))
+
+    def test_start_is_exact_immutable_idempotent_and_creates_only_local_authority(self):
+        plan, projection = self.start()
+        run_id = projection["run_id"]
+        self.assertEqual(projection["state"], "running")
+        self.assertEqual(projection["event_count"], 1)
+        self.assertTrue((self.root / ".git/pmo-programs/runs" / run_id / "grant.json").is_file())
+        self.assertFalse((self.root / "pm/program-runs").exists())
+        again = self.core.start_program(
+            self.root, plan, start_token=plan["start_token"],
+            now="2026-07-22T12:01:30Z",
+        )
+        self.assertEqual(again["run_id"], run_id)
+        self.assertEqual(again["event_count"], 1)
+
+        forged = json.loads(json.dumps(plan))
+        forged["authority"]["mode"] = "advisory"
+        with self.assertRaises(DwError):
+            self.core.start_program(
+                self.root, forged, start_token=forged["start_token"],
+                now=self.started_at,
+            )
+
+    def test_unstarted_provider_model_repository_and_roadmap_drift_refuse(self):
+        from dw_pmo.orchestration_driver import load_driver_config, write_driver_config
+
+        plan = self.plan(intent="model-stale")
+        driver = load_driver_config(self.root)
+        driver["profiles"]["verifier-a"]["model"] = "claude/sonnet-5.1"
+        write_driver_config(self.root, driver)
+        with self.assertRaisesRegex(DwError, "stale|changed|altered"):
+            self.core.start_program(
+                self.root, plan, start_token=plan["start_token"],
+                now=self.started_at,
+            )
+        self.assertFalse((self.root / ".git/pmo-programs").exists())
+
+        driver["profiles"]["verifier-a"]["model"] = "claude/sonnet-5"
+        write_driver_config(self.root, driver)
+        repository_plan = self.plan(intent="repository-stale")
+        (self.root / "README.fixture").write_text("drift\n", encoding="utf-8")
+        self.addCleanup((self.root / "README.fixture").unlink, missing_ok=True)
+        with self.assertRaisesRegex(DwError, "stale|changed|altered"):
+            self.core.start_program(
+                self.root, repository_plan,
+                start_token=repository_plan["start_token"],
+                now=self.started_at,
+            )
+        (self.root / "README.fixture").unlink()
+
+        roadmap_plan = self.plan(intent="roadmap-stale")
+        roadmap_file = (
+            self.root / "pm/roadmap/demo/phase-1-alpha/story-02-active-build.md"
+        )
+        roadmap_file.write_text(
+            roadmap_file.read_text(encoding="utf-8") + "\nObserved drift.\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(DwError, "roadmap|repository|changed"):
+            self.core.start_program(
+                self.root, roadmap_plan,
+                start_token=roadmap_plan["start_token"],
+                now=self.started_at,
+            )
+
+    def test_claims_are_exclusive_idempotent_budgeted_and_exhaust(self):
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+        selection = self.claim_preview(run_id, "selection", key="selection-1")
+        self.assertTrue(selection["applicable"], selection["issues"])
+        selected = self.apply_claim(selection)
+        self.assertEqual(selected["budgets"]["max_stories"]["used"], 1)
+        self.assertEqual(selected["budgets"]["max_phases"]["used"], 1)
+        duplicate = self.apply_claim(selection)
+        self.assertTrue(duplicate["idempotent"])
+        self.assertEqual(len(duplicate["claims"]), 1)
+
+        agent = self.claim_preview(
+            run_id,
+            "agent",
+            key="agent-1",
+            at="2026-07-22T12:03:00Z",
+            estimate={
+                "artifact_bytes": 100,
+                "tokens": 200,
+                "observed_cost_microunits": 300,
+            },
+        )
+        spent = self.apply_claim(agent, at="2026-07-22T12:03:00Z")
+        self.assertEqual(spent["budgets"]["max_agent_starts"]["used"], 1)
+        self.assertEqual(spent["budgets"]["max_provider_starts"]["used"], 1)
+        self.assertEqual(spent["budgets"]["max_model_starts"]["used"], 1)
+        self.assertEqual(spent["budgets"]["max_tokens"]["used"], 200)
+
+        exhausted = self.claim_preview(
+            run_id, "agent", key="agent-2",
+            at="2026-07-22T12:04:00Z",
+        )
+        self.assertFalse(exhausted["applicable"])
+        self.assertEqual(exhausted["issues"][-1]["code"], "budget-exhausted")
+        stopped = self.apply_claim(exhausted, at="2026-07-22T12:04:00Z")
+        self.assertEqual(stopped["state"], "exhausted")
+        self.assertEqual(stopped["exhaustion"]["counter"], "max_agent_starts")
+
+    def test_child_authority_is_strict_intersection_and_cannot_inherit_rails(self):
+        _plan, projection = self.start()
+        implementer = next(
+            seat for seat in projection["roster"]["seats"]
+            if seat["duty"] == "implementer"
+        )
+        child = self.core.derive_child_grant(
+            self.root,
+            projection["run_id"],
+            role_address=implementer["address"],
+            node_address="program/demo/phase/1/story/DM-1-02/workflow/alpha/implement",
+            capabilities=["agent:dispatch", "workspace:write"],
+            budgets={"max_agent_starts": 1, "max_artifact_bytes": 1_000},
+            now="2026-07-22T12:02:00Z",
+        )
+        self.assertEqual(
+            child["capabilities"], ["agent:dispatch", "workspace:write"]
+        )
+        self.assertFalse(set(child["capabilities"]) & {
+            "integration:apply", "certification:verdict", "git:commit",
+            "roadmap:story-complete",
+        })
+        with self.assertRaisesRegex(DwError, "intersection|non-delegable"):
+            self.core.derive_child_grant(
+                self.root,
+                projection["run_id"],
+                role_address=implementer["address"],
+                node_address="program/demo/phase/1/story/DM-1-02/workflow/alpha/implement",
+                capabilities=["agent:dispatch", "git:commit"],
+                budgets={"max_agent_starts": 1},
+                now="2026-07-22T12:02:00Z",
+            )
+        preview = self.claim_preview(
+            projection["run_id"], "child-grant", key="child-1",
+            child_grant=child,
+        )
+        claimed = self.apply_claim(preview)
+        self.assertEqual(claimed["claim"]["child_grant_hash"], child["grant_hash"])
+
+    def test_apply_recomputes_budget_child_scope_and_checkpoint_authority(self):
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+
+        outside = self.claim_preview(
+            run_id,
+            "check",
+            key="outside-scope",
+            subject=self.subject(
+                identifier="DM-99-01", phase=99, story="DM-99-01",
+            ),
+        )
+        self.assertFalse(outside["applicable"])
+        self.assertTrue(any(
+            issue["code"] == "scope-violation" for issue in outside["issues"]
+        ))
+        unknown_port = self.claim_preview(
+            run_id,
+            "checkpoint-request",
+            key="unknown-port",
+            subject=self.subject(kind="checkpoint", identifier="mystery"),
+            port="not-declared",
+        )
+        self.assertFalse(unknown_port["applicable"])
+        self.assertTrue(any(
+            issue["code"] == "request-port-denied"
+            for issue in unknown_port["issues"]
+        ))
+
+        budget = self.claim_preview(run_id, "check", key="forged-budget")
+        forged_budget = json.loads(json.dumps(budget))
+        forged_budget["budget"] = {}
+        forged_budget["claim_token"] = self.core._sha({
+            key: value for key, value in forged_budget.items()
+            if key != "claim_token"
+        })
+        with self.assertRaisesRegex(DwError, "mechanical reservation"):
+            self.core.apply_program_claim(
+                self.root,
+                forged_budget,
+                claim_token=forged_budget["claim_token"],
+                now="2026-07-22T12:02:00Z",
+            )
+
+        implementer = next(
+            seat for seat in projection["roster"]["seats"]
+            if seat["duty"] == "implementer"
+        )
+        child = self.core.derive_child_grant(
+            self.root,
+            run_id,
+            role_address=implementer["address"],
+            node_address="program/demo/phase/1/story/DM-1-02/workflow/alpha/implement",
+            capabilities=["agent:dispatch", "workspace:write"],
+            budgets={"max_agent_starts": 1},
+            now="2026-07-22T12:02:00Z",
+        )
+        child_preview = self.claim_preview(
+            run_id, "child-grant", key="forged-child", child_grant=child,
+        )
+        forged_child = json.loads(json.dumps(child_preview))
+        forged_child["child_grant"]["capabilities"].append("git:commit")
+        forged_child["child_grant"]["capabilities"].sort()
+        forged_child["child_grant"]["grant_hash"] = self.core._sha({
+            key: value for key, value in forged_child["child_grant"].items()
+            if key != "grant_hash"
+        })
+        forged_child["claim_token"] = self.core._sha({
+            key: value for key, value in forged_child.items()
+            if key != "claim_token"
+        })
+        with self.assertRaisesRegex(DwError, "intersection|non-delegable"):
+            self.core.apply_program_claim(
+                self.root,
+                forged_child,
+                claim_token=forged_child["claim_token"],
+                now="2026-07-22T12:02:00Z",
+            )
+
+    def test_control_tokens_bind_head_state_reason_decision_and_generation(self):
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+        pause = self.core.build_program_control_preview(
+            self.root, run_id, action="pause", decision="approve",
+            reason="Pause at the exact reviewed ledger head.",
+            now="2026-07-22T12:02:00Z",
+        )
+        claim = self.claim_preview(
+            run_id, "check", key="check-before-pause",
+            at="2026-07-22T12:02:10Z",
+        )
+        self.apply_claim(claim, at="2026-07-22T12:02:10Z")
+        with self.assertRaisesRegex(DwError, "stale"):
+            self.core.apply_program_control(
+                self.root, pause, control_token=pause["control_token"],
+                now="2026-07-22T12:02:20Z",
+            )
+        pause = self.core.build_program_control_preview(
+            self.root, run_id, action="pause", decision="approve",
+            reason="Pause after the check claim.",
+            now="2026-07-22T12:02:20Z",
+        )
+        paused = self.core.apply_program_control(
+            self.root, pause, control_token=pause["control_token"],
+            now="2026-07-22T12:02:20Z",
+        )
+        self.assertEqual(paused["state"], "paused")
+        self.assertEqual(paused["generation"], 0)
+        resume = self.core.build_program_control_preview(
+            self.root, run_id, action="resume", decision="approve",
+            reason="Resume the same immutable authority.",
+            now="2026-07-22T12:03:00Z",
+        )
+        resumed = self.core.apply_program_control(
+            self.root, resume, control_token=resume["control_token"],
+            now="2026-07-22T12:03:00Z",
+        )
+        self.assertEqual(resumed["state"], "running")
+        revoke = self.core.build_program_control_preview(
+            self.root, run_id, action="revoke", decision="approve",
+            reason="Stop all future claims now.",
+            now="2026-07-22T12:04:00Z",
+        )
+        revoked = self.core.apply_program_control(
+            self.root, revoke, control_token=revoke["control_token"],
+            now="2026-07-22T12:04:00Z",
+        )
+        self.assertEqual(revoked["state"], "revoked")
+        self.assertEqual(revoked["generation"], 1)
+        self.assertFalse(revoked["future_claims_allowed"])
+        impossible = self.core.build_program_control_preview(
+            self.root, run_id, action="resume", decision="approve",
+            reason="A revoked grant cannot be revived.",
+            now="2026-07-22T12:05:00Z",
+        )
+        self.assertFalse(impossible["applicable"])
+
+    def test_apply_recomputes_control_and_completion_facts(self):
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+        pause = self.core.build_program_control_preview(
+            self.root, run_id, action="pause", decision="approve",
+            reason="Pause exactly this generation.",
+            now="2026-07-22T12:02:00Z",
+        )
+        forged_pause = json.loads(json.dumps(pause))
+        forged_pause["effect"]["to_state"] = "cancelled"
+        forged_pause["control_token"] = self.core._sha({
+            key: value for key, value in forged_pause.items()
+            if key != "control_token"
+        })
+        with self.assertRaisesRegex(DwError, "effect"):
+            self.core.apply_program_control(
+                self.root,
+                forged_pause,
+                control_token=forged_pause["control_token"],
+                now="2026-07-22T12:02:00Z",
+            )
+
+        claim_preview = self.claim_preview(
+            run_id, "check", key="completion-facts",
+            at="2026-07-22T12:02:10Z",
+        )
+        claimed = self.apply_claim(claim_preview, at="2026-07-22T12:02:10Z")
+        completion = self.core.build_program_completion_preview(
+            self.root,
+            run_id,
+            claim_id=claimed["claim"]["claim_id"],
+            result="succeeded",
+            receipt_hash=self.h("d"),
+            reason="Record exact observed completion facts.",
+            now="2026-07-22T12:02:20Z",
+        )
+        forged_completion = json.loads(json.dumps(completion))
+        forged_completion["fact_binding"]["repository"]["head"] = "0" * 40
+        forged_completion["completion_token"] = self.core._sha({
+            key: value for key, value in forged_completion.items()
+            if key != "completion_token"
+        })
+        with self.assertRaisesRegex(DwError, "facts changed"):
+            self.core.apply_program_completion(
+                self.root,
+                forged_completion,
+                completion_token=forged_completion["completion_token"],
+                now="2026-07-22T12:02:20Z",
+            )
+
+    def test_cancel_increments_generation_and_requests_bounded_interrupts(self):
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+        active = self.apply_claim(self.claim_preview(
+            run_id, "check", key="interrupt-me",
+            at="2026-07-22T12:02:00Z",
+        ), at="2026-07-22T12:02:00Z")
+        cancel = self.core.build_program_control_preview(
+            self.root, run_id, action="cancel", decision="approve",
+            reason="Stop and request bounded interruption of active work.",
+            now="2026-07-22T12:03:00Z",
+        )
+        self.assertEqual(
+            cancel["effect"]["interrupt_claim_ids"],
+            [active["claim"]["claim_id"]],
+        )
+        cancelled = self.core.apply_program_control(
+            self.root, cancel, control_token=cancel["control_token"],
+            now="2026-07-22T12:03:00Z",
+        )
+        self.assertEqual(cancelled["state"], "cancelled")
+        self.assertEqual(cancelled["generation"], 1)
+        self.assertEqual(
+            cancelled["interrupt_claim_ids"], [active["claim"]["claim_id"]]
+        )
+        self.assertFalse(cancelled["future_claims_allowed"])
+
+    def test_revocation_expires_requests_and_preserves_inflight_receipts(self):
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+        request = self.claim_preview(
+            run_id,
+            "checkpoint-request",
+            key="checkpoint-1",
+            subject=self.subject(kind="checkpoint", identifier="story-approval"),
+            port="story-boundary",
+        )
+        waiting = self.apply_claim(request)
+        self.assertEqual(waiting["state"], "checkpoint")
+        revoke = self.core.build_program_control_preview(
+            self.root, run_id, action="revoke", decision="approve",
+            reason="Revoke while the typed request is outstanding.",
+            now="2026-07-22T12:03:00Z",
+        )
+        self.assertEqual(
+            revoke["effect"]["expired_request_ids"],
+            [waiting["claim"]["claim_id"]],
+        )
+        revoked = self.core.apply_program_control(
+            self.root, revoke, control_token=revoke["control_token"],
+            now="2026-07-22T12:03:00Z",
+        )
+        self.assertEqual(revoked["outstanding_requests"][0]["status"], "expired")
+        completion = self.core.build_program_completion_preview(
+            self.root,
+            run_id,
+            claim_id=waiting["claim"]["claim_id"],
+            result="cancelled",
+            receipt_hash=self.h("b"),
+            reason="Bounded in-flight request cancellation receipt.",
+            now="2026-07-22T12:04:00Z",
+        )
+        self.assertTrue(completion["applicable"], completion["issues"])
+        completed = self.core.apply_program_completion(
+            self.root,
+            completion,
+            completion_token=completion["completion_token"],
+            now="2026-07-22T12:04:00Z",
+        )
+        self.assertEqual(completed["state"], "revoked")
+        self.assertEqual(completed["completed_claims"][0]["status"], "cancelled")
+
+    def test_successful_completion_rebinds_observed_facts_without_new_authority(self):
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+        integration = self.claim_preview(
+            run_id, "integration", key="integration-1",
+        )
+        claimed = self.apply_claim(integration)
+        changed = self.root / "candidate.txt"
+        changed.write_text("integrated fixture\n", encoding="utf-8")
+        self.addCleanup(changed.unlink, missing_ok=True)
+        completion = self.core.build_program_completion_preview(
+            self.root,
+            run_id,
+            claim_id=claimed["claim"]["claim_id"],
+            result="succeeded",
+            receipt_hash=self.h("c"),
+            reason="Trusted integration adapter observed its exact post-state.",
+            now="2026-07-22T12:03:00Z",
+        )
+        rebound = self.core.apply_program_completion(
+            self.root,
+            completion,
+            completion_token=completion["completion_token"],
+            now="2026-07-22T12:03:00Z",
+        )
+        self.assertFalse(rebound["expected_repository"]["clean"])
+        next_claim = self.claim_preview(
+            run_id, "check", key="check-after-integration",
+            at="2026-07-22T12:04:00Z",
+        )
+        self.assertTrue(next_claim["applicable"], next_claim["issues"])
+
+    def test_live_policy_or_model_drift_blocks_claim_but_not_safety_revoke(self):
+        from dw_pmo.orchestration_driver import load_driver_config, write_driver_config
+
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+        driver = load_driver_config(self.root)
+        driver["profiles"]["meta-a"]["provider"] = "different-router"
+        write_driver_config(self.root, driver)
+        stale = self.claim_preview(
+            run_id, "check", key="stale-check",
+            at="2026-07-22T12:02:00Z",
+        )
+        self.assertFalse(stale["applicable"])
+        self.assertTrue(any(
+            item["code"] == "program-stale"
+            and "roster" in item["message"]
+            for item in stale["issues"]
+        ))
+        revoke = self.core.build_program_control_preview(
+            self.root, run_id, action="revoke", decision="approve",
+            reason="Safety controls remain available through provider drift.",
+            now="2026-07-22T12:03:00Z",
+        )
+        self.assertTrue(revoke["applicable"], revoke["issues"])
+        result = self.core.apply_program_control(
+            self.root, revoke, control_token=revoke["control_token"],
+            now="2026-07-22T12:03:00Z",
+        )
+        self.assertEqual(result["state"], "revoked")
+
+        _plan, policy_projection = self.start(intent="policy-drift")
+        program_path = self.root / "pm/programs/demo-program.json"
+        program = json.loads(program_path.read_text(encoding="utf-8"))
+        program["title"] = "Changed after grant"
+        program_path.write_text(
+            json.dumps(program, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        policy_stale = self.claim_preview(
+            policy_projection["run_id"], "check", key="policy-stale",
+            at="2026-07-22T12:04:00Z",
+        )
+        self.assertFalse(policy_stale["applicable"])
+        self.assertTrue(any(
+            issue["code"] == "program-stale"
+            and "program" in issue["message"]
+            for issue in policy_stale["issues"]
+        ))
+
+    def test_expiry_stops_future_claims_and_still_allows_revocation(self):
+        _plan, projection = self.start()
+        run_id = projection["run_id"]
+        expired = self.core.replay_program(
+            self.root, run_id, now="2026-07-22T13:00:00Z"
+        )
+        self.assertEqual(expired["state"], "expired")
+        self.assertFalse(expired["future_claims_allowed"])
+        claim = self.claim_preview(
+            run_id, "check", key="late-check",
+            at="2026-07-22T13:00:01Z",
+        )
+        self.assertFalse(claim["applicable"])
+        revoke = self.core.build_program_control_preview(
+            self.root, run_id, action="revoke", decision="approve",
+            reason="Close the expired authority generation.",
+            now="2026-07-22T13:00:01Z",
+        )
+        self.assertTrue(revoke["applicable"], revoke["issues"])
+        result = self.core.apply_program_control(
+            self.root, revoke, control_token=revoke["control_token"],
+            now="2026-07-22T13:00:01Z",
+        )
+        self.assertEqual(result["state"], "revoked")
+        self.assertEqual(result["generation"], 1)
+
+    def test_ledger_and_grant_corruption_fail_closed(self):
+        _plan, projection = self.start()
+        run_dir = self.root / ".git/pmo-programs/runs" / projection["run_id"]
+        ledger = run_dir / "ledger.jsonl"
+        original = ledger.read_bytes()
+        event = json.loads(original)
+        event["detail"]["mode"] = "advisory"
+        ledger.write_text(json.dumps(event, sort_keys=True) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(DwError, "hash|match"):
+            self.core.replay_program(self.root, projection["run_id"], now=self.started_at)
+        ledger.write_bytes(original)
+
+        claimed = self.apply_claim(self.claim_preview(
+            projection["run_id"], "check", key="tamper-ledger",
+            at="2026-07-22T12:02:00Z",
+        ), at="2026-07-22T12:02:00Z")
+        claim_ledger = ledger.read_bytes()
+        events = [json.loads(line) for line in claim_ledger.splitlines()]
+        events[1]["detail"]["budget"] = {}
+        events[1]["event_hash"] = self.core._sha({
+            key: value for key, value in events[1].items()
+            if key != "event_hash"
+        })
+        ledger.write_text(
+            "\n".join(json.dumps(item, sort_keys=True) for item in events) + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(DwError, "ledger budget"):
+            self.core.replay_program(
+                self.root, claimed["run_id"], now="2026-07-22T12:02:01Z"
+            )
+        ledger.write_bytes(claim_ledger)
+
+        grant_path = run_dir / "grant.json"
+        grant_original = grant_path.read_text(encoding="utf-8")
+        grant = json.loads(grant_original)
+        grant["authority"]["capabilities"].append("git:push")
+        grant["grant_hash"] = self.core._grant_hash(grant)
+        grant_path.chmod(0o600)
+        grant_path.write_text(json.dumps(grant, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(DwError, "reviewed plan"):
+            self.core.replay_program(self.root, projection["run_id"], now=self.started_at)
+        grant_path.write_text(grant_original, encoding="utf-8")
+
+    def test_two_processes_share_one_start_and_one_claim(self):
+        plan = self.plan(intent="race-start")
+        payload = self.root / ".git/program-plan-race.json"
+        payload.write_text(json.dumps(plan), encoding="utf-8")
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(TESTS_DIR.parent / "lib")
+        start_code = (
+            "import json,sys; from pathlib import Path; "
+            "from dw_pmo.program_run import start_program; "
+            "p=json.loads(Path(sys.argv[2]).read_text()); "
+            "r=start_program(Path(sys.argv[1]),p,start_token=p['start_token'],"
+            "now='2026-07-22T12:01:00Z'); print(r['run_id'])"
+        )
+        commands = [
+            subprocess.Popen(
+                [sys.executable, "-c", start_code, str(self.root), str(payload)],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+            )
+            for _ in range(2)
+        ]
+        outputs = [process.communicate(timeout=30) for process in commands]
+        for process, (_stdout, stderr) in zip(commands, outputs):
+            self.assertEqual(process.returncode, 0, stderr)
+        run_ids = {stdout.strip() for stdout, _stderr in outputs}
+        self.assertEqual(len(run_ids), 1)
+        run_id = next(iter(run_ids))
+        inventory = self.core.program_run_inventory(
+            self.root, now="2026-07-22T12:01:30Z"
+        )
+        self.assertEqual([item["run_id"] for item in inventory["runs"]], [run_id])
+
+        preview = self.claim_preview(
+            run_id, "check", key="race-claim",
+            at="2026-07-22T12:02:00Z",
+        )
+        claim_payload = self.root / ".git/program-claim-race.json"
+        claim_payload.write_text(json.dumps(preview), encoding="utf-8")
+        claim_code = (
+            "import json,sys; from pathlib import Path; "
+            "from dw_pmo.program_run import apply_program_claim; "
+            "p=json.loads(Path(sys.argv[2]).read_text()); "
+            "r=apply_program_claim(Path(sys.argv[1]),p,claim_token=p['claim_token'],"
+            "now='2026-07-22T12:02:00Z'); print(r['claim']['claim_id'])"
+        )
+        commands = [
+            subprocess.Popen(
+                [sys.executable, "-c", claim_code, str(self.root), str(claim_payload)],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+            )
+            for _ in range(2)
+        ]
+        outputs = [process.communicate(timeout=30) for process in commands]
+        for process, (_stdout, stderr) in zip(commands, outputs):
+            self.assertEqual(process.returncode, 0, stderr)
+        self.assertEqual(len({stdout.strip() for stdout, _stderr in outputs}), 1)
+        final = self.core.replay_program(
+            self.root, run_id, now="2026-07-22T12:02:01Z"
+        )
+        self.assertEqual(len(final["claims"]), 1)
+        self.assertEqual(final["budgets"]["max_check_starts"]["used"], 1)
+
+
 class ProgramOrganizationTest(unittest.TestCase):
     """WLA-26-04: role topology, separation, visibility, and replacement."""
 
@@ -9696,7 +10578,8 @@ class ProgramOrganizationTest(unittest.TestCase):
                 "program/demo/phase/1/story/DM-1-02/workflow/story"
             ),
             program_capabilities=[
-                "agent:dispatch", "workspace:write", "certification:verdict",
+                "agent:dispatch", "workspace:write", "verdict:issue",
+                "council:decide", "obligation:record",
             ],
             workflow=workflow,
         )
@@ -9942,7 +10825,7 @@ class ProgramOrganizationTest(unittest.TestCase):
             organization,
             "story-cell",
             workflow,
-            ["agent:dispatch", "workspace:write", "certification:verdict"],
+            ["agent:dispatch", "workspace:write", "verdict:issue"],
         )
         self.assertEqual(issues, [])
         self.assertEqual(
@@ -9953,13 +10836,13 @@ class ProgramOrganizationTest(unittest.TestCase):
             role for role in narrowed["organization"]["teams"][0]["roles"]
             if role["id"] == "verifier"
         )
-        verifier["capability_ceiling"].remove("certification:verdict")
+        verifier["capability_ceiling"].remove("verdict:issue")
         verifier["artifacts"]["read"].remove("git-diff")
         _requirements, refused = self.core.validate_workflow_team(
             narrowed,
             "story-cell",
             workflow,
-            ["agent:dispatch", "workspace:write", "certification:verdict"],
+            ["agent:dispatch", "workspace:write", "verdict:issue"],
         )
         self.assertTrue(
             {"role-capability-denied", "visibility-denied"}
@@ -10126,7 +11009,7 @@ class ProgramStudioTest(unittest.TestCase):
         document = self.core.new_studio_document("program", "authority-proof")
         document["mode_ceiling"] = "checkpointed"
         document["requested_capabilities"] = [
-            "agent:dispatch", "certification:verdict",
+            "agent:dispatch", "verdict:issue", "certification:verdict",
             "evidence:materialize", "git:commit", "roadmap:phase-advance",
         ]
         authority = self.core.build_authority_preview(
@@ -10141,10 +11024,13 @@ class ProgramStudioTest(unittest.TestCase):
             item["id"] for item in groups["delivery-rails"]["capabilities"]
             if item["requested"]
         }
-        self.assertEqual(work, {"agent:dispatch", "certification:verdict"})
+        self.assertEqual(work, {"agent:dispatch", "verdict:issue"})
         self.assertEqual(
             delivery,
-            {"evidence:materialize", "git:commit", "roadmap:phase-advance"},
+            {
+                "certification:verdict", "evidence:materialize",
+                "git:commit", "roadmap:phase-advance",
+            },
         )
         modes = {item["id"]: item for item in authority["modes"]}
         self.assertTrue(modes["advisory"]["within_ceiling"])
@@ -10326,7 +11212,8 @@ class ProgramDeliberationTest(unittest.TestCase):
             story_id="DM-1-02",
             workflow_address="program/demo/phase/1/story/DM-1-02/workflow/design",
             program_capabilities=[
-                "agent:dispatch", "workspace:write", "certification:verdict",
+                "agent:dispatch", "workspace:write", "verdict:issue",
+                "council:decide", "obligation:record",
             ],
             workflow=None,
         )
@@ -11975,7 +12862,7 @@ class ProgramVerdictTest(unittest.TestCase):
                         "workspace": "read-only",
                         "verdict_schema": "delivery-workbench-verdict@1",
                         "effective_capability_ceiling": [
-                            "certification:verdict"
+                            "verdict:issue"
                         ],
                     },
                 },
@@ -12216,7 +13103,7 @@ class ProgramWorkflowTest(unittest.TestCase):
         self.assertIn("workflow-version-mismatch", self.diagnostic_codes(raised))
 
         smuggled = self.load(self.architect_path)
-        smuggled["nodes"][2]["capability_ceiling"].remove("certification:verdict")
+        smuggled["nodes"][2]["capability_ceiling"].remove("verdict:issue")
         with self.assertRaises(self.core.WorkflowValidationError) as raised:
             self.core.compile_workflow(self.root, smuggled)
         self.assertIn("capability-smuggling", self.diagnostic_codes(raised))
