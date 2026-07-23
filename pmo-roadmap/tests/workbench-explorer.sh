@@ -188,9 +188,11 @@ for key in ("starts_work", "writes_policy", "writes_roadmap", "writes_run_state"
             "creates_grant", "background_polling", "changes_default_route"):
     assert d[key] is False, key
 PY
-[ ! -e "$REPO/pm/programs" ] && [ ! -e "$REPO/pm/workflows" ] \
-  && [ ! -e "$REPO/pm/organizations" ] \
-  || fail "opening empty Program Studio must not create optional policy directories"
+if [ -e "$REPO/pm/programs" ] \
+  || [ -e "$REPO/pm/workflows" ] \
+  || [ -e "$REPO/pm/organizations" ]; then
+  fail "opening empty Program Studio must not create optional policy directories"
+fi
 
 python3 - "$TMP_ROOT/studio-save.json" <<'PY'
 import json, sys
@@ -262,8 +264,9 @@ assert d["graph"]["config"] == d["raw"]
 assert d["simulation"]["starts_work"] is False
 assert d["authority"]["grant_required"] and not d["authority"]["creates_grant"]
 PY
-[ ! -e "$REPO/.git/pmo-programs" ] && [ ! -e "$REPO/pm/program-runs" ] \
-  || fail "Studio authoring must not create runtime authority or run state"
+if [ -e "$REPO/.git/pmo-programs" ] || [ -e "$REPO/pm/program-runs" ]; then
+  fail "Studio authoring must not create runtime authority or run state"
+fi
 [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
   -d '{"family":"workflow","action":"save","name":"../escape","document":{}}' \
   "$BASE/api/program-studio/preview")" = "400" ] \

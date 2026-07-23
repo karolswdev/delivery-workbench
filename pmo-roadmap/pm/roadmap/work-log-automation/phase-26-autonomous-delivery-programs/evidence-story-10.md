@@ -123,6 +123,11 @@
 - Python compilation on both floors, canon lint, all Markdown, executable
   documentation snippets, agent surfaces, roadmap validation, rendered rider,
   source/vendored update parity, and diff checks passed.
+- PR follow-up: GitHub ShellCheck 0.9 exposed two ambiguous compound assertions
+  and two unquoted fixture-path interpolations in earlier Phase 26 shell tests.
+  Explicit `if` guards and quoted Python argv preserve the behavior; the exact
+  workflow ShellCheck invocation, `workbench-explorer.sh`, and fresh-wheel
+  package smoke all pass after the correction.
 
 ## Captured validation - 2026-07-23
 
@@ -183,4 +188,15 @@ $ /usr/bin/python3 -m compileall -q \
 
 $ git diff --check
 (no output)
+
+$ shellcheck -e SC2317 <the exact validation.yml shell-file set>
+(no output)
+
+$ pmo-roadmap/tests/workbench-explorer.sh
+workbench-explorer.sh: ok
+
+$ pmo-roadmap/tests/package-smoke.sh
+packaged multi-agent orchestration: duplicate_restarts=0, verify_all=ok
+packaged outward exam: duplicate_starts=0, duplicate_nudges=0
+package-smoke.sh: ok
 ```
