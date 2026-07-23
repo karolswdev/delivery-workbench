@@ -1,9 +1,9 @@
 # Optional autonomous delivery programs
 
 **Status:** Phase 26 contract and incremental implementation. Planning,
-workflow, organization, deliberation, Studio, and governed quality-decision
-cores are pinned by tests; program grant, conductor, advancement, and control
-room slices remain explicit later stories.
+workflow, organization, deliberation, Studio, governed quality-decision, and
+finite program-grant/replay cores are pinned by tests; conductor, advancement,
+and control-room slices remain explicit later stories.
 **Product claim:** Delivery Workbench **can run** a governed delivery program
 across an explicit roadmap scope when tracked policy has compiled and an
 operator has issued a separate finite program grant. Delivery Workbench is not
@@ -164,9 +164,15 @@ A representative program policy is:
   ],
   "mode_ceiling": "continuous",
   "requested_capabilities": [
+    "program:select",
     "agent:dispatch",
     "check:execute",
     "workspace:write",
+    "verdict:issue",
+    "council:decide",
+    "obligation:record",
+    "obligation:materialize",
+    "obligation:disposition",
     "evidence:materialize",
     "integration:apply",
     "contract:generate",
@@ -182,16 +188,24 @@ A representative program policy is:
     "max_stories": 12,
     "max_child_runs": 72,
     "max_agent_starts": 96,
+    "max_provider_starts": 96,
+    "max_model_starts": 96,
     "max_check_starts": 240,
     "max_loop_rounds": 36,
     "max_debate_rounds": 8,
+    "max_councils": 8,
     "max_repairs_per_story": 3,
     "max_verdicts": 72,
+    "max_obligations": 72,
+    "max_obligation_materializations": 24,
+    "max_obligation_dispositions": 72,
     "max_integrations": 12,
     "max_commits": 12,
     "max_pushes": 12,
     "max_nudges": 24,
     "max_artifact_bytes": 50000000,
+    "max_tokens": 12000000,
+    "max_observed_cost_microunits": 750000000,
     "max_wall_seconds": 172800
   },
   "stop_conditions": [
@@ -649,7 +663,9 @@ Decision authority is explicit and closed:
 
 - `rule` means majority, weighted threshold or unanimity computes the terminal
   outcome. No agent is the ultimate decider; a chair may synthesize the record
-  but cannot override the computed result.
+  but cannot override the computed result. If the charter separately declares
+  a judge-only tie route, that conditional route names its preassigned
+  `decider_seat`; it does not turn non-tied rule outcomes into agent decisions.
 - `judge` names one `decider_seat` in the compiled council. That seat is
   resolved and assigned before discussion, and its agent may select only from
   the outcomes mechanically allowed by the charter, quorum, veto, evidence and
@@ -861,9 +877,15 @@ The Phase 26 capability vocabulary is closed:
 
 | Capability | Exact act |
 |---|---|
+| `program:select` | reserve one deterministic scoped selection, assignment, or typed checkpoint request |
 | `agent:dispatch` | claim and start/poll one declared agent or child-run node |
 | `check:execute` | claim and execute one declared bounded mechanical check |
 | `workspace:write` | let an assigned child write only its isolated declared paths |
+| `verdict:issue` | issue one declared rubric-bound agent/panel/meta/architect verdict or evaluate its gate |
+| `council:decide` | conduct one declared bounded council/debate act and issue only its predeclared decision route |
+| `obligation:record` | append the explicit typed obligations carried by one decision |
+| `obligation:materialize` | materialize one separately authorized obligation on the exact roadmap rail |
+| `obligation:disposition` | complete, supersede, escalate, or explicitly waive one exact durable obligation |
 | `nudge:deliver` | use a score/program-declared Phase 25 standing rule within budget |
 | `notification:send` | publish a content-safe declared notification |
 | `evidence:materialize` | write one exact captured evidence artifact through the evidence rail |
@@ -897,27 +919,42 @@ the specifically assigned authority, exact rubric and citations, fresh subject,
 visible judgment provenance, and any required quorum/meta-review. Neither can
 be inferred from program completion.
 
+An ordinary workflow or council judgment uses `verdict:issue`; it does not
+silently acquire certification authority. `certification:verdict` is reserved
+for the separate certification rail and must be granted independently.
+
 ## Program plan and grant
 
-`delivery-workbench-program-plan@1` is a pure reviewed preview. In addition to
-the complete assignment plan it carries:
+`delivery-workbench-program-plan@1` remains the pure selector/assignment view.
+`delivery-workbench-program-start-plan@1` is the separate reviewed consent
+preview over that plan. In addition to the complete assignment it carries:
 
 - repository physical identity, branch, HEAD, index tree, worktree cleanliness,
-  Git operation, remote/ref and fast-forward observation;
+  Git operation, worktree fingerprint, and—when push is requested—one exact
+  remote/ref, URL fingerprint, head, and fast-forward observation;
 - roadmap snapshot/hash, selected project, complete scope, current frontier,
   and all candidate reasons;
-- source document hashes, compiler version, bundle hash, roster fingerprint,
+- source document hashes, bundle hash, roster and assignment fingerprints,
   assignments, separation proof, route simulation, and worst-case envelope;
+- every assigned seat's stable address and generation plus its resolved
+  harness/adapter, router/provider, model vendor/family/id/revision-or-alias,
+  auth domain, principal, workspace, session, and capability fingerprints;
+- every council's rule/judge/checkpoint authority and, for judge mode, its
+  already assigned `decider_seat` (rule mode records `null`, not a fake agent);
 - requested mode, capabilities, per-scope budgets, expiry, stop conditions,
   permanent exclusions, and accountable operator; and
 - `starts_work: false`, `writes_policy: false`, `writes_roadmap: false`, and an
   exact single-use `start_token` over the whole preview.
 
 `delivery-workbench-program-grant@1` is issued only when start re-plans current
-facts and byte-matches the submitted plan/token. It contains one unpredictable
-program-run id, immutable plan/bundle, repository/roadmap/roster facts, chosen
-mode, exact capability set, every finite budget, issued/expiry times,
-revocation generation, operator identity/decision, and permanent exclusions.
+facts under an exclusive lock and exactly matches the submitted plan/token. It
+contains one unpredictable program-run id, immutable policy/bundle hashes,
+repository/roadmap/roster facts, chosen mode, exact capability set, every
+finite budget, issued/expiry times, revocation generation, operator
+identity/decision, and permanent exclusions. The grant therefore identifies a
+judge by durable seat plus exact assignment/execution generation; changing a
+provider, model alias resolution, adapter, auth domain, principal, workspace,
+or capability fingerprint cannot silently preserve that authority.
 
 The grant lives under `.git/pmo-programs/runs/<program-run-id>/grant.json`. It
 is local authority, not a portable bearer secret. A caller supplies ids and
@@ -933,12 +970,25 @@ cancel additionally requests bounded interruption of active children. A wider
 scope, larger budget, different mode, changed policy, or changed authority
 always requires a new grant—not mutation in place.
 
+The WLA-26-08 authority core reserves every act through an exclusive,
+idempotent `delivery-workbench-program-claim-preview@1`, appends only
+hash-chained `delivery-workbench-program-event@1` records, and derives the
+disposable `delivery-workbench-program-projection@1` by replay. Apply-time code
+recomputes scope, capability, typed checkpoint port, child intersection,
+budget, roster/policy/repository/roadmap freshness, control transition, and
+completion facts; preview hashes are integrity bindings, never treated as
+secret bearer authority. WLA-26-09's conductor consumes these reservations—it
+does not acquire a second authority system.
+
 ## Budgets, ceilings, and exhaustion
 
 All continuous grants have finite positive limits for phases, stories, child
-runs, agent starts, check starts, total loop rounds, debate rounds, repairs per
-story, verdicts, integrations, commits, pushes, nudges, artifact bytes, and wall
-time. A capability absent from the grant has an effective budget of zero.
+runs, agent, provider and model starts, check starts, total loop rounds, debate
+rounds, councils, repairs per story, verdicts, obligations and their
+materialization/disposition, integrations, commits, pushes, nudges, artifact
+bytes, tokens, observed cost and wall time. A capability absent from the grant
+has an effective budget of zero. Cost is explicitly `observed-only`; no
+unavailable provider bill is presented as a mechanical fact.
 
 Each workflow/loop/role may declare a narrower local ceiling. Before a claim,
 the conductor checks the minimum of policy, grant, scope, role, node, loop,
@@ -953,66 +1003,75 @@ uncovered claims. Adding budget requires a new grant over a fresh plan.
 
 ## Program state, ledger, and recovery
 
-The replayed `delivery-workbench-program-run@1` projection uses these states:
+The WLA-26-08 replayed `delivery-workbench-program-projection@1` uses this
+authority state machine:
 
 ```mermaid
 stateDiagram-v2
-  [*] --> planned
-  planned --> running: exact grant
-  running --> waiting_child: child claimed
-  waiting_child --> running: child receipt reconciled
-  running --> waiting_checkpoint: named decision port
-  running --> waiting_signal: declared outward wait
-  running --> repairing: failed gate routes to repair
-  repairing --> running: fresh subject produced
-  running --> paused: operator or recoverable stop
-  paused --> running: exact resume
-  running --> blocked: policy/refusal/architect veto
-  running --> exhausted: finite budget consumed
-  running --> revoked: grant revoked
-  running --> cancelled: cancellation completes
-  running --> complete: scope plus phase gates complete
-  planned --> corrupt: invalid authority chain
-  running --> corrupt: invalid ledger chain
+  [*] --> advisory: exact advisory grant
+  [*] --> running: exact checkpointed/continuous grant
+  running --> checkpoint: typed request claimed
+  checkpoint --> running: request receipt
+  running --> paused: approved pause
+  checkpoint --> paused: approved pause
+  paused --> running: approved resume
+  paused --> checkpoint: resume with open request
+  running --> exhausted: finite budget cannot cover claim
+  running --> expired: wall-time expiry
+  checkpoint --> expired: wall-time expiry
+  paused --> expired: wall-time expiry
+  running --> revoked: approved revoke
+  checkpoint --> revoked: approved revoke
+  paused --> revoked: approved revoke
+  advisory --> revoked: approved revoke
+  expired --> revoked: approved revoke
+  exhausted --> revoked: approved revoke
+  running --> cancelled: approved cancel
+  checkpoint --> cancelled: approved cancel
+  paused --> cancelled: approved cancel
+  expired --> cancelled: approved cancel
+  exhausted --> cancelled: approved cancel
 ```
 
-`blocked`, `exhausted`, `revoked`, `cancelled`, `complete`, and `corrupt` are
-terminal for that grant generation. A repair or checkpoint is nonterminal only
-when the compiled route and remaining grant explicitly cover it.
+`advisory` can only be inspected or revoked. `expired`, `exhausted`, `revoked`,
+and `cancelled` permit no future claims; bounded active-claim receipts may still
+be reconciled without reviving authority. The conductor will add the exact
+scope-complete transition in WLA-26-09. Operational labels such as waiting for
+a child, repairing, or blocked are conductor views over claims/routes, not new
+authority states. A corrupt, forked, truncated, reordered, or invalid ledger
+produces no projection at all—it does not become a usable `corrupt` state.
 
-The runtime directory is:
+The WLA-26-08 authority directory is deliberately small:
 
 ```text
 .git/pmo-programs/runs/<program-run-id>/
   grant.json                 immutable local authority
   plan.json                  immutable reviewed start plan
-  bundle.json                immutable compiled policy bundle
   ledger.jsonl               authoritative hash-chained events
-  children/<address>.json    child run/session identities and receipts
-  artifacts/                 declared bounded artifact metadata/content
-  integration/               exact diff/apply/commit/push receipts
-  projection.json            disposable replay cache
 ```
 
-Every `delivery-workbench-program-event@1` carries run id, sequence, event id,
-timestamp, previous hash, event hash, grant generation, workflow address,
-phase/story when applicable, action/idempotency key, typed detail, consumed
-budget, and resulting state. The closed event families are:
+Child grants are mechanically derived documents and projections are replayed,
+not trusted caches. The conductor/integration stories may add bounded artifact
+and receipt storage, but neither may replace the three authoritative files or
+smuggle authority into them.
 
-- lifecycle: `program_started`, `program_paused`, `program_resumed`,
-  `program_revoked`, `program_cancelled`, `program_exhausted`,
-  `program_completed`, `program_refused`;
-- selection/organization: `phase_selected`, `story_selected`, `team_assigned`,
-  `assignment_replaced`, `workflow_instantiated`;
-- work/quality: `action_claimed`, `child_started`, `child_reconciled`,
-  `artifact_recorded`, `mechanical_fact_recorded`, `verdict_recorded`,
-  `dissent_recorded`, `loop_advanced`, `debate_round_recorded`,
-  `gate_evaluated`, `repair_routed`;
-- decisions/signals: `checkpoint_requested`, `checkpoint_decided`,
-  `signal_linked`, `nudge_linked`, `notification_linked`; and
-- delivery: `evidence_materialized`, `integration_applied`,
-  `contract_generated`, `certification_recorded`, `commit_recorded`,
-  `push_recorded`, `story_transitioned`, `phase_transitioned`.
+Every current `delivery-workbench-program-event@1` carries exact run id,
+sequence, timestamp, previous/event hash, grant generation, one closed event
+name, and exact typed detail. The WLA-26-08 event names are
+`program_started`, `claim_reserved`, `claim_completed`, `program_paused`,
+`program_resumed`, `program_revoked`, `program_cancelled`, and
+`program_exhausted`. A reservation records deterministic claim id,
+idempotency/request hash, category, exact typed subject (including phase/story
+when applicable), capability, decision, reason, resource estimate, consumed
+budget, optional child-grant hash, and optional typed request port.
+
+Claim categories close over selection/assignment, child and agent work,
+checks, council/debate/loop rounds, verdict/gate/repair, all three obligation
+acts, evidence/integration/certification, commit/push, story/phase transitions,
+nudges/notifications, and checkpoint requests. WLA-26-09/10 may add versioned
+conductor and delivery receipts, but their authority must continue to originate
+in these reservations and their exact artifact/decision receipts; they cannot
+invent an unclaimed event family as a shortcut.
 
 Before any external or mutation act, the conductor atomically appends an
 exclusive claim with an idempotency key over run/generation/phase/story/
@@ -1023,8 +1082,8 @@ attempt. It never treats a missing receipt as proof an act did not happen.
 Driver, check, evidence, integration, Git, and roadmap rails each expose an
 operation-specific idempotency/reconciliation seam. An uncertain destructive
 act blocks rather than repeats. A corrupt, forked, truncated, reordered, or
-hash-invalid ledger yields `corrupt` and no further claim. Deleting
-`projection.json` changes no meaning.
+hash-invalid ledger refuses replay and all further claims. No projection cache
+is authoritative; creating, deleting, or changing one cannot change meaning.
 
 ## Integration and exact roadmap advancement
 

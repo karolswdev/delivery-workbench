@@ -594,6 +594,8 @@ class _Compiler:
                         self.diag(f"{role_pointer}/{key}", "unsafe-selector", f"invalid schema selector {schema!r}", "use a bounded schema id or null")
                 if duty in JUDGMENT_DUTIES and verdict_schema is None:
                     self.diag(f"{role_pointer}/verdict_schema", "missing-verdict-schema", f"{duty} must declare a verdict schema", "name the exact verdict schema")
+                if duty in JUDGMENT_DUTIES and "verdict:issue" not in ceiling:
+                    self.diag(f"{role_pointer}/capability_ceiling", "capability-missing", f"{duty} must explicitly allow verdict:issue", "add verdict:issue to the role ceiling")
                 if duty not in JUDGMENT_DUTIES and output_schema is None:
                     self.diag(f"{role_pointer}/output_schema", "missing-output-schema", f"{duty} must declare an output schema", "name the exact output schema")
                 max_concurrency = self.integer(
@@ -692,6 +694,8 @@ class _Compiler:
                 judge = None
             elif roles.get(judge, {}).get("duty") not in {"judge", "verifier"}:
                 self.diag(f"{pointer}/judge", "unsupported-duty", "council judge must have judge or verifier duty", "use a judgment role")
+            elif not {"council:decide", "obligation:record"} <= set(roles[judge]["capability_ceiling"]):
+                self.diag(f"{pointer}/judge", "capability-missing", "council judge must explicitly allow council:decide and obligation:record", "add both council decision capabilities to the judge role ceiling")
             meta = raw.get("meta_verifier")
             if meta is not None and (
                 not isinstance(meta, str)
@@ -1129,7 +1133,10 @@ def workflow_role_requirements(workflow: dict[str, object] | None) -> dict[str, 
             "addresses": [],
         })
         requirement["capabilities"].update(
-            required_capabilities.get(str(lane["node"]), [])
+            lane.get(
+                "capabilities",
+                required_capabilities.get(str(lane["node"]), []),
+            )
         )
         workspace = lane.get("workspace")
         if workspace:
@@ -1540,6 +1547,7 @@ def assign_organization_team(
                 "verdict_schema": role["verdict_schema"],
                 "workflow_requirements": requirement,
             },
+            "capability_ceiling": role["capability_ceiling"],
             "replacement": role["replacement"],
         })
 

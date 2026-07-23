@@ -400,6 +400,18 @@ adds current repository, roadmap, and local driver-roster facts plus one stable
 workflow/team assignment. All four operations stamp `starts_work: false`; they
 create no grant, run state, program store, observer, or roadmap write.
 
+The shared finite program-authority core is a separate consent surface over
+that pure plan. Its start preview binds an accountable operator, exact scope,
+policy and roster hashes, every assigned seat's provider/model/auth execution
+identity, mode, capability set, finite budget, expiry, stop conditions, and
+permanent exclusions. Exact start creates only an immutable local grant plus a
+hash-chained ledger under `.git/pmo-programs`; opening the Workbench, saving
+policy, installing/updating, or running ordinary/bounded commands never does.
+Exclusive claim, completion, child-grant, and pause/resume/revoke/cancel
+previews are generation/head-bound, and apply recomputes their scope, budget,
+authority intersection, facts, and legal transition. WLA-26-09 consumes this
+core to conduct work; WLA-26-11 exposes byte-equivalent live controls.
+
 `run plan` is the separate orchestration consent preview: it binds the
 compiled score to current local Git/status/story facts, exact requested
 profiles/capabilities/workspaces, all finite budgets, expiry, and permanent

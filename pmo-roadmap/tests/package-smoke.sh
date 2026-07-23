@@ -131,6 +131,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_deliberation.py" ] || fail "wheel omitted the replayable deliberation protocol core"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_studio.py" ] || fail "wheel omitted the pure Program Studio model/edit core"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_verdict.py" ] || fail "wheel omitted the governed verdict and quality-gate core"
+[ -f "$FIXTURE/.githooks/dw_pmo/program_run.py" ] || fail "wheel omitted the finite program grant and ledger core"
 [ -f "$FIXTURE/pm/orchestration/research-build-review.json" ] \
   || fail "install did not seed the ordinary orchestration preset"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
@@ -150,6 +151,9 @@ PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
   'from dw_pmo import COUNCIL_DECISION_KIND, MECHANICAL_FACT_KIND, QUALITY_PROOF_KIND, RUBRIC_SCHEMA_VERSION, VERDICT_KIND, build_mechanical_fact, build_verdict_assignment, build_verdict_set_subject, compile_rubric, compose_panel_verdict, council_decision_freshness_issues, evaluate_quality_gate, issue_agent_verdict, rubric_inventory, validate_council_decision, validate_mechanical_fact, validate_rubric, validate_verdict_document, verdict_freshness_issues; assert COUNCIL_DECISION_KIND == "delivery-workbench-decision" and MECHANICAL_FACT_KIND == "delivery-workbench-mechanical-fact" and QUALITY_PROOF_KIND == "delivery-workbench-quality-proof" and RUBRIC_SCHEMA_VERSION == 1 and VERDICT_KIND == "delivery-workbench-verdict"; assert all(callable(item) for item in (build_mechanical_fact, build_verdict_assignment, build_verdict_set_subject, compile_rubric, compose_panel_verdict, council_decision_freshness_issues, evaluate_quality_gate, issue_agent_verdict, rubric_inventory, validate_council_decision, validate_mechanical_fact, validate_rubric, validate_verdict_document, verdict_freshness_issues))' \
   || fail "packaged core does not expose governed fact, verdict, and gate parity"
+PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
+  'from pathlib import Path; from dw_pmo import PROGRAM_GRANT_KIND, PROGRAM_PERMANENT_EXCLUSIONS, PROGRAM_START_PLAN_KIND, apply_program_claim, apply_program_completion, apply_program_control, build_program_claim_preview, build_program_completion_preview, build_program_control_preview, build_program_start_plan, derive_child_grant, program_freshness_issues, program_run_inventory, replay_program, start_program, validate_child_grant; view=program_run_inventory(Path("'$FIXTURE'")); assert PROGRAM_START_PLAN_KIND == "delivery-workbench-program-start-plan" and PROGRAM_GRANT_KIND == "delivery-workbench-program-grant"; assert view["healthy"] and view["runs"] == [] and not view["starts_work"] and not view["creates_grant"]; assert "authority-minting" in PROGRAM_PERMANENT_EXCLUSIONS; assert all(callable(item) for item in (build_program_start_plan, start_program, replay_program, program_freshness_issues, derive_child_grant, validate_child_grant, build_program_claim_preview, apply_program_claim, build_program_completion_preview, apply_program_completion, build_program_control_preview, apply_program_control))' \
+  || fail "packaged core does not expose finite program grant and ledger parity"
 (cd "$FIXTURE" && ./.githooks/dw orchestration validate research-build-review --json) \
   | grep -q '"valid": true' \
   || fail "packaged orchestration preset did not validate"

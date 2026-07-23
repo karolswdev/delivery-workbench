@@ -112,7 +112,7 @@
       },
       "capability_ceiling": [
         "agent:dispatch",
-        "certification:verdict",
+        "verdict:issue",
         "check:execute",
         "workspace:write"
       ],

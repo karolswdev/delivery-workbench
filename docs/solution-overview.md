@@ -511,9 +511,14 @@ without deliberation. A council declares before dispatch whether its outcome
 comes from a deterministic rule, a preassigned decider seat, or an authorized
 external checkpoint; every terminal decision binds the resolved execution
 stack and carries an explicit backlog/technical-debt/risk/follow-up obligation
-list. The remaining program grant/conductor slices will place that protocol,
-obligation lifecycle, and any resulting integration or roadmap act behind
-separately granted authority.
+list. The finite program-authority core now freezes that exact roster—including
+the council's stable `decider_seat`, assignment generation, provider/model and
+auth-domain execution binding—inside an expiring, revocable grant. Its
+exclusive claims and hash-chained replay ledger reserve only named capabilities
+and budgets; rule-decided councils still have no agent decider, and checkpoint
+decisions remain external typed requests. The remaining conductor and
+integration slices will execute those reserved acts and carry obligation state
+onto exact roadmap rails without acquiring broader authority.
 
 This does not redefine the product's ordinary mode. Vanilla Delivery Workbench
 remains complete with no program configured, and a Phase 24 score remains an

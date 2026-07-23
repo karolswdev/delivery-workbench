@@ -743,7 +743,7 @@ def build_verdict_assignment(
     _refuse(packet.get("workspace") == "read-only", "workspace-denied", "judgment role must be read-only")
     _refuse(bool(packet.get("verdict_schema")), "assignment-invalid", "judgment role has no verdict schema")
     effective = packet.get("effective_capability_ceiling")
-    _refuse(isinstance(effective, list) and "certification:verdict" in effective, "capability-denied", "judgment role lacks certification:verdict")
+    _refuse(isinstance(effective, list) and "verdict:issue" in effective, "capability-denied", "judgment role lacks verdict:issue")
     independent_roles = role.get("independent_from")
     _refuse(isinstance(independent_roles, list), "assignment-invalid", "independence policy is absent")
     if role.get("duty") == "verifier":
