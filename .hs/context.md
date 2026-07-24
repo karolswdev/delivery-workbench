@@ -6,8 +6,8 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Current phase: 26 (phase-26-autonomous-delivery-programs)
-- Next story: WLA-26-11 — Operate the autonomous organization across every surface [backlog]
+- Current phase: 27 (phase-27-usability-improvements)
+- Next story: WLA-27-01 — Contract the everyday product language [backlog]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->
