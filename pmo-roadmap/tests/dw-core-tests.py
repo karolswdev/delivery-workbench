@@ -1613,7 +1613,7 @@ class DwCoreTest(unittest.TestCase):
         self.assertEqual(self._interop_missing(post_routes, doc), [])
         # the CLI's machine-readable verbs
         verbs = [
-            "dw status", "dw step", "dw context", "dw state --json", "dw next", "dw board",
+            "dw status", "dw setup", "dw step", "dw context", "dw state --json", "dw next", "dw board",
             "dw holds", "dw story show", "dw sessions --json", "dw events",
             "dw check", "dw gate --porcelain", "dw verify",
             "dw orchestration list", "dw orchestration show", "dw orchestration simulate",
@@ -1637,7 +1637,9 @@ class DwCoreTest(unittest.TestCase):
         ]
         self.assertEqual(self._interop_missing(verbs, doc), [])
         # the stamped models
-        for stamp in ("delivery-workbench-status", "delivery-workbench-step",
+        for stamp in ("delivery-workbench-status",
+                      "delivery-workbench-delivery-setup",
+                      "delivery-workbench-step",
                       "delivery-workbench-step-result",
                       "delivery-workbench-roadmap-context",
                       "delivery-workbench-workbench-response",
@@ -14999,6 +15001,173 @@ class ProgramStudioTest(unittest.TestCase):
         )
         self.assertEqual(status, 409)
         self.assertFalse(stale["ok"])
+
+
+class DeliverySetupTest(unittest.TestCase):
+    """WLA-27-03: one pure delivery choice model across CLI and Workbench."""
+
+    def setUp(self):
+        import dw_pmo.delivery_setup as setup_core
+
+        self.core = setup_core
+        self.tmp = Path(tempfile.mkdtemp(prefix="dw-delivery-setup-test.")).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = self.tmp / "repo"
+        self.root.mkdir()
+        self._cmd("git", "init", "-q", "-b", "main")
+        self._cmd("git", "config", "user.name", "Delivery Setup Fixture")
+        self._cmd("git", "config", "user.email", "setup@example.test")
+        subprocess.run(
+            [
+                str(TESTS_DIR.parent / "bootstrap" / "new-project.sh"),
+                str(self.root), "sample", "Sample", "SMP",
+            ],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        subprocess.run(
+            [
+                str(TESTS_DIR.parent / "install.sh"),
+                str(self.root), "--skip-bootstrap",
+            ],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.dw = self.root / ".githooks" / "dw"
+        self._dw("story", "status", "sample", "0", "SMP-0-01", "in-progress")
+        self._dw("rider", "docs")
+        self._cmd("git", "add", ".")
+        self._cmd(
+            "git", "-c", "core.hooksPath=/dev/null",
+            "commit", "-q", "-m", "delivery setup fixture",
+        )
+
+    def _cmd(self, *argv, check=True):
+        return subprocess.run(
+            list(argv), cwd=self.root, check=check, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+    def _dw(self, *argv, check=True):
+        return self._cmd(str(self.dw), *argv, check=check)
+
+    def _files(self):
+        return {
+            str(path.relative_to(self.root)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(self.root.rglob("*"))
+            if path.is_file() and ".git" not in path.relative_to(self.root).parts
+        }
+
+    @staticmethod
+    def _choice(model, choice_id):
+        return next(item for item in model["choices"] if item["id"] == choice_id)
+
+    def test_front_door_names_scope_three_modes_effects_and_permissions(self):
+        model = self.core.build_delivery_setup(self.root, "sample")
+        self.assertEqual(model["kind"], "delivery-workbench-delivery-setup")
+        self.assertEqual(model["schema_version"], 1)
+        self.assertTrue(model["healthy"])
+        self.assertEqual(model["readiness"], "ready")
+        self.assertEqual(model["delivery_scope"]["selected_project"], "sample")
+        self.assertEqual(
+            model["delivery_scope"]["current_work"]["story_id"], "SMP-0-01"
+        )
+        self.assertEqual(
+            [item["id"] for item in model["choices"]],
+            ["roadmap", "bounded", "program"],
+        )
+        ordinary, bounded, program = model["choices"]
+        self.assertTrue(ordinary["recommended"])
+        self.assertEqual(ordinary["readiness"], "ready")
+        self.assertEqual(bounded["readiness"], "ready-to-review")
+        self.assertEqual(program["readiness"], "ready-to-set-up")
+        self.assertIsNone(ordinary["separate_permission"])
+        self.assertIn("explicit start confirmation", bounded["separate_permission"])
+        self.assertIn("separate reviewed program start", program["separate_permission"])
+        self.assertIn("Save draft", program["creates_during_setup"][0])
+        self.assertEqual(model["technical_details"]["label"], "Technical details")
+        self.assertEqual(model["cancel"]["effect"], "Leaves repository and delivery state unchanged.")
+
+    def test_setup_and_cancel_model_are_repeatable_and_write_nothing(self):
+        before = self._files()
+        first = self.core.build_delivery_setup(self.root, "sample")
+        second = self.core.build_delivery_setup(self.root, "sample")
+        self.assertEqual(first, second)
+        self.assertEqual(before, self._files())
+        self.assertEqual(self._cmd("git", "status", "--porcelain").stdout, "")
+        for key in (
+            "starts_work", "writes_policy", "writes_roadmap",
+            "writes_run_state", "creates_grant", "starts_process",
+            "starts_observer", "sends_notification", "uses_network",
+        ):
+            self.assertFalse(first[key], key)
+        for path in (
+            ".git/pmo-orchestration", ".git/pmo-programs", "pm/program-runs",
+            "pm/programs", "pm/workflows", "pm/organizations",
+        ):
+            self.assertFalse((self.root / path).exists(), path)
+
+    def test_human_cli_and_http_render_the_same_choice_and_readiness(self):
+        from dw_pmo.status import build_status
+        from dw_pmo.workbench import handle_api
+
+        model = self.core.build_delivery_setup(self.root, "sample")
+        status, body = handle_api(
+            self.root, "/api/delivery-setup", {"project": ["sample"]}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"], model)
+
+        setup = self._dw("setup", "sample", "--technical")
+        self.assertEqual(setup.returncode, 0, setup.stderr)
+        for choice in model["choices"]:
+            self.assertIn(
+                f"{choice['label']} — {choice['readiness']}", setup.stdout
+            )
+        self.assertIn("Technical details:", setup.stdout)
+        self.assertIn("inspection and cancel start nothing", setup.stdout)
+
+        machine_status = self._dw("status", "sample", "--json")
+        self.assertEqual(machine_status.returncode, 0, machine_status.stderr)
+        self.assertEqual(json.loads(machine_status.stdout), build_status(self.root, "sample"))
+        human_status = self._dw("status", "sample")
+        self.assertIn("choices=roadmap|bounded|program", human_status.stdout)
+        self.assertIn('open=".githooks/dw setup sample"', human_status.stdout)
+
+    def test_missing_or_invalid_inputs_name_the_delivery_decision_and_correction(self):
+        score = self.root / "pm/orchestration/research-build-review.json"
+        score.write_text("{}\n", encoding="utf-8")
+        invalid = self.core.build_delivery_setup(self.root, "sample")
+        bounded = self._choice(invalid, "bounded")
+        self.assertEqual(bounded["readiness"], "needs-delivery-plan")
+        self.assertFalse(bounded["available"])
+        self.assertIn("valid delivery plan", bounded["correction"])
+
+        programs = self.root / "pm/programs"
+        programs.mkdir()
+        (programs / "broken.json").write_text("{}\n", encoding="utf-8")
+        invalid_program = self.core.build_delivery_setup(self.root, "sample")
+        program = self._choice(invalid_program, "program")
+        self.assertTrue(invalid_program["healthy"])
+        self.assertFalse(invalid_program["optional_configuration_healthy"])
+        self.assertEqual(program["readiness"], "needs-program-repair")
+        self.assertTrue(program["available"])
+        self.assertIn("invalid delivery-program draft", program["correction"])
+
+        subprocess.run(
+            [
+                str(TESTS_DIR.parent / "bootstrap" / "new-project.sh"),
+                str(self.root), "second", "Second", "SND",
+            ],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        unselected = self.core.build_delivery_setup(self.root)
+        self.assertEqual(unselected["readiness"], "attention")
+        self.assertTrue(unselected["delivery_scope"]["selection_required"])
+        self.assertEqual(unselected["issues"][0]["decision"], "delivery scope")
+        self.assertIn("Select the project", unselected["issues"][0]["next_step"])
+        self.assertEqual(
+            self._choice(unselected, "program")["readiness"],
+            "needs-delivery-scope",
+        )
 
 
 class ProgramDeliberationTest(unittest.TestCase):

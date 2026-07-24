@@ -227,6 +227,12 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
             return 200, envelope(score_inventory(root))
 
+        if parts == ["api", "delivery-setup"]:
+            from .delivery_setup import build_delivery_setup
+
+            project = query.get("project", [""])[0].strip() or None
+            return 200, envelope(build_delivery_setup(root, project))
+
         if parts == ["api", "program-studio"]:
             from .program_studio import build_program_studio
 

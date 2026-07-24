@@ -70,6 +70,7 @@ inspects the repo and drafts a roadmap for you. See the
 
 ```bash
 .githooks/dw status                     # is this repo ready, and what is safe next?
+.githooks/dw setup myapp                # compare ordinary, bounded, and optional-program delivery
 .githooks/dw step myapp                 # preview one state-bound, allowlisted action
 # review the preview; run its exact apply=... command when it is applicable
 .githooks/dw story status myapp 2 3 in-progress
@@ -155,6 +156,7 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 | Command | What it does |
 |---|---|
 | `dw status [project] [--json]` | One read-only readiness verdict and the next safe action across rails, workspace, and roadmap. |
+| `dw setup [project] [--technical]` | Compare the same three delivery choices and readiness shown in Workbench; starts and writes nothing. |
 | `dw step [project] [--json]` | Preview one state-bound action; `--json --apply --expect <token>` returns its bounded result after at most one allowlisted argv, never certification or commit. |
 | `dw orchestration list\|show\|validate\|simulate` | Compile and explain exact `pm/orchestration/*.json` scores without starting agents or writing run state. |
 | `dw organization list\|validate\|simulate` | Purely compile optional `pm/organizations/*.json`: logical pools, exact role packet/capability policy, principal/workspace separation, councils, resource waves, and finite replacement; an empty registry is healthy. |
@@ -258,8 +260,14 @@ explicit pause/resume/revoke/cancel decisions. Refresh and stream opens are
 deliberate; there is no hidden poller, generic terminal, certification button,
 or commit shortcut.
 
-At `#/program-studio`, an explicitly entered advanced workspace authors the
-optional Phase 26 policy family without changing that ordinary front door.
+At `#/program-studio`, delivery setup first asks which project and phase are
+being delivered, then compares ordinary roadmap work, one bounded delivery,
+and an optional delivery program without preselecting a higher mode. Each
+choice explains what setup creates, what could change later, what stays off,
+and which separate permission would still be required. Leaving or inspecting
+**Technical details** starts and writes nothing. Explicit family routes then
+open the advanced workspace that authors the optional Phase 26 policy family
+without changing that ordinary front door.
 Programs show roadmap scope, binding rules, phase gates, requested
 capabilities, finite budgets, and stops; workflows show accessible role lanes,
 nested subflows, fan-in/out, typed loop/debate containers, verdicts, artifacts,
@@ -407,6 +415,7 @@ trailers and an archived contract, the full history passing
 
 - [Everyday product language](./docs/product-language.md): the Phase 27 vocabulary, presentation-only application-view boundary, complete surface inventory, technical-details escape hatch, and executable drift contract
 - [Whole-task usability journeys](./docs/usability-journeys.md): the Phase 27 journey contract, reachable state fixtures, current-friction baseline, screen ownership, and deterministic usability proof
+- [Delivery setup and first arrival](./docs/delivery-setup.md): the three deliberate operating modes, pure shared model, Workbench/CLI parity, safe exits, preflight, and proof
 - [Comprehensive solution overview](./docs/solution-overview.md): current architecture, workflows, trust model, proof snapshot, strengths, gaps, and delivered response
 - [Status briefing contract](./docs/status-briefing.md): the Phase 22 one-answer model, readiness semantics, and guided action order
 - [Deliberate step contract](./docs/deliberate-step.md): the Phase 23 state-bound preview/apply seam and closed executable action table

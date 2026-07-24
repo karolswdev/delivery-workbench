@@ -275,6 +275,40 @@ function statusPanel(status, step, notice) {
   </section>`;
 }
 
+function setupChoice(setup, id) {
+  return (setup.choices || []).find((choice) => choice.id === id);
+}
+
+function arrivalPanel(setup, status, step, notice) {
+  const scope = setup.delivery_scope || {};
+  const work = scope.current_work;
+  const ordinary = setupChoice(setup, "roadmap");
+  const technicalOpen = Boolean(
+    notice || (SNAPSHOT_MODE && new URLSearchParams(location.search).has("confirmstep"))
+  );
+  const workLine = work
+    ? `<div class="arrival-work"><span>Current work</span><div><strong>${esc(work.title)}</strong><small>${esc(work.story_id)} · ${esc(work.status)}</small></div></div>`
+    : `<div class="arrival-work"><span>Current work</span><div><strong>No work is currently actionable</strong><small>Check readiness for the affected delivery decision.</small></div></div>`;
+  return `<section class="arrival-panel readiness-${esc(setup.readiness)}" aria-labelledby="arrival-title">
+    <div class="arrival-hero">
+      <div><span class="arrival-eyebrow">${setup.healthy ? "healthy ordinary delivery" : "delivery needs attention"}</span>
+        <h1 id="arrival-title">${esc(setup.title)}</h1><p>${esc(setup.summary)}</p></div>
+      ${badge(setup.readiness, setup.readiness === "ready" ? "ok" : "issue")}
+    </div>
+    ${workLine}
+    <div class="arrival-actions">
+      ${ordinary?.available && work ? `<a class="primary" href="${esc(ordinary.route)}">Open current work</a>` : '<a class="primary" href="#/health">Check readiness</a>'}
+      <a href="#/program-studio">Review delivery options</a>
+      <span>Optional coordination is not required.</span>
+    </div>
+    <details class="arrival-technical"${technicalOpen ? " open" : ""}>
+      <summary>Technical details</summary>
+      <p>Exact repository, contract, gate, command, and one-step facts remain available here.</p>
+      ${statusPanel(status, step, notice)}
+    </details>
+  </section>`;
+}
+
 /* ── mission control (WLA-15-01): the read-only belt ──────────────
  * The workbench is the fourth consumer of the mission-control
  * substrate (feed + sessions + events), read-only by charter — the
@@ -378,12 +412,13 @@ async function viewMissionControl() {
 
 async function viewOverview(notice = null) {
   setCrumbs([{ label: "overview" }]);
-  const [statusBody, stepBody, body] = await Promise.all([
+  const [statusBody, stepBody, body, setupBody] = await Promise.all([
     api("/api/status"), api("/api/step"), api("/api/projects"),
+    api("/api/delivery-setup"),
   ]);
   const projects = body.data.projects;
   const step = stepBody.data;
-  const briefing = statusPanel(statusBody.data, step, notice);
+  const briefing = arrivalPanel(setupBody.data, statusBody.data, step, notice);
   if (!projects.length) {
     app.innerHTML = briefing + stateHtml("No roadmap projects found under pm/roadmap/. Scaffold one with `dw phase create` or `dw adopt`.");
     wireStepControl(step);
@@ -1401,21 +1436,42 @@ function orchGraph() {
 
 function validateView() {
   const p = orchState.preview;
-  if (!p) return stateHtml("Waiting for the shared compiler…");
+  if (!p) return stateHtml("Checking delivery readiness…");
   const diagnostics = p.validation?.diagnostics || [];
-  if (!p.valid) return `<div class="orch-validation invalid" aria-live="polite"><h2>Compiler refused this score ${badge(`${diagnostics.length} issue${diagnostics.length === 1 ? "" : "s"}`, "issue")}</h2>
-    <ol class="orch-diagnostics">${diagnostics.map((d) => `<li data-pointer="${esc(d.pointer)}"><code>${esc(d.pointer)}</code><strong>${esc(d.code)}</strong><span>${esc(d.message)}</span><small>${esc(d.remediation)}</small></li>`).join("")}</ol></div>`;
+  const technicalOpen = new URLSearchParams(location.search).has("orchtechnical");
+  if (!p.valid) return `<div class="orch-validation invalid delivery-preflight" aria-live="polite">
+    <header class="preflight-head"><div><span>Delivery readiness</span><h2>${diagnostics.length} delivery decision${diagnostics.length === 1 ? "" : "s"} need attention</h2><p>Nothing was saved or started. Correct the affected part of the delivery plan, then check readiness again.</p></div>${badge("not ready", "issue")}</header>
+    <ol class="preflight-corrections">${diagnostics.map((d) => `<li data-pointer="${esc(d.pointer)}"><strong>Affected decision</strong><span>${esc(d.message)}</span><small>Next step: ${esc(d.remediation)}</small></li>`).join("")}</ol>
+    <div class="preflight-actions"><a href="#/program-studio">Return to delivery choices</a></div>
+    <details class="preflight-technical"${technicalOpen ? " open" : ""}><summary>Technical details</summary>
+      <p>Exact compiler targets and identifiers:</p>
+      <ol class="orch-diagnostics">${diagnostics.map((d) => `<li data-pointer="${esc(d.pointer)}"><code>${esc(d.pointer)}</code><strong>${esc(d.code)}</strong><span>${esc(d.message)}</span><small>${esc(d.remediation)}</small></li>`).join("")}</ol>
+    </details>
+  </div>`;
   const c = p.compiled;
   const s = p.simulation;
-  return `<div class="orch-validation valid" aria-live="polite">
-    <div class="orch-hashes"><div><span>semantic hash</span><code>${esc(c.semantic_hash)}</code></div><div><span>document hash</span><code>${esc(c.document_hash)}</code></div></div>
-    <div class="orch-validate-grid">
-      <section><h3>capability request</h3>${c.analysis.capabilities.map((x) => badge(x, "warn")).join(" ") || "none"}<h3>logical profiles</h3>${c.analysis.profiles.map((x) => badge(x)).join(" ") || "none"}</section>
-      <section><h3>finite budgets</h3>${Object.entries(s.budgets).map(([k, v]) => `<div class="kv"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("")}</section>
+  const nodeCount = c.score?.nodes?.length || orchState.score.nodes?.length || 0;
+  const profiles = c.analysis.profiles || [];
+  return `<div class="orch-validation valid delivery-preflight" aria-live="polite">
+    <header class="preflight-head"><div><span>Delivery readiness</span><h2>This delivery plan is ready to review</h2><p>The work order, checks, decisions, limits, and stops are internally valid. This inspection starts nothing.</p></div>${badge("ready to review", "ok")}</header>
+    <div class="preflight-facts">
+      <section><span>Work and order</span><strong>${esc(nodeCount)} planned step${nodeCount === 1 ? "" : "s"} in ${esc(s.waves.length)} group${s.waves.length === 1 ? "" : "s"}</strong><small>The displayed order comes from the shared delivery-plan simulation.</small></section>
+      <section><span>Team</span><strong>${profiles.length ? `${esc(profiles.length)} named responsibility profile${profiles.length === 1 ? "" : "s"}` : "No agent profile requested"}</strong><small>${profiles.length ? esc(profiles.join(", ")) : "Checks and human decisions may still be present."}</small></section>
+      <section><span>Review</span><strong>${esc(s.failure_branches.length)} repair or stop route${s.failure_branches.length === 1 ? "" : "s"} · ${esc(s.checkpoints.length)} decision point${s.checkpoints.length === 1 ? "" : "s"}</strong><small>Failed work follows the reviewed route; no route is improvised at start.</small></section>
+      <section><span>Permission</span><strong>Still off</strong><small>A separate start review must name the current work, accountable operator, limits, and expiry.</small></section>
     </div>
-    <section><h3>scheduling simulation ${badge("pure — starts nothing", "ok")}</h3><div class="orch-waves">${s.waves.map((w) => `<div><strong>wave ${w.wave}</strong><span>${w.scheduled.map((x) => `<code>${esc(x)}</code>`).join(" ")}</span><small>eligible: ${esc(w.eligible.join(", "))}${w.resource_groups.length ? ` · locks: ${esc(w.resource_groups.join(", "))}` : ""}</small></div>`).join("")}</div></section>
-    <section><h3>output lineage</h3><div class="tablewrap"><table><thead><tr><th>artifact</th><th>producer</th><th>format</th><th>consumers</th><th>conventions</th></tr></thead><tbody>${s.output_lineage.map((o) => `<tr><td><code>${esc(o.name)}</code></td><td>${esc(o.producer)}</td><td>${esc(o.format)}</td><td>${esc(o.consumers.join(", ") || "—")}</td><td>${o.citations === "required" ? "citations · " : ""}${o.required_sections.length ? esc(o.required_sections.join(", ")) : `${esc(o.max_bytes)} bytes`}</td></tr>`).join("") || '<tr><td colspan="5">no declared artifacts</td></tr>'}</tbody></table></div></section>
-    <section><h3>failure routes and checkpoints</h3>${s.failure_branches.map((b) => `<div class="orch-branch"><code>${esc(b.source)}</code><strong>${esc(b.action)}</strong><span>${esc(b.node || b.checkpoint || "terminal policy")}</span></div>`).join("") || "none"}<div class="orch-terminals">${s.terminals.map((t) => `${badge(t.node)} → ${badge(t.meaning, "ok")}`).join(" ")}</div></section>
+    <section class="preflight-limits"><div><span>Limits and stops</span><strong>Finite before start</strong></div><div>${Object.entries(s.budgets).map(([k, v]) => `<div class="kv"><div class="k">${esc(k.replace(/^max_/, "").replaceAll("_", " "))}</div><div class="v">${esc(v)}</div></div>`).join("")}</div></section>
+    <div class="preflight-next"><div><span>Next step</span><strong>Review the separate delivery start</strong><p>Confirming that later review creates permission for this delivery; it does not continue automatically.</p></div><div><button type="button" id="preflight-open-start">Review separate start</button><a href="#/program-studio">Return to delivery choices</a><a href="#/">Leave for now</a></div></div>
+    <details class="preflight-technical"${technicalOpen ? " open" : ""}><summary>Technical details</summary>
+      <div class="orch-hashes"><div><span>semantic hash</span><code>${esc(c.semantic_hash)}</code></div><div><span>document hash</span><code>${esc(c.document_hash)}</code></div></div>
+      <div class="orch-validate-grid">
+        <section><h3>capability request</h3>${c.analysis.capabilities.map((x) => badge(x, "warn")).join(" ") || "none"}<h3>logical profiles</h3>${profiles.map((x) => badge(x)).join(" ") || "none"}</section>
+        <section><h3>finite budgets</h3>${Object.entries(s.budgets).map(([k, v]) => `<div class="kv"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("")}</section>
+      </div>
+      <section><h3>scheduling simulation ${badge("pure — starts nothing", "ok")}</h3><div class="orch-waves">${s.waves.map((w) => `<div><strong>wave ${w.wave}</strong><span>${w.scheduled.map((x) => `<code>${esc(x)}</code>`).join(" ")}</span><small>eligible: ${esc(w.eligible.join(", "))}${w.resource_groups.length ? ` · locks: ${esc(w.resource_groups.join(", "))}` : ""}</small></div>`).join("")}</div></section>
+      <section><h3>output lineage</h3><div class="tablewrap"><table><thead><tr><th>artifact</th><th>producer</th><th>format</th><th>consumers</th><th>conventions</th></tr></thead><tbody>${s.output_lineage.map((o) => `<tr><td><code>${esc(o.name)}</code></td><td>${esc(o.producer)}</td><td>${esc(o.format)}</td><td>${esc(o.consumers.join(", ") || "—")}</td><td>${o.citations === "required" ? "citations · " : ""}${o.required_sections.length ? esc(o.required_sections.join(", ")) : `${esc(o.max_bytes)} bytes`}</td></tr>`).join("") || '<tr><td colspan="5">no declared artifacts</td></tr>'}</tbody></table></div></section>
+      <section><h3>failure routes and checkpoints</h3>${s.failure_branches.map((b) => `<div class="orch-branch"><code>${esc(b.source)}</code><strong>${esc(b.action)}</strong><span>${esc(b.node || b.checkpoint || "terminal policy")}</span></div>`).join("") || "none"}<div class="orch-terminals">${s.terminals.map((t) => `${badge(t.node)} → ${badge(t.meaning, "ok")}`).join(" ")}</div></section>
+    </details>
   </div>`;
 }
 
@@ -1655,6 +1711,7 @@ async function refreshOrchValidation() {
     }
     const tab = document.querySelector('[data-orch-view="validate"]');
     if (tab) tab.textContent = `Validate${orchState.preview.valid ? "" : ` (${orchState.preview.validation.diagnostics.length})`}`;
+    if (orchState.view === "validate") wireOrchPreflight();
   }
 }
 
@@ -1974,6 +2031,15 @@ function wireRunView() {
   document.getElementById("run-stream-close")?.addEventListener("click", () => { orchState.runStream = null; renderOrchestration(); });
 }
 
+function wireOrchPreflight() {
+  document.getElementById("preflight-open-start")?.addEventListener("click", async () => {
+    orchState.view = "run";
+    orchState.runError = "";
+    renderOrchestration();
+    if (!orchState.runView) await refreshRunData();
+  });
+}
+
 function wireOrchestration() {
   document.querySelectorAll("[data-orch-view]").forEach((button) => button.addEventListener("click", async () => {
     orchState.view = button.dataset.orchView; orchState.runError = ""; renderOrchestration();
@@ -1987,6 +2053,7 @@ function wireOrchestration() {
   if (orchState.view === "design") wireOrchDesign();
   if (orchState.view === "json") wireJsonView();
   if (orchState.view === "run") wireRunView();
+  if (orchState.view === "validate") wireOrchPreflight();
   document.querySelectorAll(".orch-diagnostics [data-pointer], .orch-diagnostics li[data-pointer]").forEach((item) => item.addEventListener("click", () => { const match = item.dataset.pointer?.match(/^\/nodes\/(\d+)/); if (match && orchState.score.nodes[Number(match[1])]) { orchState.selected = orchState.score.nodes[Number(match[1])].id; orchState.view = "design"; renderOrchestration(); } }));
 }
 
@@ -2362,6 +2429,162 @@ async function viewPrograms(runId = "") {
   renderPrograms();
 }
 
+/* ── delivery-shaped front door (WLA-27-03) ────────────────────────
+ * This is a renderer over /api/delivery-setup. Choosing, cancelling, and
+ * opening Technical details are browser-local navigation only. A bounded
+ * delivery still crosses the existing run-plan/start boundary; a program
+ * draft still crosses Program Studio preview/apply and a later separate
+ * program start. */
+
+let deliverySetupState = {
+  model: null, choice: "", project: "", phase: "", technical: false,
+};
+let pendingProgramSetup = null;
+
+function setupEffectList(items, emptyText) {
+  return items?.length
+    ? `<ul>${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`
+    : `<p>${esc(emptyText)}</p>`;
+}
+
+function deliveryChoiceCard(choice) {
+  const selected = deliverySetupState.choice === choice.id;
+  return `<article class="delivery-choice${selected ? " selected" : ""}" data-choice="${esc(choice.id)}">
+    <div class="delivery-choice-head"><span>${esc(choice.tier === "vanilla" ? "ordinary roadmap" : choice.tier === "bounded-run" ? "one bounded delivery" : "optional delivery program")}</span>${badge(choice.readiness, choice.available ? "ok" : "warn")}</div>
+    <h2>${esc(choice.label)}</h2><p>${esc(choice.summary)}</p>
+    ${choice.recommended ? '<strong class="delivery-default">Ready now · no optional setup</strong>' : ""}
+    ${choice.correction ? `<div class="delivery-correction"><strong>Affected decision</strong><span>${esc(choice.correction)}</span></div>` : ""}
+    <button type="button" data-delivery-choice="${esc(choice.id)}" aria-pressed="${selected ? "true" : "false"}">Review this option</button>
+  </article>`;
+}
+
+function deliveryChoiceReview(model, choice) {
+  if (!choice) return `<section class="delivery-review empty"><h2>Choose how much coordination this delivery needs</h2><p>No option is selected for you. Ordinary roadmap work remains ready while you compare the optional paths.</p></section>`;
+  const scope = model.delivery_scope || {};
+  const project = deliverySetupState.project || scope.selected_project || "";
+  const phase = deliverySetupState.phase;
+  const actionLabel = choice.id === "roadmap"
+    ? (choice.available ? "Continue with the roadmap" : "Resolve readiness first")
+    : choice.id === "bounded"
+      ? (choice.available ? "Review delivery readiness" : "Open delivery plans")
+      : (choice.available ? "Continue to a delivery-plan draft" : "Choose a project first");
+  const continueAllowed = choice.id === "bounded" || choice.available;
+  return `<section class="delivery-review" tabindex="-1" id="delivery-review" aria-labelledby="delivery-review-title">
+    <header><div><span>Review before continuing</span><h2 id="delivery-review-title">${esc(choice.label)}</h2></div>${badge("nothing started", "ok")}</header>
+    <div class="delivery-effect-grid">
+      <section><h3>What setup creates</h3>${setupEffectList(choice.creates_during_setup, "Nothing.")}</section>
+      <section><h3>What could change later</h3>${setupEffectList(choice.may_change_after_confirmation, "Nothing through this option.")}</section>
+      <section><h3>What stays off</h3>${setupEffectList(choice.remains_disabled, "No additional delivery mode.")}</section>
+      <section><h3>Permission still needed</h3><p>${esc(choice.separate_permission || "No optional delivery permission is requested.")}</p></section>
+    </div>
+    ${choice.correction ? `<div class="delivery-next"><strong>Next step</strong><span>${esc(choice.correction)}</span></div>` : ""}
+    <div class="delivery-review-actions">
+      <button type="button" id="delivery-continue"${continueAllowed ? "" : " disabled"}>${esc(actionLabel)}</button>
+      <button type="button" id="delivery-back">Compare options</button>
+      <button type="button" id="delivery-cancel">Leave for now</button>
+    </div>
+    <p class="delivery-unchanged">Leaving, comparing, or opening details creates no delivery plan, permission, run, process, observer, notification, network activity, or roadmap change.</p>
+    <span hidden data-delivery-project="${esc(project)}" data-delivery-phase="${esc(phase)}"></span>
+  </section>`;
+}
+
+function deliveryTechnicalDetails(model) {
+  const details = model.technical_details || {};
+  return `<details class="delivery-technical"${deliverySetupState.technical ? " open" : ""}>
+    <summary>${esc(details.label || "Technical details")}</summary>
+    <p>Exact source models and inspection commands. These reads confer no authority.</p>
+    <div class="delivery-source-list">${(details.sources || []).map((source) => `<div><code>${esc(source.kind)}@${esc(source.schema_version)}</code><span>${esc(source.route)}</span></div>`).join("")}</div>
+    <div class="delivery-command-list">${Object.entries(details.commands || {}).map(([name, command]) => `<div><span>${esc(name.replaceAll("_", " "))}</span><code>${esc(command.join(" "))}</code></div>`).join("")}</div>
+  </details>`;
+}
+
+function renderDeliverySetup() {
+  const model = deliverySetupState.model;
+  if (!model) { app.innerHTML = stateHtml("Checking delivery readiness…"); return; }
+  const scope = model.delivery_scope || {};
+  const projects = scope.projects || [];
+  const current = projects.find((item) => item.slug === deliverySetupState.project)
+    || projects.find((item) => item.slug === scope.selected_project);
+  const work = current?.next_work || scope.current_work;
+  const phase = current?.current_phase || scope.current_phase;
+  if (!deliverySetupState.project && scope.selected_project) deliverySetupState.project = scope.selected_project;
+  if (!deliverySetupState.phase && phase?.number !== undefined) deliverySetupState.phase = String(phase.number);
+  const choice = setupChoice(model, deliverySetupState.choice);
+  app.innerHTML = `<div class="delivery-setup" data-readiness="${esc(model.readiness)}">
+    <header class="delivery-setup-hero"><div><span>Delivery setup · read-only until a reviewed save or start</span><h1>What are you delivering?</h1><p>${esc(model.summary)}</p></div>${badge(model.readiness, model.readiness === "ready" ? "ok" : "issue")}</header>
+    <section class="delivery-scope" aria-labelledby="delivery-scope-title"><div><span>Step 1</span><h2 id="delivery-scope-title">Choose the delivery scope</h2></div>
+      <label>Roadmap project<select id="delivery-project"><option value="">Choose a project</option>${projects.map((item) => `<option value="${esc(item.slug)}"${item.slug === deliverySetupState.project ? " selected" : ""}>${esc(item.slug)}</option>`).join("")}</select></label>
+      <label>Phase to review<input id="delivery-phase" type="number" min="0" value="${esc(deliverySetupState.phase)}" inputmode="numeric"></label>
+      <div class="delivery-current-work"><span>Current work</span><strong>${esc(work?.title || "Choose a project to see current work")}</strong><small>${work ? `${esc(work.story_id)} · ${esc(work.status)}` : "No work is inferred."}</small></div>
+    </section>
+    ${(model.issues || []).map((issue) => `<div class="delivery-issue" role="status"><strong>${esc(issue.decision)}</strong><span>${esc(issue.summary)}</span><small>${esc(issue.next_step)}</small></div>`).join("")}
+    <section class="delivery-choice-step" aria-labelledby="delivery-choice-title"><div><span>Step 2</span><h2 id="delivery-choice-title">Choose the operating mode</h2><p>Compare all three. A higher mode is never selected or started for you.</p></div>
+      <div class="delivery-choice-grid">${(model.choices || []).map(deliveryChoiceCard).join("")}</div>
+    </section>
+    ${deliveryChoiceReview(model, choice)}
+    ${deliveryTechnicalDetails(model)}
+  </div>`;
+  wireDeliverySetup();
+}
+
+function wireDeliverySetup() {
+  document.getElementById("delivery-project")?.addEventListener("change", async (event) => {
+    deliverySetupState.project = event.target.value;
+    deliverySetupState.phase = "";
+    deliverySetupState.choice = "";
+    const query = deliverySetupState.project
+      ? `?project=${encodeURIComponent(deliverySetupState.project)}`
+      : "";
+    deliverySetupState.model = (await api(`/api/delivery-setup${query}`)).data;
+    renderDeliverySetup();
+  });
+  document.getElementById("delivery-phase")?.addEventListener("input", (event) => {
+    deliverySetupState.phase = event.target.value;
+  });
+  document.querySelectorAll("[data-delivery-choice]").forEach((button) => button.addEventListener("click", () => {
+    deliverySetupState.choice = button.dataset.deliveryChoice;
+    renderDeliverySetup();
+    requestAnimationFrame(() => document.getElementById("delivery-review")?.focus());
+  }));
+  document.getElementById("delivery-back")?.addEventListener("click", () => {
+    deliverySetupState.choice = "";
+    renderDeliverySetup();
+    requestAnimationFrame(() => document.querySelector("[data-delivery-choice]")?.focus());
+  });
+  document.getElementById("delivery-cancel")?.addEventListener("click", () => {
+    pendingProgramSetup = null;
+    location.hash = "#/";
+  });
+  document.getElementById("delivery-continue")?.addEventListener("click", () => {
+    const choice = setupChoice(deliverySetupState.model, deliverySetupState.choice);
+    if (!choice) return;
+    if (choice.id === "bounded") orchState.view = "validate";
+    if (choice.id === "program") {
+      pendingProgramSetup = {
+        project: deliverySetupState.project,
+        phase: deliverySetupState.phase,
+      };
+    }
+    location.hash = choice.route;
+  });
+  document.querySelector(".delivery-technical")?.addEventListener("toggle", (event) => {
+    deliverySetupState.technical = event.currentTarget.open;
+  });
+}
+
+async function viewDeliverySetup() {
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "delivery setup" }]);
+  const requested = new URLSearchParams(location.search);
+  const queryProject = requested.get("setupproject") || "";
+  const query = queryProject ? `?project=${encodeURIComponent(queryProject)}` : "";
+  deliverySetupState.model = (await api(`/api/delivery-setup${query}`)).data;
+  deliverySetupState.project = queryProject || deliverySetupState.model.delivery_scope.selected_project || "";
+  deliverySetupState.phase = "";
+  deliverySetupState.choice = requested.get("setupmode") || "";
+  deliverySetupState.technical = requested.has("setuptechnical");
+  renderDeliverySetup();
+}
+
 /* ── optional Program / Workflow Studio (WLA-26-06) ────────────────
  * This route is deliberately additive: the ordinary Workbench stays at #/.
  * The browser owns interaction and layout only. Raw policy, diagnostics,
@@ -2380,6 +2603,7 @@ let studioState = {
   document: null, model: null, compilePreview: null, view: "design",
   selected: "", jsonDraft: "", validationTimer: null,
   scenario: "candidate-assignment", error: "", jsonPointer: "",
+  setupContext: null,
 };
 
 function studioFamilyModel(family = studioState.family) {
@@ -2622,8 +2846,9 @@ function renderProgramStudio() {
   const validation = studioState.model?.validation;
   const empty = studioState.inventory?.empty;
   app.innerHTML = `<div class="program-studio" data-family="${esc(studioState.family)}" data-policy="${esc(studioState.name)}">
+    ${studioState.setupContext ? `<section class="studio-setup-context"><div><span>Delivery scope from setup</span><strong>${esc(studioState.setupContext.project || "project not chosen")} · phase ${esc(studioState.setupContext.phase || "review needed")}</strong><p>This is an unsaved delivery-plan draft. Editing and checking it start nothing; Save draft still requires its own exact preview and confirmation.</p></div><div><a href="#/program-studio">Back to delivery choices</a><a href="#/">Leave for now</a></div></section>` : ""}
     ${empty ? `<section class="studio-empty-neutral"><div><span class="orch-eyebrow">optional advanced workspace</span><h2>${esc(studioState.inventory.empty_state.title)}</h2><p>${esc(studioState.inventory.empty_state.detail)}</p></div><a href="#/">ordinary Workbench overview</a></section>` : ""}
-    <header class="studio-toolbar"><div><span class="orch-eyebrow">optional autonomous delivery policy</span><h1>${esc(document.title || document.slug || "Program Studio")}</h1><code>pm/${esc(family?.plural || `${studioState.family}s`)}/${esc(document.slug || studioState.name)}.json</code><p>Designing, validating, simulating, and saving start nothing.</p></div><div class="studio-policy-actions"><label>family<select id="studio-family-select">${STUDIO_FAMILIES.map((id) => `<option value="${id}"${id === studioState.family ? " selected" : ""}>${esc(studioFamilyModel(id)?.label || id)}</option>`).join("")}</select></label><label>policy<select id="studio-policy-select"><option value="">new unsaved ${esc(studioState.family)}</option>${items.map((item) => `<option value="${esc(item.name)}"${item.name === studioState.name && studioState.exists ? " selected" : ""}>${esc(item.slug || item.name)}${item.valid ? "" : " (invalid)"}</option>`).join("")}</select></label><button type="button" id="studio-new">new</button><button type="button" id="studio-duplicate">duplicate</button><button type="button" id="studio-preview-save">preview save</button><button type="button" id="studio-preview-delete" class="danger"${studioState.exists ? "" : " disabled"}>preview delete</button></div></header>
+    <header class="studio-toolbar"><div><span class="orch-eyebrow">optional autonomous delivery policy</span><h1>${esc(document.title || document.slug || "Program Studio")}</h1><code>pm/${esc(family?.plural || `${studioState.family}s`)}/${esc(document.slug || studioState.name)}.json</code><p>Designing, validating, simulating, and saving start nothing.</p></div><div class="studio-policy-actions"><label>family<select id="studio-family-select">${STUDIO_FAMILIES.map((id) => `<option value="${id}"${id === studioState.family ? " selected" : ""}>${esc(studioFamilyModel(id)?.label || id)}</option>`).join("")}</select></label><label>policy<select id="studio-policy-select"><option value="">new unsaved ${esc(studioState.family)}</option>${items.map((item) => `<option value="${esc(item.name)}"${item.name === studioState.name && studioState.exists ? " selected" : ""}>${esc(item.slug || item.name)}${item.valid ? "" : " (invalid)"}</option>`).join("")}</select></label><button type="button" id="studio-new">new</button><button type="button" id="studio-duplicate">duplicate</button><button type="button" id="studio-preview-save">${studioState.setupContext && studioState.family === "program" ? "review draft save" : "preview save"}</button><button type="button" id="studio-preview-delete" class="danger"${studioState.exists ? "" : " disabled"}>preview delete</button></div></header>
     <nav class="studio-tabs" aria-label="Program Studio views">${STUDIO_VIEWS.map((id) => `<button type="button" data-studio-view="${id}" class="${studioState.view === id ? "active" : ""}">${id[0].toUpperCase() + id.slice(1)}${id === "validate" && validation && !validation.valid ? ` (${validation.diagnostics.length})` : ""}</button>`).join("")}</nav>
     ${studioState.error ? `<div class="studio-error" role="alert">${esc(studioState.error)}</div>` : ""}<div id="studio-save-panel" aria-live="polite"></div><div id="studio-view">${studioBody()}</div>
   </div>`;
@@ -2774,7 +2999,10 @@ function wireStudioCanvas() {
 
 function renderStudioSavePreview(preview, request) {
   const slot = document.getElementById("studio-save-panel"); if (!slot) return;
-  slot.innerHTML = `<section class="studio-save-preview ${preview.applicable ? "" : "refused"}"><div class="studio-preview-head"><strong>${esc(preview.action)} ${esc(preview.path)}</strong>${badge(preview.applicable ? "compiler-valid" : "refused", preview.applicable ? "ok" : "issue")}<code>${esc(preview.fingerprint)}</code></div>${preview.diff ? `<pre class="diff">${diffHtml(preview.diff)}</pre>` : '<p class="hint">No content change.</p>'}<p>Preview writes nothing, starts nothing, and grants nothing. Apply is bound to these exact source bytes and desired content.</p><div class="studio-preview-actions">${preview.applicable ? '<button type="button" id="studio-confirm-apply">apply this exact tracked-policy change</button>' : ""}<button type="button" id="studio-close-preview">close preview</button></div></section>`;
+  const applyLabel = studioState.setupContext && request.family === "program"
+    ? "save this delivery-plan draft"
+    : "apply this exact tracked-policy change";
+  slot.innerHTML = `<section class="studio-save-preview ${preview.applicable ? "" : "refused"}"><div class="studio-preview-head"><strong>${esc(preview.action)} ${esc(preview.path)}</strong>${badge(preview.applicable ? "compiler-valid" : "refused", preview.applicable ? "ok" : "issue")}<code>${esc(preview.fingerprint)}</code></div>${preview.diff ? `<pre class="diff">${diffHtml(preview.diff)}</pre>` : '<p class="hint">No content change.</p>'}<p>Preview writes nothing, starts nothing, and grants nothing. Apply is bound to these exact source bytes and desired content.</p><div class="studio-preview-actions">${preview.applicable ? `<button type="button" id="studio-confirm-apply">${esc(applyLabel)}</button>` : ""}<button type="button" id="studio-close-preview">close preview</button></div></section>`;
   document.getElementById("studio-close-preview")?.addEventListener("click", () => { slot.innerHTML = ""; });
   document.getElementById("studio-confirm-apply")?.addEventListener("click", () => applyStudioAction(preview, request));
 }
@@ -2855,17 +3083,32 @@ function wireProgramStudio() {
 
 async function viewProgramStudio(family = "program", name) {
   family = STUDIO_FAMILIES.includes(family) ? family : "program";
-  setCrumbs([{ label: "overview", href: "#/" }, { label: "program studio", href: "#/program-studio" }, { label: family }, ...(name ? [{ label: name }] : [])]);
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "delivery setup", href: "#/program-studio" }, { label: "technical editor" }, { label: family }, ...(name ? [{ label: name }] : [])]);
   studioState.inventory = (await api("/api/program-studio")).data;
   studioState.family = family; studioState.error = ""; studioState.selected = ""; studioState.jsonDraft = ""; studioState.jsonPointer = "";
   const familyModel = studioFamilyModel(family);
-  const chosen = name || familyModel.items?.[0]?.name;
+  const chosen = (!name && family === "program" && pendingProgramSetup)
+    ? null
+    : (name || familyModel.items?.[0]?.name);
   if (chosen) {
     const detail = (await api(`/api/program-studio/${encodeURIComponent(family)}/${encodeURIComponent(chosen)}`)).data;
     studioState.name = detail.name; studioState.document = clone(detail.raw); studioState.model = detail; studioState.exists = true;
   } else {
     studioState.document = clone(familyModel.draft); studioState.name = studioState.document.slug; studioState.model = null; studioState.exists = false;
+    if (family === "program" && pendingProgramSetup) {
+      const phase = Number(pendingProgramSetup.phase);
+      studioState.document.scope ||= {};
+      studioState.document.scope.project = pendingProgramSetup.project || "";
+      if (Number.isInteger(phase) && phase >= 0) {
+        studioState.document.scope.phases = { from: phase, through: phase };
+      }
+      studioState.setupContext = { ...pendingProgramSetup };
+      pendingProgramSetup = null;
+    } else {
+      studioState.setupContext = null;
+    }
   }
+  if (chosen) studioState.setupContext = null;
   const requestedView = new URLSearchParams(location.search).get("studioview");
   if (STUDIO_VIEWS.includes(requestedView)) studioState.view = requestedView;
   const requestedScenario = new URLSearchParams(location.search).get("studioscenario");
@@ -2892,6 +3135,7 @@ async function route() {
     if (parts[0] === "board") return await viewBoard(parts[1]);
     if (parts[0] === "orchestration") return await viewOrchestration(parts[1]);
     if (parts[0] === "programs") return await viewPrograms(parts[1]);
+    if (parts[0] === "program-studio" && parts.length === 1) return await viewDeliverySetup();
     if (parts[0] === "program-studio") return await viewProgramStudio(parts[1], parts[2]);
     if (parts[0] === "edit") return await viewEdit(parts[1]);
     if (parts[0] === "health") return await viewHealth();

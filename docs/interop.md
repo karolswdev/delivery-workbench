@@ -26,6 +26,7 @@ is added when an external consumer asks for one.
 | Model | Stamp | Declared in |
 |---|---|---|
 | Status briefing | `delivery-workbench-status` v1 | `status.build_status` |
+| Delivery setup | `delivery-workbench-delivery-setup` v1 | `delivery_setup.build_delivery_setup` |
 | Deliberate-step preview | `delivery-workbench-step` v1 | `step.build_step` |
 | Deliberate-step result | `delivery-workbench-step-result` v1 | `step.apply_step` |
 | Orchestration score | `delivery-workbench-orchestration` v1 | `orchestration.validate_score` |
@@ -126,6 +127,7 @@ is added when an external consumer asks for one.
 | Verb | Core function | Returns |
 |---|---|---|
 | `dw status [project] --json` | `status.build_status` | the stamped briefing; exit 0 `ready`, 1 `attention` |
+| `dw setup [project] [--technical]` | `delivery_setup.build_delivery_setup` | human guidance over the same three delivery choices and readiness used by Workbench; intentionally no JSON mode, write, grant, or start |
 | `dw step [project] --json` | `step.build_step` | pure state-bound preview; add `--apply --expect <token>` for exactly one closed-table action and the stamped result |
 | `dw orchestration list --json` | `orchestration.score_inventory` | contained `pm/orchestration/*.json` inventory with validation and stable hashes |
 | `dw orchestration show <score> --json` | `orchestration.compile_score` | normalized runtime score, layout, analysis, semantic hash, and document hash |
@@ -218,6 +220,7 @@ or provider argv.
 | Route | Core function | Returns |
 |---|---|---|
 | `/api/status?project=<slug>` | `status.build_status` | the stamped briefing in `data`; `attention` remains HTTP 200 data |
+| `GET /api/delivery-setup?project=<slug>` | `delivery_setup.build_delivery_setup` | pure application view over status, delivery-plan inventory, and optional-program inventory: delivery scope, all three choices, effects, remaining permission, corrections, and technical sources |
 | `GET /api/step?project=<slug>` | `step.build_step` | the stamped pure preview in `data` |
 | `POST /api/step/apply` | `step.apply_step` | exact stamped result in `data`; 409 for a non-started refusal |
 | `GET /api/orchestration` | `orchestration.score_inventory` | contained score inventory with validity and hashes; pure |

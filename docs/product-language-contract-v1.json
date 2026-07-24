@@ -400,7 +400,7 @@
       "id": "workbench-orientation-roadmap",
       "channel": "workbench",
       "classification": "everyday",
-      "sources": ["pmo-roadmap/workbench/app.js"],
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/delivery_setup.py"],
       "entry_points": ["#/", "#/p/<project>", "#/board/<project>"],
       "boundary": "Roadmap status, current work, holds, and next step use product language; file paths and exact evidence open through explicit links.",
       "owner_stories": ["WLA-27-03", "WLA-27-08"]
@@ -436,7 +436,7 @@
       "id": "workbench-delivery-studio",
       "channel": "workbench",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/program_studio.py"],
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/delivery_setup.py", "pmo-roadmap/lib/dw_pmo/program_studio.py"],
       "entry_points": ["#/program-studio", "#/program-studio/<family>/<name>"],
       "boundary": "Task-shaped delivery and team decisions lead; lossless JSON, exact governed fields, compiler diagnostics, and fingerprints live under Technical details.",
       "owner_stories": ["WLA-27-03", "WLA-27-04", "WLA-27-05", "WLA-27-08"]
@@ -463,8 +463,8 @@
       "id": "cli-setup-health-help-and-errors",
       "channel": "cli",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/install.sh", "pmo-roadmap/update.sh"],
-      "entry_points": ["dw --help", "dw adopt", "dw doctor", "dw check", "dw gate", "dw contract"],
+      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/lib/dw_pmo/delivery_setup.py", "pmo-roadmap/install.sh", "pmo-roadmap/update.sh"],
+      "entry_points": ["dw --help", "dw setup", "dw adopt", "dw doctor", "dw check", "dw gate", "dw contract"],
       "boundary": "Setup and errors state the task, impact, unchanged state, and correction first; exact gate rules, contract fields, commands, and paths remain copyable under Technical details.",
       "owner_stories": ["WLA-27-03", "WLA-27-07", "WLA-27-08"]
     },

@@ -666,9 +666,13 @@ viewer, the guarded roadmap editor, and the rich orchestration score editor.
 The orchestration route couples an accessible typed SVG graph and complete
 inspector with compiler-owned Validate and lossless JSON views; score save and
 delete require a separate preview→diff→fingerprint apply and start no run.
-The additive `#/program-studio` route progressively discloses Phase 26 program,
-workflow, and organization policy. Its Design, Simulate, Validate, JSON, and
-Authority views share the core compilers; the accessible graph distinguishes
+The additive `#/program-studio` route first renders the shared
+`delivery-workbench-delivery-setup` application view: selected project/phase,
+current work, and ordinary, bounded, and optional-program choices with their
+effects and remaining permission. It is read-only, preselects no higher mode,
+and matches human `dw setup` guidance. Explicit family routes then disclose
+Phase 26 program, workflow, and organization policy. Their Design, Simulate,
+Validate, JSON, and Authority views share the core compilers; the accessible graph distinguishes
 nested subflows, finite loops/debates, role lanes, verifier separation,
 councils/meta-audit, architect gates, artifacts, capabilities, budgets, and
 stop routes. Graph/config round trips preserve compiler semantic/document and
@@ -680,7 +684,7 @@ inventory is a healthy neutral state and never changes `#/` or starts polling.
 screenshot tools.
 
 JSON API (stable envelope `delivery-workbench-workbench-response`,
-schema_version 1): `/api/status`, `/api/context`, `/api/projects`,
+schema_version 1): `/api/status`, `/api/delivery-setup`, `/api/context`, `/api/projects`,
 `/api/projects/{slug}`, `/api/projects/{slug}/phases/{n}`,
 `/api/projects/{slug}/stories/{id}`, `/api/health` (structured
 drift/validation report with the `mutation_safe` flag),

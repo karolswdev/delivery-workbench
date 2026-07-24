@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 27
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-27-01, WLA-27-02
 - **Unblocks:** WLA-27-06 through WLA-27-10
 - **Owner:** unassigned
@@ -33,21 +33,21 @@ step.
 
 ## Acceptance criteria
 
-- [ ] A fresh install opens in a useful healthy state with ordinary roadmap
+- [x] A fresh install opens in a useful healthy state with ordinary roadmap
   work available and optional coordination explained, not as an error or
   required migration.
-- [ ] Setup begins with delivery scope and desired operating mode; engineering
+- [x] Setup begins with delivery scope and desired operating mode; engineering
   artifacts and exact protocol details appear only where needed or when the
   user opens the technical view.
-- [ ] The flow explains what will be created, what can change, what remains
+- [x] The flow explains what will be created, what can change, what remains
   disabled, and what separate permission will still be required before any
   work starts.
-- [ ] Cancel and read-only exploration create no policy, run, grant, ledger,
+- [x] Cancel and read-only exploration create no policy, run, grant, ledger,
   observer, notification store, process, network activity, or roadmap change.
-- [ ] Invalid or incomplete setup identifies the affected delivery decision
+- [x] Invalid or incomplete setup identifies the affected delivery decision
   and a corrective next step without dumping raw internal identifiers as the
   primary explanation.
-- [ ] Workbench and human CLI guidance lead to the same capability choice and
+- [x] Workbench and human CLI guidance lead to the same capability choice and
   readiness outcome; machine-facing responses remain unchanged.
 
 ## Test plan

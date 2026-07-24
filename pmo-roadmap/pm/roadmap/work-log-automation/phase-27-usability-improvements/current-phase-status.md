@@ -33,7 +33,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
   setup, plan/team/review design, live progress, a blocked decision, recovery,
   completion, and technical inspection before UI implementation begins
   (WLA-27-02).
-- [ ] A fresh user can understand the healthy no-program state, choose the
+- [x] A fresh user can understand the healthy no-program state, choose the
   optional delivery capability deliberately, and finish or leave setup without
   hidden writes or internal protocol vocabulary (WLA-27-03).
 - [ ] Program Studio makes delivery-plan/workflow authoring and team/review
@@ -59,7 +59,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 |---|---|---|---|---|
 | WLA-27-01 | Contract the everyday product language | done | [story-01-contract-the-everyday-product-language](./story-01-contract-the-everyday-product-language.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-27-02 | Define whole-task journeys and usability proof | done | [story-02-define-whole-task-journeys-and-usability-proof](./story-02-define-whole-task-journeys-and-usability-proof.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-27-03 | Give first-time users a delivery-shaped front door | backlog | [story-03-give-first-time-users-a-delivery-shaped-front-door](./story-03-give-first-time-users-a-delivery-shaped-front-door.md) | - |
+| WLA-27-03 | Give first-time users a delivery-shaped front door | done | [story-03-give-first-time-users-a-delivery-shaped-front-door](./story-03-give-first-time-users-a-delivery-shaped-front-door.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-27-04 | Make plan and workflow authoring task-shaped | backlog | [story-04-make-plan-and-workflow-authoring-task-shaped](./story-04-make-plan-and-workflow-authoring-task-shaped.md) | - |
 | WLA-27-05 | Make teams and review rules understandable | backlog | [story-05-make-teams-and-review-rules-understandable](./story-05-make-teams-and-review-rules-understandable.md) | - |
 | WLA-27-06 | Make live delivery explain progress and next steps | backlog | [story-06-make-live-delivery-explain-progress-and-next-steps](./story-06-make-live-delivery-explain-progress-and-next-steps.md) | - |
@@ -70,17 +70,16 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 
 ## Where we are
 
-Phase 27 is OPEN 2/10. WLA-27-01 fixes the product language and application
-view; WLA-27-02 now fixes thirteen whole-task journeys, fifteen reachable
-states, all seven operator questions, and screen ownership through WLA-27-10.
-The deterministic validator exercises six planted red fixtures, and the
-recorded current-application baseline measures 88 steps, 38 decisions, 81
-engineering-term occurrences, 13 dead ends, and 26 context switches across
-wide and narrow captures. The canonical 60-render Workbench harness plus 46
-selected core/read-model tests are green. WLA-27-03 is next: use the owned
-arrival, deliberate-choice, and preflight journeys to build a delivery-shaped
-front door without making optional coordination look required. There are no
-known blockers.
+Phase 27 is OPEN 3/10. WLA-27-03 now gives first arrival, deliberate capability
+choice, and bounded preflight one delivery-shaped application view over the
+unchanged status, score-inventory, and Program Studio sources. Ordinary work
+leads; all three modes remain visible without preselection; every optional path
+states its effects, disabled behavior, and later permission; leaving and
+technical inspection are pure. Human CLI and Workbench agree while existing
+machine responses remain unchanged. The 62-render wide/narrow harness, 477
+core tests, and the fresh Python 3.9 wheel/no-program consumer are green.
+WLA-27-04 is next: make delivery-plan and workflow authoring task-shaped while
+preserving lossless compiler/config round trips. There are no known blockers.
 
 ## Active risks
 
@@ -147,6 +146,23 @@ known blockers.
   context switches as descriptive baseline counts, not a model-generated
   usability score - later stories must show task improvement and retain any
   tradeoff honestly - WLA-27-02.
+- 2026-07-24 - Add `delivery-workbench-delivery-setup@1` as a pure application
+  view over existing status, orchestration-inventory, and Program Studio
+  models; Workbench and human CLI may explain and group those facts, but
+  existing machine documents and all source authority remain unchanged -
+  WLA-27-03.
+- 2026-07-24 - Compare ordinary, bounded, and optional-program delivery without
+  preselecting a higher tier; choice review must state creation, later change,
+  disabled behavior, and remaining permission before handing off to an
+  existing save or start boundary - informed optionality - WLA-27-03.
+- 2026-07-24 - Keep setup, comparison, technical disclosure, and leave paths
+  read-only; a program choice seeds browser memory only, tracked save retains
+  its exact preview/confirmation, and every runtime start remains a separate
+  reviewed act - no friendly navigation may acquire authority - WLA-27-03.
+- 2026-07-24 - Treat invalid optional policy as an affected optional decision,
+  not a failure of ordinary delivery: the ordinary front door remains healthy
+  and the program choice names its correction - progressive capability
+  isolation - WLA-27-03.
 
 ## Decisions deferred
 
