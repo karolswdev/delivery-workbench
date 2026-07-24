@@ -1,0 +1,75 @@
+{
+  "kind": "delivery-workbench-usability-red-fixtures",
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "incomplete-starting-state",
+      "base_journey": "healthy-first-arrival",
+      "mutation": {
+        "op": "remove",
+        "path": "/starting_state",
+        "value": null
+      },
+      "expected_error": "journey-incomplete"
+    },
+    {
+      "id": "missing-safe-exit",
+      "base_journey": "failed-review-and-repair",
+      "mutation": {
+        "op": "remove",
+        "path": "/refusal_recovery/safe_exit",
+        "value": null
+      },
+      "expected_error": "safe-exit-missing"
+    },
+    {
+      "id": "invented-authority",
+      "base_journey": "blocked-human-decision",
+      "mutation": {
+        "op": "replace",
+        "path": "/bounded_actions/0/authority_source",
+        "value": "friendly-button"
+      },
+      "expected_error": "authority-invented"
+    },
+    {
+      "id": "inaccessible-technical-details",
+      "base_journey": "technical-inspection",
+      "mutation": {
+        "op": "replace",
+        "path": "/technical_details/reachable",
+        "value": false
+      },
+      "expected_error": "technical-details-inaccessible"
+    },
+    {
+      "id": "ambiguous-next-step",
+      "base_journey": "completion",
+      "mutation": {
+        "op": "replace",
+        "path": "/success_outcome/next_step",
+        "value": [
+          {
+            "label": "Open next work",
+            "target": "action:open-next-work"
+          },
+          {
+            "label": "Finish here",
+            "target": "action:leave-complete"
+          }
+        ]
+      },
+      "expected_error": "next-step-ambiguous"
+    },
+    {
+      "id": "silent-tier-upgrade",
+      "base_journey": "deliberate-capability-choice",
+      "mutation": {
+        "op": "replace",
+        "path": "/bounded_actions/1/confirmation_required",
+        "value": false
+      },
+      "expected_error": "tier-upgrade-silent"
+    }
+  ]
+}

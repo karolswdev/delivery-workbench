@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 27
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-27-01
 - **Unblocks:** WLA-27-03 through WLA-27-10
 - **Owner:** unassigned
@@ -33,21 +33,21 @@ constraints, regression inputs, and the final exit exam.
 
 ## Acceptance criteria
 
-- [ ] Every journey names its starting state, user question, visible facts,
+- [x] Every journey names its starting state, user question, visible facts,
   bounded actions, success outcome, refusal/recovery outcome, and exact
   technical-details escape hatch.
-- [ ] Fixtures cover vanilla, bounded-run, and optional program states without
+- [x] Fixtures cover vanilla, bounded-run, and optional program states without
   implying that a program is required or that one capability tier silently
   upgrades to another.
-- [ ] The baseline records steps, decisions, exposed engineering terms, dead
+- [x] The baseline records steps, decisions, exposed engineering terms, dead
   ends, and context switches for the current application; later stories can
   demonstrate a real task improvement rather than a subjective restyle.
-- [ ] Each of the seven Phase 26 handoff questions is answered by at least one
+- [x] Each of the seven Phase 26 handoff questions is answered by at least one
   journey, and each Phase 27 screen slice names the journeys it owns.
-- [ ] A deterministic validator rejects incomplete fixtures, missing safe
+- [x] A deterministic validator rejects incomplete fixtures, missing safe
   exits, invented authority, inaccessible technical details, and ambiguous
   expected next steps.
-- [ ] Journey fixtures are reusable by Workbench UI tests and the fresh-wheel
+- [x] Journey fixtures are reusable by Workbench UI tests and the fresh-wheel
   exit exam rather than re-described separately in each test.
 
 ## Test plan

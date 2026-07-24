@@ -1,0 +1,510 @@
+{
+  "kind": "delivery-workbench-usability-baseline",
+  "schema_version": 1,
+  "observed_at": "2026-07-24",
+  "source_harness": "pmo-roadmap/tests/workbench-ui-smoke.sh",
+  "method": [
+    "Render the current application from canonical fixture builders with DW_UI_CAPTURE_PATTERN='*'.",
+    "Inspect the mapped 1440x900 and 390x844 captures without changing production behavior.",
+    "Record observable steps, decisions, engineering terms, dead ends, context switches, and viewport-specific friction."
+  ],
+  "viewports": {
+    "wide": "1440x900",
+    "narrow": "390x844"
+  },
+  "journeys": [
+    {
+      "journey_id": "healthy-first-arrival",
+      "starting_capture": "overview",
+      "technical_capture": "step-confirm",
+      "steps": [
+        "Open the overview.",
+        "Interpret the repository readiness banner.",
+        "Locate the project card below the banner.",
+        "Translate the next story row into current work.",
+        "Open the separate deliberate-step view before acting."
+      ],
+      "decisions": [
+        "Decide whether READY means the delivery task is ready or only the repository rails are ready.",
+        "Decide whether the contract and gate cards require attention before opening ordinary work."
+      ],
+      "engineering_terms": [
+        "argv",
+        "contract",
+        "deliberate step",
+        "gate",
+        "workspace"
+      ],
+      "dead_ends": [
+        "The primary banner does not provide a delivery-shaped route to the current story."
+      ],
+      "context_switches": [
+        "Move from repository briefing to a secondary project card.",
+        "Move from the overview to a separate confirmation screen to understand the next action."
+      ],
+      "observations": {
+        "wide": "The current story is visible, but repository protocol cards occupy the primary reading order.",
+        "narrow": "Wrapped global navigation and stacked protocol cards push the current story and safe action below the first viewport."
+      }
+    },
+    {
+      "journey_id": "deliberate-capability-choice",
+      "starting_capture": "program-studio-empty",
+      "technical_capture": "studio-json",
+      "steps": [
+        "Open Program Studio.",
+        "Interpret the no-policy banner.",
+        "Scan the optional delivery-program form.",
+        "Compare design, simulation, validation, JSON, and authority views.",
+        "Infer whether ordinary roadmap work remains available.",
+        "Leave without saving or starting anything."
+      ],
+      "decisions": [
+        "Decide whether the no-policy banner is healthy or an incomplete migration.",
+        "Decide whether the large program editor is required setup.",
+        "Decide which implementation-shaped tab explains the practical choice."
+      ],
+      "engineering_terms": [
+        "authority",
+        "autonomous policy",
+        "family",
+        "JSON",
+        "tracked policy"
+      ],
+      "dead_ends": [
+        "There is no side-by-side ordinary, bounded, and optional-program choice with consequences and a safe leave path."
+      ],
+      "context_switches": [
+        "Move from the ordinary overview into Program Studio.",
+        "Switch among five technical editor tabs to infer one product choice."
+      ],
+      "observations": {
+        "wide": "The healthy empty state is present, but the large new-program editor visually outweighs the optionality explanation.",
+        "narrow": "The global navigation wraps across several lines and the editor controls push the choice and ordinary-work alternative down the page."
+      }
+    },
+    {
+      "journey_id": "delivery-plan-setup",
+      "starting_capture": "studio-nested-design",
+      "technical_capture": "studio-json",
+      "steps": [
+        "Select a workflow document.",
+        "Choose the design view.",
+        "Interpret the graph and node palette.",
+        "Map node types to delivery decisions.",
+        "Edit the underlying fields.",
+        "Open validation for feedback.",
+        "Open JSON to verify the exact document."
+      ],
+      "decisions": [
+        "Choose implementation node types before the screen states what delivery question each answers.",
+        "Decide which graph detail controls scope, quality, repair, escalation, or stopping.",
+        "Decide whether a valid graph is also a complete delivery plan."
+      ],
+      "engineering_terms": [
+        "bounded_run",
+        "checkpoint",
+        "collect",
+        "debate",
+        "gate",
+        "loop",
+        "rail",
+        "subflow",
+        "verdict"
+      ],
+      "dead_ends": [
+        "A readable whole-plan summary is not available before editing or saving."
+      ],
+      "context_switches": [
+        "Translate graph topology into delivery order and quality intent.",
+        "Switch from visual design to validation and then JSON for confidence."
+      ],
+      "observations": {
+        "wide": "The graph is powerful but begins with node taxonomy and topology instead of delivery scope, sequence, review, recovery, and limits.",
+        "narrow": "The graph and editor controls extend horizontally, so plan context and the active field cannot remain visible together."
+      }
+    },
+    {
+      "journey_id": "team-review-setup",
+      "starting_capture": "studio-authority",
+      "technical_capture": "studio-json",
+      "steps": [
+        "Select an organization document.",
+        "Open the authority view.",
+        "Read requested capability cards.",
+        "Translate roles and capability strings into responsibility.",
+        "Switch to simulation for assignment outcomes.",
+        "Inspect exact JSON for separation facts."
+      ],
+      "decisions": [
+        "Decide which role performs, reviews, or decides from exact identifiers.",
+        "Decide whether displayed separation is a readable quality guarantee or only a topology fact.",
+        "Decide which capability strings matter to the team design."
+      ],
+      "engineering_terms": [
+        "agent:dispatch",
+        "authority",
+        "capability",
+        "certification:verdict",
+        "grant",
+        "workspace:write"
+      ],
+      "dead_ends": [
+        "The ordinary summary does not directly answer who does, reviews, decides, and receives escalation."
+      ],
+      "context_switches": [
+        "Move between authority, simulation, and JSON views.",
+        "Translate exact role and capability identifiers into human responsibilities."
+      ],
+      "observations": {
+        "wide": "Capability cards and exact role data are visible, but responsibility and independent-review answers are not the primary structure.",
+        "narrow": "Scenario controls and dense cards consume the first viewport before an assignment can be understood."
+      }
+    },
+    {
+      "journey_id": "preflight",
+      "starting_capture": "orchestration-validate",
+      "technical_capture": "orchestration-json",
+      "steps": [
+        "Select an orchestration score.",
+        "Open Validate.",
+        "Interpret the validation verdict.",
+        "Review semantic and document hashes.",
+        "Decode requested capabilities and logical profiles.",
+        "Review finite budget fields.",
+        "Review scheduling waves.",
+        "Move to Run for a separate start."
+      ],
+      "decisions": [
+        "Decide whether a valid document is ready for the intended delivery.",
+        "Decide which capability strings and budget field names affect informed permission.",
+        "Decide whether scheduling-wave output answers who will do and review the work."
+      ],
+      "engineering_terms": [
+        "capability request",
+        "document hash",
+        "logical profile",
+        "max_agent_starts",
+        "max_artifact_bytes",
+        "scheduling wave",
+        "semantic hash"
+      ],
+      "dead_ends": [
+        "Validation does not provide one readable preflight summary of work, team, effects, limits, exclusions, and next step."
+      ],
+      "context_switches": [
+        "Translate compiler validation into delivery readiness.",
+        "Move from Validate to Run to discover the separate start boundary."
+      ],
+      "observations": {
+        "wide": "The exact validation evidence is comprehensive but leads with hashes, profiles, fields, and waves rather than a task-shaped readiness answer.",
+        "narrow": "Dense validation cards stack before the separate safe action, requiring substantial scrolling and retained context."
+      }
+    },
+    {
+      "journey_id": "live-progress",
+      "starting_capture": "orchestration-run-active",
+      "technical_capture": "orchestration-json",
+      "steps": [
+        "Open the Run view.",
+        "Identify the selected run from its generated identifier.",
+        "Interpret state, authority, event, and attempt cards.",
+        "Read six budget counters.",
+        "Scroll to the delivery graph.",
+        "Infer eligible, blocked, active, and completed work.",
+        "Locate the next safe action below the state explanation."
+      ],
+      "decisions": [
+        "Decide which generated run is the intended delivery.",
+        "Decide whether dispatch permitted means work is currently happening.",
+        "Decide what to do next from graph states and lower-page controls."
+      ],
+      "engineering_terms": [
+        "authority",
+        "dispatch permitted",
+        "hash",
+        "ledger replay",
+        "run id",
+        "tick preview"
+      ],
+      "dead_ends": [
+        "The first viewport does not state the delivery-shaped next step or current owner in ordinary language."
+      ],
+      "context_switches": [
+        "Move from summary cards to a large graph to reconstruct progress.",
+        "Move below the graph or into another view to find the bounded action."
+      ],
+      "observations": {
+        "wide": "The graph provides useful exact state, but identifiers, event integrity, authority, and counters precede the operator answers.",
+        "narrow": "The first viewport is almost entirely navigation, score controls, generated identifiers, and state cards; the graph and next action are far below."
+      }
+    },
+    {
+      "journey_id": "failed-review-and-repair",
+      "starting_capture": "orchestration-run-repair",
+      "technical_capture": "orchestration-json",
+      "steps": [
+        "Open the repair run.",
+        "Interpret active state and completed attempt counts.",
+        "Scroll to the graph.",
+        "Identify the failed check.",
+        "Follow the failure route to the repair node.",
+        "Infer whether repair is waiting, active, or complete.",
+        "Locate the next bounded control."
+      ],
+      "decisions": [
+        "Decide which card represents the failed review result.",
+        "Decide whether the repair has already run or still requires action.",
+        "Decide whether retry, advance, or pause is the safe next choice."
+      ],
+      "engineering_terms": [
+        "attempt",
+        "check start",
+        "dispatch permitted",
+        "failure route",
+        "ledger replay",
+        "tick"
+      ],
+      "dead_ends": [
+        "The failure explanation, unchanged state, repair consequence, and safe exit are not grouped into one recovery task."
+      ],
+      "context_switches": [
+        "Move from counters to graph topology to understand the failure.",
+        "Move from the graph to lower controls to act on the repair."
+      ],
+      "observations": {
+        "wide": "The failed-check topology is inspectable, but the human explanation and repair choice are not the primary content.",
+        "narrow": "Header, run identity, and counters delay the failed result and repair action beyond the first viewport."
+      }
+    },
+    {
+      "journey_id": "blocked-human-decision",
+      "starting_capture": "orchestration-run-terminal",
+      "technical_capture": "orchestration-json",
+      "steps": [
+        "Open the terminal run.",
+        "Interpret awaiting-certification.",
+        "Read dispatch-stopped state.",
+        "Scroll to the eligible approval node.",
+        "Infer that human inspection is required.",
+        "Find the available response controls.",
+        "Determine what follows approval or rejection."
+      ],
+      "decisions": [
+        "Decide whether awaiting-certification is a blocker, completion state, or technical phase.",
+        "Decide who is responsible for the eligible approval.",
+        "Decide what each response changes because consequences are not adjacent above the fold."
+      ],
+      "engineering_terms": [
+        "approval node",
+        "awaiting-certification",
+        "dispatch stopped",
+        "hash",
+        "ledger replay",
+        "run id"
+      ],
+      "dead_ends": [
+        "The closed choices, decision owner, and consequence of each choice are not visible with the blocker."
+      ],
+      "context_switches": [
+        "Translate a terminal graph node into a human decision.",
+        "Move below the graph to locate response controls and exact consequences."
+      ],
+      "observations": {
+        "wide": "Human inspection is mentioned, but the screen leads with protocol state and an eligible node rather than a decision card.",
+        "narrow": "The responsible person, choices, and safe leave path appear after generated identifiers, state cards, and scrolling."
+      }
+    },
+    {
+      "journey_id": "remaining-permission-and-cost",
+      "starting_capture": "program-active",
+      "technical_capture": "program-active",
+      "steps": [
+        "Open the active program.",
+        "Identify the run from its generated identifier.",
+        "Interpret authority and operational frontier cards.",
+        "Read the current selection and raw workflow binding.",
+        "Scan fifteen budget counters.",
+        "Distinguish totals, used values, and remaining capacity.",
+        "Locate the next or refusal payload and controls."
+      ],
+      "decisions": [
+        "Decide which counters are limits, consumption, or remaining values.",
+        "Decide which exact capability names correspond to practical allowed changes.",
+        "Decide whether zero means none, not used, unknown, or not applicable."
+      ],
+      "engineering_terms": [
+        "authority",
+        "canonical ledger replay",
+        "grant",
+        "ledger hash",
+        "micro-units",
+        "operational frontier",
+        "workflow binding"
+      ],
+      "dead_ends": [
+        "Permission, cost, exclusions, and the next safe action are split across raw payloads and many counters."
+      ],
+      "context_switches": [
+        "Move between authority, frontier, binding, counters, and controls.",
+        "Translate protocol units and capability names into practical consequences."
+      ],
+      "observations": {
+        "wide": "The exact limits are comprehensive, but raw binding data and protocol counters dominate the delivery answer.",
+        "narrow": "Generated identifiers, authority, hash, and stacked counters fill multiple viewports before the person can compare remaining permission and cost."
+      }
+    },
+    {
+      "journey_id": "stop-and-revoke",
+      "starting_capture": "program-active",
+      "technical_capture": "program-active",
+      "steps": [
+        "Open the active program.",
+        "Find program controls below the primary state.",
+        "Distinguish pause, cancel, and revoke.",
+        "Open an exact action preview.",
+        "Interpret the effect and current-state binding.",
+        "Confirm the selected stop.",
+        "Open the revoked state to verify the result."
+      ],
+      "decisions": [
+        "Decide whether pause, cancel, or revoke matches the intended consequence.",
+        "Decide what completed work and future work each stop affects.",
+        "Decide whether the revoked display proves a permanent stop or only reports authority-not-running."
+      ],
+      "engineering_terms": [
+        "act token",
+        "authority",
+        "grant",
+        "ledger hash",
+        "preview",
+        "revoked"
+      ],
+      "dead_ends": [
+        "The practical difference among stop choices and the recovery path are not summarized before technical confirmation."
+      ],
+      "context_switches": [
+        "Move from live progress to a separate exact action preview.",
+        "Move back to a technical stopped-state view to verify the consequence."
+      ],
+      "observations": {
+        "wide": "The permanent stop is visible after the act, but exact authority and history terms remain the primary explanation.",
+        "narrow": "The controls and consequence follow several stacked protocol sections, making comparison and safe cancellation costly."
+      }
+    },
+    {
+      "journey_id": "crash-recovery",
+      "starting_capture": "orchestration-run-active",
+      "technical_capture": "orchestration-json",
+      "steps": [
+        "Reopen the Workbench after interruption.",
+        "Select the generated run.",
+        "Refresh the canonical state once.",
+        "Compare event, attempt, and graph state.",
+        "Infer which effects completed before interruption.",
+        "Inspect exact data for uncertain boundaries.",
+        "Find a resume or stop control."
+      ],
+      "decisions": [
+        "Decide whether zero active attempts means idle, recovered, or lost work.",
+        "Decide which event or graph state proves that an effect completed.",
+        "Decide whether resuming may repeat work or only advances eligible work."
+      ],
+      "engineering_terms": [
+        "attempt generation",
+        "hash",
+        "ledger replay",
+        "reconcile",
+        "run id",
+        "tick preview"
+      ],
+      "dead_ends": [
+        "There is no explicit recovery summary separating completed, uncertain, eligible, and safely resumable work."
+      ],
+      "context_switches": [
+        "Reconstruct recovery from event counts, attempt cards, and graph state.",
+        "Switch to exact JSON to reason about effect boundaries."
+      ],
+      "observations": {
+        "wide": "Canonical replay is present, but recovery requires protocol knowledge to distinguish completed and resumable work.",
+        "narrow": "The recovery question remains below generated identifiers and stacked state cards, with no concise resume consequence."
+      }
+    },
+    {
+      "journey_id": "completion",
+      "starting_capture": "program-certified",
+      "technical_capture": "program-active",
+      "steps": [
+        "Open the certified program capture.",
+        "Interpret the running status.",
+        "Interpret the story-certified frontier.",
+        "Read integration-required as the stop reason.",
+        "Inspect the completed story and phase cards.",
+        "Decode the raw workflow binding.",
+        "Determine whether the story or whole delivery is complete.",
+        "Locate the next eligible work or finish path."
+      ],
+      "decisions": [
+        "Decide whether running, story-certified, and integration-required describe completion or a blocker.",
+        "Decide what review passed from the quality and workflow payloads.",
+        "Decide whether more scoped work remains."
+      ],
+      "engineering_terms": [
+        "canonical ledger replay",
+        "integration-required",
+        "ledger-derived",
+        "ledger hash",
+        "operational frontier",
+        "story-certified",
+        "workflow binding"
+      ],
+      "dead_ends": [
+        "The current display does not lead with whether one work item or the whole delivery completed and what happens next."
+      ],
+      "context_switches": [
+        "Translate three different state labels into one completion answer.",
+        "Move between quality, binding, counters, and next/refusal data."
+      ],
+      "observations": {
+        "wide": "The evidence-rich state is precise but visually ambiguous: the capture named certified still says running and integration-required.",
+        "narrow": "The completion distinction and next work appear after identifiers, state cards, raw binding data, and counters."
+      }
+    },
+    {
+      "journey_id": "technical-inspection",
+      "starting_capture": "orchestration-run-active",
+      "technical_capture": "orchestration-json",
+      "steps": [
+        "Open the live delivery.",
+        "Choose the JSON tab.",
+        "Find the exact field or identifier.",
+        "Copy or compare the exact value.",
+        "Return to Run.",
+        "Reconstruct the original task position."
+      ],
+      "decisions": [
+        "Decide that JSON is the exact-detail escape despite the missing product-language label.",
+        "Decide which raw document represents configuration, compiled state, or live state.",
+        "Decide how to return without losing the delivery question being answered."
+      ],
+      "engineering_terms": [
+        "document hash",
+        "JSON",
+        "ledger",
+        "schema version",
+        "semantic hash"
+      ],
+      "dead_ends": [
+        "The exact view is labelled JSON rather than Technical details and does not preserve a visible task summary beside the raw record."
+      ],
+      "context_switches": [
+        "Change from delivery language to a raw machine document.",
+        "Return to Run and mentally restore the prior task context."
+      ],
+      "observations": {
+        "wide": "Exact data is reachable and copyable, but the abrupt JSON tab provides little orientation back to the delivery task.",
+        "narrow": "Raw JSON dominates the viewport and requires horizontal attention to long values before the return context becomes useful."
+      }
+    }
+  ]
+}

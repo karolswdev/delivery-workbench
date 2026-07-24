@@ -114,8 +114,10 @@ jobs:
           python3 -m py_compile pmo-roadmap/tests/outward-loop-packaged-exam.py
           python3 -m py_compile pmo-roadmap/tests/autonomous-program-packaged-exam.py
           python3 -m py_compile pmo-roadmap/tests/product-language-contract.py
+          python3 -m py_compile pmo-roadmap/tests/usability-journey-contract.py
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
           python3 pmo-roadmap/tests/product-language-contract.py
+          python3 pmo-roadmap/tests/usability-journey-contract.py
           python3 pmo-roadmap/tests/dw-core-tests.py
 
   telegram-interface:
@@ -246,6 +248,7 @@ jobs:
           python3 -m py_compile pmo-roadmap/tests/orchestration-packaged-exam.py
           python3 -m py_compile pmo-roadmap/tests/outward-loop-packaged-exam.py
           python3 -m py_compile pmo-roadmap/tests/autonomous-program-packaged-exam.py
+          python3 -m py_compile pmo-roadmap/tests/usability-journey-contract.py
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
 
       - name: dw core unit tests
