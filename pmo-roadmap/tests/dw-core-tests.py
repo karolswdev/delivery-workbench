@@ -14097,12 +14097,13 @@ class ProgramSurfaceTest(unittest.TestCase):
             self.root, run_id, "tick"
         )
         barrier = threading.Barrier(2)
-        original = self.core.build_program_act_preview
 
-        def synchronized_preview(*args, **kwargs):
-            document = original(*args, **kwargs)
+        def synchronized_preview(*_args, **_kwargs):
+            # Both callers consume the same already-reviewed frontier. Keep
+            # the potentially expensive pure preview replay outside this
+            # rendezvous so the test isolates the execution race.
             barrier.wait(timeout=10)
-            return document
+            return preview
 
         def invoke():
             try:

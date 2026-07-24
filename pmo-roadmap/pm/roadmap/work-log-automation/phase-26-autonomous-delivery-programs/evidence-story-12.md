@@ -143,6 +143,16 @@ refusal clones contain `pm/programs/autonomous-exit.json` before testing
 authority. A full Python 3.9 package run with `init.defaultBranch=master`
 reproduced the runner environment and passed all five packaged paths.
 
+The replacement Actions run proved that package repair, then exposed an
+independent timing flaw in the existing public-surface concurrency test on
+macOS. The test made both worker threads rebuild the complete pure preview
+before meeting at a ten-second barrier, so runner scheduling could break the
+barrier before the execution race under test even began. The harness now
+builds the exact preview once, brings both workers to an immediate rendezvous,
+and hands each that same reviewed frontier. Runtime locking and stale-token
+behavior remain unchanged; the test now isolates the public execution race
+it claims to prove.
+
 ## Verification summary
 
 - Autonomous fresh-wheel exam: complete, three stories/two phases, one repair,
@@ -150,6 +160,11 @@ reproduced the runner environment and passed all five packaged paths.
   three commits, three pushes, nine conductor crashes, eighteen delivery
   crashes, and 203 ledger/SSE events.
 - Focused exact nested-untracked-path regression: passed.
+- Stabilized public-surface execution race: 20/20 repeated macOS/Python 3.14.6
+  passes; the old preview-before-barrier harness reproduced its timeout on the
+  second repetition under the same stress.
+- Post-repair full core: 473/473 on Python 3.14.6 in 928.626 seconds and
+  473/473 on Python 3.9 in 869.455 seconds, run concurrently.
 - The full dual-Python, fresh-wheel package, 60-render Workbench, documentation,
   canon, rider, vendoring, shell, roadmap, range, and history closeout matrix is
   captured below.
