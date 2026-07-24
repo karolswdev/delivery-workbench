@@ -29,6 +29,7 @@ from .model import DwError
 from .orchestration import canonical_json
 from .orchestration_driver import driver_capability, load_driver_config
 from .plan_authoring import build_delivery_plan_authoring
+from .team_review import build_team_review
 from .program_organization import (
     compile_organization,
     find_organization_path,
@@ -1064,6 +1065,9 @@ def build_studio_document(root: Path, family: str, selector: str) -> dict[str, o
     round_trip = graph_config_round_trip(root, family, document)
     diagnostics = _diagnostic_targets(family, document, validation.get("diagnostics"))
     presented_validation = {**validation, "diagnostics": diagnostics}
+    authority = build_authority_preview(
+        family, document, compiled, root=root
+    )
     return {
         "kind": STUDIO_DOCUMENT_KIND,
         "schema_version": STUDIO_SCHEMA_VERSION,
@@ -1076,12 +1080,21 @@ def build_studio_document(root: Path, family: str, selector: str) -> dict[str, o
         "simulation": simulation,
         "simulation_scenarios": _simulation_scenarios(family, graph),
         "graph": graph,
-        "authority": build_authority_preview(
-            family, document, compiled, root=root
-        ),
+        "authority": authority,
         "round_trip": round_trip,
         "authoring": build_delivery_plan_authoring(
             family, document, presented_validation, graph, round_trip
+        ),
+        "team_review": (
+            build_team_review(
+                document,
+                presented_validation,
+                compiled,
+                simulation,
+                authority,
+                round_trip,
+            )
+            if family == "organization" else None
         ),
         "starts_work": False,
         "writes_policy": False,
@@ -1131,9 +1144,151 @@ def new_studio_document(family: str, slug: str | None = None) -> dict[str, objec
         }
     return {
         "kind": spec.kind, "schema_version": 1, "slug": slug,
-        "title": "New governed organization", "agents": [], "pools": [],
-        "teams": [], "councils": [],
-        "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+        "title": "New governed team",
+        "description": (
+            "A bounded implementation responsibility with a separate, "
+            "read-only reviewer."
+        ),
+        "agents": [
+            {
+                "id": "builder",
+                "profile": "builder",
+                "duties": ["implementer"],
+                "workspace_domain": "builder-work",
+                "capability_ceiling": [
+                    "agent:dispatch", "workspace:write",
+                ],
+                "max_concurrency": 1,
+                "weight": 1,
+            },
+            {
+                "id": "reviewer",
+                "profile": "reviewer",
+                "duties": ["verifier"],
+                "workspace_domain": "reviewer-work",
+                "capability_ceiling": [
+                    "agent:dispatch", "verdict:issue",
+                ],
+                "max_concurrency": 1,
+                "weight": 1,
+            },
+        ],
+        "pools": [
+            {"id": "builders", "agents": ["builder"]},
+            {"id": "reviewers", "agents": ["reviewer"]},
+        ],
+        "teams": [{
+            "id": "delivery-team",
+            "roles": [
+                {
+                    "id": "implementer",
+                    "duty": "implementer",
+                    "pool": "builders",
+                    "required": True,
+                    "cardinality": 1,
+                    "capability_ceiling": [
+                        "agent:dispatch", "workspace:write",
+                    ],
+                    "driver_capabilities": [
+                        "repository-read", "repository-write",
+                    ],
+                    "workspace": "isolated-worktree",
+                    "context": {
+                        "allow": [
+                            "story", "phase", "roadmap",
+                            "workflow-inputs", "mechanical-receipts",
+                            "public-artifacts",
+                        ],
+                        "expressions": [
+                            "context", "parameter", "literal", "artifact",
+                        ],
+                        "max_bytes": 500_000,
+                    },
+                    "artifacts": {
+                        "read": [
+                            "markdown", "json", "text",
+                            "mechanical-fact",
+                        ],
+                        "write": [
+                            "git-diff", "markdown", "json", "text",
+                        ],
+                        "max_bytes": 50_000_000,
+                    },
+                    "output_schema": (
+                        "delivery-workbench-implementation-output@1"
+                    ),
+                    "verdict_schema": None,
+                    "max_concurrency": 1,
+                    "resource_groups": ["repository-writer"],
+                    "may_request": [],
+                    "may_judge": [],
+                    "independent_from": [],
+                    "replacement": {
+                        "reasons": [],
+                        "max_replacements": 0,
+                        "fallback_pools": [],
+                        "on_exhausted": "escalate",
+                        "preserve_history": True,
+                    },
+                },
+                {
+                    "id": "verifier",
+                    "duty": "verifier",
+                    "pool": "reviewers",
+                    "required": True,
+                    "cardinality": 1,
+                    "capability_ceiling": [
+                        "agent:dispatch", "verdict:issue",
+                    ],
+                    "driver_capabilities": ["repository-read"],
+                    "workspace": "read-only",
+                    "context": {
+                        "allow": [
+                            "story", "phase", "roadmap",
+                            "candidate-diff", "mechanical-receipts",
+                            "prior-verdicts", "dissent",
+                            "public-artifacts",
+                        ],
+                        "expressions": [
+                            "context", "parameter", "literal", "artifact",
+                        ],
+                        "max_bytes": 500_000,
+                    },
+                    "artifacts": {
+                        "read": [
+                            "markdown", "json", "text", "git-diff",
+                            "mechanical-fact", "verdict",
+                        ],
+                        "write": ["verdict"],
+                        "max_bytes": 50_000_000,
+                    },
+                    "output_schema": None,
+                    "verdict_schema": (
+                        "delivery-workbench-agent-verdict@1"
+                    ),
+                    "max_concurrency": 1,
+                    "resource_groups": ["independent-verification"],
+                    "may_request": [],
+                    "may_judge": ["implementer"],
+                    "independent_from": ["implementer"],
+                    "replacement": {
+                        "reasons": [],
+                        "max_replacements": 0,
+                        "fallback_pools": [],
+                        "on_exhausted": "block",
+                        "preserve_history": True,
+                    },
+                },
+            ],
+        }],
+        "councils": [],
+        "layout": {
+            "nodes": {
+                "delivery-team/implementer": {"x": 80, "y": 110},
+                "delivery-team/verifier": {"x": 390, "y": 110},
+            },
+            "viewport": {"x": 0, "y": 0, "zoom": 1},
+        },
     }
 
 
@@ -1273,6 +1428,9 @@ def studio_mutation_preview(plan: StudioMutationPlan) -> dict[str, object]:
         round_trip = graph_config_round_trip(
             plan.root, plan.family, plan.document,
         )
+        authority = build_authority_preview(
+            plan.family, plan.document, plan.compiled, root=plan.root,
+        )
         studio = {
             "kind": STUDIO_DOCUMENT_KIND,
             "schema_version": STUDIO_SCHEMA_VERSION,
@@ -1285,9 +1443,7 @@ def studio_mutation_preview(plan: StudioMutationPlan) -> dict[str, object]:
             "simulation": plan.simulation,
             "simulation_scenarios": _simulation_scenarios(plan.family, graph),
             "graph": graph,
-            "authority": build_authority_preview(
-                plan.family, plan.document, plan.compiled, root=plan.root,
-            ),
+            "authority": authority,
             "round_trip": round_trip,
             "authoring": build_delivery_plan_authoring(
                 plan.family,
@@ -1295,6 +1451,17 @@ def studio_mutation_preview(plan: StudioMutationPlan) -> dict[str, object]:
                 presented_validation,
                 graph,
                 round_trip,
+            ),
+            "team_review": (
+                build_team_review(
+                    plan.document,
+                    presented_validation,
+                    plan.compiled,
+                    plan.simulation,
+                    authority,
+                    round_trip,
+                )
+                if plan.family == "organization" else None
             ),
             "starts_work": False,
             "writes_policy": False,

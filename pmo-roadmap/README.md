@@ -680,7 +680,15 @@ loops/discussions, source fields, conditions, diagnostics, and lossless JSON
 remain editable under **Technical details**. The same source document still
 passes through the core compilers; valid imports preserve semantic/document
 and layout identity, while unknown fields remain present and make save refuse
-safely. Its own preview→diff→fingerprint→apply pair can write or delete one
+safely. Organization documents lead with the shared
+`delivery-workbench-team-review` view: responsibilities, independent review,
+contested decisions, escalation, and review-of-review in ordinary language.
+It distinguishes compatible policy from runtime-proven identity/work-area/
+session separation; advanced decision groups and exact provider/model/auth/
+principal provenance stay inspectable under **Technical details**. The live
+program control room consumes the same projection for assigned ownership and
+review. See [`docs/team-review.md`](../docs/team-review.md).
+Its own preview→diff→fingerprint→apply pair can write or delete one
 direct-contained tracked policy and cannot create a grant, run, agent, check,
 observer, notification, integration, or roadmap act. An empty policy inventory
 is a healthy neutral state and never changes `#/` or starts polling.

@@ -567,17 +567,17 @@
         {
           "concept_id": "team",
           "statement": "The summary names who does each kind of work and who reviews it independently.",
-          "source_model": "delivery-workbench-compiled-organization"
+          "source_model": "delivery-workbench-team-review"
         },
         {
           "concept_id": "review",
           "statement": "The summary names required reviews, contested decisions, and escalation paths.",
-          "source_model": "delivery-workbench-team-assignment"
+          "source_model": "delivery-workbench-team-review"
         },
         {
           "concept_id": "decision",
           "statement": "Any incompatible assignment identifies the exact roles and a corrective choice.",
-          "source_model": "delivery-workbench-program-studio-authority-preview"
+          "source_model": "delivery-workbench-team-review"
         }
       ],
       "bounded_actions": [
@@ -636,10 +636,12 @@
       },
       "technical_details": {
         "label": "Technical details",
-        "state_id": "studio-technical",
+        "state_id": "team-review-technical",
         "source_models": [
+          "delivery-workbench-team-review",
           "delivery-workbench-program-studio-document",
-          "delivery-workbench-program-studio-round-trip"
+          "delivery-workbench-program-studio-round-trip",
+          "delivery-workbench-program-studio-authority-preview"
         ],
         "return_label": "Back to team summary",
         "reachable": true

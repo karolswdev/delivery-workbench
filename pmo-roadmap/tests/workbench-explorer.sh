@@ -307,9 +307,46 @@ assert d["authoring"]["status"] == "ready-to-review"
 assert d["authoring"]["edit_safety"]["targeted_edits_preserve_unedited_fields"]
 assert d["authoring"]["edit_safety"]["exact_export_available"]
 PY
+mkdir -p "$REPO/pm/organizations"
+cp "$PMO_DIR/templates/organizations/autonomous-story-cell.json" \
+  "$REPO/pm/organizations/autonomous-story-cell.json"
+curl -s "$BASE/api/program-studio/organization/autonomous-story-cell" \
+  > "$TMP_ROOT/studio-team-review.json"
+python3 - "$TMP_ROOT/studio-team-review.json" <<'PY' \
+  || fail "Program Studio should expose the shared understandable team-and-review projection"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+team = d["team_review"]
+assert d["validation"]["valid"] and team["status"] == "ready-to-review"
+assert team["kind"] == "delivery-workbench-team-review"
+assert team["context"] == "design"
+assert [item["id"] for item in team["sections"]] == [
+    "responsibilities", "independence", "decisions", "escalation", "audit",
+]
+answers = team["review_before_save"]
+assert "Builder Primary" in answers["responsibilities"]
+assert "Verifier Primary" in answers["responsibilities"]
+assert "must be separate" in answers["independence"]
+assert "Every voting reviewer" in answers["decisions"]
+assert "delivery owner" in answers["escalation"]
+assert "review auditor" in answers["audit"]
+assert team["runtime_independence"]["status"] == "not-assigned"
+assert team["progressive_details"]["council"]
+assert team["progressive_details"]["dissent"]
+assert team["progressive_details"]["judge"]
+assert team["progressive_details"]["review_auditor"]
+assert team["progressive_details"]["architecture_review"]
+assert team["technical_details"]["round_trip_lossless"]
+assert team["technical_details"]["provider_model_do_not_prove_independence"]
+for key in ("starts_work", "writes_policy", "writes_roadmap",
+            "writes_run_state", "creates_grant", "starts_process",
+            "starts_observer", "sends_notification", "uses_network"):
+    assert team[key] is False, key
+PY
 STUDIO_READ_BEFORE="$(sum_tree)"
 for _ in 1 2 3; do
   curl -s "$BASE/api/program-studio/workflow/studio-fixture" >/dev/null
+  curl -s "$BASE/api/program-studio/organization/autonomous-story-cell" >/dev/null
 done
 STUDIO_READ_AFTER="$(sum_tree)"
 [ "$STUDIO_READ_BEFORE" = "$STUDIO_READ_AFTER" ] \

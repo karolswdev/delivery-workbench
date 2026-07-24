@@ -2163,9 +2163,18 @@ function programWhyHtml(view) {
 
 function programOrganizationHtml(view) {
   const org = view.organization || { roles: [], councils: [] };
-  return `<section class="program-panel"><div class="program-panel-head"><div><span>organization</span><strong>${esc(org.slug)} · ${esc(org.team)}</strong></div>${badge(`${(org.roles || []).length} seats`)}</div>
-    <div class="tablewrap"><table class="run-table program-role-table"><thead><tr><th>seat / duty</th><th>agent</th><th>execution port</th><th>identity boundary</th><th>activity</th></tr></thead><tbody>${(org.roles || []).map((seat) => { const x = seat.execution || {}; return `<tr><td><code>${esc(seat.address)}</code><br>${esc(seat.role)} · ${esc(seat.duty)}</td><td>${esc(seat.agent)}<br><small>${esc(seat.profile)}</small></td><td><strong>${esc(x.harness || "—")} / ${esc(x.adapter || "—")}</strong><br><small>${esc(x.provider || "—")} · ${esc(x.model || x.model_family || "—")}</small></td><td><code>${esc(x.auth_domain_fingerprint || "—")}</code><br><small>principal ${esc(seat.principal_fingerprint)}</small></td><td>${programStateBadge(seat.activity)}<br><small>${esc(programScalar(seat.last_result))}</small></td></tr>`; }).join("")}</tbody></table></div>
-    <div class="program-councils"><section><h3>councils / deciders</h3>${(org.councils || []).map((council) => `<article><div><strong>${esc(council.id)}</strong>${badge(council.primary_authority || council.method, council.primary_authority === "judge" ? "warn" : "ok")}</div><p>${esc((council.members || []).join(", "))} · quorum ${esc(council.quorum)} · tie ${esc(council.tie_authority)}</p><small>chair ${esc(council.chair_seat || "rule")} · decider ${esc(council.decider_seat || "deterministic rule")}</small></article>`).join("") || '<p class="hint">No council is assigned to this scope.</p>'}</section><section><h3>separation / diversity</h3><pre>${esc(JSON.stringify(org.separation || {}, null, 2))}</pre></section></div>
+  const team = view.team_review || { sections: [], responsibilities: [], quality_constraints: [] };
+  const proven = team.runtime_independence?.status === "proven";
+  return `<section class="program-panel program-team-review" data-team-review-context="${esc(team.context || "legacy")}"><div class="program-panel-head"><div><span>team and review</span><strong>${esc(team.title || `${org.slug} · ${org.team}`)}</strong></div>${badge(proven ? "runtime independence proven" : "needs attention", proven ? "ok" : "issue")}</div>
+    <p class="program-team-summary">${esc(team.summary || "Live team ownership and review.")}</p>
+    <div class="program-team-answers">${(team.sections || []).map((section) => `<article><span>${esc(section.question)}</span><strong>${esc(section.label)}</strong><p>${esc(section.answer)}</p></article>`).join("")}</div>
+    <div class="program-team-responsibilities">${(team.responsibilities || []).map((role) => `<article><div><strong>${esc(role.label)}</strong>${programStateBadge(role.assigned?.activity || "waiting")}</div><p>${esc(role.responsibility)}</p><span>${esc(role.coverage)}</span><small>${esc(role.outcomes)}</small></article>`).join("")}</div>
+    <div class="program-team-constraints">${(team.quality_constraints || []).map((item) => `<article class="${item.status === "runtime-proven" ? "ready" : "issue"}"><div><strong>${esc((item.labels || []).join(" ↔ "))}</strong>${badge(item.status === "runtime-proven" ? "separate now" : "not proven", item.status === "runtime-proven" ? "ok" : "issue")}</div><p>${esc(item.runtime_claim)}</p></article>`).join("")}</div>
+    <details class="program-team-technical"><summary>Technical details: exact seats, providers, models, identities, work areas, and sessions</summary>
+      <p>Provider or model diversity is not identity independence. Principal, profile, work area, session binding, and read-only review remain separate exact facts.</p>
+      <div class="tablewrap"><table class="run-table program-role-table"><thead><tr><th>seat / duty</th><th>agent</th><th>execution port</th><th>identity boundary</th><th>work area / session</th><th>activity</th></tr></thead><tbody>${(org.roles || []).map((seat) => { const x = seat.execution || {}; return `<tr><td><code>${esc(seat.address)}</code><br>${esc(seat.role)} · ${esc(seat.duty)}</td><td>${esc(seat.agent)}<br><small>${esc(seat.profile)}</small></td><td><strong>${esc(x.harness || "—")} / ${esc(x.adapter || "—")}</strong><br><small>${esc(x.provider || "—")} · ${esc(x.model || x.model_family || "—")}</small></td><td><code>${esc(x.auth_domain_fingerprint || "—")}</code><br><small>principal ${esc(seat.principal_fingerprint)}</small></td><td><code>${esc(seat.workspace_domain || "—")}</code><br><small>${esc(seat.session_binding_key || "—")}</small></td><td>${programStateBadge(seat.activity)}<br><small>${esc(programScalar(seat.last_result))}</small></td></tr>`; }).join("")}</tbody></table></div>
+      <div class="program-councils"><section><h3>decision groups / exact authority</h3>${(org.councils || []).map((council) => `<article><div><strong>${esc(council.id)}</strong>${badge(council.primary_authority || council.method, council.primary_authority === "judge" ? "warn" : "ok")}</div><p>${esc((council.members || []).join(", "))} · required agreement ${esc(council.quorum)} · tie ${esc(council.tie_authority)}</p><small>chair ${esc(council.chair_seat || "rule")} · decider ${esc(council.decider_seat || "deterministic rule")}</small></article>`).join("") || '<p class="hint">No decision group is assigned to this scope.</p>'}</section><section><h3>separation facts</h3><pre>${esc(JSON.stringify(org.separation || {}, null, 2))}</pre></section></div>
+    </details>
   </section>`;
 }
 
@@ -2728,7 +2737,9 @@ function studioProgramInspector() {
 }
 
 function studioAuthoring() {
-  return studioState.model?.authoring || null;
+  return studioState.family === "organization"
+    ? studioState.model?.team_review || null
+    : studioState.model?.authoring || null;
 }
 
 function studioPlanSection(id = studioState.planSection) {
@@ -2767,6 +2778,7 @@ function studioPlanCorrections(sectionId) {
 
 function studioPlanExamples() {
   const examples = studioAuthoring()?.examples || [];
+  if (!examples.length) return "";
   return `<details class="studio-plan-examples"><summary>Examples</summary><div>${examples.map((example) => `<article><strong>${esc(example.label)}</strong><p>${esc(example.summary)}</p></article>`).join("")}</div></details>`;
 }
 
@@ -2896,11 +2908,176 @@ function studioWorkflowPlanEditor(section) {
   return `${studioPlanItemList(section.items, true)}${section.id === "limits" ? studioPlanFactList(section.facts) : ""}`;
 }
 
+const TEAM_DUTY_LABELS = {
+  implementer: "Implementation",
+  verifier: "Independent review",
+  "meta-verifier": "Review audit",
+  "master-architect": "Architecture review",
+  researcher: "Research",
+  reviewer: "Review",
+  repairer: "Repair",
+  critic: "Critical perspective",
+  judge: "Contested decision",
+};
+
+function studioOrganizationRoles() {
+  return (studioState.document?.teams || []).flatMap((team, teamIndex) => (
+    (team.roles || []).map((role, roleIndex) => ({
+      team, teamIndex, role, roleIndex,
+      model: (studioAuthoring()?.responsibilities || []).find((item) => item.id === role.id),
+    }))
+  ));
+}
+
+function studioTeamRoleLabel(role) {
+  return TEAM_DUTY_LABELS[role?.duty] || String(role?.id || "Responsibility").replaceAll("-", " ");
+}
+
+function studioTeamRoleOptions(selected = "", includeBlank = false) {
+  const values = studioOrganizationRoles();
+  return `${includeBlank ? '<option value="">No separate responsibility</option>' : ""}${values.map(({ role }) => `<option value="${esc(role.id)}"${role.id === selected ? " selected" : ""}>${esc(studioTeamRoleLabel(role))}</option>`).join("")}`;
+}
+
+function studioTeamResponsibilitiesEditor() {
+  const document = studioState.document || {};
+  const pools = document.pools || [];
+  const roles = studioOrganizationRoles();
+  return `<div class="studio-team-editor" data-team-section="responsibilities">
+    <form class="studio-plan-form studio-team-intro">
+      ${studioInput("Team design name", "document.slug", document.slug, "text", 'pattern="[a-z][a-z0-9_-]*"', "/slug")}
+      ${studioInput("Team design title", "document.title", document.title, "text", "", "/title")}
+      ${studioArea("What is this team responsible for?", "document.description", document.description || "", "A short purpose visible during review.", "/description")}
+    </form>
+    <div class="studio-team-card-grid">${roles.map(({ team, teamIndex, role, roleIndex, model }) => {
+      const pointer = `/teams/${teamIndex}/roles/${roleIndex}`;
+      const primary = (model?.primary_candidates || []).map((item) => item.label);
+      const backups = (model?.backup_candidates || []).map((item) => item.label);
+      return `<fieldset class="studio-team-card"><legend>${esc(model?.label || studioTeamRoleLabel(role))}</legend>
+        <div class="studio-team-card-head"><div><span>${esc(team.id)}</span><strong>${esc(model?.responsibility || "Performs the saved bounded responsibility.")}</strong></div>${badge(role.required ? "required" : "optional", role.required ? "ok" : "")}</div>
+        <div class="studio-plan-form-grid">
+          <label><span>Responsibility name</span><input id="${esc(studioFieldId(`${pointer}/id`))}" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="id" value="${esc(role.id || "")}"></label>
+          <label><span>Kind of work</span><select id="${esc(studioFieldId(`${pointer}/duty`))}" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="duty">${Object.entries(TEAM_DUTY_LABELS).map(([value, label]) => `<option value="${esc(value)}"${role.duty === value ? " selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
+          <label><span>First-choice candidate group</span><select id="${esc(studioFieldId(`${pointer}/pool`))}" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="pool">${pools.map((pool) => `<option value="${esc(pool.id)}"${pool.id === role.pool ? " selected" : ""}>${esc(String(pool.id).replaceAll("-", " "))}</option>`).join("")}</select></label>
+          <label><span>Number of places</span><input id="${esc(studioFieldId(`${pointer}/cardinality`))}" type="number" min="1" max="16" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="cardinality" value="${esc(role.cardinality ?? 1)}"></label>
+          <label class="studio-plan-toggle"><input id="${esc(studioFieldId(`${pointer}/required`))}" type="checkbox" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="required"${role.required ? " checked" : ""}><span>This responsibility must be filled</span></label>
+        </div>
+        <dl class="studio-team-coverage"><div><dt>First in line</dt><dd>${esc(primary.join(", ") || "No compatible candidate")}</dd></div><div><dt>Backups</dt><dd>${esc(backups.join(", ") || "No backup candidate")}</dd></div></dl>
+        <p>${esc(model?.when || "")}</p><small>${esc(model?.outcomes || "")}</small>
+      </fieldset>`;
+    }).join("") || '<p class="studio-plan-empty">Add implementation and independent-review responsibilities under Technical details.</p>'}</div>
+    <p class="studio-plan-note">Candidate profiles, exact permissions, packet limits, schemas, and stable IDs remain visible and losslessly editable under Technical details.</p>
+  </div>`;
+}
+
+function studioTeamIndependenceEditor() {
+  const authoring = studioAuthoring() || {};
+  const entries = studioOrganizationRoles();
+  const constraints = authoring.quality_constraints || [];
+  return `<div class="studio-team-editor" data-team-section="independence">
+    <div class="studio-quality-constraints">${constraints.map((item) => `<article class="${item.status === "needs-attention" ? "issue" : "ready"}"><div><strong>${esc((item.labels || []).join(" ↔ "))}</strong>${badge(item.status === "runtime-proven" ? "proven in this assignment" : item.status === "policy-ready" ? "compatible candidates exist" : "must be checked at assignment", item.status === "needs-attention" ? "issue" : "ok")}</div><p>${esc(item.summary)}</p><small>${esc(item.runtime_claim)}</small>${item.status === "needs-attention" ? `<em>${esc(item.correction)}</em>` : ""}</article>`).join("") || '<p class="studio-plan-empty">No independent-review relationship has been declared.</p>'}</div>
+    <div class="studio-plan-editor-list">${entries.map(({ team, teamIndex, role, roleIndex, model }) => {
+      const peers = (team.roles || []).filter((item) => item !== role);
+      const pointer = `/teams/${teamIndex}/roles/${roleIndex}`;
+      return `<fieldset class="studio-team-rule"><legend>${esc(model?.label || studioTeamRoleLabel(role))}</legend>
+        <p>${esc(model?.responsibility || "")}</p>
+        <label><span>Work-area access</span><select id="${esc(studioFieldId(`${pointer}/workspace`))}" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="workspace"><option value="read-only"${role.workspace === "read-only" ? " selected" : ""}>Read only</option><option value="isolated-worktree"${role.workspace === "isolated-worktree" ? " selected" : ""}>Separate writable work area</option></select></label>
+        <div class="studio-team-rule-grid"><fieldset><legend>Must be separate from</legend>${peers.map((peer) => `<label><input type="checkbox" data-team-role-link="${roleIndex}" data-team-team="${teamIndex}" data-team-role-link-field="independent_from" data-team-role-target="${esc(peer.id)}"${(role.independent_from || []).includes(peer.id) ? " checked" : ""}><span>${esc(studioTeamRoleLabel(peer))}</span></label>`).join("") || "<small>No other responsibility in this team.</small>"}</fieldset>
+        <fieldset><legend>May review this work</legend>${peers.map((peer) => `<label><input type="checkbox" data-team-role-link="${roleIndex}" data-team-team="${teamIndex}" data-team-role-link-field="may_judge" data-team-role-target="${esc(peer.id)}"${(role.may_judge || []).includes(peer.id) ? " checked" : ""}><span>${esc(studioTeamRoleLabel(peer))}</span></label>`).join("") || "<small>No other responsibility in this team.</small>"}</fieldset></div>
+      </fieldset>`;
+    }).join("")}</div>
+    <aside class="studio-team-honesty"><strong>Compatible policy is not a runtime proof</strong><p>A saved design can prove that different candidates, profiles, and work areas are available. Only a later assignment can prove separate execution identities and work sessions. Provider or model names never prove independence by themselves.</p></aside>
+  </div>`;
+}
+
+function studioTeamDecisionsEditor() {
+  const authoring = studioAuthoring() || {};
+  const document = studioState.document || {};
+  const roles = studioOrganizationRoles();
+  const panels = roles.filter(({ role }) => Number(role.cardinality || 0) > 1);
+  const groups = authoring.review_groups || [];
+  return `<div class="studio-team-editor" data-team-section="decisions">
+    ${panels.length ? `<section class="studio-team-panel"><h3>Review panels</h3>${panels.map(({ role, model }) => `<article><strong>${esc(model?.label || studioTeamRoleLabel(role))}</strong><p>${esc(role.cardinality)} separate places contribute to this responsibility. The saved agreement and decision rules still determine the outcome.</p></article>`).join("")}</section>` : ""}
+    <div class="studio-plan-editor-list">${(document.councils || []).map((council, index) => {
+      const model = groups.find((item) => item.id === council.id) || {};
+      const decision = council.decision || {};
+      return `<fieldset class="studio-team-council"><legend>Contested-decision group ${index + 1}</legend>
+        <div class="studio-team-card-head"><div><span>Runs only when a saved work flow calls it</span><strong>${esc(model.description || "Declared perspectives discuss one matter before one governed outcome.")}</strong></div>${badge(`${council.quorum || 0} required`)}</div>
+        <div class="studio-plan-form-grid">
+          <label><span>Group name</span><input id="${esc(studioFieldId(`/councils/${index}/id`))}" data-team-council="${index}" data-team-council-field="id" value="${esc(council.id || "")}"></label>
+          <label><span>Required reviewer agreement</span><input id="${esc(studioFieldId(`/councils/${index}/quorum`))}" type="number" min="1" data-team-council="${index}" data-team-council-field="quorum" value="${esc(council.quorum ?? 1)}"></label>
+          <label><span>Decision owner</span><select id="${esc(studioFieldId(`/councils/${index}/judge`))}" data-team-council="${index}" data-team-council-field="judge">${studioTeamRoleOptions(council.judge, true)}</select></label>
+          <label><span>How agreement is decided</span><select id="${esc(studioFieldId(`/councils/${index}/decision/method`))}" data-team-council="${index}" data-team-council-field="decision.method">${[["majority", "More than half agree"], ["weighted", "Saved perspective weights agree"], ["unanimous", "Every reviewer agrees"], ["judge", "Decision owner chooses"]].map(([value, label]) => `<option value="${value}"${decision.method === value ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+          <label class="studio-plan-toggle"><input id="${esc(studioFieldId(`/councils/${index}/distinct_principals`))}" type="checkbox" data-team-council="${index}" data-team-council-field="distinct_principals"${council.distinct_principals ? " checked" : ""}><span>Require different execution identities</span></label>
+        </div>
+        <fieldset class="studio-team-members"><legend>Participating responsibilities</legend>${roles.map(({ role }) => `<label><input type="checkbox" data-team-council-member="${index}" data-team-role-target="${esc(role.id)}"${(council.members || []).includes(role.id) ? " checked" : ""}><span>${esc(studioTeamRoleLabel(role))}</span></label>`).join("")}</fieldset>
+        <p>${esc(model.decision_summary || "")} ${esc(model.decision_owner_summary || "")}</p>
+        <details class="studio-plan-advanced"><summary>Objections, dissent, and bounded discussion</summary><p>${esc(model.dissent || "An objection remains visible and follows the saved route.")}</p><p>${esc(model.veto_summary || "")}</p><label><span>Responsibilities with a separate objection right</span><textarea data-team-council="${index}" data-team-council-field="decision.veto_roles">${esc((decision.veto_roles || []).join("\n"))}</textarea><small>One responsibility name per line.</small></label><p class="studio-plan-note">Speaker weights, thresholds, round bounds, artifact bounds, output bounds, token bounds, and time bounds remain exact under Technical details.</p></details>
+      </fieldset>`;
+    }).join("") || '<section class="studio-plan-empty"><strong>No contested-decision group is defined.</strong><p>Ordinary independent review remains decisive. Add an advanced group in Technical details only when multiple perspectives, a named decision owner, or preserved dissent are required.</p></section>'}</div>
+  </div>`;
+}
+
+function studioTeamEscalationEditor() {
+  const authoring = studioAuthoring() || {};
+  return `<div class="studio-team-editor" data-team-section="escalation">
+    <div class="studio-plan-editor-list">${studioOrganizationRoles().map(({ team, teamIndex, role, roleIndex, model }) => {
+      const replacement = role.replacement || {};
+      const route = (authoring.escalation_routes || []).find((item) => item.id === role.id);
+      const pointer = `/teams/${teamIndex}/roles/${roleIndex}`;
+      return `<fieldset class="studio-team-rule"><legend>${esc(model?.label || studioTeamRoleLabel(role))}</legend>
+        <p>${esc(route?.summary || "Choose a finite replacement and handoff rule.")}</p>
+        <div class="studio-plan-form-grid">
+          <label><span>Maximum replacements</span><input id="${esc(studioFieldId(`${pointer}/replacement/max_replacements`))}" type="number" min="0" max="20" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="replacement.max_replacements" value="${esc(replacement.max_replacements ?? 0)}"></label>
+          <label><span>When replacements are exhausted</span><select id="${esc(studioFieldId(`${pointer}/replacement/on_exhausted`))}" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="replacement.on_exhausted">${[["block", "Keep the work blocked"], ["escalate", "Ask the separately authorized delivery owner"], ["checkpoint", "Wait for a named person"], ["abort", "End this delivery"]].map(([value, label]) => `<option value="${value}"${replacement.on_exhausted === value ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+          <label><span>Backup candidate groups</span><textarea id="${esc(studioFieldId(`${pointer}/replacement/fallback_pools`))}" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="replacement.fallback_pools">${esc((replacement.fallback_pools || []).join("\n"))}</textarea><small>One saved group per line.</small></label>
+          <label class="studio-plan-toggle"><input id="${esc(studioFieldId(`${pointer}/replacement/preserve_history`))}" type="checkbox" data-team-role="${roleIndex}" data-team-team="${teamIndex}" data-team-role-field="replacement.preserve_history"${replacement.preserve_history ? " checked" : ""}><span>Keep earlier work, review, and disagreement history</span></label>
+        </div>
+        <fieldset class="studio-team-members"><legend>May ask these responsibilities for bounded help</legend>${(team.roles || []).filter((item) => item !== role).map((peer) => `<label><input type="checkbox" data-team-role-link="${roleIndex}" data-team-team="${teamIndex}" data-team-role-link-field="may_request" data-team-role-target="${esc(peer.id)}"${(role.may_request || []).includes(peer.id) ? " checked" : ""}><span>${esc(studioTeamRoleLabel(peer))}</span></label>`).join("") || "<small>No other responsibility in this team.</small>"}</fieldset>
+      </fieldset>`;
+    }).join("")}</div>
+    <aside class="studio-team-honesty"><strong>Escalation does not grant authority</strong><p>A delivery-owner escalation leaves this team and waits for separately authorized handling. The team design does not name, create, or impersonate that person.</p></aside>
+  </div>`;
+}
+
+function studioTeamAuditEditor() {
+  const authoring = studioAuthoring() || {};
+  const document = studioState.document || {};
+  const auditRoles = (authoring.responsibilities || []).filter((item) => ["meta-verifier", "master-architect"].includes(item.technical_details?.duty));
+  const metaRoles = studioOrganizationRoles().filter(({ role }) => role.duty === "meta-verifier");
+  return `<div class="studio-team-editor" data-team-section="audit">
+    <div class="studio-team-audit-roles">${auditRoles.map((item) => `<article><div><strong>${esc(item.name)}</strong>${badge(item.technical_details?.duty === "master-architect" ? "architecture review · declared plan boundary only" : "review of review")}</div><p>${esc(item.responsibility)}</p><small>${esc(item.when)} ${esc(item.outcomes)}</small></article>`).join("") || '<p class="studio-plan-empty">No review auditor or architecture reviewer is enabled by this team design.</p>'}</div>
+    <div class="studio-plan-editor-list">${(document.councils || []).map((council, index) => {
+      const model = (authoring.review_groups || []).find((item) => item.id === council.id) || {};
+      const audit = council.audit || {};
+      return `<fieldset class="studio-team-rule"><legend>${esc(model.label || council.id)} review audit</legend>
+        <p>${esc(model.audit?.summary || "No separate review audit runs.")}</p>
+        <div class="studio-plan-form-grid">
+          <label><span>Audit coverage</span><select id="${esc(studioFieldId(`/councils/${index}/audit/mode`))}" data-team-council="${index}" data-team-council-field="audit.mode"><option value="none"${audit.mode === "none" ? " selected" : ""}>No separate audit</option><option value="sample"${audit.mode === "sample" ? " selected" : ""}>Check a sample</option><option value="full"${audit.mode === "full" ? " selected" : ""}>Check every participant result</option></select></label>
+          <label><span>Review auditor</span><select id="${esc(studioFieldId(`/councils/${index}/meta_verifier`))}" data-team-council="${index}" data-team-council-field="meta_verifier"><option value="">No review auditor</option>${metaRoles.map(({ role }) => `<option value="${esc(role.id)}"${council.meta_verifier === role.id ? " selected" : ""}>${esc(studioTeamRoleLabel(role))}</option>`).join("")}</select></label>
+          <label><span>Results checked</span><input id="${esc(studioFieldId(`/councils/${index}/audit/sample_size`))}" type="number" min="0" data-team-council="${index}" data-team-council-field="audit.sample_size" value="${esc(audit.sample_size ?? 0)}"></label>
+          <label><span>If the audit overturns a result</span><select data-team-council="${index}" data-team-council-field="audit.on_overturn">${["repair", "escalate", "block", "checkpoint", "abort"].map((value) => `<option value="${value}"${audit.on_overturn === value ? " selected" : ""}>${esc({ repair: "Request repair", escalate: "Escalate outside the team", block: "Keep work blocked", checkpoint: "Wait for a named person", abort: "End this delivery" }[value])}</option>`).join("")}</select></label>
+        </div>
+        <p class="studio-plan-note">Architecture review is activated only by a separately declared story or phase gate; defining an architecture responsibility here does not run it.</p>
+      </fieldset>`;
+    }).join("")}</div>
+  </div>`;
+}
+
+function studioTeamReviewEditor(section) {
+  if (section.id === "responsibilities") return studioTeamResponsibilitiesEditor();
+  if (section.id === "independence") return studioTeamIndependenceEditor();
+  if (section.id === "decisions") return studioTeamDecisionsEditor();
+  if (section.id === "escalation") return studioTeamEscalationEditor();
+  return studioTeamAuditEditor();
+}
+
 function studioPlanReview() {
   const authoring = studioAuthoring();
   const review = authoring?.review_sections || [];
-  return `<aside class="studio-plan-review" aria-label="Readable plan summary"><div><span>Review before save</span><strong>${esc(authoring?.status === "ready-to-review" ? "Ready to review" : "Needs attention")}</strong>${badge(authoring?.status === "ready-to-review" ? "nothing starts" : `${authoring?.corrections?.length || 0} corrections`, authoring?.status === "ready-to-review" ? "ok" : "issue")}</div>
+  const team = studioState.family === "organization";
+  return `<aside class="studio-plan-review" aria-label="${team ? "Readable team and review summary" : "Readable plan summary"}"><div><span>Review before save</span><strong>${esc(authoring?.status === "ready-to-review" ? "Ready to review" : "Needs attention")}</strong>${badge(authoring?.status === "ready-to-review" ? "nothing starts" : `${authoring?.corrections?.length || 0} corrections`, authoring?.status === "ready-to-review" ? "ok" : "issue")}</div>
     <dl>${review.map((item) => `<div><dt>${esc(item.label)}</dt><dd>${esc(item.answer)}</dd></div>`).join("")}</dl>
+    ${team ? `<p>${esc(authoring?.runtime_independence?.claim || "")}</p>` : ""}
     <p>Drafting, checking, and leaving make no change. Saving still requires a separate review of the exact file change and starts no work.</p>
     <button type="button" id="studio-review-save"${authoring?.status === "ready-to-review" ? "" : " disabled"}>Review this save</button>
   </aside>`;
@@ -2909,18 +3086,19 @@ function studioPlanReview() {
 function studioPlanView() {
   const authoring = studioAuthoring();
   if (!authoring) return stateHtml("Checking the delivery decisions…");
-  if (!authoring.applicable) {
-    return `<section class="studio-plan-unavailable"><h2>Team and review design</h2><p>This area keeps its existing exact editor until the dedicated team-and-review usability slice.</p><button type="button" data-studio-view="technical">Open Technical details</button></section>`;
-  }
+  if (!authoring.applicable) return stateHtml("This delivery design has no ordinary authoring view.");
   const section = studioPlanSection() || authoring.sections[0];
   if (section) studioState.planSection = section.id;
   const editor = studioState.family === "program"
     ? studioProgramPlanEditor(section)
-    : studioWorkflowPlanEditor(section);
+    : studioState.family === "workflow"
+      ? studioWorkflowPlanEditor(section)
+      : studioTeamReviewEditor(section);
+  const team = studioState.family === "organization";
   return `<div class="studio-plan" data-plan-status="${esc(authoring.status)}">
-    <header><div><span>Delivery decisions</span><h2>Build the plan in the order people review it</h2><p>${esc(authoring.summary)}</p></div>${badge(authoring.status === "ready-to-review" ? "ready to review" : "needs attention", authoring.status === "ready-to-review" ? "ok" : "issue")}</header>
+    <header><div><span>${team ? "Team and review" : "Delivery decisions"}</span><h2>${team ? "Make ownership, independence, and decisions understandable" : "Build the plan in the order people review it"}</h2><p>${esc(authoring.summary)}</p></div>${badge(authoring.status === "ready-to-review" ? "ready to review" : "needs attention", authoring.status === "ready-to-review" ? "ok" : "issue")}</header>
     <div class="studio-plan-shell">
-      <nav class="studio-plan-sections" aria-label="Delivery plan sections">${authoring.sections.map((item) => `<button type="button" data-plan-section="${esc(item.id)}" class="${item.id === section.id ? "active" : ""}" aria-current="${item.id === section.id ? "step" : "false"}"><span>${item.step}</span><strong>${esc(item.label)}</strong>${item.correction_count ? `<small>${item.correction_count} to fix</small>` : "<small>ready</small>"}</button>`).join("")}</nav>
+      <nav class="studio-plan-sections" aria-label="${team ? "Team and review sections" : "Delivery plan sections"}">${authoring.sections.map((item) => `<button type="button" data-plan-section="${esc(item.id)}" class="${item.id === section.id ? "active" : ""}" aria-current="${item.id === section.id ? "step" : "false"}"><span>${item.step}</span><strong>${esc(item.label)}</strong>${item.correction_count ? `<small>${item.correction_count} to fix</small>` : "<small>ready</small>"}</button>`).join("")}</nav>
       <main class="studio-plan-section" id="studio-plan-section" tabindex="-1"><header><span>Step ${section.step} of ${authoring.sections.length}</span><h2>${esc(section.question)}</h2><p>${esc(section.guidance)}</p><strong>${esc(section.answer)}</strong></header>
         ${studioPlanCorrections(section.id)}${editor}${section.id !== "limits" ? studioPlanFactList(section.facts) : ""}${studioPlanExamples()}
       </main>
@@ -2930,7 +3108,8 @@ function studioPlanView() {
 }
 
 function studioTechnicalView() {
-  return `<div class="studio-technical-view"><header><div><span class="orch-eyebrow">Technical details</span><h2>Exact graph, fields, and configuration</h2><p>Use this view for hierarchical flows, bounded loops, discussion cells, exact conditions, raw import/export, and source-level diagnostics.</p></div>${badge("same source document", "ok")}</header>
+  const team = studioState.family === "organization";
+  return `<div class="studio-technical-view"><header><div><span class="orch-eyebrow">Technical details</span><h2>${team ? "Exact responsibilities, provenance, and configuration" : "Exact graph, fields, and configuration"}</h2><p>${team ? "Inspect stable role IDs, candidate profiles, provider and model resolution, auth and principal fingerprints, work areas, sessions, packet bounds, decision rules, and the lossless source." : "Use this view for hierarchical flows, bounded loops, discussion cells, exact conditions, raw import/export, and source-level diagnostics."}</p></div>${badge("same source document", "ok")}</header>
     <nav class="studio-technical-tabs" aria-label="Technical editor mode"><button type="button" data-studio-technical="graph" class="${studioState.technicalMode === "graph" ? "active" : ""}">Graph and fields</button><button type="button" data-studio-technical="config" class="${studioState.technicalMode === "config" ? "active" : ""}">Lossless configuration</button></nav>
     ${studioState.technicalMode === "config" ? studioJsonView() : studioDesignView()}
   </div>`;
@@ -2943,7 +3122,7 @@ function studioExecutionContractHtml(contract, compact = false) {
   const councils = contract.councils || [];
   const diversity = contract.diversity || {};
   return `<div class="studio-execution-contract${compact ? " compact" : ""}">
-    <section><h3>portable execution ports / local resolution</h3>${ports.map((port) => { const local = port.local_resolution || {}; return `<article><div><strong>${esc(port.agent)}</strong>${badge(local.configured ? (local.available ? "available" : "unavailable") : "unconfigured", local.available ? "ok" : "warn")}</div><code>${esc(port.selector?.profile)}</code><span>${esc((port.constraints?.duties || []).join(", "))} · ${esc(local.harness || "unresolved")} / ${esc(local.provider || "—")} / ${esc(local.model || local.model_family || "—")}</span><small>auth <code>${esc(local.auth_domain_fingerprint || "—")}</code> · principal <code>${esc(local.principal_fingerprint || "—")}</code></small></article>`; }).join("") || '<p class="hint">This policy family declares no logical execution profile.</p>'}${contract.local_resolution_issue ? `<p class="guard">${esc(contract.local_resolution_issue)}</p>` : ""}</section>
+    <section><h3>portable execution ports / local resolution</h3>${ports.map((port) => { const local = port.local_resolution || {}; const constraints = port.constraints || {}; return `<article><div><strong>${esc(port.agent)}</strong>${badge(local.configured ? (local.available ? "available" : "unavailable") : "unconfigured", local.available ? "ok" : "warn")}</div><code>${esc(port.selector?.profile)}</code><span>${esc((constraints.duties || []).join(", "))} · ${esc(local.harness || "unresolved")} / ${esc(local.provider || "—")} / ${esc(local.model || local.model_family || "—")}</span><small>auth <code>${esc(local.auth_domain_fingerprint || "—")}</code> · principal <code>${esc(local.principal_fingerprint || "—")}</code></small><small>work area <code>${esc(constraints.workspace_domain || "—")}</code> · session binding not assigned before runtime</small></article>`; }).join("") || '<p class="hint">This policy family declares no logical execution profile.</p>'}${contract.local_resolution_issue ? `<p class="guard">${esc(contract.local_resolution_issue)}</p>` : ""}</section>
     <section><h3>fallback and replacement policy</h3>${fallbacks.map((item) => `<article><div><strong>${esc(item.team)} / ${esc(item.role)}</strong>${badge(`${esc(item.max_replacements)} replacement${Number(item.max_replacements) === 1 ? "" : "s"}`)}</div><span>${esc(item.primary_pool)} → ${esc((item.fallback_pools || []).join(", ") || "no fallback pool")}</span><small>${esc((item.reasons || []).join(", ") || "no eligible reason")} · exhausted → ${esc(item.on_exhausted)}</small></article>`).join("") || '<p class="hint">No replacement policy is reachable.</p>'}</section>
     <section><h3>council perspectives / authority / obligations</h3>${councils.map((item) => `<article><div><strong>${esc(item.id)}</strong>${badge(item.decision_authority === "judge" ? "agent judge" : `rule · ${item.decision_authority}`, item.decision_authority === "judge" ? "warn" : "ok")}</div><span>${(item.perspectives || []).map((perspective) => `${esc(perspective.role)}:${esc(perspective.perspective)}`).join(" · ")}</span><small>quorum ${esc(item.quorum)} · principals ${esc(item.principal_diversity)} · meta ${esc(item.meta_verifier || "none")} · veto ${esc((item.veto_roles || []).join(", ") || "none")}</small><small>obligations required · ${esc((item.obligation_policy?.allowed_kinds || []).join(", "))} · blocking stops progress</small></article>`).join("") || '<p class="hint">No council policy is reachable.</p>'}</section>
     <section><h3>diversity contract and observed roster</h3><dl class="studio-diversity"><div><dt>separation edges</dt><dd>${esc((diversity.independence || []).length)}</dd></div><div><dt>providers observed</dt><dd>${esc(diversity.resolved_provider_count || 0)}</dd></div><div><dt>model families observed</dt><dd>${esc(diversity.resolved_model_family_count || 0)}</dd></div><div><dt>principals observed</dt><dd>${esc(diversity.resolved_principal_count || 0)}</dd></div><div><dt>auth domains observed</dt><dd>${esc(diversity.resolved_auth_domain_count || 0)}</dd></div></dl><p class="hint">Provider/model counts are local observations. Exact logical profiles, principal separation, fallbacks, and council authority remain tracked policy; a later grant freezes resolved fingerprints.</p></section>
@@ -3021,9 +3200,11 @@ function studioValidateView() {
   if (!model) return stateHtml("Checking this delivery plan…");
   const validation = model.validation || { valid: false, diagnostics: [] };
   const diagnostics = validation.diagnostics || [];
-  const corrections = model.authoring?.corrections || [];
+  const corrections = studioAuthoring()?.corrections || [];
   const hashes = model.round_trip?.hashes_before || {};
-  return `<div class="studio-validation ${validation.valid ? "valid" : "invalid"}"><header><div><span class="orch-eyebrow">Check the delivery decisions</span><h2>${validation.valid ? "This plan is ready to review" : `${corrections.length} delivery decision${corrections.length === 1 ? "" : "s"} need attention`}</h2><p>${validation.valid ? "Scope, flow, review, decisions, recovery, stops, and limits agree." : "Fix the affected decision below; the saved plan remains unchanged."}</p></div>${badge(validation.valid ? "ready" : "needs attention", validation.valid ? "ok" : "issue")}</header>
+  const team = studioState.family === "organization";
+  const subject = team ? "team and review design" : "plan";
+  return `<div class="studio-validation ${validation.valid ? "valid" : "invalid"}"><header><div><span class="orch-eyebrow">${team ? "Check responsibilities and independence" : "Check the delivery decisions"}</span><h2>${validation.valid ? `This ${subject} is ready to review` : `${corrections.length} ${team ? "team or review rule" : "delivery decision"}${corrections.length === 1 ? "" : "s"} need attention`}</h2><p>${validation.valid ? (team ? "Responsibilities, independent review, decisions, escalation, and audit rules agree." : "Scope, flow, review, decisions, recovery, stops, and limits agree.") : `Fix the affected ${team ? "responsibility or quality constraint" : "decision"} below; the saved ${subject} remains unchanged.`}</p></div>${badge(validation.valid ? "ready" : "needs attention", validation.valid ? "ok" : "issue")}</header>
     ${corrections.length ? `<ol class="studio-decision-diagnostics">${corrections.map((item) => `<li><div><span>${esc(item.decision)}</span><strong>${esc(item.affected_behavior)}</strong><p>${esc(item.correction)}</p></div><button type="button" data-plan-correction="${esc(item.section_id)}" data-plan-node="${esc(item.target?.node_id || "")}" data-plan-field="${esc(item.target?.field_id || "")}">Fix this decision</button></li>`).join("")}</ol>` : '<p class="studio-green">The exact source is valid, and reviewing this result starts no work.</p>'}
     <details class="studio-validation-technical"><summary>Technical details</summary>
       <div class="studio-hashes"><div><span>semantic</span><code>${esc(hashes.semantic || "unavailable until valid")}</code></div><div><span>document</span><code>${esc(hashes.document || "unavailable until valid")}</code></div><div><span>layout</span><code>${esc(hashes.layout)}</code></div></div>
@@ -3069,7 +3250,7 @@ function renderProgramStudio() {
     organization: "team and review design",
   };
   const viewLabels = {
-    plan: "Plan",
+    plan: studioState.family === "organization" ? "Team & review" : "Plan",
     simulate: "Try the flow",
     validate: "Check",
     technical: "Technical details",
@@ -3080,7 +3261,7 @@ function renderProgramStudio() {
     ${studioState.setupContext ? `<section class="studio-setup-context"><div><span>Delivery scope from setup</span><strong>${esc(studioState.setupContext.project || "project not chosen")} · phase ${esc(studioState.setupContext.phase || "review needed")}</strong><p>This is an unsaved delivery-plan draft. Editing and checking it start nothing; Save draft still requires its own exact preview and confirmation.</p></div><div><a href="#/program-studio">Back to delivery choices</a><a href="#/">Leave for now</a></div></section>` : ""}
     ${empty ? `<section class="studio-empty-neutral"><div><span class="orch-eyebrow">Optional delivery design</span><h2>Nothing has been saved here yet</h2><p>Ordinary roadmap work is ready. Drafting a ${esc(objectLabel)} is optional and starts no work.</p></div><a href="#/">Return to current work</a></section>` : ""}
     <header class="studio-toolbar"><div><span class="orch-eyebrow">${esc(familyLabels[studioState.family])}</span><h1>${esc(document.title || document.slug || "Delivery plan")}</h1><p>Draft, check, and review before saving. Nothing here starts work or provides permission.</p><details><summary>Technical details</summary><code>pm/${esc(family?.plural || `${studioState.family}s`)}/${esc(document.slug || studioState.name)}.json</code></details></div><div class="studio-policy-actions"><label>Design area<select id="studio-family-select">${STUDIO_FAMILIES.map((id) => `<option value="${id}"${id === studioState.family ? " selected" : ""}>${esc(familyLabels[id])}</option>`).join("")}</select></label><label>Saved ${esc(objectLabel)}<select id="studio-policy-select"><option value="">New unsaved ${esc(objectLabel)}</option>${items.map((item) => `<option value="${esc(item.name)}"${item.name === studioState.name && studioState.exists ? " selected" : ""}>${esc(item.slug || item.name)}${item.valid ? "" : " · needs attention"}</option>`).join("")}</select></label><button type="button" id="studio-new">New</button><button type="button" id="studio-duplicate">Duplicate</button><button type="button" id="studio-preview-save">${studioState.setupContext && studioState.family === "program" ? "Review draft save" : `Review ${esc(objectLabel)} save`}</button><button type="button" id="studio-preview-delete" class="danger"${studioState.exists ? "" : " disabled"}>Review removal</button></div></header>
-    <nav class="studio-tabs" aria-label="Delivery-plan authoring views">${STUDIO_VIEWS.map((id) => `<button type="button" data-studio-view="${id}" class="${studioState.view === id ? "active" : ""}">${esc(viewLabels[id])}${id === "validate" && validation && !validation.valid ? ` (${validation.diagnostics.length})` : ""}</button>`).join("")}</nav>
+    <nav class="studio-tabs" aria-label="${studioState.family === "organization" ? "Team and review authoring views" : "Delivery-plan authoring views"}">${STUDIO_VIEWS.map((id) => `<button type="button" data-studio-view="${id}" class="${studioState.view === id ? "active" : ""}">${esc(viewLabels[id])}${id === "validate" && validation && !validation.valid ? ` (${validation.diagnostics.length})` : ""}</button>`).join("")}</nav>
     ${studioState.error ? `<div class="studio-error" role="alert">${esc(studioState.error)}</div>` : ""}<div id="studio-save-panel" aria-live="polite"></div><div id="studio-view">${studioBody()}</div>
   </div>`;
   wireProgramStudio();
@@ -3425,6 +3606,179 @@ function removeWorkflowInput(index) {
   studioPlanChanged();
 }
 
+function studioTeamRoleAt(teamIndex, roleIndex) {
+  return studioState.document?.teams?.[teamIndex]?.roles?.[roleIndex] || null;
+}
+
+function renameStudioTeamRole(teamIndex, roleIndex, nextValue) {
+  const document = studioState.document;
+  const role = studioTeamRoleAt(teamIndex, roleIndex);
+  if (!document || !role) return;
+  const old = role.id;
+  const next = String(nextValue).trim();
+  const collision = studioOrganizationRoles().some((item) => (
+    (item.teamIndex !== teamIndex || item.roleIndex !== roleIndex)
+    && item.role.id === next
+  ));
+  role.id = next;
+  if (!next || next === old || collision) return;
+  (document.teams || []).forEach((team) => (team.roles || []).forEach((item) => {
+    ["may_request", "may_judge", "independent_from"].forEach((field) => {
+      item[field] = (item[field] || []).map((value) => value === old ? next : value);
+    });
+  }));
+  (document.councils || []).forEach((council) => {
+    council.members = (council.members || []).map((value) => value === old ? next : value);
+    if (council.judge === old) council.judge = next;
+    if (council.meta_verifier === old) council.meta_verifier = next;
+    if (council.decision) {
+      council.decision.veto_roles = (council.decision.veto_roles || []).map((value) => value === old ? next : value);
+      if (council.decision.weights && Object.prototype.hasOwnProperty.call(council.decision.weights, old)) {
+        council.decision.weights[next] = council.decision.weights[old];
+        delete council.decision.weights[old];
+      }
+    }
+  });
+  ensureStudioLayout();
+  const teamId = document.teams?.[teamIndex]?.id;
+  const oldKey = `${teamId}/${old}`;
+  const nextKey = `${teamId}/${next}`;
+  if (document.layout.nodes[oldKey]) {
+    document.layout.nodes[nextKey] = document.layout.nodes[oldKey];
+    delete document.layout.nodes[oldKey];
+  }
+}
+
+function updateStudioTeamRole(teamIndex, roleIndex, field, value, checked = false) {
+  const role = studioTeamRoleAt(teamIndex, roleIndex);
+  if (!role) return;
+  if (field === "id") renameStudioTeamRole(teamIndex, roleIndex, value);
+  else if (field === "required") role.required = checked;
+  else if (field === "cardinality") role.cardinality = maybeNumber(value);
+  else if (field === "replacement.max_replacements") {
+    role.replacement ||= {};
+    role.replacement.max_replacements = maybeNumber(value);
+    if (Number(role.replacement.max_replacements) > 0 && !(role.replacement.reasons || []).length) {
+      role.replacement.reasons = ["unavailable", "lost", "failed", "refused", "conflicted"];
+    }
+  } else if (field.startsWith("replacement.")) {
+    role.replacement ||= {};
+    const key = field.slice("replacement.".length);
+    if (key === "fallback_pools") role.replacement[key] = splitLines(value);
+    else if (key === "preserve_history") role.replacement[key] = checked;
+    else role.replacement[key] = String(value).trim();
+  } else role[field] = String(value).trim();
+  studioPlanChanged();
+}
+
+function updateStudioTeamRoleLink(teamIndex, roleIndex, field, target, checked) {
+  const role = studioTeamRoleAt(teamIndex, roleIndex);
+  if (!role) return;
+  const current = new Set(role[field] || []);
+  if (checked) current.add(target);
+  else current.delete(target);
+  const order = (studioState.document?.teams?.[teamIndex]?.roles || []).map((item) => item.id);
+  role[field] = order.filter((id) => current.has(id));
+  studioPlanChanged();
+}
+
+function studioCouncilVotingSlots(council) {
+  const roleMap = new Map(studioOrganizationRoles().map(({ role }) => [role.id, role]));
+  return (council.members || [])
+    .filter((id) => id !== council.judge)
+    .reduce((total, id) => total + Number(roleMap.get(id)?.cardinality || 0), 0);
+}
+
+function renameStudioCouncil(index, nextValue) {
+  const document = studioState.document;
+  const council = document?.councils?.[index];
+  if (!document || !council) return;
+  const old = council.id;
+  const next = String(nextValue).trim();
+  const collision = (document.councils || []).some((item, itemIndex) => (
+    itemIndex !== index && item.id === next
+  ));
+  council.id = next;
+  if (!next || next === old || collision) return;
+  ensureStudioLayout();
+  const oldKey = `council:${old}`;
+  const nextKey = `council:${next}`;
+  if (document.layout.nodes[oldKey]) {
+    document.layout.nodes[nextKey] = document.layout.nodes[oldKey];
+    delete document.layout.nodes[oldKey];
+  }
+}
+
+function updateStudioCouncil(index, field, value, checked = false) {
+  const council = studioState.document?.councils?.[index];
+  if (!council) return;
+  council.decision ||= {};
+  council.audit ||= {};
+  if (field === "quorum" || field === "audit.sample_size") {
+    const [parent, child] = field.split(".");
+    if (child) council[parent][child] = maybeNumber(value);
+    else council[field] = maybeNumber(value);
+  } else if (field === "distinct_principals") {
+    council.distinct_principals = checked;
+  } else if (field === "meta_verifier") {
+    council.meta_verifier = String(value).trim() || null;
+  } else if (field === "decision.veto_roles") {
+    council.decision.veto_roles = splitLines(value);
+  } else if (field === "decision.method") {
+    council.decision.method = value;
+    const votingSlots = Math.max(studioCouncilVotingSlots(council), 1);
+    const totalWeight = (council.members || [])
+      .filter((id) => id !== council.judge)
+      .reduce((total, id) => {
+        const role = studioOrganizationRoles().find((item) => item.role.id === id)?.role;
+        return total + Number(role?.cardinality || 0) * Number(council.decision.weights?.[id] || 1);
+      }, 0);
+    council.decision.threshold = value === "unanimous"
+      ? votingSlots
+      : value === "weighted"
+        ? Math.floor(totalWeight / 2) + 1
+        : value === "majority"
+          ? Math.floor(votingSlots / 2) + 1
+          : 1;
+  } else if (field === "audit.mode") {
+    council.audit.mode = value;
+    const memberSlots = (council.members || []).reduce((total, id) => {
+      const role = studioOrganizationRoles().find((item) => item.role.id === id)?.role;
+      return total + Number(role?.cardinality || 0);
+    }, 0);
+    council.audit.sample_size = value === "none" ? 0 : value === "full" ? memberSlots : 1;
+  } else if (field === "id") {
+    renameStudioCouncil(index, value);
+  } else if (field.includes(".")) {
+    const [parent, child] = field.split(".");
+    council[parent][child] = String(value).trim();
+  } else {
+    council[field] = String(value).trim();
+  }
+  studioPlanChanged();
+}
+
+function updateStudioCouncilMember(index) {
+  const council = studioState.document?.councils?.[index];
+  if (!council) return;
+  const selected = new Set(
+    [...document.querySelectorAll(`[data-team-council-member="${index}"]:checked`)]
+      .map((field) => field.dataset.teamRoleTarget)
+  );
+  council.members = studioOrganizationRoles()
+    .map(({ role }) => role.id)
+    .filter((id) => selected.has(id));
+  if (council.decision?.weights) {
+    Object.keys(council.decision.weights).forEach((id) => {
+      if (!selected.has(id)) delete council.decision.weights[id];
+    });
+  }
+  if (council.decision?.veto_roles) {
+    council.decision.veto_roles = council.decision.veto_roles.filter((id) => selected.has(id));
+  }
+  studioPlanChanged();
+}
+
 function wireProgramStudio() {
   document.querySelectorAll("[data-studio-view]").forEach((button) => button.addEventListener("click", () => { studioState.view = button.dataset.studioView; renderProgramStudio(); }));
   document.querySelectorAll("[data-studio-technical]").forEach((button) => button.addEventListener("click", () => { studioState.technicalMode = button.dataset.studioTechnical; renderProgramStudio(); }));
@@ -3460,6 +3814,10 @@ function wireProgramStudio() {
   document.querySelectorAll("[data-plan-input-field]").forEach((field) => field.addEventListener("change", () => updateWorkflowInput(Number(field.dataset.planInput), field.dataset.planInputField, field.value, field.checked)));
   document.querySelector("[data-plan-add-input]")?.addEventListener("click", addWorkflowInput);
   document.querySelectorAll("[data-plan-remove-input]").forEach((button) => button.addEventListener("click", () => removeWorkflowInput(Number(button.dataset.planRemoveInput))));
+  document.querySelectorAll("[data-team-role-field]").forEach((field) => field.addEventListener("change", () => updateStudioTeamRole(Number(field.dataset.teamTeam), Number(field.dataset.teamRole), field.dataset.teamRoleField, field.value, field.checked)));
+  document.querySelectorAll("[data-team-role-link]").forEach((field) => field.addEventListener("change", () => updateStudioTeamRoleLink(Number(field.dataset.teamTeam), Number(field.dataset.teamRoleLink), field.dataset.teamRoleLinkField, field.dataset.teamRoleTarget, field.checked)));
+  document.querySelectorAll("[data-team-council-field]").forEach((field) => field.addEventListener("change", () => updateStudioCouncil(Number(field.dataset.teamCouncil), field.dataset.teamCouncilField, field.value, field.checked)));
+  document.querySelectorAll("[data-team-council-member]").forEach((field) => field.addEventListener("change", () => updateStudioCouncilMember(Number(field.dataset.teamCouncilMember))));
   document.querySelectorAll("[data-plan-edit-step]").forEach((button) => button.addEventListener("click", () => {
     studioState.selected = button.dataset.planEditStep;
     studioState.planSection = "flow";
@@ -3519,8 +3877,8 @@ async function viewProgramStudio(family = "program", name) {
   setCrumbs([{ label: "overview", href: "#/" }, { label: "delivery setup", href: "#/program-studio" }, { label: familyLabel }, ...(name ? [{ label: name }] : [])]);
   studioState.inventory = (await api("/api/program-studio")).data;
   studioState.family = family; studioState.error = ""; studioState.selected = ""; studioState.jsonDraft = ""; studioState.jsonPointer = "";
-  studioState.view = family === "organization" ? "technical" : "plan";
-  studioState.planSection = "scope";
+  studioState.view = "plan";
+  studioState.planSection = family === "organization" ? "responsibilities" : "scope";
   studioState.technicalMode = "graph";
   const familyModel = studioFamilyModel(family);
   const chosen = (!name && family === "program" && pendingProgramSetup)

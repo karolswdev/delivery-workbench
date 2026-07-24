@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-24 (Phase 27 complete 4/10: product language, whole-task journeys, delivery-shaped setup, and task-shaped plan/work-flow authoring are evidence-backed).
-**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (active, 4/10).
-**Status:** Program Studio now follows seven plain delivery decisions with a readable pre-save review, decision-shaped corrections, and ordinary plan/work-flow controls over the unchanged exact source. Hierarchy, bounded repetition, discussion, exact conditions, graph fields, and lossless configuration remain under Technical details; invalid or unknown content refuses safely, all draft paths remain pure, and the installed-wheel/no-program exams are green. Understandable team and review-rule design is next; landing and release remain separate decisions.
+**Last updated:** 2026-07-24 (Phase 27 complete 5/10: product language, whole-task journeys, delivery-shaped setup, task-shaped plan/work-flow authoring, and understandable team/review design are evidence-backed).
+**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (active, 5/10).
+**Status:** Organization authoring now answers five plain responsibility and review questions over one shared design/live projection. It distinguishes policy-ready candidates from runtime-proven identity, work-area, and session separation; advanced decision groups and exact provenance stay under Technical details. Targeted edits preserve the source and references, invalid or unknown content refuses safely, and all view paths remain pure. WLA-27-06 live progress and next-step explanation is next; landing and release remain separate decisions.
 
 ## Vision
 

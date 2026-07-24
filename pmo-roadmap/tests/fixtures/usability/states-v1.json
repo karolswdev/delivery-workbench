@@ -73,17 +73,21 @@
       "title": "Team and review draft",
       "capability_tier": "program",
       "route": "#/program-studio/organization/autonomous-story-cell",
-      "capture_id": "studio-authority",
+      "capture_id": "studio-team-review",
       "canonical_models": [
+        "delivery-workbench-team-review",
+        "delivery-workbench-program-studio-document",
         "delivery-workbench-compiled-organization",
-        "delivery-workbench-team-assignment",
+        "delivery-workbench-program-studio-round-trip",
         "delivery-workbench-program-studio-authority-preview"
       ],
       "fact_paths": [
-        "organization.seats",
-        "assignment.implementer",
-        "assignment.verifier",
-        "authority.requested_capabilities"
+        "team_review.sections",
+        "team_review.responsibilities",
+        "team_review.quality_constraints",
+        "team_review.review_groups",
+        "team_review.corrections",
+        "team_review.technical_details.provenance"
       ]
     },
     {
@@ -264,6 +268,28 @@
         "document.path",
         "round_trip.semantic_hash",
         "round_trip.layout_hash"
+      ]
+    },
+    {
+      "id": "team-review-technical",
+      "title": "Exact team, provenance, and review policy",
+      "capability_tier": "program",
+      "route": "?studioview=technical&studiotechnical=graph#/program-studio/organization/autonomous-story-cell",
+      "capture_id": "studio-team-technical",
+      "canonical_models": [
+        "delivery-workbench-team-review",
+        "delivery-workbench-program-studio-document",
+        "delivery-workbench-program-studio-graph",
+        "delivery-workbench-program-studio-round-trip",
+        "delivery-workbench-program-studio-authority-preview"
+      ],
+      "fact_paths": [
+        "team_review.technical_details.provenance",
+        "team_review.runtime_independence",
+        "document.raw",
+        "graph.nodes",
+        "authority.execution_contract",
+        "round_trip.semantic_hash"
       ]
     },
     {

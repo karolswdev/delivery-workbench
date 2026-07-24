@@ -80,8 +80,9 @@ for token in ("live run · ledger replay", "fail checks", "failure routes",
 assert "setInterval" not in run and "driver_config" not in run and "argv:" not in run
 assert 'aria-labelledby="run-graph-title"' in run
 assert "@media (max-width: 520px)" in css and ".run-node.state-active" in css
-for token in ("Program control room", "why this frontier", "organization",
-              "councils / deciders", "separation / diversity",
+for token in ("Program control room", "why this frontier", "team and review",
+              "runtime independence proven", "decision groups / exact authority",
+              "separation facts", "Technical details: exact seats",
               "nested execution", "quality, dissent, and gates",
               "obligations / debt", "phase progress", "permanently excluded",
               "operator notifications", "transport ≠ authority",
@@ -117,6 +118,13 @@ for token in ("plan", "simulate", "validate", "technical", "authority",
               "budget-exhausted", "phase-transition", "complete",
               "Delivery decisions", "data-plan-section",
               "data-plan-correction", "Review before save",
+              "Make ownership, independence, and decisions understandable",
+              "Team & review", "Independent review",
+              "Compatible policy is not a runtime proof",
+              "Ask the separately authorized delivery owner",
+              "Contested-decision group", "Review auditor",
+              "session binding not assigned before runtime",
+              "data-team-role-field", "data-team-council-field",
               "Advanced flow building blocks",
               "Technical details", "Lossless configuration",
               "starts no work"):
@@ -130,11 +138,17 @@ assert "data-field-id" in studio and "scrollIntoView" in studio
 for token in ("visitStudioObjects", 'item.kind === "parameter"',
               'item.kind === "artifact"', "nudge.binding === old"):
     assert token in studio, token
+for token in ("renameStudioTeamRole", "renameStudioCouncil",
+              "const collision", "council.members",
+              "council.decision.weights", "document.layout.nodes"):
+    assert token in studio, token
 for token in (".studio-node.type-loop", ".studio-node.type-debate",
               ".studio-node.type-verifier", ".studio-node.type-meta-verifier",
               ".studio-node.type-master-architect", ".studio-lane",
               ".studio-plan-shell", ".studio-plan-sections",
               ".studio-plan-review", ".studio-technical-view",
+              ".studio-team-card-grid", ".studio-quality-constraints",
+              ".studio-team-honesty", ".program-team-answers",
               "@media (max-width: 600px)"):
     assert token in css, token
 assert ".studio-workarea" in css and "overflow: auto" in css
@@ -433,7 +447,7 @@ for path, document in documents.items():
     path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 PY
 
-VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-authority:#/program-studio/program/studio-program"
+VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-team-review:#/program-studio/organization/autonomous-story-cell studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-team-technical:#/program-studio/organization/autonomous-story-cell"
 for spec in $VIEWS; do
   name="${spec%%:*}"
   route="${spec#*:}"
@@ -452,7 +466,7 @@ for spec in $VIEWS; do
     studio-validate) extra="&studioview=validate" ;;
     studio-technical-graph) extra="&studioview=technical&studiotechnical=graph" ;;
     studio-technical-config) extra="&studioview=technical&studiotechnical=config" ;;
-    studio-authority) extra="&studioview=authority" ;;
+    studio-team-technical) extra="&studioview=technical&studiotechnical=graph" ;;
   esac
   shot "$name-desktop" 1440,900 "$BASE/?snapshot=1$extra$route"
   shot "$name-mobile" 390,844 "$BASE/?snapshot=1$extra$route"
@@ -581,4 +595,4 @@ shot "program-revoked-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_REVO
 shot "program-certified-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 shot "program-certified-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 
-echo "workbench-ui-smoke.sh: ok (68 viewport renders: 26 data views + delivery setup/review + program planning/active/certified/revoked + attention + ambiguity, desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (70 viewport renders: 27 data views + delivery setup/review + program planning/active/certified/revoked + attention + ambiguity, desktop+mobile)"

@@ -13944,6 +13944,62 @@ class ProgramSurfaceTest(unittest.TestCase):
             self.assertNotIn(excluded, rendered)
         self.assertFalse(expected["starts_work"])
         self.assertFalse(expected["writes_events"])
+        team_review = expected["team_review"]
+        self.assertEqual(
+            team_review["kind"], "delivery-workbench-team-review"
+        )
+        self.assertEqual(team_review["context"], "live")
+        self.assertEqual(
+            team_review["source_models"],
+            [
+                "delivery-workbench-team-assignment",
+                "delivery-workbench-program-event",
+            ],
+        )
+        self.assertEqual(
+            [item["id"] for item in team_review["sections"]],
+            [
+                "responsibilities", "independence", "decisions",
+                "escalation", "audit",
+            ],
+        )
+        self.assertEqual(
+            team_review["runtime_independence"]["status"], "proven"
+        )
+        self.assertTrue(team_review["quality_constraints"])
+        self.assertTrue(all(
+            item["status"] == "runtime-proven"
+            for item in team_review["quality_constraints"]
+        ))
+        self.assertTrue(
+            team_review["technical_details"][
+                "provider_model_do_not_prove_independence"
+            ]
+        )
+        escalation_answer = next(
+            item["answer"] for item in team_review["sections"]
+            if item["id"] == "escalation"
+        )
+        self.assertIn(
+            "If work escalates",
+            escalation_answer,
+        )
+        self.assertNotIn("An open escalation", escalation_answer)
+        self.assertEqual(
+            len(team_review["dissent"]),
+            sum(
+                1 for item in expected["decisions"]
+                if item["result"] in {
+                    "dissent", "quorum-lost", "overturn", "escalate",
+                }
+            ),
+        )
+        for key in (
+            "starts_work", "writes_policy", "writes_roadmap",
+            "writes_run_state", "creates_grant", "starts_process",
+            "starts_observer", "sends_notification", "uses_network",
+        ):
+            self.assertFalse(team_review[key], key)
 
         tail = self.core.tail_program_events(self.root, run_id)
         tail_tool = mcp.call_tool(
@@ -14900,6 +14956,258 @@ class ProgramStudioTest(unittest.TestCase):
         self.assertFalse(detail["simulation"]["starts_work"])
         self.assertFalse(detail["authority"]["creates_grant"])
 
+    def test_team_review_answers_five_human_questions_over_advanced_policy(self):
+        from dw_pmo.team_review import TEAM_REVIEW_KIND, SECTION_ORDER
+
+        detail = self.core.build_studio_document(
+            self.root, "organization", "autonomous-story-cell"
+        )
+        team = detail["team_review"]
+        self.assertEqual(team["kind"], TEAM_REVIEW_KIND)
+        self.assertEqual(team["context"], "design")
+        self.assertEqual(team["status"], "ready-to-review")
+        self.assertEqual(
+            [section["id"] for section in team["sections"]],
+            list(SECTION_ORDER),
+        )
+        answers = team["review_before_save"]
+        self.assertIn("Builder Primary", answers["responsibilities"])
+        self.assertIn("Verifier Primary", answers["responsibilities"])
+        self.assertIn(
+            "must be separate from", answers["independence"]
+        )
+        self.assertEqual(
+            answers["independence"].count("must be separate from"), 1
+        )
+        self.assertIn("Every voting reviewer", answers["decisions"])
+        self.assertIn("Judge records the outcome", answers["decisions"])
+        self.assertIn("delivery owner", answers["escalation"])
+        self.assertIn("review auditor", answers["audit"])
+        self.assertIn("Meta Verifier owns this check", answers["audit"])
+        self.assertIn("Master Architect performs architecture review", answers["audit"])
+        self.assertIn("architecture check", answers["audit"])
+        self.assertEqual(
+            team["runtime_independence"]["status"], "not-assigned"
+        )
+        self.assertIn(
+            "does not claim a runtime identity",
+            team["runtime_independence"]["claim"],
+        )
+        self.assertTrue(all(
+            item["status"] == "policy-ready"
+            for item in team["quality_constraints"]
+            if item["roles"] == ["implementer", "verifier"]
+        ))
+        self.assertTrue(team["progressive_details"]["council"])
+        self.assertTrue(team["progressive_details"]["dissent"])
+        self.assertTrue(team["progressive_details"]["judge"])
+        self.assertTrue(team["progressive_details"]["review_auditor"])
+        self.assertTrue(team["progressive_details"]["architecture_review"])
+        self.assertTrue(
+            team["technical_details"][
+                "provider_model_do_not_prove_independence"
+            ]
+        )
+        self.assertTrue(
+            team["technical_details"][
+                "principal_workspace_session_remain_distinct"
+            ]
+        )
+        self.assertTrue(team["technical_details"]["round_trip_lossless"])
+        self.assertNotIn(
+            "delivery-workbench-team-assignment", team["source_models"]
+        )
+        self.assertEqual(team["corrections"], [])
+
+    def test_team_review_upgrades_only_the_runtime_pair_and_compares_exact_ids(self):
+        from dw_pmo.team_review import build_team_review
+
+        detail = self.core.build_studio_document(
+            self.root, "organization", "autonomous-story-cell"
+        )
+        assigned = build_team_review(
+            detail["raw"],
+            detail["validation"],
+            detail["compiled"],
+            detail["simulation"],
+            detail["authority"],
+            detail["round_trip"],
+            {
+                "applicable": True,
+                "separation": {
+                    "passed": True,
+                    "facts": {
+                        "implementer_role": "implementer",
+                        "verifier_role": "verifier",
+                    },
+                },
+            },
+        )
+        statuses = {
+            tuple(item["roles"]): item["status"]
+            for item in assigned["quality_constraints"]
+        }
+        self.assertEqual(
+            statuses[("implementer", "verifier")], "runtime-proven"
+        )
+        self.assertIn(
+            "delivery-workbench-team-assignment", assigned["source_models"]
+        )
+        self.assertTrue(all(
+            status != "runtime-proven"
+            for roles, status in statuses.items()
+            if roles != ("implementer", "verifier")
+        ))
+
+        colliding_labels = build_team_review(
+            {
+                "slug": "exact-candidate-ids",
+                "agents": [
+                    {
+                        "id": "review-one",
+                        "profile": "writer",
+                        "workspace_domain": "writer-space",
+                    },
+                    {
+                        "id": "review_one",
+                        "profile": "reader",
+                        "workspace_domain": "reader-space",
+                    },
+                ],
+                "pools": [
+                    {"id": "writers", "agents": ["review-one"]},
+                    {"id": "readers", "agents": ["review_one"]},
+                ],
+                "teams": [{
+                    "id": "delivery",
+                    "roles": [
+                        {
+                            "id": "implementer",
+                            "duty": "implementer",
+                            "pool": "writers",
+                            "required": True,
+                            "cardinality": 1,
+                        },
+                        {
+                            "id": "verifier",
+                            "duty": "verifier",
+                            "pool": "readers",
+                            "required": True,
+                            "cardinality": 1,
+                            "independent_from": ["implementer"],
+                        },
+                    ],
+                }],
+            },
+            {"valid": True, "diagnostics": []},
+            {
+                "logical_assignment_proofs": [{
+                    "team": "delivery",
+                    "witness": [
+                        {
+                            "role": "implementer",
+                            "agent": "review-one",
+                            "profile": "writer",
+                            "workspace_domain": "writer-space",
+                        },
+                        {
+                            "role": "verifier",
+                            "agent": "review_one",
+                            "profile": "reader",
+                            "workspace_domain": "reader-space",
+                        },
+                    ],
+                }],
+            },
+        )
+        constraint = colliding_labels["quality_constraints"][0]
+        self.assertEqual(constraint["labels"], ["Implementer", "Verifier"])
+        self.assertEqual(constraint["status"], "policy-ready")
+        witnesses = constraint["technical_details"]["policy_witness"]
+        self.assertNotEqual(
+            witnesses["left"]["candidate_id"],
+            witnesses["right"]["candidate_id"],
+        )
+        self.assertEqual(
+            witnesses["left"]["candidate"],
+            witnesses["right"]["candidate"],
+        )
+
+    def test_new_team_draft_is_a_valid_understandable_independent_pair(self):
+        document = self.core.new_studio_document(
+            "organization", "friendly-team"
+        )
+        plan = self.core.build_studio_mutation_plan(
+            self.root, "organization", "save", "friendly-team", document
+        )
+        preview = self.core.studio_mutation_preview(plan)
+        team = preview["studio"]["team_review"]
+        self.assertTrue(preview["applicable"])
+        self.assertTrue(preview["studio"]["validation"]["valid"])
+        self.assertEqual(team["status"], "ready-to-review")
+        self.assertEqual(
+            [item["technical_details"]["duty"]
+             for item in team["responsibilities"]],
+            ["implementer", "verifier"],
+        )
+        self.assertEqual(
+            team["quality_constraints"][0]["status"], "policy-ready"
+        )
+        self.assertEqual(team["review_groups"], [])
+        self.assertIn(
+            "separately authorized delivery owner",
+            team["review_before_save"]["escalation"],
+        )
+        self.assertTrue(preview["studio"]["round_trip"]["lossless"])
+        self.assertFalse(preview["writes_policy"])
+        self.assertFalse(preview["starts_work"])
+
+    def test_invalid_team_names_conflicting_roles_and_refuses_losslessly(self):
+        document = json.loads(
+            (
+                self.root
+                / "pm/organizations/autonomous-story-cell.json"
+            ).read_text(encoding="utf-8")
+        )
+        verifier = next(
+            role
+            for role in document["teams"][0]["roles"]
+            if role["id"] == "verifier"
+        )
+        verifier["independent_from"] = []
+        verifier["may_judge"] = []
+        document["future_extension"] = {"preserved": True}
+        plan = self.core.build_studio_mutation_plan(
+            self.root,
+            "organization",
+            "save",
+            "autonomous-story-cell",
+            document,
+        )
+        preview = self.core.studio_mutation_preview(plan)
+        team = preview["studio"]["team_review"]
+        self.assertFalse(preview["applicable"])
+        self.assertFalse(preview["valid"])
+        self.assertEqual(preview["studio"]["raw"], document)
+        self.assertTrue(preview["studio"]["round_trip"]["lossless"])
+        separation = next(
+            item for item in team["corrections"]
+            if item["technical_details"]["code"] == "missing-separation"
+        )
+        self.assertEqual(
+            separation["conflicting_roles"],
+            ["implementer", "verifier"],
+        )
+        self.assertIn("separate", separation["correction"])
+        self.assertEqual(separation["section_id"], "independence")
+        self.assertIn(
+            "/future_extension",
+            team["edit_safety"]["unknown_fields"],
+        )
+        self.assertTrue(team["edit_safety"]["unknown_fields_preserved"])
+        self.assertTrue(team["edit_safety"]["invalid_save_refused"])
+        self.assertIsNone(preview["studio"]["compiled"])
+
     def test_studio_projects_portable_ports_fallbacks_and_safe_local_fingerprints(self):
         from dw_pmo.orchestration_driver import write_driver_config
 
@@ -14953,6 +15261,7 @@ class ProgramStudioTest(unittest.TestCase):
             self.root, "organization", "autonomous-story-cell"
         )
         contract = detail["authority"]["execution_contract"]
+        provenance = detail["team_review"]["technical_details"]["provenance"]
         self.assertTrue(contract["content_safe"])
         self.assertFalse(contract["credentials_exposed"])
         self.assertFalse(contract["commands_accepted"])
@@ -14977,6 +15286,17 @@ class ProgramStudioTest(unittest.TestCase):
         self.assertGreaterEqual(
             contract["diversity"]["resolved_provider_count"], 2
         )
+        self.assertEqual(len(provenance), len(raw["agents"]))
+        self.assertTrue(all(
+            item["provider"] in {"provider-a", "provider-b"}
+            and item["model_vendor"] == "fixture-vendor"
+            and item["model"]
+            and item["auth_domain_fingerprint"]
+            and item["principal_fingerprint"]
+            and item["workspace_domain"]
+            and item["session_binding_key"] is None
+            for item in provenance
+        ))
         for port in contract["ports"]:
             self.assertNotIn("principal", port["local_resolution"])
             self.assertNotIn("auth_domain", port["local_resolution"])

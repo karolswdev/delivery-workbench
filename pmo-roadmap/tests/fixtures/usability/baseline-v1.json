@@ -126,8 +126,8 @@
     },
     {
       "journey_id": "team-review-setup",
-      "starting_capture": "studio-authority",
-      "technical_capture": "studio-technical-config",
+      "starting_capture": "studio-team-review",
+      "technical_capture": "studio-team-technical",
       "steps": [
         "Select an organization document.",
         "Open the authority view.",

@@ -1428,8 +1428,9 @@ One core compiler/planner/projection owns semantics. Delivered adapters are:
 - CLI: `dw program list|show|validate|simulate|plan|start|tick|supervise|pause|
   resume|revoke|cancel|request|tail|stream`;
 - MCP/HTTP: byte-equivalent reads plus exact-token, closed-parameter acts;
-- Workbench Program Studio: task-shaped Plan, Try the flow, Check,
-  Technical details, and Permission details views over the shared compiler;
+- Workbench Program Studio: task-shaped Plan or Team & review, Try the flow,
+  Check, Technical details, and Permission details views over the shared
+  compiler;
   and
 - Workbench control room: roadmap frontier, active organization, workflow
   lineage, rounds, verdicts/dissent, gates, authority, budgets, events, and
@@ -1470,6 +1471,14 @@ authoring around delivery scope, work flow, quality and review, decision
 points, repair and escalation, stop conditions, and finite limits, and it
 provides one readable summary before save. The exact graph and JSON editors
 remain under **Technical details** rather than becoming a second saved format.
+Organization documents instead lead with
+`delivery-workbench-team-review@1`. Its shared design/live sections answer who
+does each responsibility, who reviews independently, who decides contested
+matters, where exhausted replacement escalates, and who audits review or
+architecture. Policy feasibility stays distinct from runtime-proven
+principal/workspace/session separation; provider/model observations never
+stand in for identity proof. Exact roles, packet rules, decision thresholds,
+provenance, and source JSON remain under **Technical details**.
 `GET /api/program-studio` returns a healthy neutral empty inventory, while the
 family/name read and
 `POST /api/program-studio/preview|apply` expose the exact compiler, graph,

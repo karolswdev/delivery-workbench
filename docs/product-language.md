@@ -157,8 +157,8 @@ stories for every row. This table is the human review of that inventory.
 | `workbench-health-and-edit` | mixed | Explain the issue, affected work, unchanged state, and correction | Paths, diffs, fingerprints, and rule IDs under **Technical details** |
 | `workbench-mission-control-and-history` | mixed | Group progress and outcomes | Sessions, event kinds, file paths, and logs under **Technical details** |
 | `workbench-bounded-delivery` | mixed | Delivery plan, team, work, review, decisions, limits, progress | Exact score/run fields, events, hashes, tokens, and streams under **Technical details** |
-| `workbench-delivery-studio` | mixed | Task-shaped delivery and team design | Lossless JSON, compiler diagnostics, exact fields, and fingerprints under **Technical details** |
-| `workbench-live-delivery` | mixed | Progress, ownership, review, blockers, decisions, permission, cost, next step | Grants, ledgers, hashes, identifiers, events, and streams under **Technical details** |
+| `workbench-delivery-studio` | mixed | Task-shaped delivery, responsibility, independence, decision, escalation, and review-audit design | Lossless JSON, compiler diagnostics, stable IDs, exact provider/identity facts, fields, and fingerprints under **Technical details** |
+| `workbench-live-delivery` | mixed | Progress, assigned ownership, runtime-proven review, blockers, decisions, permission, cost, next step | Grants, ledgers, provider/model/auth/principal/workspace/session facts, hashes, identifiers, events, and streams under **Technical details** |
 | `cli-orientation-and-roadmap` | everyday | Readiness, work, blocker, evidence, next step | `--json` remains the exact machine contract |
 | `cli-setup-health-help-and-errors` | mixed | Task, effect, unchanged state, and correction | Gate rules, contract fields, commands, and paths remain copyable under **Technical details** |
 | `cli-bounded-delivery` | mixed | Human delivery summaries and actions | `--json`, identifiers, and copyable commands stay exact under **Technical details** |
@@ -284,6 +284,15 @@ view groups those facts into delivery scope, work flow, quality/review,
 decisions, repair/escalation, stops, and limits. Exact graph structure, source
 fields, diagnostics, and JSON remain under **Technical details**. The
 projection edits no source and owns no compiler or permission decision.
+
+WLA-27-05 adds `delivery-workbench-team-review@1` over the existing
+organization, validation, assignment, Studio authority, and live program-view
+facts. Its five sections use `team`, `work`, `review`, and `decision` language
+for responsibility, independence, contested outcomes, escalation, and
+review-of-review. The ordinary view distinguishes compatible policy from a
+runtime-proven assignment. Provider/model/auth/principal/workspace/session
+facts remain distinct and inspectable under **Technical details**; the view
+never promotes provider or model diversity into a claim of independence.
 
 Later stories follow the same rule. If a desired sentence cannot be supported
 by canonical facts, the renderer must say it is unknown or the canonical model

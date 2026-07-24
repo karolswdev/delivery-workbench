@@ -130,6 +130,28 @@
       "expected": []
     },
     {
+      "id": "mixed-team-review",
+      "classification": "mixed",
+      "technical_label": "Technical details",
+      "technical_explicit": true,
+      "regions": [
+        {
+          "classification": "everyday",
+          "text": "Team: Maya does the work and Rowan provides independent review. A separate decision owner resolves disagreement, and exhausted replacement asks the delivery owner."
+        },
+        {
+          "classification": "technical_audit",
+          "text": "provider=openai; model=gpt; auth_domain_fingerprint=sha256:01; principal_fingerprint=sha256:02; workspace_domain=reviewer; session_binding_key=review-1"
+        }
+      ],
+      "concept_names": {
+        "team": "team",
+        "review": "review",
+        "decision": "decision"
+      },
+      "expected": []
+    },
+    {
       "id": "technical-architecture-language",
       "classification": "technical_audit",
       "text": "The conductor projection replays the ledger before deriving the operational frontier.",

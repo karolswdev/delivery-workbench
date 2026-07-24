@@ -3,7 +3,7 @@
   "schema_version": 1,
   "slug": "autonomous-story-cell",
   "title": "Autonomous story cell",
-  "description": "Optional logical organization with independent delivery, verification, council, meta-audit, and architecture duties.",
+  "description": "A delivery team with separate implementation and review, governed decisions, review auditing, and architecture checks.",
   "agents": [
     {
       "id": "builder-primary",

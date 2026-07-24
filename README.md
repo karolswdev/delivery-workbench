@@ -272,6 +272,12 @@ Each section states the question it answers, links incomplete source facts to
 the affected decision, and contributes to one readable summary before save.
 Programs can edit scope, work routes, phase decisions, stops, and limits;
 work flows can edit inputs and ordinary work/check/review/decision steps.
+Organization routes open on **Team & review** and answer who does each kind of
+work, who reviews independently, who decides disagreements, where escalation
+goes, and who audits review or architecture. The same stamped view describes
+live assigned ownership. It distinguishes compatible policy from
+runtime-proven identity/work-area/session separation; provider and model names
+never stand in for independence.
 Nested flows, bounded repair, discussion cells, exact conditions, graph
 layout, and lossless JSON remain editable under **Technical details**.
 Every view uses the existing Python compilers and edits the same source
@@ -414,6 +420,7 @@ trailers and an archived contract, the full history passing
 - [Whole-task usability journeys](./docs/usability-journeys.md): the Phase 27 journey contract, reachable state fixtures, current-friction baseline, screen ownership, and deterministic usability proof
 - [Delivery setup and first arrival](./docs/delivery-setup.md): the three deliberate operating modes, pure shared model, Workbench/CLI parity, safe exits, preflight, and proof
 - [Delivery-plan authoring](./docs/plan-authoring.md): the seven task-shaped decisions, readable pre-save summary, decision-shaped corrections, lossless Technical-details editing, and no-side-effect proof
+- [Team and review design](./docs/team-review.md): five responsibility questions, policy-ready versus runtime-proven independence, progressive decision/audit rules, exact provenance, lossless editing, and shared live reuse
 - [Comprehensive solution overview](./docs/solution-overview.md): current architecture, workflows, trust model, proof snapshot, strengths, gaps, and delivered response
 - [Status briefing contract](./docs/status-briefing.md): the Phase 22 one-answer model, readiness semantics, and guided action order
 - [Deliberate step contract](./docs/deliberate-step.md): the Phase 23 state-bound preview/apply seam and closed executable action table

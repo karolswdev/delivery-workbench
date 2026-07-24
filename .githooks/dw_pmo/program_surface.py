@@ -44,6 +44,7 @@ from .program_run import (
     start_program,
 )
 from .programs import program_inventory
+from .team_review import build_live_team_review
 
 
 PROGRAM_SURFACE_SCHEMA_VERSION = 1
@@ -1045,6 +1046,13 @@ def build_program_view(
         for item in receipts
         if isinstance(item.get("decision"), dict)
     ]
+    dissent = [
+        item
+        for item in decisions
+        if str(item.get("result")) in {
+            "dissent", "quorum-lost", "overturn", "escalate",
+        }
+    ]
     rounds = [
         item
         for item in receipts
@@ -1155,6 +1163,20 @@ def build_program_view(
             "roster_hash": roster["roster_hash"],
             "assignment_hash": roster["assignment_hash"],
         },
+        "team_review": build_live_team_review(
+            {
+                "slug": roster["organization"],
+                "team": roster["team"],
+                "roles": roles,
+                "councils": roster["councils"],
+                "separation": roster["separation"],
+                "roster_hash": roster["roster_hash"],
+                "assignment_hash": roster["assignment_hash"],
+            },
+            decisions,
+            dissent,
+            gates,
+        ),
         "graph": _activity_graph(receipts, next_action),
         "activities": {
             "completed": receipts,
@@ -1165,13 +1187,7 @@ def build_program_view(
         "verdicts": verdicts,
         "decisions": decisions,
         "rounds": rounds,
-        "dissent": [
-            item
-            for item in decisions
-            if str(item.get("result")) in {
-                "dissent", "quorum-lost", "overturn", "escalate",
-            }
-        ],
+        "dissent": dissent,
         "gates": gates,
         "child_runs": [
             item
