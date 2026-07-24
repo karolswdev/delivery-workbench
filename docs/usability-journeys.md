@@ -1,0 +1,212 @@
+# Whole-task usability journeys
+
+Delivery Workbench's usability contract is a set of observable delivery tasks,
+not a prescribed page layout and not a model-generated score. It fixes the
+questions, facts, bounded choices, outcomes, safe exits, and exact-detail path
+that a later interface must preserve while it improves the interaction.
+
+The contract sits on top of the
+[everyday product language](./product-language.md). It changes no workflow,
+eligibility, review, permission, cost, or next-work semantics. Every displayed
+fact names a canonical model already declared by
+[`docs/interop.md`](./interop.md), and every mutation names an existing
+preview/apply boundary.
+
+## Versioned sources
+
+| Source | Purpose |
+|---|---|
+| [`journeys-v1.json`](../pmo-roadmap/tests/fixtures/usability/journeys-v1.json) | The 13 whole-task journeys, operating tiers, canonical action sources, seven operator questions, and screen ownership |
+| [`states-v1.json`](../pmo-roadmap/tests/fixtures/usability/states-v1.json) | Reachable canonical starting and exact-detail states, model paths, routes, and wide/narrow capture IDs |
+| [`baseline-v1.json`](../pmo-roadmap/tests/fixtures/usability/baseline-v1.json) | Reproducible observations of the application before the Phase 27 screen redesign |
+| [`red-fixtures-v1.json`](../pmo-roadmap/tests/fixtures/usability/red-fixtures-v1.json) | Planted incomplete, unsafe, ambiguous, inaccessible, and authority-invalid journeys |
+| [`usability-journey-contract.py`](../pmo-roadmap/tests/usability-journey-contract.py) | Deterministic schema, source, reachability, language, ownership, baseline, and red-fixture validation |
+
+All files use schema version 1. A new required journey field, changed tier
+meaning, changed operator question, or changed outcome meaning requires a new
+schema version. Additive baseline observations may remain in v1 when they do
+not change the task contract.
+
+## Operating tiers
+
+| Tier ID | Product choice | Entry rule |
+|---|---|---|
+| `vanilla` | Everyday roadmap | The healthy default. It is usable immediately and creates no optional delivery state. |
+| `bounded-run` | One bounded delivery | Optional. It starts only after the exact work and limits are reviewed and the separate start is confirmed. |
+| `program` | Optional delivery program | Optional. Configuration, review, and the separate start are all deliberate; visiting setup or saving a draft starts nothing. |
+
+The journey contract never treats `program` as required setup. An action that
+changes tier must name the canonical start source and require explicit
+confirmation. A renderer may recommend a tier, but it may not select or start
+one silently.
+
+## Required journey shape
+
+Every journey has exactly these task elements:
+
+1. A reachable `starting_state` and the operating tiers in which the journey
+   applies.
+2. One plain `user_question` plus the Phase 26 operator questions it answers.
+3. Non-empty `visible_facts`; each fact uses a v1 everyday concept and names
+   the canonical model that supplies it.
+4. Non-empty `bounded_actions`; each action states its exact effect, available
+   tier, resulting tier, confirmation requirement, and existing authority
+   source.
+5. One observable `success_outcome` and exactly one expected next step.
+6. A `refusal_recovery` outcome that states what remains unchanged, keeps a
+   safe exit, and names exactly one next step.
+7. An explicit **Technical details** path, its canonical sources, and a
+   labelled return to the ordinary task.
+8. The Phase 27 screen slices that own it and both downstream consumers:
+   `workbench-ui` and `fresh-wheel-exit-exam`.
+
+Read-only inspection is represented explicitly and carries no mutation
+authority. Draft saves use the existing Studio mutation boundary. Bounded
+delivery and optional-program starts and controls use their existing exact
+plan/preview and result models. A friendly button, notification, route, or
+renderer is never an authority source.
+
+## Journey catalog
+
+| Journey | Starting state and tier | User question | Successful handoff |
+|---|---|---|---|
+| `healthy-first-arrival` | `everyday-ready` · `vanilla` | Is this repository ready, and what useful work can I do now? | Open current ordinary work without optional setup. |
+| `deliberate-capability-choice` | `capability-choice` · all three choices visible | How much coordination do I want for this delivery? | Keep the selected tier explicit; any higher tier has its own confirmed start. |
+| `delivery-plan-setup` | `plan-draft` · `program` | What will be delivered, in what order, and where should work stop? | Save only the reviewed draft, then set up the team and review. |
+| `team-review-setup` | `team-review-draft` · `program` | Who will do, review, and decide on this work? | Preserve readable responsibility and independent review, then preflight. |
+| `preflight` | `preflight-ready` · `bounded-run` | Is this delivery ready to start, and what exactly may it do? | Start the exact reviewed delivery once, or return without starting. |
+| `live-progress` | `bounded-active` · `bounded-run` | What is happening now, what passed, and what happens next? | Advance at most one reviewed step, then show the updated canonical state. |
+| `failed-review-and-repair` | `repair-needed` · `bounded-run` | What failed, what can repair it, and what remains safe? | Run only the reviewed repair and require the failed check to pass. |
+| `blocked-human-decision` | `human-decision-needed` · `bounded-run` | Who must decide, which choices are valid, and what follows each choice? | Apply one exact response and recalculate the canonical next step. |
+| `remaining-permission-and-cost` | `program-active` · `program` | What may this delivery still change or spend? | Distinguish allowed, consumed, remaining, forbidden, unknown, and not-applicable facts before action. |
+| `stop-and-revoke` | `program-active` · `program` | How do I pause safely or permanently stop this delivery? | Apply the selected stop once and show its consequence. |
+| `crash-recovery` | `bounded-active` · `bounded-run` | After interruption, what completed, what may resume, and what happens next? | Separate completed, incomplete, and eligible work before a deliberate resume. |
+| `completion` | `delivery-complete` · `program` | What finished, what passed, and is there more work? | Distinguish work-item completion from whole-delivery completion and name the next work or finish path. |
+| `technical-inspection` | `bounded-active` · `bounded-run` | How can I inspect the exact record without losing the delivery summary? | Inspect or copy the exact source, then return to the same ordinary task context. |
+
+The success handoff is not the only valid ending. Every row also has a
+versioned refusal/recovery outcome and safe leave path in the JSON contract.
+
+## Seven-question coverage
+
+| Phase 26 operator question | Journeys that directly answer it |
+|---|---|
+| What are we delivering? | `healthy-first-arrival`, `deliberate-capability-choice`, `delivery-plan-setup`, `preflight`, `live-progress`, `completion` |
+| Who is doing and reviewing it? | `team-review-setup`, `preflight`, `live-progress` |
+| What passed? | `live-progress`, `failed-review-and-repair`, `crash-recovery`, `completion`, `technical-inspection` |
+| What is blocked? | `live-progress`, `failed-review-and-repair`, `blocked-human-decision`, `stop-and-revoke`, `crash-recovery` |
+| Who needs to decide? | `team-review-setup`, `live-progress`, `blocked-human-decision` |
+| What may the delivery still change or spend? | `deliberate-capability-choice`, `delivery-plan-setup`, `preflight`, `live-progress`, `remaining-permission-and-cost`, `stop-and-revoke`, `crash-recovery`, `technical-inspection` |
+| What happens next? | All 13 journeys. |
+
+Coverage means the answer is a source-linked visible fact, not that a renderer
+may derive or guess an answer.
+
+## Screen-slice ownership
+
+| Story | Owned journeys |
+|---|---|
+| `WLA-27-03` | `healthy-first-arrival`, `deliberate-capability-choice`, `preflight` |
+| `WLA-27-04` | `delivery-plan-setup`, `preflight`, `technical-inspection` |
+| `WLA-27-05` | `team-review-setup`, `blocked-human-decision`, `technical-inspection` |
+| `WLA-27-06` | `live-progress`, `failed-review-and-repair`, `crash-recovery`, `completion`, `technical-inspection` |
+| `WLA-27-07` | `failed-review-and-repair`, `blocked-human-decision`, `remaining-permission-and-cost`, `stop-and-revoke`, `crash-recovery`, `technical-inspection` |
+| `WLA-27-08` | All 13 journeys across human surfaces. |
+| `WLA-27-09` | All 13 journeys at wide/narrow viewports and through keyboard/assistive interaction. |
+| `WLA-27-10` | All 13 journeys in the fresh-wheel exit exam. |
+
+The JSON mapping is bidirectional: each screen slice lists its journeys and
+each journey lists its owners. The validator rejects drift in either
+direction.
+
+## Current-friction baseline
+
+The baseline was captured on 2026-07-24 from the existing canonical UI
+fixture builders:
+
+```bash
+DW_UI_CAPTURE_DIR=.tmp/wla27-current-baseline \
+DW_UI_CAPTURE_PATTERN='*' \
+pmo-roadmap/tests/workbench-ui-smoke.sh
+```
+
+The harness produced all 60 existing views and passed. Each mapped state has a
+1440×900 desktop capture and a 390×844 mobile capture. The screenshots are
+reproducible test output under ignored `.tmp/`; the versioned baseline records
+the observable findings, not machine-specific image bytes.
+
+Across the 13 journeys, the current application requires **88 visible steps**
+and **38 user decisions**, exposes **81 engineering-term occurrences**, and
+contains **13 recorded dead ends** plus **26 context switches**. These are
+descriptive counts, not a quality score. A later story demonstrates
+improvement by updating its owned journey against the same categories and
+recording any tradeoff honestly.
+
+| Journey | Steps | Decisions | Engineering terms | Dead ends | Context switches |
+|---|---:|---:|---:|---:|---:|
+| `healthy-first-arrival` | 5 | 2 | 5 | 1 | 2 |
+| `deliberate-capability-choice` | 6 | 3 | 5 | 1 | 2 |
+| `delivery-plan-setup` | 7 | 3 | 9 | 1 | 2 |
+| `team-review-setup` | 6 | 3 | 6 | 1 | 2 |
+| `preflight` | 8 | 3 | 7 | 1 | 2 |
+| `live-progress` | 7 | 3 | 6 | 1 | 2 |
+| `failed-review-and-repair` | 7 | 3 | 6 | 1 | 2 |
+| `blocked-human-decision` | 7 | 3 | 6 | 1 | 2 |
+| `remaining-permission-and-cost` | 7 | 3 | 7 | 1 | 2 |
+| `stop-and-revoke` | 7 | 3 | 6 | 1 | 2 |
+| `crash-recovery` | 7 | 3 | 6 | 1 | 2 |
+| `completion` | 8 | 3 | 7 | 1 | 2 |
+| `technical-inspection` | 6 | 3 | 5 | 1 | 2 |
+
+The consistent baseline finding is not that exact data is absent. It is
+abundant and inspectable. The friction is its placement: generated IDs,
+hashes, exact authority state, raw bindings, counters, graph taxonomy, and JSON
+often precede the ordinary delivery answer. On narrow screens, wrapped global
+navigation and stacked protocol cards commonly push the decisive fact and safe
+action beyond the first viewport.
+
+Notable specific findings:
+
+- healthy ordinary work exists, but contract/gate/workspace language leads the
+  arrival view;
+- optional setup is technically healthy, but a large new-program editor can
+  look mandatory;
+- plan and team design begin with node, topology, role, and exact capability
+  structures rather than delivery decisions and responsibilities;
+- live, repair, and decision states are reconstructable from graphs and exact
+  state, but their human answer and next step are not adjacent;
+- remaining permission and cost are precise but distributed across raw
+  bindings and many counters;
+- the captured completion specimen simultaneously presents `running`,
+  `story-certified`, and `integration-required`, requiring the person to infer
+  whether one work item or the whole delivery completed;
+- exact inspection is reachable through a `JSON` tab, but the required
+  **Technical details** label and a task-preserving return path are absent.
+
+## Reuse contract
+
+Workbench UI tests load state IDs from `states-v1.json`, build those states
+through the existing core/read-model fixture paths, and resolve each
+`capture_id` to both viewport renders in
+`pmo-roadmap/tests/workbench-ui-smoke.sh`. They do not hand-author a parallel
+UI-only state.
+
+The WLA-27-10 fresh-wheel exam loads the same journey IDs, starting states,
+visible facts, actions, outcomes, and exact-detail state. It may add an
+acceptance transcript, but it may not re-describe or weaken the task. A screen
+test or exit exam that needs a different fact or outcome must change the
+versioned contract first.
+
+Run the deterministic contract check with:
+
+```bash
+python3 pmo-roadmap/tests/usability-journey-contract.py
+```
+
+The checker rejects incomplete journeys, unknown source models, capture IDs
+without both viewports, reserved engineering language in everyday regions,
+missing safe exits, invented or over-broad action sources, silent tier
+changes, ambiguous next steps, inaccessible **Technical details**, missing
+question or screen coverage, incomplete baselines, reuse drift, and missing
+docs/README/CI wiring. It also applies every planted mutation in
+`red-fixtures-v1.json` and proves the intended refusal still fires.

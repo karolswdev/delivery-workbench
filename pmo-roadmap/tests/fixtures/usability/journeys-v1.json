@@ -1,0 +1,1639 @@
+{
+  "kind": "delivery-workbench-usability-journeys",
+  "schema_version": 1,
+  "product_language_contract": "docs/product-language-contract-v1.json",
+  "technical_details_label": "Technical details",
+  "capability_tiers": [
+    {
+      "id": "vanilla",
+      "label": "Everyday roadmap",
+      "optional": false,
+      "entry_rule": "Available after setup without creating optional delivery state."
+    },
+    {
+      "id": "bounded-run",
+      "label": "One bounded delivery",
+      "optional": true,
+      "entry_rule": "Starts only after a person reviews the exact work and limits and confirms the separate start."
+    },
+    {
+      "id": "program",
+      "label": "Optional delivery program",
+      "optional": true,
+      "entry_rule": "Starts only after a person deliberately configures it, reviews the exact work and limits, and confirms the separate start."
+    }
+  ],
+  "authority_sources": [
+    {
+      "id": "read-only-inspection",
+      "preview_model": null,
+      "result_model": null,
+      "effect_ids": [
+        "copy",
+        "inspect",
+        "leave-unchanged",
+        "navigate",
+        "reload"
+      ],
+      "confirmation_required": false
+    },
+    {
+      "id": "studio-mutation",
+      "preview_model": "delivery-workbench-program-studio-mutation-preview",
+      "result_model": "delivery-workbench-program-studio-mutation-result",
+      "effect_ids": [
+        "delete-draft",
+        "save-draft"
+      ],
+      "confirmation_required": true
+    },
+    {
+      "id": "bounded-start",
+      "preview_model": "delivery-workbench-run-plan",
+      "result_model": "delivery-workbench-run-grant",
+      "effect_ids": [
+        "start-bounded-delivery"
+      ],
+      "confirmation_required": true
+    },
+    {
+      "id": "bounded-control",
+      "preview_model": "delivery-workbench-run-act-preview",
+      "result_model": "delivery-workbench-run",
+      "effect_ids": [
+        "advance-once",
+        "pause",
+        "respond",
+        "resume",
+        "retry-repair",
+        "revoke"
+      ],
+      "confirmation_required": true
+    },
+    {
+      "id": "program-start",
+      "preview_model": "delivery-workbench-program-start-plan",
+      "result_model": "delivery-workbench-program-grant",
+      "effect_ids": [
+        "start-program"
+      ],
+      "confirmation_required": true
+    },
+    {
+      "id": "program-control",
+      "preview_model": "delivery-workbench-program-act-preview",
+      "result_model": "delivery-workbench-program-projection",
+      "effect_ids": [
+        "advance-once",
+        "pause",
+        "respond",
+        "resume",
+        "revoke"
+      ],
+      "confirmation_required": true
+    }
+  ],
+  "operator_questions": [
+    {
+      "id": "delivery",
+      "text": "What are we delivering?"
+    },
+    {
+      "id": "team-review",
+      "text": "Who is doing and reviewing it?"
+    },
+    {
+      "id": "passed",
+      "text": "What passed?"
+    },
+    {
+      "id": "blocked",
+      "text": "What is blocked?"
+    },
+    {
+      "id": "decision",
+      "text": "Who needs to decide?"
+    },
+    {
+      "id": "permission-cost",
+      "text": "What may the delivery still change or spend?"
+    },
+    {
+      "id": "next",
+      "text": "What happens next?"
+    }
+  ],
+  "screen_slices": [
+    {
+      "story": "WLA-27-03",
+      "title": "First arrival and deliberate setup",
+      "journey_ids": [
+        "healthy-first-arrival",
+        "deliberate-capability-choice",
+        "preflight"
+      ]
+    },
+    {
+      "story": "WLA-27-04",
+      "title": "Delivery-plan and workflow authoring",
+      "journey_ids": [
+        "delivery-plan-setup",
+        "preflight",
+        "technical-inspection"
+      ]
+    },
+    {
+      "story": "WLA-27-05",
+      "title": "Team and review setup",
+      "journey_ids": [
+        "team-review-setup",
+        "blocked-human-decision",
+        "technical-inspection"
+      ]
+    },
+    {
+      "story": "WLA-27-06",
+      "title": "Live progress and next steps",
+      "journey_ids": [
+        "live-progress",
+        "failed-review-and-repair",
+        "crash-recovery",
+        "completion",
+        "technical-inspection"
+      ]
+    },
+    {
+      "story": "WLA-27-07",
+      "title": "Decisions, blockers, permission, cost, and control",
+      "journey_ids": [
+        "failed-review-and-repair",
+        "blocked-human-decision",
+        "remaining-permission-and-cost",
+        "stop-and-revoke",
+        "crash-recovery",
+        "technical-inspection"
+      ]
+    },
+    {
+      "story": "WLA-27-08",
+      "title": "Cross-surface product-language parity",
+      "journey_ids": [
+        "healthy-first-arrival",
+        "deliberate-capability-choice",
+        "delivery-plan-setup",
+        "team-review-setup",
+        "preflight",
+        "live-progress",
+        "failed-review-and-repair",
+        "blocked-human-decision",
+        "remaining-permission-and-cost",
+        "stop-and-revoke",
+        "crash-recovery",
+        "completion",
+        "technical-inspection"
+      ]
+    },
+    {
+      "story": "WLA-27-09",
+      "title": "Keyboard, viewport, and assistive use",
+      "journey_ids": [
+        "healthy-first-arrival",
+        "deliberate-capability-choice",
+        "delivery-plan-setup",
+        "team-review-setup",
+        "preflight",
+        "live-progress",
+        "failed-review-and-repair",
+        "blocked-human-decision",
+        "remaining-permission-and-cost",
+        "stop-and-revoke",
+        "crash-recovery",
+        "completion",
+        "technical-inspection"
+      ]
+    },
+    {
+      "story": "WLA-27-10",
+      "title": "Fresh-wheel usability exit exam",
+      "journey_ids": [
+        "healthy-first-arrival",
+        "deliberate-capability-choice",
+        "delivery-plan-setup",
+        "team-review-setup",
+        "preflight",
+        "live-progress",
+        "failed-review-and-repair",
+        "blocked-human-decision",
+        "remaining-permission-and-cost",
+        "stop-and-revoke",
+        "crash-recovery",
+        "completion",
+        "technical-inspection"
+      ]
+    }
+  ],
+  "journeys": [
+    {
+      "id": "healthy-first-arrival",
+      "title": "Healthy first arrival",
+      "starting_state": "everyday-ready",
+      "capability_tiers": [
+        "vanilla"
+      ],
+      "user_question": "Is this repository ready, and what useful work can I do now?",
+      "operator_questions": [
+        "delivery",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "work",
+          "statement": "One ordinary roadmap story is ready to continue.",
+          "source_model": "delivery-workbench-roadmap-context"
+        },
+        {
+          "concept_id": "progress",
+          "statement": "The repository is ready and earlier completed work remains visible.",
+          "source_model": "delivery-workbench-status"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Open the current story; optional coordination is not required.",
+          "source_model": "delivery-workbench-status"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "open-current-work",
+          "label": "Open current work",
+          "effect_id": "navigate",
+          "effect": "Opens the current story without changing repository or delivery state.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "vanilla"
+          ],
+          "resulting_tier": "vanilla",
+          "confirmation_required": false
+        },
+        {
+          "id": "check-readiness",
+          "label": "Check readiness",
+          "effect_id": "inspect",
+          "effect": "Reads current readiness facts and makes no change.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "vanilla"
+          ],
+          "resulting_tier": "vanilla",
+          "confirmation_required": false
+        },
+        {
+          "id": "leave-unchanged",
+          "label": "Leave for now",
+          "effect_id": "leave-unchanged",
+          "effect": "Leaves every repository and delivery fact unchanged.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "vanilla"
+          ],
+          "resulting_tier": "vanilla",
+          "confirmation_required": false
+        }
+      ],
+      "success_outcome": {
+        "summary": "The person can identify current work and continue without optional setup.",
+        "next_step": {
+          "label": "Open current work",
+          "target": "action:open-current-work"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If readiness cannot be established, show the affected check and do not suggest that work may start.",
+        "unchanged": "No repository or delivery state changes.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Check readiness",
+          "target": "action:check-readiness"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "vanilla-technical",
+        "source_models": [
+          "delivery-workbench-status",
+          "delivery-workbench-step"
+        ],
+        "return_label": "Back to current work",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-03",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "deliberate-capability-choice",
+      "title": "Deliberate delivery choice",
+      "starting_state": "capability-choice",
+      "capability_tiers": [
+        "vanilla",
+        "bounded-run",
+        "program"
+      ],
+      "user_question": "How much coordination do I want for this delivery?",
+      "operator_questions": [
+        "delivery",
+        "permission-cost",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "delivery_plan",
+          "statement": "Ordinary roadmap work remains available with no optional setup.",
+          "source_model": "delivery-workbench-status"
+        },
+        {
+          "concept_id": "permission",
+          "statement": "One bounded delivery and an optional program each require a separate reviewed start.",
+          "source_model": "delivery-workbench-program-studio"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Stay with the roadmap, review one bounded delivery, or review an optional program.",
+          "source_model": "delivery-workbench-program-studio"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "stay-vanilla",
+          "label": "Continue with the roadmap",
+          "effect_id": "navigate",
+          "effect": "Returns to ordinary work and creates no optional delivery state.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "vanilla"
+          ],
+          "resulting_tier": "vanilla",
+          "confirmation_required": false
+        },
+        {
+          "id": "start-bounded",
+          "label": "Confirm one bounded delivery",
+          "effect_id": "start-bounded-delivery",
+          "effect": "Starts only the reviewed work with the reviewed limits; it does not enable an optional program.",
+          "authority_source": "bounded-start",
+          "available_in_tiers": [
+            "vanilla"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        },
+        {
+          "id": "start-program",
+          "label": "Confirm the optional program",
+          "effect_id": "start-program",
+          "effect": "Starts only the reviewed optional program with the reviewed scope and limits.",
+          "authority_source": "program-start",
+          "available_in_tiers": [
+            "vanilla"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": true
+        }
+      ],
+      "success_outcome": {
+        "summary": "The selected tier is explicit, and any higher tier starts only after its own confirmation.",
+        "next_step": {
+          "label": "Review the selected delivery",
+          "target": "state:preflight-ready"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If a start is stale or incomplete, nothing starts and the person may return to ordinary work.",
+        "unchanged": "Ordinary roadmap work and every unselected tier remain unchanged.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Continue with the roadmap",
+          "target": "action:stay-vanilla"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "studio-technical",
+        "source_models": [
+          "delivery-workbench-program-studio-document",
+          "delivery-workbench-program-studio-round-trip"
+        ],
+        "return_label": "Back to delivery choices",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-03",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "delivery-plan-setup",
+      "title": "Delivery-plan setup",
+      "starting_state": "plan-draft",
+      "capability_tiers": [
+        "program"
+      ],
+      "user_question": "What will be delivered, in what order, and where should work stop?",
+      "operator_questions": [
+        "delivery",
+        "permission-cost",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "delivery_plan",
+          "statement": "The draft names the work, sequence, review points, repair paths, and stop conditions.",
+          "source_model": "delivery-workbench-program-studio-document"
+        },
+        {
+          "concept_id": "permission",
+          "statement": "Saving the draft starts no work and provides no permission to act.",
+          "source_model": "delivery-workbench-program-studio-mutation-preview"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Review the readable plan, then save it or leave it unchanged.",
+          "source_model": "delivery-workbench-program-studio-document"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "save-plan-draft",
+          "label": "Save reviewed draft",
+          "effect_id": "save-draft",
+          "effect": "Writes only the reviewed delivery-plan document and starts no work.",
+          "authority_source": "studio-mutation",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": true
+        },
+        {
+          "id": "discard-plan-changes",
+          "label": "Discard unsaved changes",
+          "effect_id": "leave-unchanged",
+          "effect": "Leaves the saved delivery plan and every runtime fact unchanged.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": false
+        },
+        {
+          "id": "review-plan",
+          "label": "Review plan summary",
+          "effect_id": "inspect",
+          "effect": "Shows the plan summary and makes no change.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": false
+        }
+      ],
+      "success_outcome": {
+        "summary": "The saved draft preserves the reviewed plan and still starts nothing.",
+        "next_step": {
+          "label": "Set up the team and review",
+          "target": "state:team-review-draft"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If validation or freshness fails, identify the affected delivery decision and keep the saved document unchanged.",
+        "unchanged": "No draft, permission, work, or roadmap state changes.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Review plan summary",
+          "target": "action:review-plan"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "studio-technical",
+        "source_models": [
+          "delivery-workbench-program-studio-document",
+          "delivery-workbench-program-studio-round-trip"
+        ],
+        "return_label": "Back to plan summary",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-04",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "team-review-setup",
+      "title": "Team and review setup",
+      "starting_state": "team-review-draft",
+      "capability_tiers": [
+        "program"
+      ],
+      "user_question": "Who will do, review, and decide on this work?",
+      "operator_questions": [
+        "team-review",
+        "decision",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "team",
+          "statement": "The summary names who does each kind of work and who reviews it independently.",
+          "source_model": "delivery-workbench-compiled-organization"
+        },
+        {
+          "concept_id": "review",
+          "statement": "The summary names required reviews, contested decisions, and escalation paths.",
+          "source_model": "delivery-workbench-team-assignment"
+        },
+        {
+          "concept_id": "decision",
+          "statement": "Any incompatible assignment identifies the exact roles and a corrective choice.",
+          "source_model": "delivery-workbench-program-studio-authority-preview"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "save-team-draft",
+          "label": "Save reviewed team",
+          "effect_id": "save-draft",
+          "effect": "Writes only the reviewed team document and starts no work.",
+          "authority_source": "studio-mutation",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": true
+        },
+        {
+          "id": "discard-team-changes",
+          "label": "Discard unsaved changes",
+          "effect_id": "leave-unchanged",
+          "effect": "Leaves the saved team and every runtime fact unchanged.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": false
+        },
+        {
+          "id": "review-responsibilities",
+          "label": "Review responsibilities",
+          "effect_id": "inspect",
+          "effect": "Shows responsibilities and separation facts and makes no change.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": false
+        }
+      ],
+      "success_outcome": {
+        "summary": "The saved team makes responsibility, independent review, and decision ownership understandable.",
+        "next_step": {
+          "label": "Review delivery readiness",
+          "target": "state:preflight-ready"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If responsibility or independence is invalid, name the conflict and keep the saved team unchanged.",
+        "unchanged": "No team, permission, work, or roadmap state changes.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Review responsibilities",
+          "target": "action:review-responsibilities"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "studio-technical",
+        "source_models": [
+          "delivery-workbench-program-studio-document",
+          "delivery-workbench-program-studio-round-trip"
+        ],
+        "return_label": "Back to team summary",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-05",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "preflight",
+      "title": "Delivery preflight",
+      "starting_state": "preflight-ready",
+      "capability_tiers": [
+        "bounded-run"
+      ],
+      "user_question": "Is this delivery ready to start, and what exactly may it do?",
+      "operator_questions": [
+        "delivery",
+        "team-review",
+        "permission-cost",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "delivery_plan",
+          "statement": "The reviewed work, order, checks, and stop conditions are valid.",
+          "source_model": "delivery-workbench-orchestration-validation"
+        },
+        {
+          "concept_id": "team",
+          "statement": "The people or agents responsible for work and review are named.",
+          "source_model": "delivery-workbench-run-plan"
+        },
+        {
+          "concept_id": "permission",
+          "statement": "The exact allowed effects, time, work, and cost limits are shown before start.",
+          "source_model": "delivery-workbench-run-plan"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Confirm this reviewed delivery or return to the plan.",
+          "source_model": "delivery-workbench-run-plan"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "start-reviewed-delivery",
+          "label": "Confirm this delivery",
+          "effect_id": "start-bounded-delivery",
+          "effect": "Starts only the reviewed work under the reviewed limits and does not continue automatically.",
+          "authority_source": "bounded-start",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        },
+        {
+          "id": "return-to-plan",
+          "label": "Return to the plan",
+          "effect_id": "navigate",
+          "effect": "Returns to setup and starts nothing.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": false
+        },
+        {
+          "id": "leave-preflight",
+          "label": "Leave for now",
+          "effect_id": "leave-unchanged",
+          "effect": "Leaves the plan, repository, and delivery state unchanged.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": false
+        }
+      ],
+      "success_outcome": {
+        "summary": "The exact reviewed delivery starts once and remains bounded by the displayed limits.",
+        "next_step": {
+          "label": "View live progress",
+          "target": "state:bounded-active"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If readiness, freshness, or permission fails, nothing starts and the affected fact is named.",
+        "unchanged": "No work, process, permission, or roadmap state is created or changed.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Return to the plan",
+          "target": "action:return-to-plan"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "run-technical",
+        "source_models": [
+          "delivery-workbench-orchestration",
+          "delivery-workbench-compiled-orchestration",
+          "delivery-workbench-run-view"
+        ],
+        "return_label": "Back to delivery readiness",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-03",
+        "WLA-27-04",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "live-progress",
+      "title": "Live delivery progress",
+      "starting_state": "bounded-active",
+      "capability_tiers": [
+        "bounded-run"
+      ],
+      "user_question": "What is happening now, what passed, and what happens next?",
+      "operator_questions": [
+        "delivery",
+        "team-review",
+        "passed",
+        "blocked",
+        "decision",
+        "permission-cost",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "work",
+          "statement": "Current, waiting, completed, and blocked work are visibly distinct.",
+          "source_model": "delivery-workbench-run-view"
+        },
+        {
+          "concept_id": "review",
+          "statement": "Completed checks and reviews state what they establish.",
+          "source_model": "delivery-workbench-run-view"
+        },
+        {
+          "concept_id": "progress",
+          "statement": "Consumed and remaining work, time, and cost are shown with their limits.",
+          "source_model": "delivery-workbench-run-view"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "One canonical next step explains whether to advance, wait, decide, repair, or stop.",
+          "source_model": "delivery-workbench-run-view"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "refresh-progress",
+          "label": "Refresh progress",
+          "effect_id": "reload",
+          "effect": "Reloads the canonical delivery state and starts no work.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": false
+        },
+        {
+          "id": "advance-one-step",
+          "label": "Advance one step",
+          "effect_id": "advance-once",
+          "effect": "Performs at most the one reviewed next delivery step.",
+          "authority_source": "bounded-control",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        },
+        {
+          "id": "pause-delivery",
+          "label": "Pause delivery",
+          "effect_id": "pause",
+          "effect": "Stops new work from starting while preserving completed work and current state.",
+          "authority_source": "bounded-control",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        }
+      ],
+      "success_outcome": {
+        "summary": "The display explains progress and the reviewed next step advances at most once.",
+        "next_step": {
+          "label": "Review updated progress",
+          "target": "action:refresh-progress"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If the next step is stale or unavailable, show what changed and start no replacement step.",
+        "unchanged": "No unreviewed work starts and completed work remains recorded.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Refresh progress",
+          "target": "action:refresh-progress"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "run-technical",
+        "source_models": [
+          "delivery-workbench-run-view",
+          "delivery-workbench-compiled-orchestration"
+        ],
+        "return_label": "Back to live progress",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-06",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "failed-review-and-repair",
+      "title": "Failed review and repair",
+      "starting_state": "repair-needed",
+      "capability_tiers": [
+        "bounded-run"
+      ],
+      "user_question": "What failed, what can repair it, and what remains safe?",
+      "operator_questions": [
+        "passed",
+        "blocked",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "review",
+          "statement": "The failed check states what it tested and what did not pass.",
+          "source_model": "delivery-workbench-check-receipt"
+        },
+        {
+          "concept_id": "blocker",
+          "statement": "Affected work and the available repair path are named.",
+          "source_model": "delivery-workbench-run-view"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Retry the bounded repair, pause safely, or inspect the failure.",
+          "source_model": "delivery-workbench-run-view"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "inspect-failure",
+          "label": "Review the failed check",
+          "effect_id": "inspect",
+          "effect": "Opens the failure explanation and makes no change.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": false
+        },
+        {
+          "id": "retry-repair",
+          "label": "Retry the bounded repair",
+          "effect_id": "retry-repair",
+          "effect": "Starts only the reviewed repair attempt under the remaining limits.",
+          "authority_source": "bounded-control",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        },
+        {
+          "id": "pause-after-failure",
+          "label": "Pause delivery",
+          "effect_id": "pause",
+          "effect": "Starts no further work and preserves the failure and completed work.",
+          "authority_source": "bounded-control",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        }
+      ],
+      "success_outcome": {
+        "summary": "Only the reviewed repair runs, and the failed check must pass before work continues.",
+        "next_step": {
+          "label": "Review the repair result",
+          "target": "state:bounded-active"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If repair is unavailable or its facts changed, start nothing and preserve the failure for review.",
+        "unchanged": "No replacement work starts and the prior failure remains visible.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Review the failed check",
+          "target": "action:inspect-failure"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "run-technical",
+        "source_models": [
+          "delivery-workbench-run-view",
+          "delivery-workbench-compiled-orchestration"
+        ],
+        "return_label": "Back to repair",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-06",
+        "WLA-27-07",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "blocked-human-decision",
+      "title": "Blocked human decision",
+      "starting_state": "human-decision-needed",
+      "capability_tiers": [
+        "bounded-run"
+      ],
+      "user_question": "Who must decide, which choices are valid, and what follows each choice?",
+      "operator_questions": [
+        "blocked",
+        "decision",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "blocker",
+          "statement": "The affected work and reason it cannot continue are named.",
+          "source_model": "delivery-workbench-run-view"
+        },
+        {
+          "concept_id": "decision",
+          "statement": "The responsible person, closed choices, and effect of each choice are shown.",
+          "source_model": "delivery-workbench-decision"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Respond with one valid choice or leave the decision pending.",
+          "source_model": "delivery-workbench-run-view"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "approve-decision",
+          "label": "Approve this request",
+          "effect_id": "respond",
+          "effect": "Applies approval only to the exact outstanding request and then rechecks what may proceed.",
+          "authority_source": "bounded-control",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        },
+        {
+          "id": "reject-decision",
+          "label": "Reject this request",
+          "effect_id": "respond",
+          "effect": "Applies rejection only to the exact outstanding request and keeps affected work stopped.",
+          "authority_source": "bounded-control",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        },
+        {
+          "id": "leave-decision-pending",
+          "label": "Decide later",
+          "effect_id": "leave-unchanged",
+          "effect": "Leaves the request pending and starts no affected work.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": false
+        }
+      ],
+      "success_outcome": {
+        "summary": "One exact decision is recorded and the canonical next step is recalculated.",
+        "next_step": {
+          "label": "Review what happens next",
+          "target": "state:bounded-active"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If the request is stale, mismatched, already answered, or unavailable, refuse without guessing another response.",
+        "unchanged": "The outstanding decision and affected work remain unchanged.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Decide later",
+          "target": "action:leave-decision-pending"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "run-technical",
+        "source_models": [
+          "delivery-workbench-run-view",
+          "delivery-workbench-compiled-orchestration"
+        ],
+        "return_label": "Back to the decision",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-05",
+        "WLA-27-07",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "remaining-permission-and-cost",
+      "title": "Remaining permission and cost",
+      "starting_state": "program-active",
+      "capability_tiers": [
+        "program"
+      ],
+      "user_question": "What may this delivery still change or spend?",
+      "operator_questions": [
+        "permission-cost",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "permission",
+          "statement": "Allowed effects, scope, expiry, stop conditions, and forbidden effects are stated.",
+          "source_model": "delivery-workbench-program-grant"
+        },
+        {
+          "concept_id": "cost",
+          "statement": "Each limit distinguishes total, used, remaining, unknown, and not applicable.",
+          "source_model": "delivery-workbench-program-view"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Continue once, pause, or permanently stop after reviewing the current limits.",
+          "source_model": "delivery-workbench-program-frontier"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "inspect-limits",
+          "label": "Review remaining limits",
+          "effect_id": "inspect",
+          "effect": "Shows current permission and cost facts and makes no change.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": false
+        },
+        {
+          "id": "pause-for-limits",
+          "label": "Pause the program",
+          "effect_id": "pause",
+          "effect": "Stops new work from starting while preserving completed work and current limits.",
+          "authority_source": "program-control",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": true
+        },
+        {
+          "id": "revoke-for-limits",
+          "label": "Permanently stop the program",
+          "effect_id": "revoke",
+          "effect": "Permanently prevents new program work while preserving completed work and exact history.",
+          "authority_source": "program-control",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": true
+        }
+      ],
+      "success_outcome": {
+        "summary": "The person can distinguish what remains allowed, consumed, and forbidden before acting.",
+        "next_step": {
+          "label": "Review what happens next",
+          "target": "state:program-active"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If limit facts are stale or unavailable, do not act and do not estimate authority.",
+        "unchanged": "No work starts and no permission or cost value changes.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Review remaining limits",
+          "target": "action:inspect-limits"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "program-technical",
+        "source_models": [
+          "delivery-workbench-program-view",
+          "delivery-workbench-program-projection",
+          "delivery-workbench-program-event"
+        ],
+        "return_label": "Back to remaining limits",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-07",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "stop-and-revoke",
+      "title": "Stop and revoke",
+      "starting_state": "program-active",
+      "capability_tiers": [
+        "program"
+      ],
+      "user_question": "How do I pause safely or permanently stop this delivery?",
+      "operator_questions": [
+        "blocked",
+        "permission-cost",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "progress",
+          "statement": "Active and completed work are shown before a stop choice.",
+          "source_model": "delivery-workbench-program-view"
+        },
+        {
+          "concept_id": "permission",
+          "statement": "Pause is reversible; permanent stop prevents future program work.",
+          "source_model": "delivery-workbench-program-act-preview"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Confirm one stop choice or return without changing delivery state.",
+          "source_model": "delivery-workbench-program-frontier"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "pause-program",
+          "label": "Pause the program",
+          "effect_id": "pause",
+          "effect": "Stops new program work until a separately reviewed resume.",
+          "authority_source": "program-control",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": true
+        },
+        {
+          "id": "revoke-program",
+          "label": "Permanently stop the program",
+          "effect_id": "revoke",
+          "effect": "Permanently prevents new program work while preserving completed work and exact history.",
+          "authority_source": "program-control",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": true
+        },
+        {
+          "id": "return-without-stop",
+          "label": "Return without stopping",
+          "effect_id": "leave-unchanged",
+          "effect": "Leaves current delivery state unchanged.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": false
+        }
+      ],
+      "success_outcome": {
+        "summary": "The selected stop takes effect once and its consequence is visible.",
+        "next_step": {
+          "label": "Review stopped state",
+          "target": "state:program-revoked"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If the stop choice is stale or mismatched, do not apply a different stop and show the current state.",
+        "unchanged": "No stop or resume is applied.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Return without stopping",
+          "target": "action:return-without-stop"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "program-technical",
+        "source_models": [
+          "delivery-workbench-program-view",
+          "delivery-workbench-program-projection",
+          "delivery-workbench-program-event"
+        ],
+        "return_label": "Back to stop choices",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-07",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "crash-recovery",
+      "title": "Crash recovery",
+      "starting_state": "bounded-active",
+      "capability_tiers": [
+        "bounded-run"
+      ],
+      "user_question": "After interruption, what completed, what may resume, and what happens next?",
+      "operator_questions": [
+        "passed",
+        "blocked",
+        "permission-cost",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "progress",
+          "statement": "Completed and in-progress effects are reconstructed from canonical state.",
+          "source_model": "delivery-workbench-run-view"
+        },
+        {
+          "concept_id": "blocker",
+          "statement": "Any uncertain or incomplete boundary remains stopped for review.",
+          "source_model": "delivery-workbench-run-view"
+        },
+        {
+          "concept_id": "permission",
+          "statement": "Resume uses only still-valid permission and remaining limits.",
+          "source_model": "delivery-workbench-run-act-preview"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Reload state, then resume deliberately or permanently stop.",
+          "source_model": "delivery-workbench-run-view"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "reload-recovery",
+          "label": "Reload delivery state",
+          "effect_id": "reload",
+          "effect": "Reconstructs the canonical view and starts no work.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": false
+        },
+        {
+          "id": "resume-recovered",
+          "label": "Resume reviewed work",
+          "effect_id": "resume",
+          "effect": "Allows only still-valid reviewed work to continue after state is rechecked.",
+          "authority_source": "bounded-control",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        },
+        {
+          "id": "revoke-recovered",
+          "label": "Permanently stop delivery",
+          "effect_id": "revoke",
+          "effect": "Prevents future work while preserving completed and uncertain state for inspection.",
+          "authority_source": "bounded-control",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": true
+        }
+      ],
+      "success_outcome": {
+        "summary": "Recovered state distinguishes completed, incomplete, and eligible work before anything resumes.",
+        "next_step": {
+          "label": "Review live progress",
+          "target": "state:bounded-active"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If recovery cannot prove current state or permission, keep work stopped and expose the exact record.",
+        "unchanged": "No uncertain work is repeated and no new work starts.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Reload delivery state",
+          "target": "action:reload-recovery"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "run-technical",
+        "source_models": [
+          "delivery-workbench-run-view",
+          "delivery-workbench-compiled-orchestration"
+        ],
+        "return_label": "Back to recovery",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-06",
+        "WLA-27-07",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "completion",
+      "title": "Reviewed completion",
+      "starting_state": "delivery-complete",
+      "capability_tiers": [
+        "program"
+      ],
+      "user_question": "What finished, what passed, and is there more work?",
+      "operator_questions": [
+        "delivery",
+        "passed",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "work",
+          "statement": "The completed delivery and any remaining scoped work are named.",
+          "source_model": "delivery-workbench-program-view"
+        },
+        {
+          "concept_id": "review",
+          "statement": "Passed checks, independent review, dissent, and final outcome remain distinct.",
+          "source_model": "delivery-workbench-quality-gate"
+        },
+        {
+          "concept_id": "progress",
+          "statement": "Completion states whether the work item or the whole delivery is finished.",
+          "source_model": "delivery-workbench-program-view"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Open the next work item or stop because the delivery is complete.",
+          "source_model": "delivery-workbench-program-frontier"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "open-review-proof",
+          "label": "Review what passed",
+          "effect_id": "inspect",
+          "effect": "Shows the review outcome and makes no change.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": false
+        },
+        {
+          "id": "open-next-work",
+          "label": "Open next work",
+          "effect_id": "navigate",
+          "effect": "Opens the next eligible work item and starts nothing.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": false
+        },
+        {
+          "id": "leave-complete",
+          "label": "Finish here",
+          "effect_id": "leave-unchanged",
+          "effect": "Leaves completed work and delivery state unchanged.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "program"
+          ],
+          "resulting_tier": "program",
+          "confirmation_required": false
+        }
+      ],
+      "success_outcome": {
+        "summary": "The person can tell what passed, what completed, and whether any work remains.",
+        "next_step": {
+          "label": "Open next work",
+          "target": "action:open-next-work"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If completion cannot be established, do not claim success and identify the missing review or work fact.",
+        "unchanged": "No work or completion state changes.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Review what passed",
+          "target": "action:open-review-proof"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "program-technical",
+        "source_models": [
+          "delivery-workbench-program-view",
+          "delivery-workbench-program-projection",
+          "delivery-workbench-program-event"
+        ],
+        "return_label": "Back to completion",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-06",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    },
+    {
+      "id": "technical-inspection",
+      "title": "Technical inspection",
+      "starting_state": "bounded-active",
+      "capability_tiers": [
+        "bounded-run"
+      ],
+      "user_question": "How can I inspect the exact record without losing the delivery summary?",
+      "operator_questions": [
+        "passed",
+        "permission-cost",
+        "next"
+      ],
+      "visible_facts": [
+        {
+          "concept_id": "progress",
+          "statement": "The ordinary summary remains the default view and names its canonical sources.",
+          "source_model": "delivery-workbench-run-view"
+        },
+        {
+          "concept_id": "permission",
+          "statement": "The exact permission, limits, identities, events, and configuration are one explicit view away.",
+          "source_model": "delivery-workbench-run-view"
+        },
+        {
+          "concept_id": "next_step",
+          "statement": "Open exact details, copy what is needed, then return to the delivery summary.",
+          "source_model": "delivery-workbench-run-view"
+        }
+      ],
+      "bounded_actions": [
+        {
+          "id": "open-technical-details",
+          "label": "Open Technical details",
+          "effect_id": "navigate",
+          "effect": "Opens the exact source record and makes no change.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": false
+        },
+        {
+          "id": "copy-exact-record",
+          "label": "Copy exact details",
+          "effect_id": "copy",
+          "effect": "Copies selected exact data and makes no delivery change.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": false
+        },
+        {
+          "id": "return-to-summary",
+          "label": "Back to delivery summary",
+          "effect_id": "navigate",
+          "effect": "Returns to the ordinary summary and makes no change.",
+          "authority_source": "read-only-inspection",
+          "available_in_tiers": [
+            "bounded-run"
+          ],
+          "resulting_tier": "bounded-run",
+          "confirmation_required": false
+        }
+      ],
+      "success_outcome": {
+        "summary": "Exact data is inspectable and the person can return to the same ordinary task context.",
+        "next_step": {
+          "label": "Back to delivery summary",
+          "target": "action:return-to-summary"
+        }
+      },
+      "refusal_recovery": {
+        "summary": "If exact data cannot be loaded, say which source is unavailable and keep the ordinary summary usable.",
+        "unchanged": "No delivery state changes and no technical value is guessed.",
+        "safe_exit": true,
+        "next_step": {
+          "label": "Back to delivery summary",
+          "target": "action:return-to-summary"
+        }
+      },
+      "technical_details": {
+        "label": "Technical details",
+        "state_id": "run-technical",
+        "source_models": [
+          "delivery-workbench-run-view",
+          "delivery-workbench-compiled-orchestration"
+        ],
+        "return_label": "Back to delivery summary",
+        "reachable": true
+      },
+      "screen_slices": [
+        "WLA-27-04",
+        "WLA-27-05",
+        "WLA-27-06",
+        "WLA-27-07",
+        "WLA-27-08",
+        "WLA-27-09",
+        "WLA-27-10"
+      ],
+      "reusable_by": [
+        "fresh-wheel-exit-exam",
+        "workbench-ui"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,275 @@
+{
+  "kind": "delivery-workbench-usability-states",
+  "schema_version": 1,
+  "harness": "pmo-roadmap/tests/workbench-ui-smoke.sh",
+  "viewports": {
+    "wide": "1440x900",
+    "narrow": "390x844"
+  },
+  "states": [
+    {
+      "id": "everyday-ready",
+      "title": "Healthy ordinary roadmap work",
+      "capability_tier": "vanilla",
+      "route": "#/",
+      "capture_id": "overview",
+      "canonical_models": [
+        "delivery-workbench-status",
+        "delivery-workbench-roadmap-context"
+      ],
+      "fact_paths": [
+        "status.verdict",
+        "status.next_action",
+        "roadmap.projects[].next_story"
+      ]
+    },
+    {
+      "id": "capability-choice",
+      "title": "Optional delivery coordination choice",
+      "capability_tier": "vanilla",
+      "route": "#/program-studio",
+      "capture_id": "program-studio-empty",
+      "canonical_models": [
+        "delivery-workbench-program-studio",
+        "delivery-workbench-status"
+      ],
+      "fact_paths": [
+        "studio.families",
+        "studio.default_route",
+        "status.next_action"
+      ]
+    },
+    {
+      "id": "plan-draft",
+      "title": "Delivery plan draft",
+      "capability_tier": "program",
+      "route": "#/program-studio/workflow/architect-debate-delivery",
+      "capture_id": "studio-nested-design",
+      "canonical_models": [
+        "delivery-workbench-program-studio-document",
+        "delivery-workbench-program-studio-graph",
+        "delivery-workbench-program-studio-mutation-preview"
+      ],
+      "fact_paths": [
+        "document.document",
+        "document.validation",
+        "graph.nodes",
+        "mutation.effects"
+      ]
+    },
+    {
+      "id": "team-review-draft",
+      "title": "Team and review draft",
+      "capability_tier": "program",
+      "route": "#/program-studio/organization/autonomous-story-cell",
+      "capture_id": "studio-authority",
+      "canonical_models": [
+        "delivery-workbench-compiled-organization",
+        "delivery-workbench-team-assignment",
+        "delivery-workbench-program-studio-authority-preview"
+      ],
+      "fact_paths": [
+        "organization.seats",
+        "assignment.implementer",
+        "assignment.verifier",
+        "authority.requested_capabilities"
+      ]
+    },
+    {
+      "id": "preflight-ready",
+      "title": "Bounded delivery preflight",
+      "capability_tier": "bounded-run",
+      "route": "#/orchestration/research-build-review",
+      "capture_id": "orchestration-validate",
+      "canonical_models": [
+        "delivery-workbench-orchestration-validation",
+        "delivery-workbench-orchestration-simulation",
+        "delivery-workbench-run-plan"
+      ],
+      "fact_paths": [
+        "validation.valid",
+        "simulation.waves",
+        "simulation.budgets",
+        "plan.story"
+      ]
+    },
+    {
+      "id": "bounded-active",
+      "title": "Active bounded delivery",
+      "capability_tier": "bounded-run",
+      "route": "#/orchestration/research-build-review",
+      "capture_id": "orchestration-run-active",
+      "canonical_models": [
+        "delivery-workbench-run-view",
+        "delivery-workbench-run-act-preview"
+      ],
+      "fact_paths": [
+        "view.state",
+        "view.nodes",
+        "view.budgets",
+        "view.controls"
+      ]
+    },
+    {
+      "id": "repair-needed",
+      "title": "Failed review with a repair route",
+      "capability_tier": "bounded-run",
+      "route": "#/orchestration/repair-visual",
+      "capture_id": "orchestration-run-repair",
+      "canonical_models": [
+        "delivery-workbench-run-view",
+        "delivery-workbench-check-receipt",
+        "delivery-workbench-run-act-preview"
+      ],
+      "fact_paths": [
+        "view.nodes",
+        "view.routes",
+        "view.controls",
+        "check.outcome"
+      ]
+    },
+    {
+      "id": "human-decision-needed",
+      "title": "Human decision is required",
+      "capability_tier": "bounded-run",
+      "route": "#/orchestration/terminal-visual",
+      "capture_id": "orchestration-run-terminal",
+      "canonical_models": [
+        "delivery-workbench-run-view",
+        "delivery-workbench-decision",
+        "delivery-workbench-run-act-preview"
+      ],
+      "fact_paths": [
+        "view.outstanding_request",
+        "view.controls",
+        "decision.options",
+        "decision.status"
+      ]
+    },
+    {
+      "id": "program-active",
+      "title": "Active optional delivery program",
+      "capability_tier": "program",
+      "route": "#/programs/{run_id}",
+      "capture_id": "program-active",
+      "canonical_models": [
+        "delivery-workbench-program-view",
+        "delivery-workbench-program-frontier",
+        "delivery-workbench-program-grant",
+        "delivery-workbench-program-act-preview"
+      ],
+      "fact_paths": [
+        "view.current",
+        "view.budgets",
+        "view.controls",
+        "frontier.next_actions"
+      ]
+    },
+    {
+      "id": "program-revoked",
+      "title": "Permanently stopped optional delivery program",
+      "capability_tier": "program",
+      "route": "#/programs/{run_id}",
+      "capture_id": "program-revoked",
+      "canonical_models": [
+        "delivery-workbench-program-view",
+        "delivery-workbench-program-frontier"
+      ],
+      "fact_paths": [
+        "view.current.stop",
+        "view.controls",
+        "frontier.stop",
+        "frontier.next_actions"
+      ]
+    },
+    {
+      "id": "delivery-complete",
+      "title": "Reviewed delivery is complete",
+      "capability_tier": "program",
+      "route": "#/programs/{run_id}",
+      "capture_id": "program-certified",
+      "canonical_models": [
+        "delivery-workbench-program-view",
+        "delivery-workbench-quality-gate",
+        "delivery-workbench-verdict",
+        "delivery-workbench-program-frontier"
+      ],
+      "fact_paths": [
+        "view.quality",
+        "view.deliveries",
+        "view.current.next_action",
+        "frontier.next_actions"
+      ]
+    },
+    {
+      "id": "vanilla-technical",
+      "title": "Exact ordinary-work state",
+      "capability_tier": "vanilla",
+      "route": "#/?confirmstep=1",
+      "capture_id": "step-confirm",
+      "canonical_models": [
+        "delivery-workbench-status",
+        "delivery-workbench-step"
+      ],
+      "fact_paths": [
+        "status.next_action",
+        "step.argv",
+        "step.token",
+        "step.state"
+      ]
+    },
+    {
+      "id": "run-technical",
+      "title": "Exact bounded-delivery document",
+      "capability_tier": "bounded-run",
+      "route": "?orchview=json#/orchestration/research-build-review",
+      "capture_id": "orchestration-json",
+      "canonical_models": [
+        "delivery-workbench-orchestration",
+        "delivery-workbench-compiled-orchestration",
+        "delivery-workbench-run-view"
+      ],
+      "fact_paths": [
+        "orchestration.nodes",
+        "compiled.semantic_hash",
+        "compiled.document_hash",
+        "view.ledger"
+      ]
+    },
+    {
+      "id": "studio-technical",
+      "title": "Exact delivery-plan document",
+      "capability_tier": "program",
+      "route": "?studioview=json#/program-studio/workflow/architect-debate-delivery",
+      "capture_id": "studio-json",
+      "canonical_models": [
+        "delivery-workbench-program-studio-document",
+        "delivery-workbench-program-studio-round-trip"
+      ],
+      "fact_paths": [
+        "document.document",
+        "document.source",
+        "round_trip.semantic_hash",
+        "round_trip.layout_hash"
+      ]
+    },
+    {
+      "id": "program-technical",
+      "title": "Exact optional-program state",
+      "capability_tier": "program",
+      "route": "#/programs/{run_id}",
+      "capture_id": "program-active",
+      "canonical_models": [
+        "delivery-workbench-program-view",
+        "delivery-workbench-program-projection",
+        "delivery-workbench-program-event"
+      ],
+      "fact_paths": [
+        "view.timeline",
+        "view.ledger",
+        "projection.state",
+        "event.previous_hash"
+      ]
+    }
+  ]
+}

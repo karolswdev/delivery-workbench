@@ -1,6 +1,6 @@
 # Phase 27 - Usability Improvements
 
-**Last updated:** 2026-07-23.
+**Last updated:** 2026-07-24.
 
 ## Goal
 
@@ -29,7 +29,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 - [x] `docs/product-language.md` defines one ordinary product vocabulary, the
   everyday/technical-view boundary, and a lossless mapping to existing exact
   semantics; executable language checks reject drift (WLA-27-01).
-- [ ] Versioned whole-task journeys and deterministic fixtures cover arrival,
+- [x] Versioned whole-task journeys and deterministic fixtures cover arrival,
   setup, plan/team/review design, live progress, a blocked decision, recovery,
   completion, and technical inspection before UI implementation begins
   (WLA-27-02).
@@ -58,7 +58,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-27-01 | Contract the everyday product language | done | [story-01-contract-the-everyday-product-language](./story-01-contract-the-everyday-product-language.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-27-02 | Define whole-task journeys and usability proof | backlog | [story-02-define-whole-task-journeys-and-usability-proof](./story-02-define-whole-task-journeys-and-usability-proof.md) | - |
+| WLA-27-02 | Define whole-task journeys and usability proof | done | [story-02-define-whole-task-journeys-and-usability-proof](./story-02-define-whole-task-journeys-and-usability-proof.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-27-03 | Give first-time users a delivery-shaped front door | backlog | [story-03-give-first-time-users-a-delivery-shaped-front-door](./story-03-give-first-time-users-a-delivery-shaped-front-door.md) | - |
 | WLA-27-04 | Make plan and workflow authoring task-shaped | backlog | [story-04-make-plan-and-workflow-authoring-task-shaped](./story-04-make-plan-and-workflow-authoring-task-shaped.md) | - |
 | WLA-27-05 | Make teams and review rules understandable | backlog | [story-05-make-teams-and-review-rules-understandable](./story-05-make-teams-and-review-rules-understandable.md) | - |
@@ -70,13 +70,17 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 
 ## Where we are
 
-Phase 27 is OPEN 1/10. WLA-27-01 fixes ten ordinary product concepts, eighteen
-inventoried surfaces, eighteen reserved engineering terms, and one
-presentation-only application-view contract with Python 3.9 drift checks.
-Exact machine models and adapters remain unchanged and their focused parity
-plus the full 473-test core regression are green. WLA-27-02 is next: turn the
-seven operator questions into executable whole-task journeys and reachable
-state fixtures before any screen redesign begins. There are no known blockers.
+Phase 27 is OPEN 2/10. WLA-27-01 fixes the product language and application
+view; WLA-27-02 now fixes thirteen whole-task journeys, fifteen reachable
+states, all seven operator questions, and screen ownership through WLA-27-10.
+The deterministic validator exercises six planted red fixtures, and the
+recorded current-application baseline measures 88 steps, 38 decisions, 81
+engineering-term occurrences, 13 dead ends, and 26 context switches across
+wide and narrow captures. The canonical 60-render Workbench harness plus 46
+selected core/read-model tests are green. WLA-27-03 is next: use the owned
+arrival, deliberate-choice, and preflight journeys to build a delivery-shaped
+front door without making optional coordination look required. There are no
+known blockers.
 
 ## Active risks
 
@@ -126,13 +130,30 @@ state fixtures before any screen redesign begins. There are no known blockers.
   regions while keeping them exact in machine contracts, architecture, code,
   commands, and technical/audit views - readable defaults and lossless audit
   are complementary requirements - WLA-27-01.
+- 2026-07-24 - Fix thirteen observable whole-task journeys rather than a page
+  layout: each names its canonical start, ordinary question and facts, bounded
+  actions, one success next step, one safe refusal/recovery next step, and an
+  explicit `Technical details` state - later screens may improve interaction
+  design without changing trust or outcome semantics - WLA-27-02.
+- 2026-07-24 - Treat `vanilla` as the healthy default and `bounded-run` plus
+  `program` as separate optional tiers; every tier-changing action must use an
+  existing start boundary and explicit confirmation - setup may recommend but
+  never silently upgrade - WLA-27-02.
+- 2026-07-24 - Reuse the existing canonical Workbench fixture builders as the
+  reachable-state seam: fifteen state IDs map declared `docs/interop.md`
+  models to both 1440x900 and 390x844 capture IDs - the journey contract does
+  not create a parallel UI-only state model - WLA-27-02.
+- 2026-07-24 - Record steps, user decisions, engineering terms, dead ends, and
+  context switches as descriptive baseline counts, not a model-generated
+  usability score - later stories must show task improvement and retain any
+  tradeoff honestly - WLA-27-02.
 
 ## Decisions deferred
 
-- Channel-specific microcopy refinements - trigger: WLA-27-02 journey evidence
-  and later device review - default: the v1 preferred concept names and
-  meanings are fixed; a preferred-name or meaning change requires a new
-  application-language schema version.
+- Channel-specific microcopy refinements - trigger: the owning WLA-27-03
+  through WLA-27-08 journey implementation and device review - default: the v1
+  preferred concept names and meanings are fixed; a preferred-name or meaning
+  change requires a new application-language schema version.
 - Quantitative product analytics or hosted usability telemetry - trigger: an
   explicit privacy, transport, retention, and authority contract - default:
   deterministic local fixtures and human review only.

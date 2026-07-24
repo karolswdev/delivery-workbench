@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-23 (Phase 27 complete 1/10: the everyday product language, application-view boundary, and drift checks are evidence-backed).
-**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (active, 1/10).
-**Status:** Delivery Workbench now has one versioned everyday vocabulary, a complete current-surface inventory, and an executable presentation-only boundary over unchanged exact models. Whole-task journey proof is next; landing and release remain separate decisions.
+**Last updated:** 2026-07-24 (Phase 27 complete 2/10: the product language plus thirteen whole-task journeys, reachable-state fixtures, and the current-friction baseline are evidence-backed).
+**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (active, 2/10).
+**Status:** Delivery Workbench now has one versioned everyday vocabulary and a deterministic whole-task contract over unchanged exact models: thirteen journeys, fifteen reachable states, all seven operator questions, explicit screen ownership, wide/narrow baseline evidence, and planted red fixtures. The delivery-shaped front door is next; landing and release remain separate decisions.
 
 ## Vision
 
