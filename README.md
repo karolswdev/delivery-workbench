@@ -405,6 +405,7 @@ trailers and an archived contract, the full history passing
 
 ## Documentation
 
+- [Everyday product language](./docs/product-language.md): the Phase 27 vocabulary, presentation-only application-view boundary, complete surface inventory, technical-details escape hatch, and executable drift contract
 - [Comprehensive solution overview](./docs/solution-overview.md): current architecture, workflows, trust model, proof snapshot, strengths, gaps, and delivered response
 - [Status briefing contract](./docs/status-briefing.md): the Phase 22 one-answer model, readiness semantics, and guided action order
 - [Deliberate step contract](./docs/deliberate-step.md): the Phase 23 state-bound preview/apply seam and closed executable action table

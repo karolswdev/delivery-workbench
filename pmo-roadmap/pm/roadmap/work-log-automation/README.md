@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-23 (Phase 27 opened and planned 0/10 after Phase 26 merged).
-**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (planned, 0/10).
-**Status:** Phase 27 is ready to make the everyday application speak and behave like a practical delivery tool. Phase 26's optional autonomy semantics and no-program default remain unchanged; landing and release remain separate decisions.
+**Last updated:** 2026-07-23 (Phase 27 complete 1/10: the everyday product language, application-view boundary, and drift checks are evidence-backed).
+**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (active, 1/10).
+**Status:** Delivery Workbench now has one versioned everyday vocabulary, a complete current-surface inventory, and an executable presentation-only boundary over unchanged exact models. Whole-task journey proof is next; landing and release remain separate decisions.
 
 ## Vision
 
@@ -173,7 +173,7 @@ Phase 27 adds no new autonomy, hosted authority, release, or publication scope.
 | 24 | Delivery Workbench can coordinate a bounded multi-agent run from an exact visually authored score and revocable grant: research, dependencies, context, outputs, checks, failures, budgets, recovery, and human checkpoints. | done | [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/) |
 | 25 | Delivery Workbench hears the world outside the run — CI, reviews, merge state, agent activity — records it as durable facts, and under an explicit grant nudges the right agent back to work: observed, bounded, ledgered, revocable. | done | [phase-25-outward-signals](./phase-25-outward-signals/) |
 | 26 | Delivery Workbench optionally adds governed autonomous delivery programs across an explicit roadmap scope—without changing vanilla or bounded-run usage—with hierarchical workflows, independent verification, advanced bounded loops, and only the quality, integration, and roadmap acts named by a finite revocable program grant. | done | [phase-26-autonomous-delivery-programs](./phase-26-autonomous-delivery-programs/) |
-| 27 | Make Delivery Workbench's everyday application layer speak and behave like a practical delivery tool, with one plain-language vocabulary and coherent task flows across setup, Program Studio, live operation, help, errors, onboarding, and product documentation, while keeping exact protocol terms available in machine contracts, architecture, and explicit audit views. | not-started | [phase-27-usability-improvements](./phase-27-usability-improvements/) |
+| 27 | Make Delivery Workbench's everyday application layer speak and behave like a practical delivery tool, with one plain-language vocabulary and coherent task flows across setup, Program Studio, live operation, help, errors, onboarding, and product documentation, while keeping exact protocol terms available in machine contracts, architecture, and explicit audit views. | in-progress | [phase-27-usability-improvements](./phase-27-usability-improvements/) |
 
 ## Operating cadence
 

@@ -1,0 +1,140 @@
+{
+  "kind": "delivery-workbench-product-language-fixtures",
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "everyday-progress",
+      "classification": "everyday",
+      "text": "Progress: 3 of 5 stories complete. One is in review and one has a blocker. Next step: Karol decides whether the repair continues.",
+      "concept_names": {
+        "progress": "progress",
+        "review": "review",
+        "blocker": "blocker",
+        "next_step": "next step",
+        "decision": "decision"
+      },
+      "expected": []
+    },
+    {
+      "id": "everyday-permission-and-cost",
+      "classification": "everyday",
+      "text": "The delivery plan may proceed. Permission: this delivery may update three stories and push one branch until 17:00. Cost: 8,000 of 12,000 model tokens used; 4,000 remain.",
+      "concept_names": {
+        "permission": "permission",
+        "cost": "cost",
+        "delivery_plan": "delivery plan"
+      },
+      "expected": []
+    },
+    {
+      "id": "everyday-grant-leak",
+      "classification": "everyday",
+      "text": "Grant expires in ten minutes.",
+      "concept_names": {
+        "permission": "permission"
+      },
+      "expected": ["reserved-term:grant"]
+    },
+    {
+      "id": "everyday-multiple-leaks",
+      "classification": "everyday",
+      "text": "The ledger projection needs a fresh act token before certification.",
+      "concept_names": {
+        "next_step": "next step"
+      },
+      "expected": [
+        "reserved-term:act token",
+        "reserved-term:certification",
+        "reserved-term:ledger",
+        "reserved-term:projection"
+      ]
+    },
+    {
+      "id": "everyday-conflicting-name",
+      "classification": "everyday",
+      "text": "Authority remains for one more operation.",
+      "concept_names": {
+        "permission": "authority"
+      },
+      "expected": ["conflicting-name:permission"]
+    },
+    {
+      "id": "mixed-explicit-technical-details",
+      "classification": "mixed",
+      "technical_label": "Technical details",
+      "technical_explicit": true,
+      "regions": [
+        {
+          "classification": "everyday",
+          "text": "Blocker: the current confirmation expired. Review the unchanged plan, then try the next step again."
+        },
+        {
+          "classification": "technical_audit",
+          "text": "act_token stale; ledger_head=sha256:0123; schema_version=1"
+        }
+      ],
+      "concept_names": {
+        "blocker": "blocker",
+        "next_step": "next step"
+      },
+      "expected": []
+    },
+    {
+      "id": "mixed-hidden-technical-region",
+      "classification": "mixed",
+      "technical_label": "More",
+      "technical_explicit": false,
+      "regions": [
+        {
+          "classification": "everyday",
+          "text": "Review passed."
+        },
+        {
+          "classification": "technical_audit",
+          "text": "grant_hash=sha256:0123"
+        }
+      ],
+      "concept_names": {
+        "review": "review"
+      },
+      "expected": ["mixed-boundary-missing"]
+    },
+    {
+      "id": "mixed-everyday-region-leak",
+      "classification": "mixed",
+      "technical_label": "Technical details",
+      "technical_explicit": true,
+      "regions": [
+        {
+          "classification": "everyday",
+          "text": "The conductor found the next frontier."
+        },
+        {
+          "classification": "technical_audit",
+          "text": "conductor tick selected frontier generation 4"
+        }
+      ],
+      "concept_names": {
+        "next_step": "next step"
+      },
+      "expected": [
+        "reserved-term:conductor",
+        "reserved-term:frontier"
+      ]
+    },
+    {
+      "id": "technical-contract-language",
+      "classification": "technical_audit",
+      "text": "delivery-workbench-program-grant schema_version=1 binds grant_hash to ledger_head and act_token.",
+      "concept_names": {},
+      "expected": []
+    },
+    {
+      "id": "technical-architecture-language",
+      "classification": "technical_audit",
+      "text": "The conductor projection replays the ledger before deriving the operational frontier.",
+      "concept_names": {},
+      "expected": []
+    }
+  ]
+}

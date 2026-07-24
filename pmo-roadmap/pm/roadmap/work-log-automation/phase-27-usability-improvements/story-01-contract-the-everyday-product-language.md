@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 27
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** none
 - **Unblocks:** WLA-27-02 through WLA-27-08
 - **Owner:** unassigned
@@ -35,22 +35,22 @@ locks accidental synonyms into more screens.
 
 ## Acceptance criteria
 
-- [ ] `docs/product-language.md` gives every required product concept one
+- [x] `docs/product-language.md` gives every required product concept one
   preferred name, definition, relationship, and representative good/bad
   microcopy example.
-- [ ] A checked-in inventory classifies every current human-facing surface as
+- [x] A checked-in inventory classifies every current human-facing surface as
   everyday, technical/audit, or mixed with an explicit disclosure boundary;
   no surface is silently omitted.
-- [ ] A versioned application-view contract says which canonical facts feed
+- [x] A versioned application-view contract says which canonical facts feed
   each product concept and forbids human renderers from recomputing
   eligibility, authority, evidence, or next-work rules.
-- [ ] Permission, cost, destructive effects, provenance, and refusal reasons
+- [x] Permission, cost, destructive effects, provenance, and refusal reasons
   remain precise in plain language, and exact source facts are reachable from
   the same task through an explicit technical/audit view.
-- [ ] Executable fixtures fail when reserved engineering vocabulary leaks into
+- [x] Executable fixtures fail when reserved engineering vocabulary leaks into
   an everyday snapshot or when one product concept acquires conflicting names;
   allowlists are narrow, contextual, and reviewed.
-- [ ] Existing machine JSON/schema snapshots remain byte- or object-compatible;
+- [x] Existing machine JSON/schema snapshots remain byte- or object-compatible;
   this contract adds a presentation projection, not a second runtime model.
 
 ## Test plan
@@ -70,3 +70,12 @@ in later UI work. The handoff terms are the starting vocabulary. If one cannot
 carry a safety-critical distinction, preserve the distinction in readable
 language and document why rather than falling back to unexplained protocol
 jargon.
+
+Completed with `delivery-workbench-application-language@1`, ten canonical
+product concepts mapped to nineteen existing interop models, an eighteen-row
+surface inventory, eighteen reserved engineering terms, and ten versioned
+positive/red fixtures. `pmo-roadmap/tests/product-language-contract.py` runs on
+the Python 3.9 floor and in CI; it validates contract shape, source-model and
+source-path traceability, naming uniqueness, surface boundaries, docs wiring,
+and its own red cases. No runtime, persisted, CLI, MCP, HTTP, event, or
+Workbench model changed.
