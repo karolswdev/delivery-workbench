@@ -26,7 +26,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 
 ## Exit criteria (evidence required)
 
-- [ ] `docs/product-language.md` defines one ordinary product vocabulary, the
+- [x] `docs/product-language.md` defines one ordinary product vocabulary, the
   everyday/technical-view boundary, and a lossless mapping to existing exact
   semantics; executable language checks reject drift (WLA-27-01).
 - [ ] Versioned whole-task journeys and deterministic fixtures cover arrival,
@@ -57,7 +57,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-27-01 | Contract the everyday product language | backlog | [story-01-contract-the-everyday-product-language](./story-01-contract-the-everyday-product-language.md) | - |
+| WLA-27-01 | Contract the everyday product language | done | [story-01-contract-the-everyday-product-language](./story-01-contract-the-everyday-product-language.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-27-02 | Define whole-task journeys and usability proof | backlog | [story-02-define-whole-task-journeys-and-usability-proof](./story-02-define-whole-task-journeys-and-usability-proof.md) | - |
 | WLA-27-03 | Give first-time users a delivery-shaped front door | backlog | [story-03-give-first-time-users-a-delivery-shaped-front-door](./story-03-give-first-time-users-a-delivery-shaped-front-door.md) | - |
 | WLA-27-04 | Make plan and workflow authoring task-shaped | backlog | [story-04-make-plan-and-workflow-authoring-task-shaped](./story-04-make-plan-and-workflow-authoring-task-shaped.md) | - |
@@ -70,12 +70,13 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 
 ## Where we are
 
-Phase 27 is OPEN 0/10. Phase 26 is merged and local `main` is synchronized with
-the remote; this branch contains only the new roadmap plan. WLA-27-01 is the
-first implementation story, followed by executable journey fixtures in
-WLA-27-02. Onboarding, plan authoring, and team/review design can then proceed
-in parallel before the live-operation, consistency, accessibility, and exit
-proof slices. There are no known blockers.
+Phase 27 is OPEN 1/10. WLA-27-01 fixes ten ordinary product concepts, eighteen
+inventoried surfaces, eighteen reserved engineering terms, and one
+presentation-only application-view contract with Python 3.9 drift checks.
+Exact machine models and adapters remain unchanged and their focused parity
+plus the full 473-test core regression are green. WLA-27-02 is next: turn the
+seven operator questions into executable whole-task journeys and reachable
+state fixtures before any screen redesign begins. There are no known blockers.
 
 ## Active risks
 
@@ -109,13 +110,29 @@ proof slices. There are no known blockers.
 - 2026-07-23 - Keep landing and release outside Phase 27 - opening work does
   not imply version, tag, publication, formula, or deployment authority -
   owner boundary.
+- 2026-07-23 - Fix `delivery plan`, `team`, `work`, `review`, `decision`,
+  `blocker`, `permission`, `progress`, `cost`, and `next step` as the v1
+  everyday concepts - one concept needs one stable product name across every
+  human surface - WLA-27-01.
+- 2026-07-23 - Classify each current surface as everyday, mixed, or
+  technical/audit; mixed surfaces must use the explicit label `Technical
+  details` - “advanced” does not tell a person that the mental model changed -
+  WLA-27-01.
+- 2026-07-23 - Make the application view a source-traceable presentation
+  projection over the stamped models in `docs/interop.md`; it may group and
+  explain facts but owns no eligibility, authority, evidence, review, cost, or
+  next-work semantics - source-of-truth boundary - WLA-27-01.
+- 2026-07-23 - Reserve eighteen engineering terms from everyday fixture
+  regions while keeping them exact in machine contracts, architecture, code,
+  commands, and technical/audit views - readable defaults and lossless audit
+  are complementary requirements - WLA-27-01.
 
 ## Decisions deferred
 
-- Final ordinary labels and microcopy - trigger: WLA-27-01 inventory and
-  journey review - default: the handoff terms (`delivery plan`, `team`, `work`,
-  `review`, `decision`, `blocker`, `permission`, `progress`, `cost`, `next
-  step`) are the working vocabulary.
+- Channel-specific microcopy refinements - trigger: WLA-27-02 journey evidence
+  and later device review - default: the v1 preferred concept names and
+  meanings are fixed; a preferred-name or meaning change requires a new
+  application-language schema version.
 - Quantitative product analytics or hosted usability telemetry - trigger: an
   explicit privacy, transport, retention, and authority contract - default:
   deterministic local fixtures and human review only.

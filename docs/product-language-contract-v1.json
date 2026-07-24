@@ -1,0 +1,562 @@
+{
+  "kind": "delivery-workbench-application-language",
+  "schema_version": 1,
+  "title": "Delivery Workbench everyday product language",
+  "projection": {
+    "input_contract": "Canonical stamped models enumerated in docs/interop.md",
+    "output_contract": "Presentation-only application view",
+    "technical_view_label": "Technical details",
+    "unknown_policy": "Show unknown or unavailable; never infer a missing fact.",
+    "versioning": "Changing a preferred term, concept meaning, projection rule, or surface boundary is breaking and requires a new schema_version. Additive examples and newly inventoried surfaces do not.",
+    "rules": [
+      {
+        "id": "canonical-facts-only",
+        "requirement": "Every displayed fact comes from a named canonical model or exact receipt."
+      },
+      {
+        "id": "semantic-owner-stays-core",
+        "requirement": "The application view does not compute eligibility, authority, evidence validity, review outcomes, cost consumption, or next work."
+      },
+      {
+        "id": "unknown-beats-guessed",
+        "requirement": "Missing, stale, or ambiguous source facts render as unknown, unavailable, or blocked rather than a plausible value."
+      },
+      {
+        "id": "source-trace",
+        "requirement": "Every product concept keeps enough source identity to open the exact technical record from the same task."
+      },
+      {
+        "id": "safety-adjacent",
+        "requirement": "Permission, cost, destructive effect, expiry, refusal, and recovery facts stay next to the action they qualify."
+      },
+      {
+        "id": "explicit-audit-boundary",
+        "requirement": "Engineering vocabulary appears only in machine, architecture, copyable-command, code-identifier, or explicitly labelled Technical details regions."
+      },
+      {
+        "id": "no-machine-schema-change",
+        "requirement": "Human wording never renames or aliases persisted fields, event kinds, command names, or machine-contract keys."
+      },
+      {
+        "id": "action-authority-stays-separate",
+        "requirement": "A readable summary or transported response never creates permission; existing preview, freshness, principal, and authority checks remain decisive."
+      }
+    ]
+  },
+  "concepts": [
+    {
+      "id": "delivery_plan",
+      "preferred": "delivery plan",
+      "definition": "The reviewed scope, route, quality points, decision points, limits, and stop conditions for a bounded delivery.",
+      "relationship": "A delivery plan selects work, assigns a team and review, consumes explicit permission, reports progress and cost, and produces one canonical next step.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-program",
+          "facts": ["scope", "bindings", "phase_gates", "mode_ceiling"]
+        },
+        {
+          "model": "delivery-workbench-program-plan",
+          "facts": ["selection", "assignment", "repository", "roadmap"]
+        },
+        {
+          "model": "delivery-workbench-program-studio-document",
+          "facts": ["family", "document", "validation"]
+        }
+      ],
+      "good": "Delivery plan: improve setup across stories WLA-27-03 through WLA-27-05, with independent review before completion.",
+      "bad": "The program policy binds a governed scope to compiled workflows.",
+      "safety": "Saving or reading a delivery plan grants no permission and starts no work."
+    },
+    {
+      "id": "team",
+      "preferred": "team",
+      "definition": "The named people or agents responsible for doing, reviewing, deciding, or auditing this delivery.",
+      "relationship": "A team takes work from the delivery plan; review responsibilities and independence are part of the team design.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-compiled-organization",
+          "facts": ["seats", "profiles", "roles", "independence", "councils"]
+        },
+        {
+          "model": "delivery-workbench-team-assignment",
+          "facts": ["team", "implementer", "verifier", "provenance"]
+        }
+      ],
+      "good": "Team: Maya implements the change; Rowan reviews it independently.",
+      "bad": "Organization seat provenance satisfies principal and workspace separation.",
+      "safety": "Readable role names never replace exact identity, principal, workspace, session, or provider provenance."
+    },
+    {
+      "id": "work",
+      "preferred": "work",
+      "definition": "A concrete roadmap story or bounded task being prepared, performed, checked, repaired, or completed.",
+      "relationship": "Work belongs to a delivery plan, is owned by a team member, passes through review, and contributes to progress.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-roadmap-context",
+          "facts": ["projects", "current_phase", "next_story"]
+        },
+        {
+          "model": "delivery-workbench-program-view",
+          "facts": ["scope", "current.selection", "activity", "deliveries"]
+        }
+      ],
+      "good": "Work: WLA-27-03 is being implemented by Maya and will move to Rowan for review.",
+      "bad": "The child run claimed the selected frontier node.",
+      "safety": "The view never invents work from an idle process or treats activity as completion."
+    },
+    {
+      "id": "review",
+      "preferred": "review",
+      "definition": "The independent checks and judgments required before work can pass its declared quality rules.",
+      "relationship": "Review evaluates work against the delivery plan, may request repair or a decision, and changes progress only through canonical quality rules.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-quality-gate",
+          "facts": ["criteria", "mechanical_facts", "verdicts", "outcome"]
+        },
+        {
+          "model": "delivery-workbench-verdict",
+          "facts": ["reviewer", "decision", "citations", "dissent"]
+        },
+        {
+          "model": "delivery-workbench-council-verdict",
+          "facts": ["votes", "dissent", "decision"]
+        }
+      ],
+      "good": "Review: four checks passed; Rowan requested one repair before this work can pass.",
+      "bad": "The quality gate consumed mechanical facts and an agent verdict under rubric quorum.",
+      "safety": "Mechanical checks, agent judgment, dissent, repair, and the final governed outcome remain visibly distinct."
+    },
+    {
+      "id": "decision",
+      "preferred": "decision",
+      "definition": "A closed, current choice that a named person, role, or governed review body must make before delivery can continue.",
+      "relationship": "A decision may resolve a blocker, change permitted work within existing authority, or route work to repair, review, stop, or escalation.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-program-view",
+          "facts": ["requests", "quality", "controls"]
+        },
+        {
+          "model": "delivery-workbench-decision",
+          "facts": ["decision_type", "options", "decision", "principal", "status"]
+        },
+        {
+          "model": "delivery-workbench-run-view",
+          "facts": ["outstanding_request", "decision_tree", "controls"]
+        }
+      ],
+      "good": "Decision needed from Karol: accept the repair and continue, or stop this delivery.",
+      "bad": "An outstanding typed request awaits a correlation-bound response.",
+      "safety": "The displayed choices come from the exact outstanding request; the interface never invents a response set."
+    },
+    {
+      "id": "blocker",
+      "preferred": "blocker",
+      "definition": "The concrete reason delivery cannot safely take its next step, plus who or what can resolve it.",
+      "relationship": "A blocker pauses progress and points to a decision, failed check, missing fact, exhausted limit, refusal, or recovery step.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-status",
+          "facts": ["verdict", "actions", "next_action.reason"]
+        },
+        {
+          "model": "delivery-workbench-program-frontier",
+          "facts": ["state", "stop", "refusal", "next_actions"]
+        },
+        {
+          "model": "delivery-workbench-program-view",
+          "facts": ["current.stop", "current.refusal", "requests", "obligations"]
+        }
+      ],
+      "good": "Blocker: CI failed. Fix the failing check before this work can continue.",
+      "bad": "The conductor frontier stopped at a reconciliation boundary.",
+      "safety": "A blocker names affected work, unchanged state, the resolver, and the next safe step; unknown causes stay unknown."
+    },
+    {
+      "id": "permission",
+      "preferred": "permission",
+      "definition": "The exact actions this delivery may still take, over which scope, within which limits and lifetime.",
+      "relationship": "Permission constrains the delivery plan and team; using it changes remaining cost or limits but never expands itself.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-program-grant",
+          "facts": ["capabilities", "scope", "budgets", "issued_at", "expires_at", "remote"]
+        },
+        {
+          "model": "delivery-workbench-run-grant",
+          "facts": ["capabilities", "story", "budgets", "expires_at"]
+        },
+        {
+          "model": "delivery-workbench-program-act-preview",
+          "facts": ["action", "applicable", "issues", "operation", "starts_work"]
+        }
+      ],
+      "good": "Permission: may update these three stories and push this branch until 17:00; merge and release are not allowed.",
+      "bad": "Grant capabilities authorize roadmap mutation under a fresh act token.",
+      "safety": "Always show allowed effects, scope, ceilings, expiry or stop conditions, current use, and material exclusions before an act."
+    },
+    {
+      "id": "progress",
+      "preferred": "progress",
+      "definition": "A source-backed account of completed, active, waiting, blocked, review, repair, and remaining work.",
+      "relationship": "Progress summarizes work against the delivery plan and must stay separate from activity, permission, review confidence, and cost.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-program-view",
+          "facts": ["scope", "current", "activity", "quality", "deliveries", "timeline"]
+        },
+        {
+          "model": "delivery-workbench-program-summary-list",
+          "facts": ["runs.state", "runs.operational_state", "runs.event_count", "runs.open_obligations"]
+        },
+        {
+          "model": "delivery-workbench-board",
+          "facts": ["lanes", "cards", "counts"]
+        }
+      ],
+      "good": "Progress: 3 of 5 stories complete; one is in review and one is blocked.",
+      "bad": "Projection generation 12 contains 203 ledger events.",
+      "safety": "Every count names its denominator; activity and event volume never masquerade as completed work."
+    },
+    {
+      "id": "cost",
+      "preferred": "cost",
+      "definition": "The declared limit, measured use, and remaining amount for time, model tokens, bytes, money, retries, or other finite delivery resources.",
+      "relationship": "Cost is consumed only under permission and is reported alongside progress without implying that spending proves value.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-program-grant",
+          "facts": ["budgets"]
+        },
+        {
+          "model": "delivery-workbench-program-view",
+          "facts": ["budgets", "activity", "deliveries"]
+        },
+        {
+          "model": "delivery-workbench-run-view",
+          "facts": ["budgets", "attempts", "checks"]
+        }
+      ],
+      "good": "Cost: 8,000 of 12,000 model tokens used; 4,000 remain.",
+      "bad": "Budget projection shows an unbounded null ceiling.",
+      "safety": "Distinguish limits, estimates, measured use, remaining amount, zero, unbounded, unknown, and not applicable."
+    },
+    {
+      "id": "next_step",
+      "preferred": "next step",
+      "definition": "The one source-backed action or named wait condition that follows from the current delivery state.",
+      "relationship": "The next step follows progress, review, decisions, blockers, and permission; it is never selected independently by a renderer.",
+      "source_facts": [
+        {
+          "model": "delivery-workbench-status",
+          "facts": ["next_action.id", "next_action.kind", "next_action.command", "next_action.reason"]
+        },
+        {
+          "model": "delivery-workbench-program-frontier",
+          "facts": ["next_actions", "checkpoint", "stop", "refusal"]
+        },
+        {
+          "model": "delivery-workbench-program-view",
+          "facts": ["current.next_action", "current.stop", "current.refusal", "controls"]
+        }
+      ],
+      "good": "Next step: Rowan reviews WLA-27-03 after its checks finish.",
+      "bad": "The frontier selected a conductor tick at generation 12.",
+      "safety": "When no safe step exists, show the blocker, decision owner, wait condition, or unknown state instead of guessing."
+    }
+  ],
+  "reserved_terms": [
+    {
+      "term": "grant",
+      "pattern": "\\bgrants?\\b",
+      "replacement": "permission",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "Grant expires in ten minutes."
+    },
+    {
+      "term": "ledger",
+      "pattern": "\\bledgers?\\b",
+      "replacement": "activity or technical record",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "Ledger head advanced."
+    },
+    {
+      "term": "preview token",
+      "pattern": "\\bpreview[- ]tokens?\\b",
+      "replacement": "current confirmation",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "Paste the preview token."
+    },
+    {
+      "term": "start token",
+      "pattern": "\\bstart[- ]tokens?\\b",
+      "replacement": "start confirmation",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "The start token is stale."
+    },
+    {
+      "term": "act token",
+      "pattern": "\\bact[- ]tokens?\\b",
+      "replacement": "action confirmation",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "A fresh act token is required."
+    },
+    {
+      "term": "content boundary",
+      "pattern": "\\bcontent[- ]boundar(?:y|ies)\\b",
+      "replacement": "what details are visible",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "code_identifier"],
+      "leak_example": "The content boundary refused this field."
+    },
+    {
+      "term": "certification",
+      "pattern": "\\bcertif(?:y|ied|ication)\\b",
+      "replacement": "final evidence check",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "Certification is pending."
+    },
+    {
+      "term": "capability",
+      "pattern": "\\bcapabilit(?:y|ies)\\b",
+      "replacement": "allowed action or permission",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "code_identifier"],
+      "leak_example": "This capability is missing."
+    },
+    {
+      "term": "projection",
+      "pattern": "\\bprojections?\\b",
+      "replacement": "current status",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "code_identifier"],
+      "leak_example": "Projection generation is stale."
+    },
+    {
+      "term": "conductor",
+      "pattern": "\\bconductors?\\b",
+      "replacement": "delivery coordinator or current delivery state",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "code_identifier"],
+      "leak_example": "The conductor selected work."
+    },
+    {
+      "term": "frontier",
+      "pattern": "\\bfrontiers?\\b",
+      "replacement": "next step or blocker",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "code_identifier"],
+      "leak_example": "The operational frontier is stopped."
+    },
+    {
+      "term": "receipt",
+      "pattern": "\\breceipts?\\b",
+      "replacement": "proof or technical record",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "Open the delivery receipt."
+    },
+    {
+      "term": "correlation id",
+      "pattern": "\\bcorrelation[- _]ids?\\b",
+      "replacement": "technical reference",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "Enter the correlation id."
+    },
+    {
+      "term": "schema version",
+      "pattern": "\\bschema[- _]versions?\\b",
+      "replacement": "format version",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "code_identifier"],
+      "leak_example": "Unsupported schema version."
+    },
+    {
+      "term": "rubric",
+      "pattern": "\\brubrics?\\b",
+      "replacement": "review criteria",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "Choose a rubric."
+    },
+    {
+      "term": "quorum",
+      "pattern": "\\bquorums?\\b",
+      "replacement": "required reviewer agreement",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "code_identifier"],
+      "leak_example": "Quorum is not satisfied."
+    },
+    {
+      "term": "meta-verifier",
+      "pattern": "\\bmeta[- ]verifiers?\\b",
+      "replacement": "review auditor",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "code_identifier"],
+      "leak_example": "The meta-verifier rejected the result."
+    },
+    {
+      "term": "hash",
+      "pattern": "\\bhash(?:es)?\\b",
+      "replacement": "technical fingerprint",
+      "allowed_contexts": ["machine_contract", "architecture", "technical_audit", "copyable_command", "code_identifier"],
+      "leak_example": "The hash changed."
+    }
+  ],
+  "surfaces": [
+    {
+      "id": "workbench-orientation-roadmap",
+      "channel": "workbench",
+      "classification": "everyday",
+      "sources": ["pmo-roadmap/workbench/app.js"],
+      "entry_points": ["#/", "#/p/<project>", "#/board/<project>"],
+      "boundary": "Roadmap status, current work, holds, and next step use product language; file paths and exact evidence open through explicit links.",
+      "owner_stories": ["WLA-27-03", "WLA-27-08"]
+    },
+    {
+      "id": "workbench-health-and-edit",
+      "channel": "workbench",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/workbench/app.js"],
+      "entry_points": ["#/health", "#/edit/<action>", "#/f/<path>"],
+      "boundary": "The default explains the issue, affected work, and safe correction; exact paths, diffs, fingerprints, and rule identifiers live under Technical details.",
+      "owner_stories": ["WLA-27-03", "WLA-27-07", "WLA-27-08"]
+    },
+    {
+      "id": "workbench-mission-control-and-history",
+      "channel": "workbench",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/workbench/app.js"],
+      "entry_points": ["#/mc", "#/p/<project>/t/<story>", "#/wl/<source>"],
+      "boundary": "The default groups progress and outcomes; exact sessions, event kinds, file paths, and log records require Technical details.",
+      "owner_stories": ["WLA-27-06", "WLA-27-08"]
+    },
+    {
+      "id": "workbench-bounded-delivery",
+      "channel": "workbench",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/orchestration_surface.py"],
+      "entry_points": ["#/orchestration", "#/orchestration/<score>"],
+      "boundary": "Plan, team, work, review, decisions, limits, and progress lead; exact score nodes, run events, tokens, hashes, streams, and policy fields live under Technical details.",
+      "owner_stories": ["WLA-27-04", "WLA-27-05", "WLA-27-06", "WLA-27-07", "WLA-27-08"]
+    },
+    {
+      "id": "workbench-delivery-studio",
+      "channel": "workbench",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/program_studio.py"],
+      "entry_points": ["#/program-studio", "#/program-studio/<family>/<name>"],
+      "boundary": "Task-shaped delivery and team decisions lead; lossless JSON, exact governed fields, compiler diagnostics, and fingerprints live under Technical details.",
+      "owner_stories": ["WLA-27-03", "WLA-27-04", "WLA-27-05", "WLA-27-08"]
+    },
+    {
+      "id": "workbench-live-delivery",
+      "channel": "workbench",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/program_surface.py"],
+      "entry_points": ["#/programs", "#/programs/<run>"],
+      "boundary": "Progress, ownership, review, blockers, decisions, permission, cost, and next step lead; exact grants, ledgers, hashes, identifiers, events, and streams live under Technical details.",
+      "owner_stories": ["WLA-27-06", "WLA-27-07", "WLA-27-08"]
+    },
+    {
+      "id": "cli-orientation-and-roadmap",
+      "channel": "cli",
+      "classification": "everyday",
+      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/lib/dw_pmo/status.py", "pmo-roadmap/lib/dw_pmo/board.py"],
+      "entry_points": ["dw status", "dw next", "dw board", "dw holds", "dw story show", "dw phase show"],
+      "boundary": "Human output leads with current work, blockers, evidence, and next step; --json remains the exact machine contract.",
+      "owner_stories": ["WLA-27-03", "WLA-27-08"]
+    },
+    {
+      "id": "cli-setup-health-help-and-errors",
+      "channel": "cli",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/install.sh", "pmo-roadmap/update.sh"],
+      "entry_points": ["dw --help", "dw adopt", "dw doctor", "dw check", "dw gate", "dw contract"],
+      "boundary": "Setup and errors state the task, impact, unchanged state, and correction first; exact gate rules, contract fields, commands, and paths remain copyable under Technical details.",
+      "owner_stories": ["WLA-27-03", "WLA-27-07", "WLA-27-08"]
+    },
+    {
+      "id": "cli-bounded-delivery",
+      "channel": "cli",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/lib/dw_pmo/orchestration_surface.py"],
+      "entry_points": ["dw orchestration", "dw run"],
+      "boundary": "Human output uses delivery plan, team, work, review, decision, permission, progress, cost, and next step; --json and copyable commands retain exact fields and identifiers as Technical details.",
+      "owner_stories": ["WLA-27-04", "WLA-27-05", "WLA-27-06", "WLA-27-07", "WLA-27-08"]
+    },
+    {
+      "id": "cli-program-delivery",
+      "channel": "cli",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/lib/dw_pmo/program_surface.py"],
+      "entry_points": ["dw program", "dw organization", "dw workflow", "dw rubric", "dw notifications"],
+      "boundary": "Task and outcome prose use product language; exact command names, JSON, identifiers, policy vocabulary, and audit tails remain under Technical details.",
+      "owner_stories": ["WLA-27-04", "WLA-27-05", "WLA-27-06", "WLA-27-07", "WLA-27-08"]
+    },
+    {
+      "id": "machine-json-adapters",
+      "channel": "machine",
+      "classification": "technical_audit",
+      "sources": ["pmo-roadmap/lib/dw_pmo/mcpserver.py", "pmo-roadmap/lib/dw_pmo/workbench.py", "docs/interop.md"],
+      "entry_points": ["dw --json", "MCP tools", "localhost HTTP API"],
+      "boundary": "Stamped models, JSON keys, event kinds, and identifiers remain exact and do not adopt presentation aliases.",
+      "owner_stories": ["WLA-27-01", "WLA-27-08"]
+    },
+    {
+      "id": "operator-notifications-and-telegram",
+      "channel": "notification",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/lib/dw_pmo/notifications.py", "integrations/telegram/dw_telegram/interface.py"],
+      "entry_points": ["derived notifications", "Telegram summaries and buttons"],
+      "boundary": "The notification states affected work, blocker or decision, choices, and next step; exact request identity and transport receipt are secondary technical details and transport never creates permission.",
+      "owner_stories": ["WLA-27-07", "WLA-27-08"]
+    },
+    {
+      "id": "agent-riders-and-holdspeak",
+      "channel": "rider",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/agent", "pmo-roadmap/lib/dw_pmo/riderdocs.py", ".hs/context.md"],
+      "entry_points": ["Claude Code commands", "Codex skill", "pi guidance", "HoldSpeak context"],
+      "boundary": "Guidance names the delivery task and safe next step first; exact commands, paths, story IDs, and machine payloads remain copyable under Technical details.",
+      "owner_stories": ["WLA-27-08"]
+    },
+    {
+      "id": "readme-and-first-use",
+      "channel": "documentation",
+      "classification": "everyday",
+      "sources": ["README.md", "pmo-roadmap/README.md"],
+      "entry_points": ["repository README", "packaged README"],
+      "boundary": "First-use and product explanations use the ordinary vocabulary; protocol detail is linked, not required to understand the basic task.",
+      "owner_stories": ["WLA-27-03", "WLA-27-08"]
+    },
+    {
+      "id": "everyday-product-guides",
+      "channel": "documentation",
+      "classification": "everyday",
+      "sources": ["docs/solution-overview.md", "docs/distribution.md", "docs/deliberate-step.md"],
+      "entry_points": ["solution overview", "installation and upgrade", "guided one-step workflow"],
+      "boundary": "Guides teach complete delivery tasks in product language and link to exact contracts for implementation or audit detail.",
+      "owner_stories": ["WLA-27-03", "WLA-27-08"]
+    },
+    {
+      "id": "architecture-and-protocol-contracts",
+      "channel": "documentation",
+      "classification": "technical_audit",
+      "sources": ["docs/architecture.md", "docs/interop.md", "docs/mcp.md", "docs/orchestration.md", "docs/programs.md", "docs/signals.md"],
+      "entry_points": ["architecture", "schemas and transports", "orchestration and program contracts"],
+      "boundary": "Exact engineering terms are intentional and authoritative; everyday surfaces link here through Technical details rather than copying or softening the protocol.",
+      "owner_stories": ["WLA-27-01", "WLA-27-08"]
+    },
+    {
+      "id": "exact-events-streams-and-files",
+      "channel": "technical_record",
+      "classification": "technical_audit",
+      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/workbench/app.js", "docs/mission-control.md"],
+      "entry_points": ["dw events", "dw run tail", "dw program tail", "dw run stream", "dw program stream", "Workbench file and trace views"],
+      "boundary": "Exact ordering, identifiers, paths, event kinds, hashes, and bounded content remain unchanged and are opened deliberately from an everyday task.",
+      "owner_stories": ["WLA-27-06", "WLA-27-08"]
+    },
+    {
+      "id": "cross-surface-errors-and-refusals",
+      "channel": "cross_surface",
+      "classification": "mixed",
+      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/notifications.py"],
+      "entry_points": ["CLI stderr", "Workbench guards", "notification failures"],
+      "boundary": "The default states what happened, what did not change, affected work, and the next safe step; exact codes, paths, tokens, and source records live under Technical details.",
+      "owner_stories": ["WLA-27-07", "WLA-27-08"]
+    }
+  ]
+}
