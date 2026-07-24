@@ -106,6 +106,14 @@ file-level untracked status with `--untracked-files=all`; a focused unit test
 pins the exact path. The acceptance exam stayed unchanged at that boundary and
 passed only after the product was corrected.
 
+The first Linux package run then found a fixture-only portability assumption:
+the runner's bare-repository default still advertised `master`, while the exam
+pushed `main`. Refusal clones therefore checked out no program. The exam now
+sets the bare remote's default branch explicitly and asserts each clone's
+program policy exists. Re-running the complete Python 3.9 package smoke with a
+forced `init.defaultBranch=master` passed, so the proof no longer depends on a
+developer's Git configuration.
+
 ## Deterministic proof versus live execution
 
 The mandatory oracle injects deterministic fixture behavior behind the shipped

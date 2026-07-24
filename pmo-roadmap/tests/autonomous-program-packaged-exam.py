@@ -903,6 +903,13 @@ def main():
     try:
         root.mkdir()
         run(["git", "init", "--bare", "-q", remote], cwd=temporary)
+        run(
+            [
+                "git", "--git-dir", remote, "symbolic-ref",
+                "HEAD", "refs/heads/main",
+            ],
+            cwd=temporary,
+        )
         git(root, "init", "-q", "-b", "main")
         git(root, "config", "user.name", "Autonomous Program Exam")
         git(root, "config", "user.email", "autonomous-exam@example.test")
@@ -2135,6 +2142,9 @@ def main():
         # refusals without contaminating the completed green authority.
         red_root = temporary / "authority-red"
         run(["git", "clone", "-q", baseline_remote, red_root], cwd=temporary)
+        assert (
+            red_root / "pm/programs/autonomous-exit.json"
+        ).is_file(), "authority refusal clone did not check out main"
         git(red_root, "config", "user.name", "Authority Red Exam")
         git(red_root, "config", "user.email", "authority-red@example.test")
         write_driver_config(red_root, driver_document())
@@ -2343,6 +2353,9 @@ def main():
         # A separate Story-B frontier proves architect veto before integration.
         veto_root = temporary / "architect-veto"
         run(["git", "clone", "-q", baseline_remote, veto_root], cwd=temporary)
+        assert (
+            veto_root / "pm/programs/autonomous-exit.json"
+        ).is_file(), "architect veto clone did not check out main"
         git(veto_root, "config", "user.name", "Architect Veto Exam")
         git(veto_root, "config", "user.email", "veto@example.test")
         phase_status = (

@@ -133,6 +133,16 @@ allowed-path comparison therefore rejected valid work. The driver now requests
 pins the file-level path and diff header. The exam does not paper over the
 runtime boundary.
 
+The first Linux Actions run exposed a separate fixture portability assumption.
+The local Git configuration initializes bare repositories on `main`, while the
+runner initialized the exam's bare remote with `HEAD` still pointing at
+`master`. The exam pushed `main`, copied that remote, and later cloned an empty
+default branch for its refusal specimens. The fixture now sets the bare
+remote's symbolic `HEAD` to `refs/heads/main` explicitly and asserts both
+refusal clones contain `pm/programs/autonomous-exit.json` before testing
+authority. A full Python 3.9 package run with `init.defaultBranch=master`
+reproduced the runner environment and passed all five packaged paths.
+
 ## Verification summary
 
 - Autonomous fresh-wheel exam: complete, three stories/two phases, one repair,
@@ -182,6 +192,18 @@ packaged outward exam: duplicate_starts=0, duplicate_nudges=0
 packaged autonomous exam: state=complete, phases=2, stories=3,
 repair_rounds=1, commits=3, pushes=3, conductor_crashes=9,
 delivery_crashes=18, ledger_events=203, stream_events=203
+package-smoke.sh: ok
+
+$ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=init.defaultBranch \
+    GIT_CONFIG_VALUE_0=master PMO_PACKAGE_PYTHON=/usr/bin/python3 \
+    pmo-roadmap/tests/package-smoke.sh
+package-smoke.sh: building with: /usr/bin/python3 (Python 3.9.6)
+guided-status-loop.sh: ok
+deliberate-step-loop.sh: ok
+packaged multi-agent orchestration: duplicate_restarts=0, verify_all=ok
+packaged outward exam: duplicate_starts=0, duplicate_nudges=0
+packaged autonomous exam: state=complete, phases=2, stories=3,
+ledger_events=203, stream_events=203
 package-smoke.sh: ok
 ```
 
