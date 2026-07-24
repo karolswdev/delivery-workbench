@@ -6036,6 +6036,20 @@ class OrchestrationDriverTest(unittest.TestCase):
                 ):
                     pass
 
+    def test_git_diff_artifact_keeps_exact_nested_untracked_paths(self):
+        import dw_pmo.orchestration_driver as drivers
+
+        nested = self.root / "src" / "feature" / "candidate.py"
+        nested.parent.mkdir(parents=True)
+        nested.write_text("print('candidate')\n", encoding="utf-8")
+
+        diff, paths = drivers._git_diff_artifact(
+            self.root, ["src/feature/candidate.py"]
+        )
+
+        self.assertEqual(paths, ["src/feature/candidate.py"])
+        self.assertIn(b"diff --git a/src/feature/candidate.py", diff)
+
     def test_undeclared_diff_path_and_output_are_refused(self):
         import dw_pmo.orchestration_driver as drivers
 

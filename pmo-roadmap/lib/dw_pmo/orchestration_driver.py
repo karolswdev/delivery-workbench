@@ -1329,7 +1329,10 @@ def _schema_check(value: object, schema: object, pointer: str = "$") -> list[str
 
 def _git_diff_artifact(workspace: Path, allowed: list[str]) -> tuple[bytes, list[str]]:
     status = subprocess.run(
-        ["git", "-C", str(workspace), "status", "--porcelain=v1", "-z"],
+        [
+            "git", "-C", str(workspace), "status", "--porcelain=v1", "-z",
+            "--untracked-files=all",
+        ],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     if status.returncode:

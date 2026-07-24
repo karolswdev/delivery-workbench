@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-23 (Phase 26 open 10/12: optional planning, finite workflows, independent teams, bounded councils, visual authoring, governed quality, finite revocable program authority, the restart-safe hierarchical conductor, and exact delivery rails are evidence-backed; WLA-26-11 is next).
-**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (10/12).
-**Status:** Vanilla and bounded-run defaults remain unchanged; the optional autonomous layer now reaches exact evidence, integration, machine/program certification, gated commit, fast-forward push, obligation disposition, and canonical roadmap advancement, while public program operations/control-room surfaces remain next.
+**Last updated:** 2026-07-23 (Phase 26 complete 12/12: the fresh-wheel multi-phase autonomous-program and separate no-program exit exams are evidence-backed).
+**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (complete, 12/12).
+**Status:** Vanilla and bounded-run defaults remain unchanged; the optional autonomous layer is complete through exact public operations, governed multi-phase delivery, crash recovery, and packaged exit proof. The landing/release decision remains separate.
 
 ## Vision
 
@@ -91,6 +91,14 @@ summarization can improve those entries after the lifecycle is proven.
   first-class way to work, Phase 24/25 bounded orchestration remains an
   independent opt-in, and only an explicit program policy plus a separate
   program grant activates the Phase 26 layer.
+- User direction, 2026-07-23: the next phase must make the application layer
+  speak like a practical delivery tool, not expose its internal protocol
+  vocabulary. Exact engineering names such as grant, ledger, preview token,
+  content boundary, and certification may remain in code, machine contracts,
+  architecture, and explicit audit views; everyday Program Studio, live
+  operation, setup, help, errors, onboarding, and product docs must instead use
+  consistent plain terms for the plan, team, work, review, decision, blocker,
+  permission, progress, cost, and next delivery step.
 - Comparative study (sidequest), 2026-07-19: ogulcancelik/herdr and its
   plugin ecosystem — declarative screen-state manifests with auditable
   `agent explain` derivation (strict blocked-detection, detection firewalled
@@ -181,7 +189,7 @@ program configuration is ordinary healthy state, and the established `status`,
 | 23 | Let a human or agent deliberately apply exactly one current, allowlisted recommendation without copy/paste, stale intent, arbitrary execution, certification, or commit automation. | done | [phase-23-deliberate-step](./phase-23-deliberate-step/) |
 | 24 | Delivery Workbench can coordinate a bounded multi-agent run from an exact visually authored score and revocable grant: research, dependencies, context, outputs, checks, failures, budgets, recovery, and human checkpoints. | done | [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/) |
 | 25 | Delivery Workbench hears the world outside the run — CI, reviews, merge state, agent activity — records it as durable facts, and under an explicit grant nudges the right agent back to work: observed, bounded, ledgered, revocable. | done | [phase-25-outward-signals](./phase-25-outward-signals/) |
-| 26 | Delivery Workbench optionally adds governed autonomous delivery programs across an explicit roadmap scope—without changing vanilla or bounded-run usage—with hierarchical workflows, independent verification, advanced bounded loops, and only the quality, integration, and roadmap acts named by a finite revocable program grant. | in-progress | [phase-26-autonomous-delivery-programs](./phase-26-autonomous-delivery-programs/) |
+| 26 | Delivery Workbench optionally adds governed autonomous delivery programs across an explicit roadmap scope—without changing vanilla or bounded-run usage—with hierarchical workflows, independent verification, advanced bounded loops, and only the quality, integration, and roadmap acts named by a finite revocable program grant. | done | [phase-26-autonomous-delivery-programs](./phase-26-autonomous-delivery-programs/) |
 
 ## Operating cadence
 
