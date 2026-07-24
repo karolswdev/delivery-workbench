@@ -80,6 +80,10 @@
         {
           "model": "delivery-workbench-team-assignment",
           "facts": ["team", "implementer", "verifier", "provenance"]
+        },
+        {
+          "model": "delivery-workbench-team-review",
+          "facts": ["responsibilities", "quality_constraints", "runtime_independence", "technical_details.provenance"]
         }
       ],
       "good": "Team: Maya implements the change; Rowan reviews it independently.",
@@ -122,6 +126,10 @@
         {
           "model": "delivery-workbench-council-verdict",
           "facts": ["votes", "dissent", "decision"]
+        },
+        {
+          "model": "delivery-workbench-team-review",
+          "facts": ["sections", "review_groups", "corrections", "runtime_independence"]
         }
       ],
       "good": "Review: four checks passed; Rowan requested one repair before this work can pass.",
@@ -145,6 +153,10 @@
         {
           "model": "delivery-workbench-run-view",
           "facts": ["outstanding_request", "decision_tree", "controls"]
+        },
+        {
+          "model": "delivery-workbench-team-review",
+          "facts": ["review_groups", "escalation_routes", "review_before_save"]
         }
       ],
       "good": "Decision needed from Karol: accept the repair and continue, or stop this delivery.",
@@ -436,7 +448,7 @@
       "id": "workbench-delivery-studio",
       "channel": "workbench",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/delivery_setup.py", "pmo-roadmap/lib/dw_pmo/program_studio.py", "pmo-roadmap/lib/dw_pmo/plan_authoring.py"],
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/delivery_setup.py", "pmo-roadmap/lib/dw_pmo/program_studio.py", "pmo-roadmap/lib/dw_pmo/plan_authoring.py", "pmo-roadmap/lib/dw_pmo/team_review.py"],
       "entry_points": ["#/program-studio", "#/program-studio/<family>/<name>"],
       "boundary": "Task-shaped delivery and team decisions lead; lossless JSON, exact governed fields, compiler diagnostics, and fingerprints live under Technical details.",
       "owner_stories": ["WLA-27-03", "WLA-27-04", "WLA-27-05", "WLA-27-08"]
@@ -445,7 +457,7 @@
       "id": "workbench-live-delivery",
       "channel": "workbench",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/program_surface.py"],
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/program_surface.py", "pmo-roadmap/lib/dw_pmo/team_review.py"],
       "entry_points": ["#/programs", "#/programs/<run>"],
       "boundary": "Progress, ownership, review, blockers, decisions, permission, cost, and next step lead; exact grants, ledgers, hashes, identifiers, events, and streams live under Technical details.",
       "owner_stories": ["WLA-27-06", "WLA-27-07", "WLA-27-08"]

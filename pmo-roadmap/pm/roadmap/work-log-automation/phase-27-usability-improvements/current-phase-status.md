@@ -36,7 +36,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 - [x] A fresh user can understand the healthy no-program state, choose the
   optional delivery capability deliberately, and finish or leave setup without
   hidden writes or internal protocol vocabulary (WLA-27-03).
-- [ ] Program Studio makes delivery-plan/workflow authoring and team/review
+- [x] Program Studio makes delivery-plan/workflow authoring and team/review
   design understandable while round-tripping the existing exact configuration
   without semantic loss (WLA-27-04, WLA-27-05).
 - [ ] Live operation answers the seven operator questions from the Phase 26
@@ -61,7 +61,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 | WLA-27-02 | Define whole-task journeys and usability proof | done | [story-02-define-whole-task-journeys-and-usability-proof](./story-02-define-whole-task-journeys-and-usability-proof.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-27-03 | Give first-time users a delivery-shaped front door | done | [story-03-give-first-time-users-a-delivery-shaped-front-door](./story-03-give-first-time-users-a-delivery-shaped-front-door.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-27-04 | Make plan and workflow authoring task-shaped | done | [story-04-make-plan-and-workflow-authoring-task-shaped](./story-04-make-plan-and-workflow-authoring-task-shaped.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-27-05 | Make teams and review rules understandable | backlog | [story-05-make-teams-and-review-rules-understandable](./story-05-make-teams-and-review-rules-understandable.md) | - |
+| WLA-27-05 | Make teams and review rules understandable | done | [story-05-make-teams-and-review-rules-understandable](./story-05-make-teams-and-review-rules-understandable.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-27-06 | Make live delivery explain progress and next steps | backlog | [story-06-make-live-delivery-explain-progress-and-next-steps](./story-06-make-live-delivery-explain-progress-and-next-steps.md) | - |
 | WLA-27-07 | Turn decisions, blockers, permissions, and cost into actions | backlog | [story-07-turn-decisions-blockers-permissions-and-cost-into-actions](./story-07-turn-decisions-blockers-permissions-and-cost-into-actions.md) | - |
 | WLA-27-08 | Make every everyday word agree | backlog | [story-08-make-every-everyday-word-agree](./story-08-make-every-everyday-word-agree.md) | - |
@@ -70,18 +70,20 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 
 ## Where we are
 
-Phase 27 is OPEN 4/10. WLA-27-04 now makes Program Studio follow seven delivery
-decisions—scope, flow, quality, decisions, recovery, stops, and limits—with the
-question, correction, and readable pre-save answer for each. Plan and work-flow
-fields edit the same exact source document; advanced hierarchy, bounded
-repetition, discussion, exact conditions, graph fields, and lossless
-configuration remain under Technical details. Valid configurations preserve
-semantic/layout identity, unknown extensions remain present and refuse save,
-and every draft/check/preview effect is explicitly false. The 68-render
-wide/narrow harness, 480 core tests, and the fresh Python 3.9 wheel plus
-autonomous/no-program consumers are green. WLA-27-05 is next: make teams and
-review rules understandable over the unchanged organization, assignment, and
-quality contracts. There are no known blockers.
+Phase 27 is OPEN 5/10. Program Studio now opens organization design on five
+plain questions covering work responsibility, independent review, contested
+decisions, help and escalation, and review-of-review. The shared
+`delivery-workbench-team-review@1` projection distinguishes policy-ready
+candidate separation from runtime-proven principal/work-area/session
+separation and is reused by the live program control room. Advanced panels,
+councils, dissent, judges, review auditors, architecture checks, stable IDs,
+and exact provider/model/auth provenance remain under Technical details.
+Targeted edits preserve the exact source and its references, advanced
+organizations round-trip unchanged, unknown extensions remain present and
+refuse save, and every view effect is explicitly false. The 70-render
+wide/narrow harness, core suite, fresh Python 3.9 wheel, and
+autonomous/no-program consumers are green. WLA-27-06 is next: make live
+delivery explain progress and next steps. There are no known blockers.
 
 ## Active risks
 
@@ -179,6 +181,28 @@ quality contracts. There are no known blockers.
   declared references during ordinary renames, preserve unknown extensions,
   and refuse invalid save rather than reconstructing or silently simplifying
   policy - lossless-edit boundary - WLA-27-04.
+- 2026-07-24 - Add `delivery-workbench-team-review@1` as the shared pure
+  application projection for Program Studio organization design and live
+  assigned ownership/review; it groups existing organization, validation,
+  assignment, and program-view facts but owns no assignment, review,
+  decision, escalation, or authority meaning - source-of-truth boundary -
+  WLA-27-05.
+- 2026-07-24 - Distinguish `policy-ready` compatible candidates from
+  `runtime-proven` separation; only the assignment engine's exact candidate,
+  profile, principal, work-area, session, and read-only-review facts may
+  establish the latter, while provider/model diversity remains descriptive -
+  independence boundary - WLA-27-05.
+- 2026-07-24 - Ask five ordinary questions—work responsibility, independent
+  review, contested decisions, help/escalation, and review-of-review—while
+  progressively disclosing panels, dissent, judges, review auditors, and
+  architecture checks and retaining all stable IDs, exact provenance, and raw
+  configuration under `Technical details` - progressive team-design contract
+  - WLA-27-05.
+- 2026-07-24 - Apply targeted organization edits to the cloned exact source,
+  carry responsibility references during renames, preserve unknown fields,
+  and refuse invalid save; team design and live review displays remain pure
+  and never start work or mint authority - lossless/no-side-effect boundary -
+  WLA-27-05.
 
 ## Decisions deferred
 

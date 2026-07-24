@@ -75,6 +75,12 @@ conditions, source identifiers, and raw configuration are not removed. They
 live under **Technical details**, whose graph and lossless-configuration modes
 edit the same in-memory source document.
 
+Organization routes use the parallel
+[Team and review design](./team-review.md) application view. It opens on work
+responsibilities, independent review, contested decisions, escalation, and
+review-of-review while preserving the same lossless Technical-details
+boundary.
+
 ## Lossless editing and safe refusal
 
 The browser always edits a clone of `studio.raw`; it never reconstructs a
@@ -144,6 +150,6 @@ The model tests cover the seven-section order, readable summary, advanced
 disclosure, exact semantic/layout round trips, invalid decision mapping,
 unknown-field preservation, and false effect flags. The explorer proves the
 same model through the installed HTTP adapter. The viewport suite renders
-valid program and work-flow plans, an invalid preserved draft, corrections,
-simulation, validation, and both Technical-details modes at 1440×900 and
-390×844.
+valid program, work-flow, and team/review plans, an invalid preserved draft,
+corrections, simulation, validation, and exact Technical-details modes at
+1440×900 and 390×844.

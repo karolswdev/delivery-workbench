@@ -177,6 +177,36 @@ preview/confirmation is still the only tracked save boundary.
 
 See [delivery-plan authoring](./plan-authoring.md).
 
+## WLA-27-05 delivered slice
+
+`team-review-setup` now begins with
+`delivery-workbench-team-review@1`, the same application view used for live
+ownership and review. The default **Team & review** view asks five questions:
+
+1. who does each kind of work;
+2. who reviews it independently;
+3. who decides when reviewers disagree;
+4. who receives help or an escalation; and
+5. who audits review or phase-level design.
+
+Responsibility cards show required coverage and available backup. Quality
+constraints name both conflicting responsibilities and distinguish a
+policy-ready candidate pairing from a runtime-proven assignment. Panels,
+decision groups, required reviewer agreement, objections, dissent, named
+decision owners, review auditors, and architecture checks appear
+progressively when the source declares them.
+
+The explicit team Technical-details state retains stable IDs, candidate
+profiles, exact permissions, packet and schema fields, provider/model/auth and
+principal fingerprints, work areas, session bindings, finite decision bounds,
+and lossless JSON. Provider or model diversity never substitutes for exact
+identity separation.
+
+Invalid separation leads with the affected responsibilities, unsafe behavior,
+and correction while preserving the draft and refusing save. The existing
+review/fingerprint/confirmation boundary remains the only tracked write and
+starts no work. See [team and review design](./team-review.md).
+
 The baseline below remains the dated pre-redesign observation. Its stable
 capture IDs now exercise the improved routes, allowing later whole-journey
 comparison without erasing the original finding.
@@ -192,7 +222,7 @@ DW_UI_CAPTURE_PATTERN='*' \
 pmo-roadmap/tests/workbench-ui-smoke.sh
 ```
 
-The harness produced all 60 existing views and passed. Each mapped state has a
+The harness now produces all 70 views and passes. Each mapped state has a
 1440×900 desktop capture and a 390×844 mobile capture. The screenshots are
 reproducible test output under ignored `.tmp/`; the versioned baseline records
 the observable findings, not machine-specific image bytes.
