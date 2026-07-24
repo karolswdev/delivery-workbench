@@ -259,7 +259,7 @@
         {
           "concept_id": "next_step",
           "statement": "Open the current story; optional coordination is not required.",
-          "source_model": "delivery-workbench-status"
+          "source_model": "delivery-workbench-delivery-setup"
         }
       ],
       "bounded_actions": [
@@ -356,17 +356,17 @@
         {
           "concept_id": "delivery_plan",
           "statement": "Ordinary roadmap work remains available with no optional setup.",
-          "source_model": "delivery-workbench-status"
+          "source_model": "delivery-workbench-delivery-setup"
         },
         {
           "concept_id": "permission",
           "statement": "One bounded delivery and an optional program each require a separate reviewed start.",
-          "source_model": "delivery-workbench-program-studio"
+          "source_model": "delivery-workbench-delivery-setup"
         },
         {
           "concept_id": "next_step",
           "statement": "Stay with the roadmap, review one bounded delivery, or review an optional program.",
-          "source_model": "delivery-workbench-program-studio"
+          "source_model": "delivery-workbench-delivery-setup"
         }
       ],
       "bounded_actions": [

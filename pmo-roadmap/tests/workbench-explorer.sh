@@ -122,6 +122,30 @@ assert p["story_status_counts"] == {"done": 1, "backlog": 1}
 assert p["next_story"]["story_id"] == "SMP-0-02"
 PY
 
+curl -s "$BASE/api/delivery-setup?project=sample" > "$TMP_ROOT/delivery-setup.json"
+python3 - "$TMP_ROOT/delivery-setup.json" <<'PY' \
+  || fail "delivery setup should expose three pure choices and explicit permission boundaries"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["kind"] == "delivery-workbench-delivery-setup"
+assert d["schema_version"] == 1
+assert d["delivery_scope"]["selected_project"] == "sample"
+assert d["delivery_scope"]["current_work"]["story_id"] == "SMP-0-02"
+assert [item["id"] for item in d["choices"]] == ["roadmap", "bounded", "program"]
+assert [item["readiness"] for item in d["choices"]] == [
+    "needs-attention", "ready-to-review", "ready-to-set-up",
+]
+assert d["choices"][0]["recommended"]
+assert "explicit start confirmation" in d["choices"][1]["separate_permission"]
+assert "separate reviewed program start" in d["choices"][2]["separate_permission"]
+assert d["technical_details"]["label"] == "Technical details"
+assert d["cancel"]["effect"] == "Leaves repository and delivery state unchanged."
+for key in ("starts_work", "writes_policy", "writes_roadmap", "writes_run_state",
+            "creates_grant", "starts_process", "starts_observer",
+            "sends_notification", "uses_network"):
+    assert d[key] is False, key
+PY
+
 curl -s "$BASE/api/projects/sample/phases/0" > "$TMP_ROOT/phase.json"
 python3 - "$TMP_ROOT/phase.json" <<'PY' || fail "phase payload wrong"
 import json, sys
@@ -145,7 +169,7 @@ PY
 curl -s "$BASE/" | grep -q 'id="app"' || fail "index.html should serve the app shell"
 curl -s "$BASE/app.js" | grep -q "read-only" || fail "app.js should be served"
 curl -s "$BASE/" | grep -q '#/orchestration' || fail "app shell should link the orchestration editor"
-curl -s "$BASE/" | grep -q '#/program-studio' || fail "app shell should progressively disclose Program Studio"
+curl -s "$BASE/" | grep -q '#/program-studio' || fail "app shell should disclose delivery setup"
 curl -s "$BASE/api/file?path=pm/roadmap/sample/README.md" \
   | grep -q 'Sample - Roadmap' || fail "file endpoint should serve roadmap files"
 
@@ -168,6 +192,7 @@ for _ in 1 2 3; do
   curl -s "$BASE/api/projects/sample" >/dev/null
   curl -s "$BASE/api/projects/sample/phases/0" >/dev/null
   curl -s "$BASE/api/projects/sample/stories/SMP-0-01" >/dev/null
+  curl -s "$BASE/api/delivery-setup?project=sample" >/dev/null
   curl -s "$BASE/api/program-studio" >/dev/null
 done
 AFTER="$(sum_tree)"
@@ -629,16 +654,24 @@ curl -s "http://127.0.0.1:$IPORT/" | grep -q 'id="app"' \
   || { kill $IPID 2>/dev/null; fail "installed CLI status should be ready"; }
 curl -s "http://127.0.0.1:$IPORT/api/status?project=demo" \
   > "$TMP_ROOT/installed-status-http.json"
+curl -s "http://127.0.0.1:$IPORT/api/delivery-setup?project=demo" \
+  > "$TMP_ROOT/installed-delivery-setup.json"
+"$INSTALL_REPO/.githooks/dw" --root "$INSTALL_REPO" setup demo --technical \
+  > "$TMP_ROOT/installed-delivery-setup.txt" \
+  || { kill $IPID 2>/dev/null; fail "installed CLI delivery setup should be ready"; }
 python3 - "$TMP_ROOT/installed-status-cli.json" "$TMP_ROOT/installed-status-http.json" \
-  "$INSTALL_REPO/.githooks/dw-mcp" "$INSTALL_REPO" <<'PY' \
+  "$INSTALL_REPO/.githooks/dw-mcp" "$INSTALL_REPO" \
+  "$TMP_ROOT/installed-delivery-setup.json" "$TMP_ROOT/installed-delivery-setup.txt" <<'PY' \
   || { kill $IPID 2>/dev/null; fail "installed CLI/MCP/HTTP ready status parity failed"; }
 import json
 import subprocess
 import sys
 
-cli_path, http_path, mcp, repo = sys.argv[1:]
+cli_path, http_path, mcp, repo, setup_path, setup_text_path = sys.argv[1:]
 cli = json.load(open(cli_path))
 http = json.load(open(http_path))
+setup = json.load(open(setup_path))["data"]
+setup_text = open(setup_text_path).read()
 request = {
     "jsonrpc": "2.0", "id": 1, "method": "tools/call",
     "params": {"name": "dw_status", "arguments": {"project": "demo"}},
@@ -657,6 +690,10 @@ assert cli == http["data"], json.dumps(
 assert cli == mcp_result["structuredContent"], json.dumps(
     {"cli": cli, "mcp": mcp_result["structuredContent"]}, indent=2, sort_keys=True,
 )
+assert setup["readiness"] == "ready"
+for choice in setup["choices"]:
+    assert "{} — {}".format(choice["label"], choice["readiness"]) in setup_text
+assert "Technical details:" in setup_text
 PY
 kill $IPID 2>/dev/null; wait $IPID 2>/dev/null || true
 

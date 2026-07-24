@@ -42,8 +42,10 @@ controls = app[app.index("function stepControlHtml"):app.index("function statusP
 apply = app[app.index("async function applyReviewedStep"):app.index("function wireStepControl")]
 panel = app[app.index("function statusPanel"):app.index("/* ── mission control")]
 overview = app[app.index("async function viewOverview"):app.index("async function viewProject")]
+preflight = app[app.index("function validateView"):app.index("function jsonView")]
 run = app[app.index("function runStateBadge"):app.index("/* ── optional Program / Workflow Studio")]
 program = app[app.index("/* ── autonomous program control room"):app.index("/* ── optional Program / Workflow Studio")]
+setup = app[app.index("delivery-shaped front door"):app.index("optional Program / Workflow Studio")]
 studio = app[app.index("optional Program / Workflow Studio"):app.index("/* ── router")]
 assert "data-argv-index" in action and "manual act" in action
 assert "<button" not in action and "JSON.stringify" not in action
@@ -59,10 +61,17 @@ for forbidden in ('command:', 'argv:', 'git commit', 'certif'):
     assert forbidden not in apply, forbidden
 for token in ("data-verdict", "project", "workspace", "contract", "gate"):
     assert token in panel, token
-assert '/api/status' in overview and '/api/step' in overview and "Promise.all" in overview
+assert '/api/status' in overview and '/api/step' in overview
+assert '/api/delivery-setup' in overview and "Promise.all" in overview
 assert "overflow-wrap: anywhere" in css
 assert ".step-confirmation" in css and ".brief-step-unavailable" in css
 assert "@media (max-width: 430px)" in css
+for token in ("Delivery readiness", "delivery decision", "Affected decision",
+              "Next step", "Work and order", "Team", "Review", "Permission",
+              "Limits and stops", "Review separate start", "Technical details",
+              "semantic hash", "scheduling simulation", "failure routes and checkpoints"):
+    assert token in preflight, token
+assert "postJson" not in preflight and "creates permission" in preflight
 for token in ("live run · ledger replay", "fail checks", "failure routes",
               "human checkpoints", "hash-chained receipts",
               "confirm this exact act", "no automatic continuation",
@@ -89,8 +98,21 @@ for token in (".program-room-grid", ".program-role-table",
               ".program-quality-grid", ".program-controls",
               ".program-timeline", ".program-open-stream"):
     assert token in css, token
+for token in ("/api/delivery-setup", "What are you delivering?",
+              "Choose the delivery scope", "Choose the operating mode",
+              "No option is selected for you", "Review this option",
+              "What setup creates", "What could change later", "What stays off",
+              "Permission still needed", "Leave for now", "Technical details",
+              "aria-pressed", "requestAnimationFrame"):
+    assert token in setup, token
+for forbidden in ("postJson", "localStorage", "EventSource", "setInterval"):
+    assert forbidden not in setup, forbidden
+for token in (".delivery-choice-grid", ".delivery-effect-grid",
+              "scroll-snap-type: x mandatory", ".delivery-review-actions button:focus"):
+    assert token in css, token
 for token in ("design", "simulate", "validate", "json", "authority",
               "/api/program-studio", "preview save", "preview delete",
+              "review draft save", "save this delivery-plan draft",
               "candidate-assignment", "debate-active", "verifier-failed",
               "budget-exhausted", "phase-transition", "complete",
               "open nested workflow", "creates no grant", "starts nothing"):
@@ -281,10 +303,12 @@ shot() { # name geometry url
   fi
 }
 
-# Golden optionality state: before adopting any Phase-26 policy, entering the
-# Studio is neutral and leaves the ordinary #/ route untouched.
+# Golden first-arrival state: before adopting any Phase-26 policy, delivery
+# setup compares all three modes without preselecting or starting one.
 shot "program-studio-empty-desktop" 1440,900 "$BASE/?snapshot=1#/program-studio"
 shot "program-studio-empty-mobile" 390,844 "$BASE/?snapshot=1#/program-studio"
+shot "delivery-setup-review-desktop" 1440,900 "$BASE/?snapshot=1&setupmode=program&setuptechnical=1#/program-studio"
+shot "delivery-setup-review-mobile" 390,844 "$BASE/?snapshot=1&setupmode=program&setuptechnical=1#/program-studio"
 
 # Explicitly adopt rich tracked fixtures only after the empty-state capture.
 # The server reads policy live; authoring these files does not create a grant or
@@ -537,4 +561,4 @@ shot "program-revoked-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_REVO
 shot "program-certified-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 shot "program-certified-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 
-echo "workbench-ui-smoke.sh: ok (60 viewport renders: 23 data views + empty Studio + program planning/active/certified/revoked + attention + ambiguity, desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (62 viewport renders: 23 data views + delivery setup/review + program planning/active/certified/revoked + attention + ambiguity, desktop+mobile)"

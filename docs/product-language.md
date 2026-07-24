@@ -271,10 +271,14 @@ WLA-27-10 proves the whole application from a fresh package.
 
 ## Phase 27 implementation boundary
 
-This first story changes no runtime semantics and ships no presentation
-adapter. Later stories must derive their application views from the canonical
-models named in the JSON contract and keep exact data reachable through
-**Technical details**. If a desired sentence cannot be supported by those
-facts, the renderer must say it is unknown or the canonical model must be
-changed in a separately reviewed story. The UI may never fill the gap with
-policy of its own.
+WLA-27-01 changed no runtime semantics and established this boundary.
+WLA-27-03's first presentation adapter,
+`delivery-workbench-delivery-setup@1`, derives only from the canonical status,
+orchestration inventory, and Program Studio models. Workbench and human CLI
+render that same application view; existing machine responses remain
+unchanged, and exact data stays reachable through **Technical details**.
+
+Later stories follow the same rule. If a desired sentence cannot be supported
+by canonical facts, the renderer must say it is unknown or the canonical model
+must be changed in a separately reviewed story. The UI may never fill the gap
+with policy of its own.

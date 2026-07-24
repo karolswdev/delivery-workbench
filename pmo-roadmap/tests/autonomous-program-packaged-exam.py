@@ -2570,6 +2570,38 @@ def main():
         assert studio_api["data"]["empty"]
         assert studio_api["data"]["default_route"] == "#/"
         assert not studio_api["data"]["background_polling"]
+        before_setup = file_snapshot(vanilla)
+        status, setup_api = workbench.handle_api(
+            vanilla, "/api/delivery-setup", {"project": ["vanilla"]}
+        )
+        assert status == 200
+        setup = setup_api["data"]
+        assert setup["kind"] == "delivery-workbench-delivery-setup"
+        assert setup["delivery_scope"]["selected_project"] == "vanilla"
+        assert [item["id"] for item in setup["choices"]] == [
+            "roadmap", "bounded", "program",
+        ]
+        for key in (
+            "starts_work", "writes_policy", "writes_roadmap",
+            "writes_run_state", "creates_grant", "starts_process",
+            "starts_observer", "sends_notification", "uses_network",
+        ):
+            assert setup[key] is False, (key, setup)
+        setup_result = run(
+            [
+                vanilla_dw, "--root", vanilla,
+                "setup", "vanilla", "--technical",
+            ],
+            cwd=vanilla,
+            check=False,
+        )
+        assert setup_result.returncode in (0, 1), setup_result.stderr
+        for choice in setup["choices"]:
+            assert "{} — {}".format(
+                choice["label"], choice["readiness"]
+            ) in setup_result.stdout
+        assert "Technical details:" in setup_result.stdout
+        assert before_setup == file_snapshot(vanilla)
         notifications = build_notifications(vanilla)
         assert notifications["notifications"] == []
         assert not (vanilla / ".git/pmo-programs").exists()
@@ -2650,6 +2682,11 @@ def main():
             "vanilla_consumer": {
                 "status_kind": vanilla_status["kind"],
                 "step_kind": vanilla_step["kind"],
+                "delivery_setup_kind": setup["kind"],
+                "delivery_choices": [
+                    item["id"] for item in setup["choices"]
+                ],
+                "setup_writes": False,
                 "orchestration_starts_work": simulation["starts_work"],
                 "programs": 0,
                 "program_store": False,

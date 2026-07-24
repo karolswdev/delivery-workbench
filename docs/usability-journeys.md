@@ -119,6 +119,32 @@ The JSON mapping is bidirectional: each screen slice lists its journeys and
 each journey lists its owners. The validator rejects drift in either
 direction.
 
+## WLA-27-03 delivered slice
+
+The first owned slice now uses the shared
+`delivery-workbench-delivery-setup` application view:
+
+- `healthy-first-arrival` leads with **Your roadmap is ready**, current work,
+  **Open current work**, and **Review delivery options**; repository protocol
+  remains under **Technical details**;
+- `deliberate-capability-choice` begins with project/phase scope and compares
+  ordinary roadmap work, one bounded delivery, and an optional program without
+  preselecting a higher tier; reviewing any choice shows its creation, later
+  effect, disabled behavior, remaining permission, and safe exit;
+- `preflight` leads with work/order, team, review, permission, limits/stops,
+  and one separate-start next step; invalid plans lead with the affected
+  delivery decision and correction while exact compiler targets remain under
+  **Technical details**.
+
+Human `dw setup` renders the same labels and readiness. The Workbench setup
+renderer has no mutation or live-activity primitive, and the fresh-wheel
+no-program proof requires all optional policy/runtime stores to remain absent.
+See [delivery setup and first arrival](./delivery-setup.md).
+
+The baseline below remains the dated pre-redesign observation. Its stable
+capture IDs now exercise the improved routes, allowing later whole-journey
+comparison without erasing the original finding.
+
 ## Current-friction baseline
 
 The baseline was captured on 2026-07-24 from the existing canonical UI

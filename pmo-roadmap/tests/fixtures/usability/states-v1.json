@@ -14,10 +14,13 @@
       "route": "#/",
       "capture_id": "overview",
       "canonical_models": [
+        "delivery-workbench-delivery-setup",
         "delivery-workbench-status",
         "delivery-workbench-roadmap-context"
       ],
       "fact_paths": [
+        "setup.delivery_scope.current_work",
+        "setup.choices",
         "status.verdict",
         "status.next_action",
         "roadmap.projects[].next_story"
@@ -30,10 +33,14 @@
       "route": "#/program-studio",
       "capture_id": "program-studio-empty",
       "canonical_models": [
+        "delivery-workbench-delivery-setup",
         "delivery-workbench-program-studio",
         "delivery-workbench-status"
       ],
       "fact_paths": [
+        "setup.delivery_scope",
+        "setup.choices",
+        "setup.cancel",
         "studio.families",
         "studio.default_route",
         "status.next_action"
