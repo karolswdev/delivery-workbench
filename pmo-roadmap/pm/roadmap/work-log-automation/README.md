@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-23 (Phase 26 complete 12/12: the fresh-wheel multi-phase autonomous-program and separate no-program exit exams are evidence-backed).
-**Current phase:** [Phase 26 - Optional autonomous delivery programs](./phase-26-autonomous-delivery-programs/) (complete, 12/12).
-**Status:** Vanilla and bounded-run defaults remain unchanged; the optional autonomous layer is complete through exact public operations, governed multi-phase delivery, crash recovery, and packaged exit proof. The landing/release decision remains separate.
+**Last updated:** 2026-07-23 (Phase 27 opened and planned 0/10 after Phase 26 merged).
+**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (planned, 0/10).
+**Status:** Phase 27 is ready to make the everyday application speak and behave like a practical delivery tool. Phase 26's optional autonomy semantics and no-program default remain unchanged; landing and release remain separate decisions.
 
 ## Vision
 
@@ -108,38 +108,20 @@ summarization can improve those entries after the lifecycle is proven.
   zero-SDK "CLI is the plugin API" ecosystem flywheel — candidate phase-26
   material recorded in the Phase 25 status.
 
-## Current phase: an optional autonomous delivery capability
+## Current phase: usability improvements
 
-Vanilla Delivery Workbench remains the complete evidence-first product: people
-and agents can inspect roadmaps, choose work, maintain stories, collect proof,
-apply one deliberate step, use the gate, and operate the Workbench without any
-score, run, program, or grant. Phase 24/25 bounded orchestration remains a
-separate optional capability for one exact score and run grant; it is not
-silently wrapped in a program.
+Phase 27 redesigns the application and information layer around the questions
+people actually bring to a delivery tool: What are we delivering? Who is doing
+and reviewing it? What passed? What is blocked? Who needs to decide? What can
+the work still spend or change? What happens next? Setup, Program Studio, live
+operation, help, errors, onboarding, and everyday docs must answer those
+questions with one stable product vocabulary and coherent whole-task flows.
 
-When explicitly configured and granted, Phase 26 adds a
-[program conductor](../../../../docs/programs.md) above individual
-orchestration runs. A program scopes multiple roadmap
-phases/stories, deterministically assigns the next eligible work to a reusable
-hierarchical workflow and specialist team, obtains only the declared grant,
-and conducts the whole organization. Every autonomously completed story has a
-specific independent verifier; policy may add research cells, critics, debate
-councils, judges, meta-verifiers, master architects, and finite review/repair/
-escalation loops. Mechanical receipts and agent judgments remain different
-evidence types, but an explicitly authorized rubric/quorum/meta-review policy
-may let governed verifier verdicts advance the program.
-
-The operator chooses an autonomy mode — **advisory** (preview every move),
-**checkpointed** (run freely between named decision ports), or **continuous**
-(advance stories and phases without another human act inside one explicit,
-finite program grant). Evidence materialization, certification, diff
-integration, commit, push, story advancement, and phase advancement remain
-separate capabilities: a program never inherits them merely because it can
-select, implement, or verify work. Merge, release, and deployment remain out of
-Phase 26. The visual studio and lossless configuration files must expose the
-same roadmap scope, workflow/subflow graph, role topology, verifier separation,
-debate/quorum rules, verdict rubrics, loop ceilings, gates, authority, budgets,
-stop conditions, and optional human checkpoints before the program starts.
+This is not a rename pass. Human-facing renderers will project the existing
+exact state into plain delivery concepts without changing authority, evidence,
+replay, or machine-contract semantics. Exact terms such as grant, ledger,
+preview token, content boundary, and certification remain available in code,
+architecture, machine contracts, and an explicit technical/audit view.
 
 The product therefore has a progressive, opt-in capability ladder:
 
@@ -158,6 +140,7 @@ Workbench never selects a higher tier, creates program state, starts a process
 or observer, performs network activity, or makes program setup mandatory. No
 program configuration is ordinary healthy state, and the established `status`,
 `next`, `step`, `gate`, and Workbench front-door behavior remains compatible.
+Phase 27 adds no new autonomy, hosted authority, release, or publication scope.
 
 ## Phase index
 
@@ -190,6 +173,7 @@ program configuration is ordinary healthy state, and the established `status`,
 | 24 | Delivery Workbench can coordinate a bounded multi-agent run from an exact visually authored score and revocable grant: research, dependencies, context, outputs, checks, failures, budgets, recovery, and human checkpoints. | done | [phase-24-bounded-orchestration](./phase-24-bounded-orchestration/) |
 | 25 | Delivery Workbench hears the world outside the run — CI, reviews, merge state, agent activity — records it as durable facts, and under an explicit grant nudges the right agent back to work: observed, bounded, ledgered, revocable. | done | [phase-25-outward-signals](./phase-25-outward-signals/) |
 | 26 | Delivery Workbench optionally adds governed autonomous delivery programs across an explicit roadmap scope—without changing vanilla or bounded-run usage—with hierarchical workflows, independent verification, advanced bounded loops, and only the quality, integration, and roadmap acts named by a finite revocable program grant. | done | [phase-26-autonomous-delivery-programs](./phase-26-autonomous-delivery-programs/) |
+| 27 | Make Delivery Workbench's everyday application layer speak and behave like a practical delivery tool, with one plain-language vocabulary and coherent task flows across setup, Program Studio, live operation, help, errors, onboarding, and product documentation, while keeping exact protocol terms available in machine contracts, architecture, and explicit audit views. | not-started | [phase-27-usability-improvements](./phase-27-usability-improvements/) |
 
 ## Operating cadence
 
