@@ -114,6 +114,19 @@ program policy exists. Re-running the complete Python 3.9 package smoke with a
 forced `init.defaultBranch=master` passed, so the proof no longer depends on a
 developer's Git configuration.
 
+That replacement run made the repaired package lane green and independently
+found a macOS timing flaw in the public-surface concurrency test. Its workers
+performed two full pure preview replays before a fixed barrier, allowing slow
+runner scheduling to time out before the execution race began. The stabilized
+harness brings both workers to an immediate rendezvous and returns the same
+already-reviewed preview to each; it changes no runtime path and more exactly
+tests that one frontier is consumed once while the competing caller is refused
+as stale.
+The repaired seam passed 20 consecutive macOS/Python 3.14.6 repetitions; the
+old seam reproduced the timeout on repetition two under the same stress.
+The complete post-repair core then passed 473/473 tests on both Python 3.14.6
+and the declared Python 3.9 floor while the suites ran concurrently.
+
 ## Deterministic proof versus live execution
 
 The mandatory oracle injects deterministic fixture behavior behind the shipped
