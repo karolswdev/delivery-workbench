@@ -253,6 +253,21 @@ assert d["studio"]["round_trip"]["semantic_hash_preserved"]
 assert d["studio"]["round_trip"]["layout_hash_preserved"]
 assert d["studio"]["graph"]["nodes"][0]["keyboard"]
 assert d["studio"]["authority"]["creates_grant"] is False
+authoring = d["studio"]["authoring"]
+assert authoring["kind"] == "delivery-workbench-delivery-plan-authoring"
+assert authoring["status"] == "ready-to-review"
+assert [item["id"] for item in authoring["sections"]] == [
+    "scope", "flow", "quality", "decisions", "recovery", "stops", "limits",
+]
+assert [item["id"] for item in authoring["review_sections"]] == [
+    "scope", "flow", "quality", "decisions", "recovery", "stops", "limits",
+]
+assert authoring["review_before_save"]["flow"]
+assert authoring["advanced_details"]["round_trip_lossless"]
+for key in ("starts_work", "writes_policy", "writes_roadmap",
+            "writes_run_state", "creates_grant", "starts_process",
+            "starts_observer", "sends_notification", "uses_network"):
+    assert authoring[key] is False, key
 for key in ("starts_work", "writes_policy", "writes_roadmap", "writes_run_state",
             "creates_grant", "starts_agent", "starts_check", "starts_observer",
             "sends_notification", "applies_integration"):
@@ -288,7 +303,51 @@ assert d["compiled"]["semantic_hash"] == d["round_trip"]["hashes_before"]["seman
 assert d["graph"]["config"] == d["raw"]
 assert d["simulation"]["starts_work"] is False
 assert d["authority"]["grant_required"] and not d["authority"]["creates_grant"]
+assert d["authoring"]["status"] == "ready-to-review"
+assert d["authoring"]["edit_safety"]["targeted_edits_preserve_unedited_fields"]
+assert d["authoring"]["edit_safety"]["exact_export_available"]
 PY
+STUDIO_READ_BEFORE="$(sum_tree)"
+for _ in 1 2 3; do
+  curl -s "$BASE/api/program-studio/workflow/studio-fixture" >/dev/null
+done
+STUDIO_READ_AFTER="$(sum_tree)"
+[ "$STUDIO_READ_BEFORE" = "$STUDIO_READ_AFTER" ] \
+  || fail "repeated delivery-plan authoring reads must not modify the repository"
+python3 - "$TMP_ROOT/studio-invalid.json" <<'PY'
+import json, sys
+document = {
+    "kind": "delivery-workbench-workflow", "schema_version": 1,
+    "slug": "studio-invalid", "title": "Incomplete flow",
+    "version": "1.0.0", "parameters": [], "defaults": {},
+    "nodes": [], "terminals": [{"id": "complete", "meaning": "complete"}],
+    "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+    "future_extension": {"preserved": True},
+}
+json.dump({
+    "family": "workflow", "action": "save", "name": "studio-invalid",
+    "document": document,
+}, open(sys.argv[1], "w"))
+PY
+curl -s -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/studio-invalid.json" \
+  "$BASE/api/program-studio/preview" > "$TMP_ROOT/studio-invalid-preview.json"
+python3 - "$TMP_ROOT/studio-invalid-preview.json" <<'PY' \
+  || fail "invalid Studio preview should map exact refusals to delivery decisions"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+authoring = d["studio"]["authoring"]
+assert not d["applicable"] and authoring["status"] == "needs-attention"
+assert "/future_extension" in authoring["edit_safety"]["unknown_fields"]
+assert authoring["edit_safety"]["unknown_fields_preserved"]
+assert any(
+    item["section_id"] == "flow"
+    and item["technical_details"]["code"] == "missing-nodes"
+    for item in authoring["corrections"]
+)
+PY
+[ ! -e "$REPO/pm/workflows/studio-invalid.json" ] \
+  || fail "invalid Studio review must not write its draft"
 if [ -e "$REPO/.git/pmo-programs" ] || [ -e "$REPO/pm/program-runs" ]; then
   fail "Studio authoring must not create runtime authority or run state"
 fi

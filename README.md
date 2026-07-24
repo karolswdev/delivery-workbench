@@ -266,23 +266,20 @@ and an optional delivery program without preselecting a higher mode. Each
 choice explains what setup creates, what could change later, what stays off,
 and which separate permission would still be required. Leaving or inspecting
 **Technical details** starts and writes nothing. Explicit family routes then
-open the advanced workspace that authors the optional Phase 26 policy family
-without changing that ordinary front door.
-Programs show roadmap scope, binding rules, phase gates, requested
-capabilities, finite budgets, and stops; workflows show accessible role lanes,
-nested subflows, fan-in/out, typed loop/debate containers, verdicts, artifacts,
-and exhaustion routes; organizations show implementer/verifier separation,
-independent review panels, deliberative councils with explicit rule/decider/
-checkpoint authority, meta-verifiers, architects, replacement, and audit
-bounds. The runtime contract separately binds each resolved seat's logical
-profile, harness, provider/router, model, principal/workspace/session identity,
-and carried decision obligations; the live control room exposes those bindings,
-nested activity, verdicts, dissent, obligations, delivery, and remaining
-authority. Design, Simulate, Validate, JSON, and Authority are
-projections of the same Python compilers. Graph/config round trips preserve
-semantic and layout hashes, and
-save/delete uses one stale-safe preview→diff→fingerprint→apply boundary scoped
-to the selected tracked policy. Saving starts no work and grants no authority.
+open on a task-shaped plan: delivery scope, work flow, quality and review,
+decision points, repair and escalation, stop conditions, and finite limits.
+Each section states the question it answers, links incomplete source facts to
+the affected decision, and contributes to one readable summary before save.
+Programs can edit scope, work routes, phase decisions, stops, and limits;
+work flows can edit inputs and ordinary work/check/review/decision steps.
+Nested flows, bounded repair, discussion cells, exact conditions, graph
+layout, and lossless JSON remain editable under **Technical details**.
+Every view uses the existing Python compilers and edits the same source
+document, so valid imports preserve semantic and layout identity. Unknown
+fields remain visible and make save refuse safely instead of being dropped.
+Save/delete still uses one stale-safe preview→diff→fingerprint→apply boundary
+scoped to the selected tracked file. Saving starts no work and provides no
+permission.
 With no `pm/programs`, `pm/workflows`, or `pm/organizations`, the Studio is a
 neutral optional empty state: `#/` remains ordinary Delivery Workbench, with
 no setup prompt, background poller, or runtime state.
@@ -416,6 +413,7 @@ trailers and an archived contract, the full history passing
 - [Everyday product language](./docs/product-language.md): the Phase 27 vocabulary, presentation-only application-view boundary, complete surface inventory, technical-details escape hatch, and executable drift contract
 - [Whole-task usability journeys](./docs/usability-journeys.md): the Phase 27 journey contract, reachable state fixtures, current-friction baseline, screen ownership, and deterministic usability proof
 - [Delivery setup and first arrival](./docs/delivery-setup.md): the three deliberate operating modes, pure shared model, Workbench/CLI parity, safe exits, preflight, and proof
+- [Delivery-plan authoring](./docs/plan-authoring.md): the seven task-shaped decisions, readable pre-save summary, decision-shaped corrections, lossless Technical-details editing, and no-side-effect proof
 - [Comprehensive solution overview](./docs/solution-overview.md): current architecture, workflows, trust model, proof snapshot, strengths, gaps, and delivered response
 - [Status briefing contract](./docs/status-briefing.md): the Phase 22 one-answer model, readiness semantics, and guided action order
 - [Deliberate step contract](./docs/deliberate-step.md): the Phase 23 state-bound preview/apply seam and closed executable action table

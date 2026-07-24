@@ -1428,8 +1428,9 @@ One core compiler/planner/projection owns semantics. Delivered adapters are:
 - CLI: `dw program list|show|validate|simulate|plan|start|tick|supervise|pause|
   resume|revoke|cancel|request|tail|stream`;
 - MCP/HTTP: byte-equivalent reads plus exact-token, closed-parameter acts;
-- Workbench Program Studio: Design, Organization, Rubrics, Simulate, Validate,
-  JSON, and Authority views over the shared compiler; and
+- Workbench Program Studio: task-shaped Plan, Try the flow, Check,
+  Technical details, and Permission details views over the shared compiler;
+  and
 - Workbench control room: roadmap frontier, active organization, workflow
   lineage, rounds, verdicts/dissent, gates, authority, budgets, events, and
   exact stop/refusal explanation.
@@ -1462,15 +1463,22 @@ revoke, cancel, and typed request responses accept only ids, bounded reasons,
 closed decisions, and a fresh exact token.
 
 The delivered authoring route is `#/program-studio`, with family documents at
-`#/program-studio/<program|workflow|organization>/<name>`. Its five initial
-views are Design, Simulate, Validate, JSON, and Authority; organization,
-rubric/verdict, scope, and gate inspectors live inside those views rather than
-creating browser-only policy kinds. `GET /api/program-studio` returns a healthy
-neutral empty inventory, while the family/name read and
+`#/program-studio/<program|workflow|organization>/<name>`. Program and workflow
+documents now lead with the
+`delivery-workbench-delivery-plan-authoring@1` application view. It orders
+authoring around delivery scope, work flow, quality and review, decision
+points, repair and escalation, stop conditions, and finite limits, and it
+provides one readable summary before save. The exact graph and JSON editors
+remain under **Technical details** rather than becoming a second saved format.
+`GET /api/program-studio` returns a healthy neutral empty inventory, while the
+family/name read and
 `POST /api/program-studio/preview|apply` expose the exact compiler, graph,
 simulation, authority, diff, and stale-fingerprint models. The graph embeds the
 lossless config and proves semantic/document/layout hash identity on every
-round trip. Apply is direct-contained to one selected tracked JSON policy and
+round trip. Targeted task edits operate on that same source object, so unedited
+advanced fields remain intact; an unknown field is preserved and the existing
+validator refuses save instead of silently dropping it. Apply is
+direct-contained to one selected tracked JSON policy and
 returns explicit false facts for grant, run, agent, check, observer,
 notification, integration, roadmap, and background-polling effects.
 

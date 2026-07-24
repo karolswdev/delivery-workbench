@@ -167,6 +167,12 @@ from .delivery_setup import (
     render_delivery_setup,
     render_delivery_setup_pointer,
 )
+from .plan_authoring import (
+    DELIVERY_PLAN_AUTHORING_KIND,
+    DELIVERY_PLAN_AUTHORING_SCHEMA_VERSION,
+    SECTION_ORDER as DELIVERY_PLAN_SECTION_ORDER,
+    build_delivery_plan_authoring,
+)
 from .step import (
     DEFAULT_STEP_OUTPUT_BYTES,
     STEP_KIND,

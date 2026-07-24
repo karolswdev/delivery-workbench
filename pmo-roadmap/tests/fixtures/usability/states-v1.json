@@ -51,14 +51,18 @@
       "title": "Delivery plan draft",
       "capability_tier": "program",
       "route": "#/program-studio/workflow/architect-debate-delivery",
-      "capture_id": "studio-nested-design",
+      "capture_id": "studio-plan-workflow",
       "canonical_models": [
+        "delivery-workbench-delivery-plan-authoring",
         "delivery-workbench-program-studio-document",
         "delivery-workbench-program-studio-graph",
         "delivery-workbench-program-studio-mutation-preview"
       ],
       "fact_paths": [
-        "document.document",
+        "authoring.sections",
+        "authoring.review_sections",
+        "authoring.corrections",
+        "document.raw",
         "document.validation",
         "graph.nodes",
         "mutation.effects"
@@ -247,15 +251,17 @@
       "id": "studio-technical",
       "title": "Exact delivery-plan document",
       "capability_tier": "program",
-      "route": "?studioview=json#/program-studio/workflow/architect-debate-delivery",
-      "capture_id": "studio-json",
+      "route": "?studioview=technical&studiotechnical=config#/program-studio/workflow/architect-debate-delivery",
+      "capture_id": "studio-technical-config",
       "canonical_models": [
+        "delivery-workbench-delivery-plan-authoring",
         "delivery-workbench-program-studio-document",
         "delivery-workbench-program-studio-round-trip"
       ],
       "fact_paths": [
-        "document.document",
-        "document.source",
+        "authoring.advanced_details",
+        "document.raw",
+        "document.path",
         "round_trip.semantic_hash",
         "round_trip.layout_hash"
       ]

@@ -278,6 +278,13 @@ orchestration inventory, and Program Studio models. Workbench and human CLI
 render that same application view; existing machine responses remain
 unchanged, and exact data stays reachable through **Technical details**.
 
+WLA-27-04 adds `delivery-workbench-delivery-plan-authoring@1` over the existing
+Program Studio document, graph, validation, and round-trip models. Its ordinary
+view groups those facts into delivery scope, work flow, quality/review,
+decisions, repair/escalation, stops, and limits. Exact graph structure, source
+fields, diagnostics, and JSON remain under **Technical details**. The
+projection edits no source and owns no compiler or permission decision.
+
 Later stories follow the same rule. If a desired sentence cannot be supported
 by canonical facts, the renderer must say it is unknown or the canonical model
 must be changed in a separately reviewed story. The UI may never fill the gap

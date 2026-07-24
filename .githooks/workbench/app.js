@@ -2592,7 +2592,7 @@ async function viewDeliverySetup() {
  * from /api/program-studio, which delegates to the Phase-26 compilers. */
 
 const STUDIO_FAMILIES = ["program", "workflow", "organization"];
-const STUDIO_VIEWS = ["design", "simulate", "validate", "json", "authority"];
+const STUDIO_VIEWS = ["plan", "simulate", "validate", "technical", "authority"];
 const STUDIO_NODE_TYPES = [
   "agent", "check", "collect", "bounded_run", "subflow", "loop",
   "debate", "verdict", "gate", "checkpoint", "rail",
@@ -2600,10 +2600,10 @@ const STUDIO_NODE_TYPES = [
 
 let studioState = {
   inventory: null, family: "program", name: "", exists: false,
-  document: null, model: null, compilePreview: null, view: "design",
+  document: null, model: null, compilePreview: null, view: "plan",
   selected: "", jsonDraft: "", validationTimer: null,
   scenario: "candidate-assignment", error: "", jsonPointer: "",
-  setupContext: null,
+  setupContext: null, planSection: "scope", technicalMode: "graph",
 };
 
 function studioFamilyModel(family = studioState.family) {
@@ -2727,6 +2727,215 @@ function studioProgramInspector() {
   </form>`;
 }
 
+function studioAuthoring() {
+  return studioState.model?.authoring || null;
+}
+
+function studioPlanSection(id = studioState.planSection) {
+  return (studioAuthoring()?.sections || []).find((section) => section.id === id);
+}
+
+function studioPlanFactList(facts = []) {
+  if (!facts.length) return "";
+  return `<dl class="studio-plan-facts">${facts.map((fact) => `<div><dt>${esc(fact.label)}</dt><dd>${esc(fact.value ?? "Not chosen")}</dd></div>`).join("")}</dl>`;
+}
+
+function studioPlanItemList(items = [], editable = false) {
+  if (!items.length) return '<p class="studio-plan-empty">Nothing has been defined here yet.</p>';
+  return `<div class="studio-plan-items">${items.map((item) => {
+    const action = editable && item.pointer?.startsWith("/nodes/")
+      ? `<button type="button" data-plan-edit-step="${esc(item.id || "")}">Edit this step</button>`
+      : "";
+    const outcomes = (item.outcomes || []).length
+      ? `<ul class="studio-plan-outcomes">${item.outcomes.map((outcome) => `<li><strong>${esc(outcome.outcome)}</strong><span>${esc(outcome.meaning)}</span></li>`).join("")}</ul>`
+      : "";
+    return `<article class="${item.advanced ? "advanced" : ""}">
+      <div><span>${esc(item.advanced ? "Detailed flow" : "Delivery decision")}</span><strong>${esc(item.label)}</strong></div>
+      <p>${esc(item.summary || "")}</p>${item.detail ? `<small>${esc(item.detail)}</small>` : ""}${outcomes}${action}
+    </article>`;
+  }).join("")}</div>`;
+}
+
+function studioPlanCorrections(sectionId) {
+  const corrections = (studioAuthoring()?.corrections || []).filter((item) => item.section_id === sectionId);
+  if (!corrections.length) return "";
+  return `<div class="studio-plan-corrections" role="status"><h3>What needs attention</h3>${corrections.map((item) => `<article>
+    <strong>${esc(item.affected_behavior)}</strong><p>${esc(item.correction)}</p>
+    <button type="button" data-plan-correction="${esc(item.section_id)}" data-plan-node="${esc(item.target?.node_id || "")}" data-plan-field="${esc(item.target?.field_id || "")}">Go to this decision</button>
+  </article>`).join("")}</div>`;
+}
+
+function studioPlanExamples() {
+  const examples = studioAuthoring()?.examples || [];
+  return `<details class="studio-plan-examples"><summary>Examples</summary><div>${examples.map((example) => `<article><strong>${esc(example.label)}</strong><p>${esc(example.summary)}</p></article>`).join("")}</div></details>`;
+}
+
+function studioProgramPlanEditor(section) {
+  const document = studioState.document || {};
+  const scope = document.scope || {};
+  const phases = scope.phases || {};
+  const stories = scope.stories === "all" ? "" : (scope.stories?.include || []).join("\n");
+  const bindings = document.bindings || [];
+  const gates = document.phase_gates || [];
+  const stopLabels = {
+    "scope-complete": "All work in scope is complete",
+    "checkpoint-required": "A named decision is required",
+    "unresolved-dissent": "Review disagreement remains unresolved",
+    "architect-veto": "The plan owner stops the delivery",
+    "blocked-frontier": "The next work is blocked",
+    "budget-exhausted": "A finite limit is reached",
+    "grant-expired": "Permission expires",
+    "grant-revoked": "Permission is withdrawn",
+  };
+  if (section.id === "scope") {
+    return `<form class="studio-plan-form">
+      ${studioInput("Plan name", "document.slug", document.slug, "text", 'pattern="[a-z][a-z0-9_-]*"', "/slug")}
+      ${studioInput("Plan title", "document.title", document.title, "text", "", "/title")}
+      ${studioArea("What is this delivery for?", "document.description", document.description || "", "A short purpose visible during review.", "/description")}
+      <div class="studio-plan-form-grid">
+        ${studioInput("Roadmap project", "program.project", scope.project || "", "text", "", "/scope/project")}
+        ${studioInput("First phase", "program.phase_from", phases.from ?? "", "number", 'min="0"', "/scope/phases/from")}
+        ${studioInput("Last phase", "program.phase_through", phases.through ?? "", "number", 'min="0"', "/scope/phases/through")}
+      </div>
+      ${studioArea("Only these story IDs", "program.stories", stories, "Leave empty to include every story in the selected phases.", "/scope/stories")}
+    </form>`;
+  }
+  if (section.id === "flow") {
+    return `<div class="studio-plan-editor-list">
+      ${bindings.map((binding, index) => {
+        const match = binding.match || {};
+        return `<fieldset class="studio-plan-route"><legend>Work route ${index + 1}</legend>
+          <div class="studio-plan-form-grid">
+            <label><span>Route name</span><input data-plan-binding="${index}" data-plan-binding-field="id" value="${esc(binding.id || "")}"></label>
+            <label><span>Order</span><input type="number" min="1" data-plan-binding="${index}" data-plan-binding-field="priority" value="${esc(binding.priority ?? "")}"></label>
+            <label><span>First phase</span><input type="number" min="0" data-plan-binding="${index}" data-plan-binding-field="phase_from" value="${esc(match.phase_from ?? "")}"></label>
+            <label><span>Last phase</span><input type="number" min="0" data-plan-binding="${index}" data-plan-binding-field="phase_through" value="${esc(match.phase_through ?? "")}"></label>
+            <label><span>Saved work flow</span><input data-plan-binding="${index}" data-plan-binding-field="workflow" value="${esc(binding.workflow || "")}"></label>
+            <label><span>Team</span><input data-plan-binding="${index}" data-plan-binding-field="team" value="${esc(binding.team || "")}"></label>
+          </div>
+          <label><span>Review criteria</span><textarea data-plan-binding="${index}" data-plan-binding-field="rubrics">${esc((binding.rubrics || []).join("\n"))}</textarea><small>One saved review-criteria name per line.</small></label>
+          <div class="studio-plan-route-actions"><a href="#/program-studio/workflow/${encodeURIComponent(binding.workflow || "")}">Open this work flow</a><button type="button" class="danger" data-plan-remove-binding="${index}">Remove route</button></div>
+        </fieldset>`;
+      }).join("") || '<p class="studio-plan-empty">Add a route to connect scoped work to a saved work flow.</p>'}
+      <button type="button" data-plan-add-binding>+ Add a work route</button>
+      <p class="studio-plan-note">Exact input mappings remain unchanged and editable under Technical details.</p>
+    </div>`;
+  }
+  if (section.id === "decisions") {
+    return `<div class="studio-plan-editor-list">
+      ${gates.map((gate, index) => `<fieldset class="studio-plan-route"><legend>Phase decision ${index + 1}</legend>
+        <div class="studio-plan-form-grid">
+          <label><span>Decision name</span><input data-plan-gate="${index}" data-plan-gate-field="id" value="${esc(gate.id || "")}"></label>
+          <label><span>Decision owner</span><input data-plan-gate="${index}" data-plan-gate-field="role" value="${esc(gate.role || "")}"></label>
+          <label><span>Review criteria</span><input data-plan-gate="${index}" data-plan-gate-field="rubric" value="${esc(gate.rubric || "")}"></label>
+          <label><span>If review does not pass</span><select data-plan-gate="${index}" data-plan-gate-field="on_fail">${["block", "checkpoint", "abort"].map((value) => `<option value="${value}"${gate.on_fail === value ? " selected" : ""}>${value === "block" ? "Stop with a blocker" : value === "checkpoint" ? "Ask for a decision" : "End this delivery"}</option>`).join("")}</select></label>
+        </div>
+        <button type="button" class="danger" data-plan-remove-gate="${index}">Remove decision</button>
+      </fieldset>`).join("") || '<p class="studio-plan-empty">No phase completion decision is defined.</p>'}
+      <button type="button" data-plan-add-gate>+ Add a phase decision</button>
+    </div>`;
+  }
+  if (section.id === "stops") {
+    return `<fieldset class="studio-plan-checks"><legend>Stop whenever…</legend>${Object.entries(stopLabels).map(([stop, label]) => `<label><input type="checkbox" data-studio-stop="${stop}"${(document.stop_conditions || []).includes(stop) ? " checked" : ""}><span>${esc(label)}</span></label>`).join("")}</fieldset>`;
+  }
+  if (section.id === "limits") {
+    return `<div class="studio-plan-limit-grid">${Object.entries(document.budgets || {}).map(([key, value]) => `<label><span>${esc(key.replace(/^max_/, "Maximum ").replaceAll("_", " "))}</span><input type="number" min="1" data-studio-budget="${esc(key)}" value="${esc(value)}"></label>`).join("")}</div><p class="studio-plan-note">Every saved finite limit remains exact. Technical details exposes the complete field names and compiled envelope.</p>`;
+  }
+  return `${studioPlanItemList(section.items)}${section.id === "recovery" ? '<p class="studio-plan-note">Detailed repair prompts and exact failure conditions remain available under Technical details.</p>' : ""}`;
+}
+
+function studioWorkflowStepEditor() {
+  const graphNode = studioGraphNode(studioState.selected);
+  const raw = studioRawNode(graphNode);
+  if (!raw) return '<p class="studio-plan-empty">Choose a work step to edit it.</p>';
+  return `<fieldset class="studio-plan-step-editor"><legend>Edit ${esc(graphNode?.label || raw.id)}</legend>
+    ${studioInput("Step name", "node.id", raw.id, "text", "", `${graphNode.pointer}/id`)}
+    ${studioInput("Step title", "node.title", raw.title || "", "text", "", `${graphNode.pointer}/title`)}
+    ${studioArea("What happens here?", raw.prompt !== undefined ? "node.prompt" : raw.task !== undefined ? "node.task" : "node.description", raw.prompt ?? raw.task ?? raw.description ?? "", "", `${graphNode.pointer}/${raw.prompt !== undefined ? "prompt" : raw.task !== undefined ? "task" : "description"}`)}
+    ${studioArea("After these steps", "node.needs", (raw.needs || []).join("\n"), "One earlier step name per line.", `${graphNode.pointer}/needs`)}
+    ${raw.role !== undefined ? studioInput(raw.type === "verdict" ? "Review owner" : "Work owner", "node.role", raw.role || "", "text", "", `${graphNode.pointer}/role`) : ""}
+    ${raw.rubric !== undefined ? studioInput("Review criteria", "node.rubric", raw.rubric || "", "text", "", `${graphNode.pointer}/rubric`) : ""}
+    ${raw.workflow !== undefined ? studioInput("Saved detailed work flow", "node.workflow", raw.workflow || "", "text", "", `${graphNode.pointer}/workflow`) : ""}
+    ${raw.max_rounds !== undefined ? studioInput("Maximum rounds", "node.max_rounds", raw.max_rounds, "number", 'min="1"', `${graphNode.pointer}/max_rounds`) : ""}
+    ${raw.quorum !== undefined ? studioInput("Required reviewer agreement", "node.quorum", raw.quorum, "number", 'min="1"', `${graphNode.pointer}/quorum`) : ""}
+    ${raw.expires_seconds !== undefined ? studioInput("Decision expires after seconds", "node.expires_seconds", raw.expires_seconds, "number", 'min="1"', `${graphNode.pointer}/expires_seconds`) : ""}
+    <div class="studio-inspector-actions"><button type="button" id="studio-duplicate-node">Duplicate step</button><button type="button" class="danger" id="studio-delete-node">Remove step</button></div>
+    <p class="studio-plan-note">Exact outcome conditions, inputs, outputs, allowed actions, and advanced bounds are preserved under Technical details.</p>
+  </fieldset>`;
+}
+
+function studioWorkflowPlanEditor(section) {
+  const document = studioState.document || {};
+  if (section.id === "scope") {
+    const parameters = document.parameters || [];
+    return `<form class="studio-plan-form">
+      ${studioInput("Flow name", "document.slug", document.slug, "text", 'pattern="[a-z][a-z0-9_-]*"', "/slug")}
+      ${studioInput("Flow title", "document.title", document.title, "text", "", "/title")}
+      ${studioArea("What delivery outcome does this flow produce?", "document.description", document.description || "", "", "/description")}
+      <div class="studio-plan-editor-list">${parameters.map((parameter, index) => `<fieldset class="studio-plan-input"><legend>Work input ${index + 1}</legend>
+        <div class="studio-plan-form-grid">
+          <label><span>Input name</span><input data-plan-input="${index}" data-plan-input-field="id" value="${esc(parameter.id || "")}"></label>
+          <label><span>Value type</span><select data-plan-input="${index}" data-plan-input-field="type">${["string", "integer", "boolean", "string-list"].map((value) => `<option value="${value}"${parameter.type === value ? " selected" : ""}>${esc(value.replace("-", " "))}</option>`).join("")}</select></label>
+          <label class="studio-plan-toggle"><input type="checkbox" data-plan-input="${index}" data-plan-input-field="required"${parameter.required ? " checked" : ""}><span>Required before work starts</span></label>
+          <label><span>Default value</span><input data-plan-input="${index}" data-plan-input-field="default" value="${esc(document.defaults?.[parameter.id] ?? "")}"></label>
+        </div><button type="button" class="danger" data-plan-remove-input="${index}">Remove input</button>
+      </fieldset>`).join("") || '<p class="studio-plan-empty">This flow needs no named work input.</p>'}</div>
+      <button type="button" data-plan-add-input>+ Add a work input</button>
+    </form>`;
+  }
+  if (section.id === "flow") {
+    const ordinaryTypes = ["agent", "check", "verdict", "checkpoint"];
+    const advancedTypes = STUDIO_NODE_TYPES.filter((type) => !ordinaryTypes.includes(type));
+    return `<div class="studio-plan-flow-editor">
+      <div class="studio-plan-add" aria-label="Add a delivery step">${ordinaryTypes.map((type) => `<button type="button" data-studio-add="${type}">+ ${esc({ agent: "Do work", check: "Run a check", verdict: "Review an outcome", checkpoint: "Ask for a decision" }[type])}</button>`).join("")}</div>
+      <details class="studio-plan-advanced"><summary>Advanced flow building blocks</summary><p>Use these only when the delivery needs nested work, bounded repetition, multi-perspective discussion, or exact delivery actions.</p><div>${advancedTypes.map((type) => `<button type="button" data-studio-add="${type}">+ ${esc(type.replaceAll("_", " "))}</button>`).join("")}</div></details>
+      ${studioPlanItemList(section.items, true)}
+      ${studioWorkflowStepEditor()}
+    </div>`;
+  }
+  return `${studioPlanItemList(section.items, true)}${section.id === "limits" ? studioPlanFactList(section.facts) : ""}`;
+}
+
+function studioPlanReview() {
+  const authoring = studioAuthoring();
+  const review = authoring?.review_sections || [];
+  return `<aside class="studio-plan-review" aria-label="Readable plan summary"><div><span>Review before save</span><strong>${esc(authoring?.status === "ready-to-review" ? "Ready to review" : "Needs attention")}</strong>${badge(authoring?.status === "ready-to-review" ? "nothing starts" : `${authoring?.corrections?.length || 0} corrections`, authoring?.status === "ready-to-review" ? "ok" : "issue")}</div>
+    <dl>${review.map((item) => `<div><dt>${esc(item.label)}</dt><dd>${esc(item.answer)}</dd></div>`).join("")}</dl>
+    <p>Drafting, checking, and leaving make no change. Saving still requires a separate review of the exact file change and starts no work.</p>
+    <button type="button" id="studio-review-save"${authoring?.status === "ready-to-review" ? "" : " disabled"}>Review this save</button>
+  </aside>`;
+}
+
+function studioPlanView() {
+  const authoring = studioAuthoring();
+  if (!authoring) return stateHtml("Checking the delivery decisions…");
+  if (!authoring.applicable) {
+    return `<section class="studio-plan-unavailable"><h2>Team and review design</h2><p>This area keeps its existing exact editor until the dedicated team-and-review usability slice.</p><button type="button" data-studio-view="technical">Open Technical details</button></section>`;
+  }
+  const section = studioPlanSection() || authoring.sections[0];
+  if (section) studioState.planSection = section.id;
+  const editor = studioState.family === "program"
+    ? studioProgramPlanEditor(section)
+    : studioWorkflowPlanEditor(section);
+  return `<div class="studio-plan" data-plan-status="${esc(authoring.status)}">
+    <header><div><span>Delivery decisions</span><h2>Build the plan in the order people review it</h2><p>${esc(authoring.summary)}</p></div>${badge(authoring.status === "ready-to-review" ? "ready to review" : "needs attention", authoring.status === "ready-to-review" ? "ok" : "issue")}</header>
+    <div class="studio-plan-shell">
+      <nav class="studio-plan-sections" aria-label="Delivery plan sections">${authoring.sections.map((item) => `<button type="button" data-plan-section="${esc(item.id)}" class="${item.id === section.id ? "active" : ""}" aria-current="${item.id === section.id ? "step" : "false"}"><span>${item.step}</span><strong>${esc(item.label)}</strong>${item.correction_count ? `<small>${item.correction_count} to fix</small>` : "<small>ready</small>"}</button>`).join("")}</nav>
+      <main class="studio-plan-section" id="studio-plan-section" tabindex="-1"><header><span>Step ${section.step} of ${authoring.sections.length}</span><h2>${esc(section.question)}</h2><p>${esc(section.guidance)}</p><strong>${esc(section.answer)}</strong></header>
+        ${studioPlanCorrections(section.id)}${editor}${section.id !== "limits" ? studioPlanFactList(section.facts) : ""}${studioPlanExamples()}
+      </main>
+      ${studioPlanReview()}
+    </div>
+  </div>`;
+}
+
+function studioTechnicalView() {
+  return `<div class="studio-technical-view"><header><div><span class="orch-eyebrow">Technical details</span><h2>Exact graph, fields, and configuration</h2><p>Use this view for hierarchical flows, bounded loops, discussion cells, exact conditions, raw import/export, and source-level diagnostics.</p></div>${badge("same source document", "ok")}</header>
+    <nav class="studio-technical-tabs" aria-label="Technical editor mode"><button type="button" data-studio-technical="graph" class="${studioState.technicalMode === "graph" ? "active" : ""}">Graph and fields</button><button type="button" data-studio-technical="config" class="${studioState.technicalMode === "config" ? "active" : ""}">Lossless configuration</button></nav>
+    ${studioState.technicalMode === "config" ? studioJsonView() : studioDesignView()}
+  </div>`;
+}
+
 function studioExecutionContractHtml(contract, compact = false) {
   if (!contract) return '<p class="hint">No organization execution contract is reachable from this policy.</p>';
   const ports = contract.ports || [];
@@ -2789,7 +2998,7 @@ function studioScenarioSummary(scenario) {
     if (scenario === "nested") return ["subflow", "loop"].includes(node.type);
     return false;
   });
-  return `<div class="studio-scenario-summary"><strong>${esc(scenario.replaceAll("-", " "))}</strong><span>${active.length ? `${active.length} governed graph element${active.length === 1 ? "" : "s"} highlighted` : "Route is not present in this policy."}</span><small>Synthetic inspection state only—simulation starts nothing and creates no grant.</small></div>`;
+  return `<div class="studio-scenario-summary"><strong>${esc(scenario.replaceAll("-", " "))}</strong><span>${active.length ? `${active.length} delivery step${active.length === 1 ? "" : "s"} involved` : "This route is not present in the plan."}</span><small>Inspection example only—nothing starts and no permission is created.</small></div>`;
 }
 
 function studioSimulationDetails() {
@@ -2804,19 +3013,23 @@ function studioSimulateView() {
   const scenarios = studioState.model?.simulation_scenarios || [];
   const current = scenarios.find((item) => item.id === studioState.scenario) || scenarios.find((item) => item.available) || scenarios[0];
   if (current) studioState.scenario = current.id;
-  return `<div class="studio-simulation" data-scenario="${esc(studioState.scenario)}"><header><div><span class="orch-eyebrow">pure route simulator</span><h2>Inspect assignment, bounds, and red/green routes before any grant</h2></div>${badge("starts nothing", "ok")}</header><div class="studio-scenario-tabs" role="tablist" aria-label="simulation states">${scenarios.map((scenario) => `<button type="button" role="tab" data-studio-scenario="${esc(scenario.id)}" aria-selected="${scenario.id === studioState.scenario}"${scenario.available ? "" : " disabled"}>${esc(scenario.label)}</button>`).join("")}</div>${studioScenarioSummary(studioState.scenario)}${studioSimulationDetails()}</div>`;
+  return `<div class="studio-simulation" data-scenario="${esc(studioState.scenario)}"><header><div><span class="orch-eyebrow">Try the delivery flow</span><h2>See how work could move before saving or requesting permission</h2><p>This is an inspection-only example. It starts no work and changes no plan.</p></div>${badge("starts nothing", "ok")}</header><div class="studio-scenario-tabs" role="tablist" aria-label="Delivery examples">${scenarios.map((scenario) => `<button type="button" role="tab" data-studio-scenario="${esc(scenario.id)}" aria-selected="${scenario.id === studioState.scenario}"${scenario.available ? "" : " disabled"}>${esc(scenario.label)}</button>`).join("")}</div>${studioScenarioSummary(studioState.scenario)}${studioSimulationDetails()}</div>`;
 }
 
 function studioValidateView() {
   const model = studioState.model;
-  if (!model) return stateHtml("Waiting for shared compiler diagnostics…");
+  if (!model) return stateHtml("Checking this delivery plan…");
   const validation = model.validation || { valid: false, diagnostics: [] };
   const diagnostics = validation.diagnostics || [];
+  const corrections = model.authoring?.corrections || [];
   const hashes = model.round_trip?.hashes_before || {};
-  return `<div class="studio-validation ${validation.valid ? "valid" : "invalid"}"><header><div><span class="orch-eyebrow">shared compiler</span><h2>${validation.valid ? "Policy is valid" : `Compiler refused ${diagnostics.length} field${diagnostics.length === 1 ? "" : "s"}`}</h2></div>${badge(validation.valid ? "valid" : "refused", validation.valid ? "ok" : "issue")}</header>
-    <div class="studio-hashes"><div><span>semantic</span><code>${esc(hashes.semantic || "unavailable until valid")}</code></div><div><span>document</span><code>${esc(hashes.document || "unavailable until valid")}</code></div><div><span>layout</span><code>${esc(hashes.layout)}</code></div></div>
-    <section class="studio-roundtrip"><strong>graph ⇄ config</strong>${badge(model.round_trip?.lossless ? "lossless" : "mismatch", model.round_trip?.lossless ? "ok" : "issue")} ${badge(model.round_trip?.semantic_hash_preserved ? "semantic hash preserved" : "semantic unavailable", model.round_trip?.semantic_hash_preserved ? "ok" : "")} ${badge(model.round_trip?.layout_hash_preserved ? "layout hash preserved" : "layout mismatch", model.round_trip?.layout_hash_preserved ? "ok" : "issue")}</section>
-    ${diagnostics.length ? `<ol class="studio-diagnostics">${diagnostics.map((item) => `<li><button type="button" data-studio-diagnostic="${esc(item.pointer)}" data-node-id="${esc(item.target?.node_id || "")}" data-field-id="${esc(item.target?.field_id || "")}"><code>${esc(item.pointer)}</code><strong>${esc(item.code)}</strong><span>${esc(item.message)}</span><small>${esc(item.remediation)}</small></button></li>`).join("")}</ol>` : '<p class="studio-green">The exact config compiled through the same core used by CLI and runtime planning.</p>'}
+  return `<div class="studio-validation ${validation.valid ? "valid" : "invalid"}"><header><div><span class="orch-eyebrow">Check the delivery decisions</span><h2>${validation.valid ? "This plan is ready to review" : `${corrections.length} delivery decision${corrections.length === 1 ? "" : "s"} need attention`}</h2><p>${validation.valid ? "Scope, flow, review, decisions, recovery, stops, and limits agree." : "Fix the affected decision below; the saved plan remains unchanged."}</p></div>${badge(validation.valid ? "ready" : "needs attention", validation.valid ? "ok" : "issue")}</header>
+    ${corrections.length ? `<ol class="studio-decision-diagnostics">${corrections.map((item) => `<li><div><span>${esc(item.decision)}</span><strong>${esc(item.affected_behavior)}</strong><p>${esc(item.correction)}</p></div><button type="button" data-plan-correction="${esc(item.section_id)}" data-plan-node="${esc(item.target?.node_id || "")}" data-plan-field="${esc(item.target?.field_id || "")}">Fix this decision</button></li>`).join("")}</ol>` : '<p class="studio-green">The exact source is valid, and reviewing this result starts no work.</p>'}
+    <details class="studio-validation-technical"><summary>Technical details</summary>
+      <div class="studio-hashes"><div><span>semantic</span><code>${esc(hashes.semantic || "unavailable until valid")}</code></div><div><span>document</span><code>${esc(hashes.document || "unavailable until valid")}</code></div><div><span>layout</span><code>${esc(hashes.layout)}</code></div></div>
+      <section class="studio-roundtrip"><strong>graph ⇄ config</strong>${badge(model.round_trip?.lossless ? "lossless" : "mismatch", model.round_trip?.lossless ? "ok" : "issue")} ${badge(model.round_trip?.semantic_hash_preserved ? "semantic hash preserved" : "semantic unavailable", model.round_trip?.semantic_hash_preserved ? "ok" : "")} ${badge(model.round_trip?.layout_hash_preserved ? "layout hash preserved" : "layout mismatch", model.round_trip?.layout_hash_preserved ? "ok" : "issue")}</section>
+      ${diagnostics.length ? `<ol class="studio-diagnostics">${diagnostics.map((item) => `<li><button type="button" data-studio-diagnostic="${esc(item.pointer)}" data-node-id="${esc(item.target?.node_id || "")}" data-field-id="${esc(item.target?.field_id || "")}"><code>${esc(item.pointer)}</code><strong>${esc(item.code)}</strong><span>${esc(item.message)}</span><small>${esc(item.remediation)}</small></button></li>`).join("")}</ol>` : '<p class="studio-green">The exact configuration passed the shared checker.</p>'}
+    </details>
   </div>`;
 }
 
@@ -2834,9 +3047,9 @@ function studioAuthorityView() {
 function studioBody() {
   if (studioState.view === "simulate") return studioSimulateView();
   if (studioState.view === "validate") return studioValidateView();
-  if (studioState.view === "json") return studioJsonView();
+  if (studioState.view === "technical") return studioTechnicalView();
   if (studioState.view === "authority") return studioAuthorityView();
-  return studioDesignView();
+  return studioPlanView();
 }
 
 function renderProgramStudio() {
@@ -2845,11 +3058,29 @@ function renderProgramStudio() {
   const document = studioState.document || family?.draft || {};
   const validation = studioState.model?.validation;
   const empty = studioState.inventory?.empty;
+  const familyLabels = {
+    program: "Delivery plans",
+    workflow: "Work flows",
+    organization: "Teams and review",
+  };
+  const objectLabels = {
+    program: "delivery plan",
+    workflow: "work flow",
+    organization: "team and review design",
+  };
+  const viewLabels = {
+    plan: "Plan",
+    simulate: "Try the flow",
+    validate: "Check",
+    technical: "Technical details",
+    authority: "Permission details",
+  };
+  const objectLabel = objectLabels[studioState.family] || "delivery design";
   app.innerHTML = `<div class="program-studio" data-family="${esc(studioState.family)}" data-policy="${esc(studioState.name)}">
     ${studioState.setupContext ? `<section class="studio-setup-context"><div><span>Delivery scope from setup</span><strong>${esc(studioState.setupContext.project || "project not chosen")} · phase ${esc(studioState.setupContext.phase || "review needed")}</strong><p>This is an unsaved delivery-plan draft. Editing and checking it start nothing; Save draft still requires its own exact preview and confirmation.</p></div><div><a href="#/program-studio">Back to delivery choices</a><a href="#/">Leave for now</a></div></section>` : ""}
-    ${empty ? `<section class="studio-empty-neutral"><div><span class="orch-eyebrow">optional advanced workspace</span><h2>${esc(studioState.inventory.empty_state.title)}</h2><p>${esc(studioState.inventory.empty_state.detail)}</p></div><a href="#/">ordinary Workbench overview</a></section>` : ""}
-    <header class="studio-toolbar"><div><span class="orch-eyebrow">optional autonomous delivery policy</span><h1>${esc(document.title || document.slug || "Program Studio")}</h1><code>pm/${esc(family?.plural || `${studioState.family}s`)}/${esc(document.slug || studioState.name)}.json</code><p>Designing, validating, simulating, and saving start nothing.</p></div><div class="studio-policy-actions"><label>family<select id="studio-family-select">${STUDIO_FAMILIES.map((id) => `<option value="${id}"${id === studioState.family ? " selected" : ""}>${esc(studioFamilyModel(id)?.label || id)}</option>`).join("")}</select></label><label>policy<select id="studio-policy-select"><option value="">new unsaved ${esc(studioState.family)}</option>${items.map((item) => `<option value="${esc(item.name)}"${item.name === studioState.name && studioState.exists ? " selected" : ""}>${esc(item.slug || item.name)}${item.valid ? "" : " (invalid)"}</option>`).join("")}</select></label><button type="button" id="studio-new">new</button><button type="button" id="studio-duplicate">duplicate</button><button type="button" id="studio-preview-save">${studioState.setupContext && studioState.family === "program" ? "review draft save" : "preview save"}</button><button type="button" id="studio-preview-delete" class="danger"${studioState.exists ? "" : " disabled"}>preview delete</button></div></header>
-    <nav class="studio-tabs" aria-label="Program Studio views">${STUDIO_VIEWS.map((id) => `<button type="button" data-studio-view="${id}" class="${studioState.view === id ? "active" : ""}">${id[0].toUpperCase() + id.slice(1)}${id === "validate" && validation && !validation.valid ? ` (${validation.diagnostics.length})` : ""}</button>`).join("")}</nav>
+    ${empty ? `<section class="studio-empty-neutral"><div><span class="orch-eyebrow">Optional delivery design</span><h2>Nothing has been saved here yet</h2><p>Ordinary roadmap work is ready. Drafting a ${esc(objectLabel)} is optional and starts no work.</p></div><a href="#/">Return to current work</a></section>` : ""}
+    <header class="studio-toolbar"><div><span class="orch-eyebrow">${esc(familyLabels[studioState.family])}</span><h1>${esc(document.title || document.slug || "Delivery plan")}</h1><p>Draft, check, and review before saving. Nothing here starts work or provides permission.</p><details><summary>Technical details</summary><code>pm/${esc(family?.plural || `${studioState.family}s`)}/${esc(document.slug || studioState.name)}.json</code></details></div><div class="studio-policy-actions"><label>Design area<select id="studio-family-select">${STUDIO_FAMILIES.map((id) => `<option value="${id}"${id === studioState.family ? " selected" : ""}>${esc(familyLabels[id])}</option>`).join("")}</select></label><label>Saved ${esc(objectLabel)}<select id="studio-policy-select"><option value="">New unsaved ${esc(objectLabel)}</option>${items.map((item) => `<option value="${esc(item.name)}"${item.name === studioState.name && studioState.exists ? " selected" : ""}>${esc(item.slug || item.name)}${item.valid ? "" : " · needs attention"}</option>`).join("")}</select></label><button type="button" id="studio-new">New</button><button type="button" id="studio-duplicate">Duplicate</button><button type="button" id="studio-preview-save">${studioState.setupContext && studioState.family === "program" ? "Review draft save" : `Review ${esc(objectLabel)} save`}</button><button type="button" id="studio-preview-delete" class="danger"${studioState.exists ? "" : " disabled"}>Review removal</button></div></header>
+    <nav class="studio-tabs" aria-label="Delivery-plan authoring views">${STUDIO_VIEWS.map((id) => `<button type="button" data-studio-view="${id}" class="${studioState.view === id ? "active" : ""}">${esc(viewLabels[id])}${id === "validate" && validation && !validation.valid ? ` (${validation.diagnostics.length})` : ""}</button>`).join("")}</nav>
     ${studioState.error ? `<div class="studio-error" role="alert">${esc(studioState.error)}</div>` : ""}<div id="studio-save-panel" aria-live="polite"></div><div id="studio-view">${studioBody()}</div>
   </div>`;
   wireProgramStudio();
@@ -2899,13 +3130,32 @@ function setStudioField(key, value) {
       const old = node.id; const next = value.trim(); node.id = next;
       (document.nodes || []).forEach((candidate) => {
         candidate.needs = (candidate.needs || []).map((need) => need === old ? next : need);
+        if (Array.isArray(candidate.producers)) {
+          candidate.producers = candidate.producers.map((producer) => producer === old ? next : producer);
+        }
+        for (const referenceKey of ["facts", "verdicts"]) {
+          if (Array.isArray(candidate[referenceKey])) {
+            candidate[referenceKey] = candidate[referenceKey].map((reference) => (
+              reference === old || reference.startsWith(`${old}.`)
+                ? `${next}${reference.slice(old.length)}`
+                : reference
+            ));
+          }
+        }
         Object.values(candidate.routes || {}).forEach((route) => { if (route?.kind === "node" && route.target === old) route.target = next; });
         ["on_success", "on_failure", "on_exhausted", "on_consensus", "on_repair", "on_dissent", "on_quorum_lost"].forEach((routeKey) => { if (candidate[routeKey]?.kind === "node" && candidate[routeKey].target === old) candidate[routeKey].target = next; });
       });
+      visitStudioObjects(document.nodes || [], (item) => {
+        if (
+          item.kind === "artifact"
+          && typeof item.name === "string"
+          && item.name.startsWith(`${old}.`)
+        ) item.name = `${next}${item.name.slice(old.length)}`;
+      });
       ensureStudioLayout(); if (document.layout.nodes[old]) { document.layout.nodes[next] = document.layout.nodes[old]; delete document.layout.nodes[old]; }
       studioState.selected = next;
-    } else if (["max_rounds", "quorum"].includes(field)) node[field] = maybeNumber(value);
-    else if (["capability_ceiling", "participants"].includes(field)) node[field] = splitLines(value);
+    } else if (["max_rounds", "quorum", "expires_seconds", "timeout_seconds", "max_attempts"].includes(field)) node[field] = maybeNumber(value);
+    else if (["capability_ceiling", "participants", "needs"].includes(field)) node[field] = splitLines(value);
     else setOptional(node, field, value.trim());
   }
   studioState.jsonDraft = "";
@@ -2999,10 +3249,18 @@ function wireStudioCanvas() {
 
 function renderStudioSavePreview(preview, request) {
   const slot = document.getElementById("studio-save-panel"); if (!slot) return;
-  const applyLabel = studioState.setupContext && request.family === "program"
-    ? "save this delivery-plan draft"
-    : "apply this exact tracked-policy change";
-  slot.innerHTML = `<section class="studio-save-preview ${preview.applicable ? "" : "refused"}"><div class="studio-preview-head"><strong>${esc(preview.action)} ${esc(preview.path)}</strong>${badge(preview.applicable ? "compiler-valid" : "refused", preview.applicable ? "ok" : "issue")}<code>${esc(preview.fingerprint)}</code></div>${preview.diff ? `<pre class="diff">${diffHtml(preview.diff)}</pre>` : '<p class="hint">No content change.</p>'}<p>Preview writes nothing, starts nothing, and grants nothing. Apply is bound to these exact source bytes and desired content.</p><div class="studio-preview-actions">${preview.applicable ? `<button type="button" id="studio-confirm-apply">${esc(applyLabel)}</button>` : ""}<button type="button" id="studio-close-preview">close preview</button></div></section>`;
+  const objectLabel = request.family === "program" ? "delivery plan" : request.family === "workflow" ? "work flow" : "team and review design";
+  const applyLabel = request.action === "delete"
+    ? `Remove this ${objectLabel}`
+    : `Save this ${objectLabel}`;
+  const actionSummary = request.action === "delete"
+    ? `This would remove one saved ${objectLabel}.`
+    : `This would write one reviewed ${objectLabel} file.`;
+  slot.innerHTML = `<section class="studio-save-preview ${preview.applicable ? "" : "refused"}"><div class="studio-preview-head"><div><span>Review before ${request.action === "delete" ? "removal" : "save"}</span><strong>${esc(actionSummary)}</strong></div>${badge(preview.applicable ? "ready for confirmation" : "needs attention", preview.applicable ? "ok" : "issue")}</div>
+    <p>Reviewing this change writes nothing. Confirming it changes only the named file; it starts no work, changes no roadmap status, and provides no permission.</p>
+    ${preview.no_op ? '<p class="hint">The saved file already matches this draft.</p>' : ""}
+    <details class="studio-save-technical"><summary>Technical details</summary><code>${esc(preview.path)}</code><code>${esc(preview.fingerprint)}</code>${preview.diff ? `<pre class="diff">${diffHtml(preview.diff)}</pre>` : '<p class="hint">No byte change.</p>'}</details>
+    <div class="studio-preview-actions">${preview.applicable ? `<button type="button" id="studio-confirm-apply">${esc(applyLabel)}</button>` : ""}<button type="button" id="studio-close-preview">Close review</button></div></section>`;
   document.getElementById("studio-close-preview")?.addEventListener("click", () => { slot.innerHTML = ""; });
   document.getElementById("studio-confirm-apply")?.addEventListener("click", () => applyStudioAction(preview, request));
 }
@@ -3027,8 +3285,156 @@ async function applyStudioAction(preview, request) {
   await viewProgramStudio(family, request.name);
 }
 
+function studioPlanChanged() {
+  studioState.jsonDraft = "";
+  studioState.jsonPointer = "";
+  queueStudioModel();
+}
+
+function visitStudioObjects(value, visitor) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => visitStudioObjects(item, visitor));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  visitor(value);
+  Object.values(value).forEach((item) => visitStudioObjects(item, visitor));
+}
+
+function updateProgramBinding(index, field, value) {
+  const binding = studioState.document?.bindings?.[index];
+  if (!binding) return;
+  binding.match ||= {};
+  if (field === "priority") binding.priority = maybeNumber(value);
+  else if (field === "phase_from") binding.match.phase_from = maybeNumber(value);
+  else if (field === "phase_through") binding.match.phase_through = maybeNumber(value);
+  else if (field === "rubrics") binding.rubrics = splitLines(value);
+  else if (field === "id") {
+    const old = binding.id;
+    const next = String(value).trim();
+    binding.id = next;
+    (studioState.document.nudges || []).forEach((nudge) => {
+      if (nudge.binding === old) nudge.binding = next;
+    });
+  } else binding[field] = String(value).trim();
+  studioPlanChanged();
+}
+
+function addProgramBinding() {
+  const document = studioState.document;
+  document.bindings ||= [];
+  const used = new Set(document.bindings.map((item) => item.id));
+  let index = document.bindings.length + 1;
+  while (used.has(`work-route-${index}`)) index += 1;
+  const phases = document.scope?.phases || { from: 1, through: 1 };
+  const workflow = studioFamilyModel("workflow")?.items?.[0]?.name || "choose-work-flow";
+  document.bindings.push({
+    id: `work-route-${index}`,
+    priority: index * 10,
+    match: { phase_from: phases.from ?? 1, phase_through: phases.through ?? phases.from ?? 1 },
+    workflow,
+    with: {},
+    team: "choose-team",
+    rubrics: ["choose-review-criteria"],
+  });
+  studioPlanChanged();
+}
+
+function removeProgramBinding(index) {
+  studioState.document.bindings?.splice(index, 1);
+  studioPlanChanged();
+}
+
+function updateProgramGate(index, field, value) {
+  const gate = studioState.document?.phase_gates?.[index];
+  if (!gate) return;
+  gate[field] = String(value).trim();
+  studioPlanChanged();
+}
+
+function addProgramGate() {
+  const document = studioState.document;
+  document.phase_gates ||= [];
+  const used = new Set(document.phase_gates.map((item) => item.id));
+  let index = document.phase_gates.length + 1;
+  while (used.has(`phase-review-${index}`)) index += 1;
+  document.phase_gates.push({
+    id: `phase-review-${index}`,
+    when: "before-phase-complete",
+    role: "choose-review-owner",
+    rubric: "choose-review-criteria",
+    on_fail: "block",
+  });
+  studioPlanChanged();
+}
+
+function removeProgramGate(index) {
+  studioState.document.phase_gates?.splice(index, 1);
+  studioPlanChanged();
+}
+
+function updateWorkflowInput(index, field, value, checked = false) {
+  const document = studioState.document;
+  const parameter = document?.parameters?.[index];
+  if (!parameter) return;
+  document.defaults ||= {};
+  if (field === "required") parameter.required = checked;
+  else if (field === "default") {
+    if (value === "") delete document.defaults[parameter.id];
+    else if (parameter.type === "integer") document.defaults[parameter.id] = maybeNumber(value);
+    else if (parameter.type === "boolean") document.defaults[parameter.id] = ["true", "1", "yes"].includes(String(value).toLowerCase());
+    else if (parameter.type === "string-list") document.defaults[parameter.id] = splitLines(value);
+    else document.defaults[parameter.id] = value;
+  } else if (field === "id") {
+    const old = parameter.id;
+    const next = String(value).trim();
+    parameter.id = next;
+    if (Object.prototype.hasOwnProperty.call(document.defaults, old)) {
+      document.defaults[next] = document.defaults[old];
+      delete document.defaults[old];
+    }
+    visitStudioObjects(document.nodes || [], (item) => {
+      if (item.kind === "parameter" && item.name === old) item.name = next;
+    });
+  } else if (field === "type") {
+    parameter.type = value;
+  }
+  studioPlanChanged();
+}
+
+function addWorkflowInput() {
+  const document = studioState.document;
+  document.parameters ||= [];
+  const used = new Set(document.parameters.map((item) => item.id));
+  let index = document.parameters.length + 1;
+  while (used.has(`work-input-${index}`)) index += 1;
+  document.parameters.push({
+    id: `work-input-${index}`,
+    type: "string",
+    required: false,
+    max_bytes: 1000,
+  });
+  studioPlanChanged();
+}
+
+function removeWorkflowInput(index) {
+  const document = studioState.document;
+  const parameter = document.parameters?.[index];
+  if (parameter && document.defaults) delete document.defaults[parameter.id];
+  document.parameters?.splice(index, 1);
+  studioPlanChanged();
+}
+
 function wireProgramStudio() {
   document.querySelectorAll("[data-studio-view]").forEach((button) => button.addEventListener("click", () => { studioState.view = button.dataset.studioView; renderProgramStudio(); }));
+  document.querySelectorAll("[data-studio-technical]").forEach((button) => button.addEventListener("click", () => { studioState.technicalMode = button.dataset.studioTechnical; renderProgramStudio(); }));
+  document.querySelectorAll("[data-plan-section]").forEach((button) => button.addEventListener("click", () => {
+    studioState.planSection = button.dataset.planSection;
+    studioState.selected = "";
+    renderProgramStudio();
+    requestAnimationFrame(() => document.getElementById("studio-plan-section")?.focus());
+  }));
+  document.getElementById("studio-review-save")?.addEventListener("click", () => previewStudioAction("save"));
   document.getElementById("studio-family-select")?.addEventListener("change", (event) => { location.hash = `#/program-studio/${event.target.value}`; });
   document.getElementById("studio-policy-select")?.addEventListener("change", (event) => { location.hash = event.target.value ? `#/program-studio/${studioState.family}/${encodeURIComponent(event.target.value)}` : `#/program-studio/${studioState.family}`; });
   document.getElementById("studio-new")?.addEventListener("click", () => {
@@ -3045,6 +3451,31 @@ function wireProgramStudio() {
   document.querySelectorAll("[data-studio-select]").forEach((button) => button.addEventListener("click", () => { studioState.selected = button.dataset.studioSelect; renderProgramStudio(); }));
   document.querySelectorAll("[data-studio-add]").forEach((button) => button.addEventListener("click", () => addStudioNode(button.dataset.studioAdd)));
   document.querySelectorAll("[data-studio-field]").forEach((field) => field.addEventListener("change", () => setStudioField(field.dataset.studioField, field.value)));
+  document.querySelectorAll("[data-plan-binding-field]").forEach((field) => field.addEventListener("change", () => updateProgramBinding(Number(field.dataset.planBinding), field.dataset.planBindingField, field.value)));
+  document.querySelector("[data-plan-add-binding]")?.addEventListener("click", addProgramBinding);
+  document.querySelectorAll("[data-plan-remove-binding]").forEach((button) => button.addEventListener("click", () => removeProgramBinding(Number(button.dataset.planRemoveBinding))));
+  document.querySelectorAll("[data-plan-gate-field]").forEach((field) => field.addEventListener("change", () => updateProgramGate(Number(field.dataset.planGate), field.dataset.planGateField, field.value)));
+  document.querySelector("[data-plan-add-gate]")?.addEventListener("click", addProgramGate);
+  document.querySelectorAll("[data-plan-remove-gate]").forEach((button) => button.addEventListener("click", () => removeProgramGate(Number(button.dataset.planRemoveGate))));
+  document.querySelectorAll("[data-plan-input-field]").forEach((field) => field.addEventListener("change", () => updateWorkflowInput(Number(field.dataset.planInput), field.dataset.planInputField, field.value, field.checked)));
+  document.querySelector("[data-plan-add-input]")?.addEventListener("click", addWorkflowInput);
+  document.querySelectorAll("[data-plan-remove-input]").forEach((button) => button.addEventListener("click", () => removeWorkflowInput(Number(button.dataset.planRemoveInput))));
+  document.querySelectorAll("[data-plan-edit-step]").forEach((button) => button.addEventListener("click", () => {
+    studioState.selected = button.dataset.planEditStep;
+    studioState.planSection = "flow";
+    renderProgramStudio();
+    requestAnimationFrame(() => document.querySelector(".studio-plan-step-editor input")?.focus());
+  }));
+  document.querySelectorAll("[data-plan-correction]").forEach((button) => button.addEventListener("click", () => {
+    studioState.planSection = button.dataset.planCorrection;
+    studioState.selected = button.dataset.planNode || "";
+    studioState.view = "plan";
+    renderProgramStudio();
+    requestAnimationFrame(() => {
+      const target = button.dataset.planField ? document.getElementById(button.dataset.planField) : null;
+      (target || document.getElementById("studio-plan-section"))?.focus();
+    });
+  }));
   document.querySelectorAll("[data-studio-capability]").forEach((field) => field.addEventListener("change", () => { const values = [...document.querySelectorAll("[data-studio-capability]:checked")].map((item) => item.dataset.studioCapability); studioState.document.requested_capabilities = values.sort(); studioState.jsonDraft = ""; queueStudioModel(); }));
   document.querySelectorAll("[data-studio-stop]").forEach((field) => field.addEventListener("change", () => { studioState.document.stop_conditions = [...document.querySelectorAll("[data-studio-stop]:checked")].map((item) => item.dataset.studioStop); studioState.jsonDraft = ""; queueStudioModel(); }));
   document.querySelectorAll("[data-studio-budget]").forEach((field) => field.addEventListener("change", () => { studioState.document.budgets[field.dataset.studioBudget] = maybeNumber(field.value); studioState.jsonDraft = ""; queueStudioModel(); }));
@@ -3055,12 +3486,13 @@ function wireProgramStudio() {
     const id = button.dataset.nodeId || diagnostic?.target?.node_id;
     const fieldId = button.dataset.fieldId || diagnostic?.target?.field_id;
     studioState.jsonPointer = button.dataset.studioDiagnostic;
-    if (id) { studioState.selected = id; studioState.view = "design"; } else studioState.view = "json";
+    if (id) { studioState.selected = id; studioState.view = "technical"; studioState.technicalMode = "graph"; }
+    else { studioState.view = "technical"; studioState.technicalMode = "config"; }
     renderProgramStudio();
     requestAnimationFrame(() => {
       const direct = fieldId ? document.getElementById(fieldId) : null;
       if (direct) { direct.focus(); direct.scrollIntoView({ block: "center" }); return; }
-      if (studioState.view !== "json") { studioState.view = "json"; renderProgramStudio(); }
+      if (studioState.view !== "technical" || studioState.technicalMode !== "config") { studioState.view = "technical"; studioState.technicalMode = "config"; renderProgramStudio(); }
       const text = document.getElementById("studio-json-text");
       if (!text) return;
       const field = String(studioState.jsonPointer).split("/").filter(Boolean).pop();
@@ -3075,7 +3507,7 @@ function wireProgramStudio() {
   jsonText?.addEventListener("input", () => { studioState.jsonDraft = jsonText.value; });
   document.getElementById("studio-json-apply")?.addEventListener("click", () => {
     const error = document.getElementById("studio-json-error");
-    try { const parsed = JSON.parse(jsonText.value); studioState.document = parsed; studioState.name = parsed.slug || studioState.name; studioState.selected = ""; studioState.jsonDraft = ""; studioState.jsonPointer = ""; studioState.view = "design"; refreshStudioModel(); }
+    try { const parsed = JSON.parse(jsonText.value); studioState.document = parsed; studioState.name = parsed.slug || studioState.name; studioState.selected = ""; studioState.jsonDraft = ""; studioState.jsonPointer = ""; studioState.view = "technical"; studioState.technicalMode = "graph"; refreshStudioModel(); }
     catch (err) { error.hidden = false; error.textContent = `JSON refused: ${err.message}`; }
   });
   document.getElementById("studio-json-import")?.addEventListener("change", async (event) => { const file = event.target.files[0]; if (!file) return; jsonText.value = await file.text(); studioState.jsonDraft = jsonText.value; });
@@ -3083,9 +3515,13 @@ function wireProgramStudio() {
 
 async function viewProgramStudio(family = "program", name) {
   family = STUDIO_FAMILIES.includes(family) ? family : "program";
-  setCrumbs([{ label: "overview", href: "#/" }, { label: "delivery setup", href: "#/program-studio" }, { label: "technical editor" }, { label: family }, ...(name ? [{ label: name }] : [])]);
+  const familyLabel = family === "program" ? "delivery plans" : family === "workflow" ? "work flows" : "teams and review";
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "delivery setup", href: "#/program-studio" }, { label: familyLabel }, ...(name ? [{ label: name }] : [])]);
   studioState.inventory = (await api("/api/program-studio")).data;
   studioState.family = family; studioState.error = ""; studioState.selected = ""; studioState.jsonDraft = ""; studioState.jsonPointer = "";
+  studioState.view = family === "organization" ? "technical" : "plan";
+  studioState.planSection = "scope";
+  studioState.technicalMode = "graph";
   const familyModel = studioFamilyModel(family);
   const chosen = (!name && family === "program" && pendingProgramSetup)
     ? null
@@ -3111,6 +3547,8 @@ async function viewProgramStudio(family = "program", name) {
   if (chosen) studioState.setupContext = null;
   const requestedView = new URLSearchParams(location.search).get("studioview");
   if (STUDIO_VIEWS.includes(requestedView)) studioState.view = requestedView;
+  const requestedTechnical = new URLSearchParams(location.search).get("studiotechnical");
+  if (["graph", "config"].includes(requestedTechnical)) studioState.technicalMode = requestedTechnical;
   const requestedScenario = new URLSearchParams(location.search).get("studioscenario");
   if (requestedScenario) studioState.scenario = requestedScenario;
   if (studioState.model) renderProgramStudio(); else { renderProgramStudio(); await refreshStudioModel(); }

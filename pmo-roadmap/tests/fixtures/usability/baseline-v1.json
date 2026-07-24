@@ -50,7 +50,7 @@
     {
       "journey_id": "deliberate-capability-choice",
       "starting_capture": "program-studio-empty",
-      "technical_capture": "studio-json",
+      "technical_capture": "studio-technical-config",
       "steps": [
         "Open Program Studio.",
         "Interpret the no-policy banner.",
@@ -85,8 +85,8 @@
     },
     {
       "journey_id": "delivery-plan-setup",
-      "starting_capture": "studio-nested-design",
-      "technical_capture": "studio-json",
+      "starting_capture": "studio-plan-workflow",
+      "technical_capture": "studio-technical-config",
       "steps": [
         "Select a workflow document.",
         "Choose the design view.",
@@ -127,7 +127,7 @@
     {
       "journey_id": "team-review-setup",
       "starting_capture": "studio-authority",
-      "technical_capture": "studio-json",
+      "technical_capture": "studio-technical-config",
       "steps": [
         "Select an organization document.",
         "Open the authority view.",

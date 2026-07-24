@@ -110,21 +110,31 @@ for forbidden in ("postJson", "localStorage", "EventSource", "setInterval"):
 for token in (".delivery-choice-grid", ".delivery-effect-grid",
               "scroll-snap-type: x mandatory", ".delivery-review-actions button:focus"):
     assert token in css, token
-for token in ("design", "simulate", "validate", "json", "authority",
-              "/api/program-studio", "preview save", "preview delete",
-              "review draft save", "save this delivery-plan draft",
+for token in ("plan", "simulate", "validate", "technical", "authority",
+              "/api/program-studio", "Review this save", "Review removal",
+              "Review draft save", "Save this ${objectLabel}",
               "candidate-assignment", "debate-active", "verifier-failed",
               "budget-exhausted", "phase-transition", "complete",
-              "open nested workflow", "creates no grant", "starts nothing"):
+              "Delivery decisions", "data-plan-section",
+              "data-plan-correction", "Review before save",
+              "Advanced flow building blocks",
+              "Technical details", "Lossless configuration",
+              "starts no work"):
     assert token in studio, token
 assert "setInterval" not in studio and "EventSource" not in studio
+assert 'studioState.view = "design"' not in studio
 assert 'default_route: "#/"' not in studio  # browser cannot redefine the API invariant
 assert "STUDIO_NODE_TYPES" in studio and "data-studio-node" in studio
 assert "semantic hash preserved" in studio and "layout hash preserved" in studio
 assert "data-field-id" in studio and "scrollIntoView" in studio
+for token in ("visitStudioObjects", 'item.kind === "parameter"',
+              'item.kind === "artifact"', "nudge.binding === old"):
+    assert token in studio, token
 for token in (".studio-node.type-loop", ".studio-node.type-debate",
               ".studio-node.type-verifier", ".studio-node.type-meta-verifier",
               ".studio-node.type-master-architect", ".studio-lane",
+              ".studio-plan-shell", ".studio-plan-sections",
+              ".studio-plan-review", ".studio-technical-view",
               "@media (max-width: 600px)"):
     assert token in css, token
 assert ".studio-workarea" in css and "overflow: auto" in css
@@ -355,6 +365,14 @@ workflow = {
     "layout": {"nodes": {"implement": {"x": 90, "y": 110}, "verify": {"x": 430, "y": 110}},
                "viewport": {"x": 0, "y": 0, "zoom": 1}},
 }
+invalid_workflow = {
+    "kind": "delivery-workbench-workflow", "schema_version": 1,
+    "slug": "studio-invalid-flow", "title": "Incomplete delivery flow",
+    "version": "1.0.0", "parameters": [], "defaults": {},
+    "nodes": [], "terminals": [{"id": "complete", "meaning": "complete"}],
+    "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+    "future_extension": {"preserved": True},
+}
 program = {
     "kind": "delivery-workbench-program", "schema_version": 1,
     "slug": "studio-program", "title": "Studio multi-phase organization",
@@ -403,6 +421,7 @@ rubrics = {
 }
 documents = {
     root / "pm/workflows/studio-story-flow.json": workflow,
+    root / "pm/workflows/studio-invalid-flow.json": invalid_workflow,
     root / "pm/programs/studio-program.json": program,
 }
 for slug, title in rubrics.items():
@@ -414,7 +433,7 @@ for path, document in documents.items():
     path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 PY
 
-VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-nested-design:#/program-studio/workflow/architect-debate-delivery studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-json:#/program-studio/workflow/architect-debate-delivery studio-authority:#/program-studio/program/studio-program"
+VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-authority:#/program-studio/program/studio-program"
 for spec in $VIEWS; do
   name="${spec%%:*}"
   route="${spec#*:}"
@@ -431,7 +450,8 @@ for spec in $VIEWS; do
     studio-phase-transition) extra="&studioview=simulate&studioscenario=phase-transition" ;;
     studio-complete) extra="&studioview=simulate&studioscenario=complete" ;;
     studio-validate) extra="&studioview=validate" ;;
-    studio-json) extra="&studioview=json" ;;
+    studio-technical-graph) extra="&studioview=technical&studiotechnical=graph" ;;
+    studio-technical-config) extra="&studioview=technical&studiotechnical=config" ;;
     studio-authority) extra="&studioview=authority" ;;
   esac
   shot "$name-desktop" 1440,900 "$BASE/?snapshot=1$extra$route"
@@ -561,4 +581,4 @@ shot "program-revoked-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_REVO
 shot "program-certified-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 shot "program-certified-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 
-echo "workbench-ui-smoke.sh: ok (62 viewport renders: 23 data views + delivery setup/review + program planning/active/certified/revoked + attention + ambiguity, desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (68 viewport renders: 26 data views + delivery setup/review + program planning/active/certified/revoked + attention + ambiguity, desktop+mobile)"

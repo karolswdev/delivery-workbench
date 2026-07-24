@@ -461,7 +461,7 @@
         {
           "concept_id": "delivery_plan",
           "statement": "The draft names the work, sequence, review points, repair paths, and stop conditions.",
-          "source_model": "delivery-workbench-program-studio-document"
+          "source_model": "delivery-workbench-delivery-plan-authoring"
         },
         {
           "concept_id": "permission",
@@ -471,7 +471,7 @@
         {
           "concept_id": "next_step",
           "statement": "Review the readable plan, then save it or leave it unchanged.",
-          "source_model": "delivery-workbench-program-studio-document"
+          "source_model": "delivery-workbench-delivery-plan-authoring"
         }
       ],
       "bounded_actions": [
@@ -532,6 +532,7 @@
         "label": "Technical details",
         "state_id": "studio-technical",
         "source_models": [
+          "delivery-workbench-delivery-plan-authoring",
           "delivery-workbench-program-studio-document",
           "delivery-workbench-program-studio-round-trip"
         ],
