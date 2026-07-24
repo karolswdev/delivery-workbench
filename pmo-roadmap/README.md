@@ -671,15 +671,19 @@ The additive `#/program-studio` route first renders the shared
 current work, and ordinary, bounded, and optional-program choices with their
 effects and remaining permission. It is read-only, preselects no higher mode,
 and matches human `dw setup` guidance. Explicit family routes then disclose
-Phase 26 program, workflow, and organization policy. Their Design, Simulate,
-Validate, JSON, and Authority views share the core compilers; the accessible graph distinguishes
-nested subflows, finite loops/debates, role lanes, verifier separation,
-councils/meta-audit, architect gates, artifacts, capabilities, budgets, and
-stop routes. Graph/config round trips preserve compiler semantic/document and
-layout hashes. Its own preview→diff→fingerprint→apply pair can write or delete
-one direct-contained tracked policy and cannot create a grant, run, agent,
-check, observer, notification, integration, or roadmap act. An empty policy
-inventory is a healthy neutral state and never changes `#/` or starts polling.
+Phase 26 program, workflow, and organization policy. Program and workflow
+documents lead with the shared
+`delivery-workbench-delivery-plan-authoring` view: seven ordered questions for
+scope, flow, quality/review, decisions, repair/escalation, stops, and limits,
+plus one readable summary before save. Exact graphs, nested flows, finite
+loops/discussions, source fields, conditions, diagnostics, and lossless JSON
+remain editable under **Technical details**. The same source document still
+passes through the core compilers; valid imports preserve semantic/document
+and layout identity, while unknown fields remain present and make save refuse
+safely. Its own preview→diff→fingerprint→apply pair can write or delete one
+direct-contained tracked policy and cannot create a grant, run, agent, check,
+observer, notification, integration, or roadmap act. An empty policy inventory
+is a healthy neutral state and never changes `#/` or starts polling.
 `?snapshot=1` switches the UI to synchronous loading for headless
 screenshot tools.
 

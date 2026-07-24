@@ -28,6 +28,7 @@ from typing import Callable
 from .model import DwError
 from .orchestration import canonical_json
 from .orchestration_driver import driver_capability, load_driver_config
+from .plan_authoring import build_delivery_plan_authoring
 from .program_organization import (
     compile_organization,
     find_organization_path,
@@ -1034,13 +1035,13 @@ def _studio_execution_contract(
 def _simulation_scenarios(family: str, graph: dict[str, object]) -> list[dict[str, object]]:
     features = graph.get("features", {})
     scenarios = [
-        ("candidate-assignment", "candidate assignment", family == "program", "selection"),
-        ("nested", "nested subflow", bool(features.get("nested_subflows")), "success"),
-        ("debate-active", "debate active", bool(features.get("debates") or features.get("councils")), "debate"),
-        ("verifier-failed", "verifier failed → repair", bool(features.get("verdicts") or features.get("implementer_verifier_separation")), "failure"),
-        ("budget-exhausted", "budget exhausted", bool(features.get("budgets") or features.get("bounded_loops") or features.get("debates")), "exhausted"),
-        ("phase-transition", "phase transition gate", bool(features.get("architect_gates")), "gate"),
-        ("complete", "scope / workflow complete", True, "terminal"),
+        ("candidate-assignment", "choose the next work", family == "program", "selection"),
+        ("nested", "use a detailed work flow", bool(features.get("nested_subflows")), "success"),
+        ("debate-active", "compare perspectives", bool(features.get("debates") or features.get("councils")), "debate"),
+        ("verifier-failed", "review asks for repair", bool(features.get("verdicts") or features.get("implementer_verifier_separation")), "failure"),
+        ("budget-exhausted", "a finite limit is reached", bool(features.get("budgets") or features.get("bounded_loops") or features.get("debates")), "exhausted"),
+        ("phase-transition", "review phase completion", bool(features.get("architect_gates")), "gate"),
+        ("complete", "delivery complete", True, "terminal"),
     ]
     return [
         {
@@ -1062,6 +1063,7 @@ def build_studio_document(root: Path, family: str, selector: str) -> dict[str, o
     graph = build_studio_graph(family, document)
     round_trip = graph_config_round_trip(root, family, document)
     diagnostics = _diagnostic_targets(family, document, validation.get("diagnostics"))
+    presented_validation = {**validation, "diagnostics": diagnostics}
     return {
         "kind": STUDIO_DOCUMENT_KIND,
         "schema_version": STUDIO_SCHEMA_VERSION,
@@ -1069,7 +1071,7 @@ def build_studio_document(root: Path, family: str, selector: str) -> dict[str, o
         "name": path.stem,
         "path": source,
         "raw": document,
-        "validation": {**validation, "diagnostics": diagnostics},
+        "validation": presented_validation,
         "compiled": compiled,
         "simulation": simulation,
         "simulation_scenarios": _simulation_scenarios(family, graph),
@@ -1078,6 +1080,9 @@ def build_studio_document(root: Path, family: str, selector: str) -> dict[str, o
             family, document, compiled, root=root
         ),
         "round_trip": round_trip,
+        "authoring": build_delivery_plan_authoring(
+            family, document, presented_validation, graph, round_trip
+        ),
         "starts_work": False,
         "writes_policy": False,
         "writes_roadmap": False,
@@ -1257,6 +1262,17 @@ def studio_mutation_preview(plan: StudioMutationPlan) -> dict[str, object]:
     if plan.document is not None:
         graph = build_studio_graph(plan.family, plan.document)
         validation = plan.validation or {}
+        presented_validation = {
+            **validation,
+            "diagnostics": _diagnostic_targets(
+                plan.family,
+                plan.document,
+                validation.get("diagnostics", []),
+            ),
+        }
+        round_trip = graph_config_round_trip(
+            plan.root, plan.family, plan.document,
+        )
         studio = {
             "kind": STUDIO_DOCUMENT_KIND,
             "schema_version": STUDIO_SCHEMA_VERSION,
@@ -1264,14 +1280,7 @@ def studio_mutation_preview(plan: StudioMutationPlan) -> dict[str, object]:
             "name": plan.name,
             "path": plan.relative_path,
             "raw": plan.document,
-            "validation": {
-                **validation,
-                "diagnostics": _diagnostic_targets(
-                    plan.family,
-                    plan.document,
-                    validation.get("diagnostics", []),
-                ),
-            },
+            "validation": presented_validation,
             "compiled": plan.compiled,
             "simulation": plan.simulation,
             "simulation_scenarios": _simulation_scenarios(plan.family, graph),
@@ -1279,8 +1288,13 @@ def studio_mutation_preview(plan: StudioMutationPlan) -> dict[str, object]:
             "authority": build_authority_preview(
                 plan.family, plan.document, plan.compiled, root=plan.root,
             ),
-            "round_trip": graph_config_round_trip(
-                plan.root, plan.family, plan.document,
+            "round_trip": round_trip,
+            "authoring": build_delivery_plan_authoring(
+                plan.family,
+                plan.document,
+                presented_validation,
+                graph,
+                round_trip,
             ),
             "starts_work": False,
             "writes_policy": False,

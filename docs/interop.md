@@ -90,6 +90,7 @@ is added when an external consumer asks for one.
 | Program Studio graph | `delivery-workbench-program-studio-graph` v1 | `program_studio.build_studio_graph` |
 | Program Studio authority preview | `delivery-workbench-program-studio-authority-preview` v1 | `program_studio.build_authority_preview` |
 | Program Studio round trip | `delivery-workbench-program-studio-round-trip` v1 | `program_studio.graph_config_round_trip` |
+| Delivery-plan authoring view | `delivery-workbench-delivery-plan-authoring` v1 | `plan_authoring.build_delivery_plan_authoring` |
 | Program Studio mutation preview | `delivery-workbench-program-studio-mutation-preview` v1 | `program_studio.studio_mutation_preview` |
 | Program Studio mutation result | `delivery-workbench-program-studio-mutation-result` v1 | `program_studio.apply_studio_mutation` |
 | Program frontier | `delivery-workbench-program-frontier` v1 | `program_conductor.derive_program_frontier` |
@@ -228,7 +229,7 @@ or provider argv.
 | `GET /api/orchestration/<score>/compiled` | `orchestration.compile_score_path` | byte-identical compiled score in `data` |
 | `GET /api/orchestration/<score>/simulation` | `orchestration.simulate_score` | byte-identical pure simulation in `data` |
 | `GET /api/program-studio` | `program_studio.build_program_studio` | healthy optional policy inventory plus shared family/compiler metadata; pure and neutral when empty |
-| `GET /api/program-studio/<family>/<name>` | `program_studio.build_studio_document` | selected program/workflow/organization source, validation, graph, simulation and authority projections; pure |
+| `GET /api/program-studio/<family>/<name>` | `program_studio.build_studio_document` | selected program/workflow/organization source plus the task-shaped delivery-plan authoring view, validation, graph, simulation and authority projections; pure |
 | `GET /api/notifications` | `notifications.build_notifications` | the derived notification inventory in `data`; pure |
 | `POST /api/notifications/ack` | `notifications.acknowledge_notification` | receipted idempotent acknowledgement of one notification id |
 | `GET /api/signals?remote=…&branch=…` | `signals.build_signals_inventory` | observed outward channels and derived status in `data`; pure, never an observe pass |

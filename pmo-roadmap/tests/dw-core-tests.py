@@ -1668,6 +1668,7 @@ class DwCoreTest(unittest.TestCase):
                       "delivery-workbench-program-studio-graph",
                       "delivery-workbench-program-studio-authority-preview",
                       "delivery-workbench-program-studio-round-trip",
+                      "delivery-workbench-delivery-plan-authoring",
                       "delivery-workbench-program-studio-mutation-preview",
                       "delivery-workbench-program-studio-mutation-result",
                       "delivery-workbench-program-frontier",
@@ -14745,6 +14746,142 @@ class ProgramStudioTest(unittest.TestCase):
         self.assertEqual(
             self.core.studio_graph_to_config(graph), detail["raw"]
         )
+
+    def test_delivery_authoring_orders_seven_decisions_over_exact_workflow(self):
+        from dw_pmo.plan_authoring import (
+            DELIVERY_PLAN_AUTHORING_KIND,
+            SECTION_ORDER,
+        )
+
+        detail = self.core.build_studio_document(
+            self.root, "workflow", "architect-debate-delivery"
+        )
+        authoring = detail["authoring"]
+        self.assertEqual(authoring["kind"], DELIVERY_PLAN_AUTHORING_KIND)
+        self.assertEqual(authoring["status"], "ready-to-review")
+        self.assertEqual(
+            [section["id"] for section in authoring["sections"]],
+            list(SECTION_ORDER),
+        )
+        self.assertEqual(
+            [section["question"] for section in authoring["sections"]],
+            [
+                "What will be delivered?",
+                "How should work move?",
+                "What must be true before work can pass?",
+                "When should a person decide?",
+                "What happens when work does not pass?",
+                "When must delivery stop?",
+                "How much work may this delivery use?",
+            ],
+        )
+        flow = next(
+            section for section in authoring["sections"]
+            if section["id"] == "flow"
+        )
+        self.assertEqual(len(flow["items"]), len(detail["raw"]["nodes"]))
+        self.assertTrue(any(item["advanced"] for item in flow["items"]))
+        self.assertTrue(authoring["advanced_details"]["hierarchical_workflows"])
+        self.assertTrue(authoring["advanced_details"]["bounded_loops"])
+        self.assertTrue(authoring["advanced_details"]["debate_cells"])
+        self.assertTrue(authoring["advanced_details"]["round_trip_lossless"])
+        self.assertTrue(
+            authoring["advanced_details"]["semantic_identity_preserved"]
+        )
+        self.assertEqual(
+            authoring["review_before_save"]["flow"], flow["answer"]
+        )
+        self.assertEqual(
+            [item["id"] for item in authoring["review_sections"]],
+            list(SECTION_ORDER),
+        )
+        self.assertEqual(authoring["corrections"], [])
+        for key in (
+            "starts_work", "writes_policy", "writes_roadmap",
+            "writes_run_state", "creates_grant", "starts_process",
+            "starts_observer", "sends_notification", "uses_network",
+        ):
+            self.assertFalse(authoring[key], key)
+
+    def test_delivery_authoring_maps_refusals_to_decisions_and_preserves_unknowns(self):
+        document = self.core.new_studio_document(
+            "workflow", "decision-refusal"
+        )
+        document["future_extension"] = {
+            "owner": "future-editor",
+            "nested": {"kept": True},
+        }
+        document["nodes"] = []
+        plan = self.core.build_studio_mutation_plan(
+            self.root, "workflow", "save", "decision-refusal", document
+        )
+        preview = self.core.studio_mutation_preview(plan)
+        authoring = preview["studio"]["authoring"]
+        self.assertFalse(preview["applicable"])
+        self.assertEqual(preview["studio"]["raw"], document)
+        self.assertEqual(
+            self.core.studio_graph_to_config(preview["studio"]["graph"]),
+            document,
+        )
+        self.assertTrue(
+            authoring["edit_safety"]["targeted_edits_preserve_unedited_fields"]
+        )
+        self.assertTrue(authoring["edit_safety"]["unknown_fields_preserved"])
+        self.assertIn(
+            "/future_extension",
+            authoring["edit_safety"]["unknown_fields"],
+        )
+        self.assertTrue(authoring["edit_safety"]["invalid_save_refused"])
+        flow_corrections = [
+            item for item in authoring["corrections"]
+            if item["section_id"] == "flow"
+        ]
+        self.assertGreaterEqual(len(flow_corrections), 2)
+        missing = next(
+            item for item in flow_corrections
+            if item["technical_details"]["code"] == "missing-nodes"
+        )
+        self.assertIn("bounded work step", missing["correction"])
+        unknown = next(
+            item for item in flow_corrections
+            if item["technical_details"]["code"] == "unknown-key"
+        )
+        self.assertIn("Technical details", unknown["correction"])
+        self.assertEqual(
+            unknown["technical_details"]["pointer"], "/future_extension"
+        )
+
+    def test_program_authoring_leads_with_scope_and_keeps_save_pure(self):
+        (self.root / "pm/roadmap").mkdir()
+        document = self.core.new_studio_document(
+            "program", "task-shaped-plan"
+        )
+        plan = self.core.build_studio_mutation_plan(
+            self.root, "program", "save", "task-shaped-plan", document
+        )
+        preview = self.core.studio_mutation_preview(plan)
+        authoring = preview["studio"]["authoring"]
+        self.assertEqual(authoring["family"], "program")
+        self.assertEqual(authoring["sections"][0]["id"], "scope")
+        self.assertEqual(
+            authoring["sections"][0]["facts"][0],
+            {
+                "label": "Roadmap project",
+                "value": "project",
+                "pointer": "/scope/project",
+            },
+        )
+        self.assertEqual(
+            authoring["review_before_save"]["flow"],
+            "No work route has been chosen yet.",
+        )
+        self.assertTrue(any(
+            item["technical_details"]["code"] == "missing-bindings"
+            and item["section_id"] == "flow"
+            for item in authoring["corrections"]
+        ))
+        self.assertFalse(preview["writes_policy"])
+        self.assertFalse(preview["starts_work"])
 
     def test_organization_graph_exposes_separation_council_meta_and_architect(self):
         detail = self.core.build_studio_document(

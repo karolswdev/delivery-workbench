@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 27
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-27-01, WLA-27-02
 - **Unblocks:** WLA-27-06, WLA-27-08, WLA-27-09, WLA-27-10
 - **Owner:** unassigned
@@ -31,20 +31,20 @@ preserving exact round-trip behavior and advanced technical control.
 
 ## Acceptance criteria
 
-- [ ] The default authoring sequence follows delivery decisions rather than
+- [x] The default authoring sequence follows delivery decisions rather than
   persisted object order, and each section says what question it answers.
-- [ ] A readable plan summary shows scope, flow, quality/review points,
+- [x] A readable plan summary shows scope, flow, quality/review points,
   decision points, repair/escalation routes, stop conditions, and limits before
   the user saves or requests permission.
-- [ ] Advanced hierarchical workflows, subflows, bounded loops, debate cells,
+- [x] Advanced hierarchical workflows, subflows, bounded loops, debate cells,
   and exact conditions remain editable through progressive technical detail
   without appearing as mandatory first-run concepts.
-- [ ] Existing valid configurations import into the redesigned Studio and
+- [x] Existing valid configurations import into the redesigned Studio and
   export to an object that is semantically identical; unknown/extensions are
   preserved or editing refuses safely.
-- [ ] Validation identifies the delivery decision that is incomplete, shows
+- [x] Validation identifies the delivery decision that is incomplete, shows
   affected downstream behavior, and links to the relevant editor section.
-- [ ] Drafting, previewing, and abandoning a plan have no execution, roadmap,
+- [x] Drafting, previewing, and abandoning a plan have no execution, roadmap,
   permission, or network side effects.
 
 ## Test plan

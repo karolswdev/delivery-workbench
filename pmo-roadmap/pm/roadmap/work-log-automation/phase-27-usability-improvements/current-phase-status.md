@@ -60,7 +60,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 | WLA-27-01 | Contract the everyday product language | done | [story-01-contract-the-everyday-product-language](./story-01-contract-the-everyday-product-language.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-27-02 | Define whole-task journeys and usability proof | done | [story-02-define-whole-task-journeys-and-usability-proof](./story-02-define-whole-task-journeys-and-usability-proof.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-27-03 | Give first-time users a delivery-shaped front door | done | [story-03-give-first-time-users-a-delivery-shaped-front-door](./story-03-give-first-time-users-a-delivery-shaped-front-door.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-27-04 | Make plan and workflow authoring task-shaped | backlog | [story-04-make-plan-and-workflow-authoring-task-shaped](./story-04-make-plan-and-workflow-authoring-task-shaped.md) | - |
+| WLA-27-04 | Make plan and workflow authoring task-shaped | done | [story-04-make-plan-and-workflow-authoring-task-shaped](./story-04-make-plan-and-workflow-authoring-task-shaped.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-27-05 | Make teams and review rules understandable | backlog | [story-05-make-teams-and-review-rules-understandable](./story-05-make-teams-and-review-rules-understandable.md) | - |
 | WLA-27-06 | Make live delivery explain progress and next steps | backlog | [story-06-make-live-delivery-explain-progress-and-next-steps](./story-06-make-live-delivery-explain-progress-and-next-steps.md) | - |
 | WLA-27-07 | Turn decisions, blockers, permissions, and cost into actions | backlog | [story-07-turn-decisions-blockers-permissions-and-cost-into-actions](./story-07-turn-decisions-blockers-permissions-and-cost-into-actions.md) | - |
@@ -70,16 +70,18 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 
 ## Where we are
 
-Phase 27 is OPEN 3/10. WLA-27-03 now gives first arrival, deliberate capability
-choice, and bounded preflight one delivery-shaped application view over the
-unchanged status, score-inventory, and Program Studio sources. Ordinary work
-leads; all three modes remain visible without preselection; every optional path
-states its effects, disabled behavior, and later permission; leaving and
-technical inspection are pure. Human CLI and Workbench agree while existing
-machine responses remain unchanged. The 62-render wide/narrow harness, 477
-core tests, and the fresh Python 3.9 wheel/no-program consumer are green.
-WLA-27-04 is next: make delivery-plan and workflow authoring task-shaped while
-preserving lossless compiler/config round trips. There are no known blockers.
+Phase 27 is OPEN 4/10. WLA-27-04 now makes Program Studio follow seven delivery
+decisions—scope, flow, quality, decisions, recovery, stops, and limits—with the
+question, correction, and readable pre-save answer for each. Plan and work-flow
+fields edit the same exact source document; advanced hierarchy, bounded
+repetition, discussion, exact conditions, graph fields, and lossless
+configuration remain under Technical details. Valid configurations preserve
+semantic/layout identity, unknown extensions remain present and refuse save,
+and every draft/check/preview effect is explicitly false. The 68-render
+wide/narrow harness, 480 core tests, and the fresh Python 3.9 wheel plus
+autonomous/no-program consumers are green. WLA-27-05 is next: make teams and
+review rules understandable over the unchanged organization, assignment, and
+quality contracts. There are no known blockers.
 
 ## Active risks
 
@@ -163,6 +165,20 @@ preserving lossless compiler/config round trips. There are no known blockers.
   not a failure of ordinary delivery: the ordinary front door remains healthy
   and the program choice names its correction - progressive capability
   isolation - WLA-27-03.
+- 2026-07-24 - Add `delivery-workbench-delivery-plan-authoring@1` as a pure
+  application view over the exact Program Studio source, graph, validation,
+  and round-trip documents; renderers may group and explain those facts but
+  own no new saved format or runtime meaning - source-of-truth boundary -
+  WLA-27-04.
+- 2026-07-24 - Fix the default authoring order as scope, flow, quality,
+  decisions, recovery, stops, and limits, each led by its delivery question;
+  move hierarchy, bounded repetition, discussion, exact conditions, graph
+  fields, and raw configuration behind the explicit `Technical details`
+  boundary - progressive authoring contract - WLA-27-04.
+- 2026-07-24 - Keep every edit on the cloned exact source document, carry
+  declared references during ordinary renames, preserve unknown extensions,
+  and refuse invalid save rather than reconstructing or silently simplifying
+  policy - lossless-edit boundary - WLA-27-04.
 
 ## Decisions deferred
 

@@ -141,6 +141,42 @@ renderer has no mutation or live-activity primitive, and the fresh-wheel
 no-program proof requires all optional policy/runtime stores to remain absent.
 See [delivery setup and first arrival](./delivery-setup.md).
 
+## WLA-27-04 delivered slice
+
+`delivery-plan-setup` now begins with
+`delivery-workbench-delivery-plan-authoring@1`, a pure application view over
+the exact Program Studio document, graph, validation, and round-trip models.
+Its default **Plan** view follows the seven reviewed delivery decisions:
+
+1. delivery scope;
+2. work flow;
+3. quality and review;
+4. decision points;
+5. repair and escalation;
+6. stop conditions;
+7. finite limits.
+
+Each section states its question, answer, source-backed items, correction
+count, and example. A persistent **Review before save** summary covers all
+seven decisions. Program plans edit scope, work routes, phase decisions,
+stops, and limits; work flows edit work inputs and ordinary work, check,
+review, and decision steps.
+
+`technical-inspection` remains adjacent rather than becoming the default.
+Hierarchical flows, bounded repair, discussion cells, exact conditions, graph
+layout, and raw import/export remain editable under **Technical details**.
+Both modes edit the same in-memory source document. Valid imports preserve
+semantic and layout identity; unknown fields remain present and make the
+existing save boundary refuse safely.
+
+Invalid drafts lead with the affected delivery decision, downstream behavior,
+and correction. Exact source paths, pointers, rule codes, and technical
+fingerprints stay in Technical details. Drafting, trying the flow, checking,
+reviewing, and abandoning remain no-write reads; the existing separate
+preview/confirmation is still the only tracked save boundary.
+
+See [delivery-plan authoring](./plan-authoring.md).
+
 The baseline below remains the dated pre-redesign observation. Its stable
 capture IDs now exercise the improved routes, allowing later whole-journey
 comparison without erasing the original finding.

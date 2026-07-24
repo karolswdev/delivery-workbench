@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-24 (Phase 27 complete 3/10: the product language, whole-task journeys, and delivery-shaped first-arrival/setup flow are evidence-backed).
-**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (active, 3/10).
-**Status:** Delivery Workbench now leads with healthy ordinary work and one pure shared setup view that compares ordinary, bounded, and optional-program delivery without preselection. Workbench and human CLI agree on scope/readiness/effects; exact details remain available, every optional save/start keeps separate permission, and the fresh-wheel no-program consumer stays dormant. Task-shaped plan/workflow authoring is next; landing and release remain separate decisions.
+**Last updated:** 2026-07-24 (Phase 27 complete 4/10: product language, whole-task journeys, delivery-shaped setup, and task-shaped plan/work-flow authoring are evidence-backed).
+**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (active, 4/10).
+**Status:** Program Studio now follows seven plain delivery decisions with a readable pre-save review, decision-shaped corrections, and ordinary plan/work-flow controls over the unchanged exact source. Hierarchy, bounded repetition, discussion, exact conditions, graph fields, and lossless configuration remain under Technical details; invalid or unknown content refuses safely, all draft paths remain pure, and the installed-wheel/no-program exams are green. Understandable team and review-rule design is next; landing and release remain separate decisions.
 
 ## Vision
 

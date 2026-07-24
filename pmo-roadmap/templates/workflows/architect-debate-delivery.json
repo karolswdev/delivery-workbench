@@ -2,8 +2,8 @@
   "kind": "delivery-workbench-workflow",
   "schema_version": 1,
   "slug": "architect-debate-delivery",
-  "title": "Architect, debate, deliver, and bounded audit",
-  "description": "A master architect frames the work, a finite council debates it, a reusable delivery subflow runs, and a bounded audit loop closes the route.",
+  "title": "Plan, review, deliver, and complete",
+  "description": "A plan owner frames the work, a review group compares options, a saved detailed flow delivers it, and one finite final review closes the route.",
   "version": "1.0.0",
   "parameters": [
     {

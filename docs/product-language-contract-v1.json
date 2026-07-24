@@ -436,7 +436,7 @@
       "id": "workbench-delivery-studio",
       "channel": "workbench",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/delivery_setup.py", "pmo-roadmap/lib/dw_pmo/program_studio.py"],
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/delivery_setup.py", "pmo-roadmap/lib/dw_pmo/program_studio.py", "pmo-roadmap/lib/dw_pmo/plan_authoring.py"],
       "entry_points": ["#/program-studio", "#/program-studio/<family>/<name>"],
       "boundary": "Task-shaped delivery and team decisions lead; lossless JSON, exact governed fields, compiler diagnostics, and fingerprints live under Technical details.",
       "owner_stories": ["WLA-27-03", "WLA-27-04", "WLA-27-05", "WLA-27-08"]
