@@ -1,11 +1,11 @@
 # Optional autonomous delivery programs
 
-**Status:** Phase 26 implementation through WLA-26-11. Planning, workflow,
-organization, deliberation, Studio, governed quality-decision, finite
-program-grant/replay, restart-safe conduction, exact integration/Git/roadmap
-delivery, and the canonical CLI/MCP/HTTP/Workbench control room are pinned by
-tests. The remaining Phase 26 work is the fresh-wheel autonomous multi-phase
-exit exam.
+**Status:** Phase 26 complete. Planning, workflow, organization,
+deliberation, Studio, governed quality-decision, finite program-grant/replay,
+restart-safe conduction, exact integration/Git/roadmap delivery, and the
+canonical CLI/MCP/HTTP/Workbench control room are pinned by tests and a
+fresh-wheel autonomous multi-phase exit exam with a separate dormant
+no-program consumer.
 **Product claim:** Delivery Workbench **can run** a governed delivery program
 across an explicit roadmap scope when tracked policy has compiled and an
 operator has issued a separate finite program grant. Delivery Workbench is not
@@ -1592,7 +1592,7 @@ tests for the default invariant, policy family, separation, verdict taxonomy,
 capabilities, refusals, and threat table, plus docs/canon/roadmap validation and
 a human read-through of one complete route.
 
-Phase completion additionally requires two distinct wheel-installed exams:
+Phase completion is proven by two distinct wheel-installed exams:
 
 1. **No-program regression:** install with no program config; exercise ordinary
    roadmap/status/next/step/evidence/gate/Workbench and one optional bounded
@@ -1610,6 +1610,17 @@ The deterministic fixture organization is the mandatory oracle. Any
 authenticated live-agent specimen is separately labeled and optional. Merge,
 release, deployment, publication, hosted authority, phone interaction, and
 cross-repository programs are not Phase 26 exit requirements.
+
+The delivered autonomous exam runs three stories across two phases after one
+continuous grant. It includes one independent fail→repair→pass route, a
+propose/critique/rebuttal council with preserved dissent and carried
+non-blocking debt, a full verifier-of-verifier audit, phase architect gates,
+evidence/integration/certification/commit/push, planted conductor and delivery
+crashes, exact ledger/SSE replay, and the contracted compiler/runtime/
+authority refusal matrix. Its Claude/Sonnet-like and
+pi/OpenRouter/Kimi-like seats are deterministic injected fixtures behind the
+shipped adapter contracts, not claims about live model behavior. The optional
+authenticated live specimen is recorded as not run.
 
 ## Settled decisions and deferred boundaries
 

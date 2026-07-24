@@ -36,10 +36,11 @@ independent roles, bounded councils, carried obligations, and architecture
 gates under a separate finite grant. Its restart-safe embedded conductor can
 now execute one replay-derived act at a time through agent, check, repair,
 council, meta-review, structural-loop, phase-architect, outward-signal, nudge,
-story/phase-transition, and scope-completion boundaries. Integration/Git/
-roadmap rails and public runtime controls remain fail-closed while Phase 26 is
-active; ordinary Delivery Workbench and bounded runs acquire none of this
-authority.
+story/phase-transition, and scope-completion boundaries. Its fresh-wheel exit
+exam proves governed delivery across three stories and two phases, planted
+crash recovery, exact refusal paths, and a separate dormant no-program
+consumer. Integration/Git/roadmap rails remain fail-closed; ordinary Delivery
+Workbench and bounded runs acquire none of this authority.
 
 ## Install
 
@@ -267,8 +268,9 @@ independent review panels, deliberative councils with explicit rule/decider/
 checkpoint authority, meta-verifiers, architects, replacement, and audit
 bounds. The runtime contract separately binds each resolved seat's logical
 profile, harness, provider/router, model, principal/workspace/session identity,
-and carried decision obligations; the later control-room slice will expose
-those live bindings. Design, Simulate, Validate, JSON, and Authority are
+and carried decision obligations; the live control room exposes those bindings,
+nested activity, verdicts, dissent, obligations, delivery, and remaining
+authority. Design, Simulate, Validate, JSON, and Authority are
 projections of the same Python compilers. Graph/config round trips preserve
 semantic and layout hashes, and
 save/delete uses one stale-safe preview→diff→fingerprint→apply boundary scoped
@@ -332,6 +334,13 @@ seats, active nested work, evidence/verdict/dissent/obligation gates, delivery,
 budgets, controls, and exact stop reason without exposing credentials or raw
 streams. Every mutation still requires a fresh matching exact token; bounded
 supervision is an explicit finite invocation, never a hidden scheduler.
+
+The installed-wheel exit exam composes the complete program path after one
+continuous grant: three stories across two phases, one independent
+reject/repair/pass, one bounded council with preserved dissent, a full
+meta-audit, architect gates, exact evidence/integration/certification/commit/
+push rails, and planted crash recovery. A second fresh consumer proves that
+no-program use creates none of this state or activity.
 
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 

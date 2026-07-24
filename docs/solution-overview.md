@@ -500,8 +500,8 @@ are in the
 
 Phase 25 delivered authority-free outward facts, bounded granted nudges,
 driver activity, durable requests, notifications, and replayable streams over
-the same finite run spine. Phase 26 now contracts an additional opt-in program
-layer above bounded runs: deterministic multi-phase selection, reusable
+the same finite run spine. Phase 26 delivers an additional opt-in program layer
+above bounded runs: deterministic multi-phase selection, reusable
 hierarchical workflows, logical delivery organizations, independent per-story
 verification, and now a replayable bounded council protocol for typed
 propose→critique→rebut→judge rounds, distinct-principal quorum, preserved
@@ -563,6 +563,15 @@ controls, and the replay-derived stop reason. Mutations accept only ids,
 bounded reasons, closed typed decisions, finite supervision ceilings, and
 fresh exact tokens; explicit bounded supervision returns every tick and never
 becomes an ambient scheduler.
+
+The Python-floor installed-wheel closeout composes the complete path after one
+continuous grant: three stories across two phases, an independently rejected
+and repaired candidate, a dissent-preserving bounded council, full meta-audit,
+architect gates, exact evidence/integration/certification/commit/push rails,
+planted crash recovery, and ledger/SSE parity. A separate fresh no-program
+consumer proves that installation and ordinary use create no program policy,
+store, process, observer, poller, stream, notification, network activity, or
+front-door detour.
 
 This does not redefine the product's ordinary mode. Vanilla Delivery Workbench
 remains complete with no program configured, and a Phase 24 score remains an

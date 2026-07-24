@@ -153,7 +153,7 @@ operator-only certification while the no-authority observer and every refusal
 remain explicit. Full detail:
 [Phase 25](./pmo-roadmap/pm/roadmap/work-log-automation/phase-25-outward-signals/final-summary.md).
 
-Phase 26 is active and remains separately opt-in. Its delivered slices compile
+Phase 26 is complete and remains separately opt-in. Its delivered slices compile
 multi-phase scope, finite hierarchical workflows, separated delivery
 organizations, bounded councils, governed verdicts, lossless Program Studio
 policy, and an exact finite program grant over the resolved
@@ -183,8 +183,16 @@ organization/execution/diversity projections, and typed intervention,
 disagreement, loss, obligation, budget, integration, and completion
 notifications. Supervision is an explicit finite invocation returning every
 tick; no read, Workbench open, or SSE connection starts a program or confers
-authority. Ordinary and bounded run modes remain unchanged. Current detail:
-[Phase 26](./pmo-roadmap/pm/roadmap/work-log-automation/phase-26-autonomous-delivery-programs/current-phase-status.md)
+authority. The Python-floor fresh-wheel exit exam now runs three stories over
+two phases after one continuous grant, including independent fail/repair/pass,
+a dissent-preserving council, meta-audit, architect gates, exact
+evidence/integration/certification/commit/push rails, planted crash recovery,
+ledger/SSE parity, and the complete refusal matrix. A separate fresh consumer
+proves ordinary and bounded-run behavior with no ambient program machinery.
+The deterministic Claude/Sonnet-like and pi/OpenRouter/Kimi-like fixtures use
+no credentials; the optional live-agent specimen remains honestly not run.
+Full detail:
+[Phase 26](./pmo-roadmap/pm/roadmap/work-log-automation/phase-26-autonomous-delivery-programs/final-summary.md)
 and the [program contract](./docs/programs.md).
 
 This section is release-ready input, not a publication claim: the package

@@ -444,6 +444,11 @@ canonical control-room view, preview-bound tick/supervision/request/control
 acts, verified ledger tail, and explicit bounded session streams. MCP and HTTP
 accept the same ids, bounded reasons, closed decisions, finite ceilings, and
 fresh tokens; Workbench starts live SSE only while an exact run route is open.
+The wheel-installed Phase 26 exam composes this path through three stories and
+two phases after one continuous grant, with independent repair, bounded
+council/meta/architect judgment, exact delivery and crash recovery. Its
+separate fresh no-program consumer proves the ordinary front door remains
+dormant and behavior-compatible.
 
 `run plan` is the separate orchestration consent preview: it binds the
 compiled score to current local Git/status/story facts, exact requested

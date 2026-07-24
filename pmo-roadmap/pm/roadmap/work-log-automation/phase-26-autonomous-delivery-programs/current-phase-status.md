@@ -100,7 +100,7 @@ acts.
   control room explaining why this story/team/workflow/verdict/state is current,
   what each agent is doing, which loops remain, and what authority/budget can
   still be consumed (WLA-26-11).
-- [ ] A Python-floor fresh-wheel exam runs a program over multiple phases and
+- [x] A Python-floor fresh-wheel exam runs a program over multiple phases and
   stories without human intervention: specialist implementation, per-story
   independent verification, one bounded debate, one repair loop, meta-verifier
   and master-architect participation, evidence/integration/commit/push, exact
@@ -123,47 +123,41 @@ acts.
 | WLA-26-09 | Conduct and recover hierarchical multi-phase programs | done | [story-09-conduct-and-recover-hierarchical-multi-phase-programs](./story-09-conduct-and-recover-hierarchical-multi-phase-programs.md) | [evidence-story-09](./evidence-story-09.md) |
 | WLA-26-10 | Integrate work and advance exact roadmap rails | done | [story-10-integrate-work-and-advance-exact-roadmap-rails](./story-10-integrate-work-and-advance-exact-roadmap-rails.md) | [evidence-story-10](./evidence-story-10.md) |
 | WLA-26-11 | Operate the autonomous organization across every surface | done | [story-11-operate-the-autonomous-organization-across-every-surface](./story-11-operate-the-autonomous-organization-across-every-surface.md) | [evidence-story-11](./evidence-story-11.md) |
-| WLA-26-12 | Prove a fully autonomous multi-phase program | backlog | [story-12-prove-a-fully-autonomous-multi-phase-program](./story-12-prove-a-fully-autonomous-multi-phase-program.md) | - |
+| WLA-26-12 | Prove a fully autonomous multi-phase program | done | [story-12-prove-a-fully-autonomous-multi-phase-program](./story-12-prove-a-fully-autonomous-multi-phase-program.md) | [evidence-story-12](./evidence-story-12.md) |
 
 ## Where we are
 
-Phase open 11/12. Optional planning, finite workflow hierarchy, independent
-organization topology, deliberation, visual authoring, governed quality,
-finite revocable program authority, the restart-safe conductor, and exact
-delivery rails and public program operations are evidence-backed.
+Phase complete 12/12. The packaged exit exam now proves the entire optional
+capability rather than isolated slices: one exact continuous grant selects and
+delivers three stories across two phases, repairs one independently rejected
+candidate, preserves dissent through a bounded council, records a carried
+non-blocking obligation, performs a full meta-audit and two architect gates,
+materializes evidence, integrates, certifies, commits, and fast-forward pushes
+each story without another human act.
 
-WLA-26-11 adds one shared `delivery-workbench-program-surface@1` projection
-over the existing planner, authority ledger, conductor, and delivery rails.
-CLI JSON, MCP `structuredContent`, HTTP `data`, Workbench bootstrap, SSE replay,
-and bounded stream reads use that projection instead of surface-specific
-policy or state. Exact previews bind the current grant, ledger head,
-generation, operation frontier, capability, budget, and parameters; apply
-rechecks the binding under the owning lock, so concurrent adapters cannot both
-consume the same stale frontier. `supervise` remains a finite explicit loop
-over the same one-act tick and stops at checkpoints, terminal state, no
-progress, budget, or duration.
+Nine planted conductor crash points and both the effect and receipt side of
+nine delivery boundaries replay to one exact result: three commits, three
+pushes, one repair, no duplicate governed/destructive acts, and an event stream
+equal to the verified ledger. Compiler, verdict, council, provider/roster,
+obligation, budget, grant, revocation, architect-veto, stale-roadmap, remote-
+divergence, dirty-worktree, and authority-free-stream red cases all refuse.
 
-The responsive Workbench control room explains roadmap intent, organization
-and execution provenance, councils and decision authority, nested runs,
-artifacts, mechanical facts versus governed verdicts, dissent, obligations,
-gates, delivery, remaining budgets/capabilities, exact next acts, refusals, and
-timeline. Program Studio projects portable execution profiles through locally
-resolved registered adapters and fingerprints without credentials or arbitrary
-commands. Live SSE starts only on an explicit run route; output streams require
-an explicit bounded open, while an empty inventory remains healthy and starts
-no store, process, poller, stream, or notification.
+CLI, MCP, HTTP, Workbench bootstrap, and SSE agree on the canonical program
+view. The browser matrix adds a real council-certified control room to active
+and revoked states. A second fresh consumer has no program policy/store,
+notification store, process, observer, stream, poller, network call, default
+route detour, or required setup, while ordinary status, next, step, gate,
+Workbench, and bounded-score simulation remain available.
 
-Typed notifications are derived only from verified program state and cover
-intervention, disagreement, decider/provider loss, architect veto, obligation
-state, budget exhaustion, integration refusal, and completion. A response is a
-closed approve/reject request document; transport is never authority and the
-fresh exact act token is minted only at the local apply boundary. Focused
-surface, conductor, browser, adapter, notification, and race tests plus the
-full two-floor/fresh-wheel closeout matrix are captured in
-[evidence-story-11](./evidence-story-11.md). WLA-26-12 is now the sole
-remaining story and owns the installed no-human multi-phase exit exam.
+The mandatory oracle uses deterministic fixture adapters behind exact
+Claude/Sonnet-like and pi/OpenRouter/Kimi-like execution bindings. It proves
+the shipped adapter and authority contracts without credentials or variable
+model output. The optional authenticated live-agent specimen is honestly
+`not-run`; Homebrew remains owned by its clean-machine macOS lane. Full proof
+is in [evidence-story-12](./evidence-story-12.md) and the
+[Phase 26 final summary](./final-summary.md).
 
-Continuation snapshot: [Phase 26 handover](./handover.md).
+Closeout snapshot: [Phase 26 handover](./handover.md).
 
 ## Active risks
 
@@ -417,6 +411,26 @@ Continuation snapshot: [Phase 26 handover](./handover.md).
   transport. Notifications are derived from verified content-safe state,
   responses use closed typed documents, and only the local exact-preview/apply
   boundary can mint and consume mutation authority - WLA-26-11.
+- 2026-07-23 - Make the wheel-installed deterministic organization the Phase
+  26 exit oracle. Exact Claude/Sonnet-like and pi/OpenRouter/Kimi-like adapter
+  bindings prove roster, scheduling, authority, recovery, and delivery without
+  credentials or variable model output; an authenticated live specimen stays
+  optional and is recorded as `not-run` when absent - WLA-26-12.
+- 2026-07-23 - Prove continuation into the next phase while parking the
+  subsequent release-decision story outside program scope. Multi-phase autonomy
+  is demonstrated without smuggling merge, release, deploy, or publication
+  authority into the grant - WLA-26-12.
+- 2026-07-23 - Make the autonomous exam a mandatory installed-wheel package
+  smoke gate and pair it with a separate fresh no-program consumer. Phase exit
+  fails if either governed autonomy or the dormant default invariant regresses
+  - WLA-26-12.
+- 2026-07-23 - Keep the exact architecture vocabulary in code and machine/
+  audit contracts, but make the next phase redesign the application language
+  around ordinary delivery work. Program setup, team/council configuration,
+  live operation, help, errors, and onboarding must explain what is happening,
+  who owns it, what passed review, what is blocked, what needs a decision, and
+  what happens next without asking users to speak in protocol terms - owner
+  direction for the next phase.
 
 ## Decisions deferred
 

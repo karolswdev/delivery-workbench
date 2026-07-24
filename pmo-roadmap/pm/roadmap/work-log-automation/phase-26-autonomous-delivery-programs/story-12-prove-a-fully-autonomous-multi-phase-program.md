@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 26
-- **Status:** backlog
+- **Status:** done
   <!-- status vocabulary: roadmap-builder.md §2.3 -->
 - **Depends on:** WLA-26-01 through WLA-26-11
 - **Unblocks:** landing/release decision
@@ -38,44 +38,44 @@ and activates no program machinery.
 
 ## Acceptance criteria
 
-- [ ] Advisory preview explains the complete multi-phase scope, organization,
+- [x] Advisory preview explains the complete multi-phase scope, organization,
   routes, finite worst-case cost and authority while producing zero starts or
   writes; the same compiled program then starts under one exact continuous
   grant.
-- [ ] Story A uses specialist implementation, fails its independent verifier,
+- [x] Story A uses specialist implementation, fails its independent verifier,
   follows one declared repair loop, passes a later fresh verdict, materializes
   evidence, integrates, certifies under recorded program provenance, commits,
   pushes and advances exactly once.
-- [ ] Story B runs a bounded propose/critique/rebuttal debate with preserved
+- [x] Story B runs a bounded propose/critique/rebuttal debate with preserved
   dissent across council seats resolved to at least two distinct provider/model
   families, reaches its declared rule or preassigned-decider result, emits one
   carried non-blocking technical-debt obligation, passes a verifier-of-verifier
   audit and a master-architect phase gate, then completes the phase and moves
   the authoritative roadmap into the next granted phase.
-- [ ] Story C in the next phase is selected and at least begins/completes its
+- [x] Story C in the next phase is selected and at least begins/completes its
   declared workflow without a new human act, proving the program—not a
   hand-scripted two-story test—owns continuation.
-- [ ] Crashes before/after child dispatch, debate round, verdict, evidence,
+- [x] Crashes before/after child dispatch, debate round, verdict, evidence,
   diff apply, status/phase transition, commit and push recover with zero
   duplicate agent/check/nudge/round/verdict/evidence/status/commit/push acts and
   exact ledger/stream replay.
-- [ ] Red cases prove unbounded loop, self-verifier, impossible separation,
+- [x] Red cases prove unbounded loop, self-verifier, impossible separation,
   forged mechanical fact, stale/dissenting verdict, quorum loss, architect veto,
   decider self-selection, missing/changed model fingerprint, undeclared provider
   fallback, open blocking obligation, no grant/capability, exhausted story/
   phase/round/integration budget, revoke, blocked/unknown agent, dirty/divergent
   remote, stale roadmap and authority-free stream all refuse without unintended
   side effects.
-- [ ] CLI/MCP/HTTP/Workbench projections agree; visual screenshots make the
+- [x] CLI/MCP/HTTP/Workbench projections agree; visual screenshots make the
   nested organization/loops/verdicts/authority legible; core tests pass on both
   Python floors; package/docs/canon/Telegram/Workbench/interop/range/history
   suites are green; Homebrew environment abstention is recorded honestly.
-- [ ] A separate fresh installed-wheel consumer with no program files or grant
+- [x] A separate fresh installed-wheel consumer with no program files or grant
   proves the established roadmap, briefing, deliberate-step, manual evidence,
   gate, bounded-score, and Workbench models remain behavior-compatible, while
   no program store, process, observer, notification, network call, default UI
   detour, or required setup appears.
-- [ ] Phase exit and final summary distinguish deterministic fixture proof from
+- [x] Phase exit and final summary distinguish deterministic fixture proof from
   any optional authenticated live model specimen; the fixture proves Claude-
   CLI/Sonnet-like and pi/OpenRouter/Kimi-like execution bindings without real
   credentials, while optional live specimens are named exactly and make no
@@ -84,7 +84,8 @@ and activates no program machinery.
 
 ## Test plan
 
-- **Unit:** n/a—focused units belong to WLA-26-01..11.
+- **Unit:** exact nested-untracked-path regression for isolated-worktree diff
+  collection, discovered by the installed-wheel exam.
 - **Integration:** installed-wheel autonomous-organization exam, separate
   installed-wheel no-program regression exam, the entire documented repository
   matrix, and pre-close `dw verify` history sweep.
@@ -96,3 +97,18 @@ and activates no program machinery.
 The exam must require no human act after the single program grant. If a manual
 checkpoint exists in the example policy, it belongs to a separate checkpointed
 red/contrast scenario—not the continuous green path.
+
+Completed by `tests/autonomous-program-packaged-exam.py`. The deterministic
+installed-wheel oracle drives three stories across two phases under one
+continuous grant, including independent fail→repair→pass verification, a
+bounded council with preserved dissent and full meta-audit, two architect
+gates, exact delivery commits/pushes, and planted conductor/delivery crashes.
+A parked release-decision story is deliberately outside the grant so the
+program proves phase continuation without claiming merge, release, deploy, or
+publication authority.
+
+The Claude/Sonnet-like and pi/OpenRouter/Kimi-like bindings are deterministic
+injected fixtures using the shipped adapter contracts; they use no credentials
+and make no live-model claim. The optional authenticated live specimen is
+recorded as `not-run`, not passed. A separate fresh no-program wheel consumer
+proves the ordinary product remains dormant and behavior-compatible.

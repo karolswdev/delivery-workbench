@@ -257,6 +257,13 @@ DW_STEP_CLI="$DW" "$SCRIPT_DIR/deliberate-step-loop.sh" \
 "$PY" "$SCRIPT_DIR/outward-loop-packaged-exam.py" --dw "$DW" \
   || fail "packaged outward-loop orchestration exam failed"
 
+# Phase-26 exit exam: a fourth fresh consumer receives one exact continuous
+# grant, advances a multi-phase roadmap through independent certification and
+# architecture gates, survives conductor and delivery-boundary crashes, pushes
+# each certified story, and proves every autonomous surface and refusal.
+"$PY" "$SCRIPT_DIR/autonomous-program-packaged-exam.py" --dw "$DW" \
+  || fail "packaged autonomous multi-phase program exam failed"
+
 # ── defer-to-repo rule ─────────────────────────────────────────────
 # Replace the vendored CLI with a marker; the global dw run inside the
 # repo must produce the marker (i.e. it exec'd the vendored copy).

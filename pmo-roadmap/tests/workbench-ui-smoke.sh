@@ -433,10 +433,11 @@ mv "$REPO/.githooks/pre-commit.off" "$REPO/.githooks/pre-commit"
 shot "overview-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
 shot "overview-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
 
-# A second exact fixture exercises the live control-room projection in both an
-# active nested-program state and a terminal authority stop. Reuse the
-# authority test builder so this browser proof cannot drift into a hand-written
-# fake ledger.
+# A second exact fixture exercises the live control-room projection in an
+# active nested-program state, a council-certified checkpoint with preserved
+# obligation and meta-audit, and a terminal authority stop. Reuse the conductor
+# test builder so this browser proof cannot drift into a hand-written fake
+# ledger.
 kill "$SERVER_PID" 2>/dev/null || true
 wait "$SERVER_PID" 2>/dev/null || true
 SERVER_PID=""
@@ -453,48 +454,74 @@ spec = importlib.util.spec_from_file_location("dw_ui_tests", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
-fixture = module.ProgramRunAuthorityTest(
-    "test_start_is_exact_immutable_idempotent_and_creates_only_local_authority"
+conductor = module.ProgramConductorTest(
+    "test_rule_council_meta_audits_and_ingests_durable_obligation"
 )
-fixture.setUp()
+conductor.setUp()
+authority = conductor.authority
 now = datetime.now(timezone.utc).replace(microsecond=0)
-fixture.issued_at = (now - timedelta(seconds=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
-fixture.started_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-fixture.expires_at = (now + timedelta(seconds=3500)).strftime("%Y-%m-%dT%H:%M:%SZ")
+authority.issued_at = (now - timedelta(seconds=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+authority.started_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+authority.expires_at = (now + timedelta(seconds=3500)).strftime("%Y-%m-%dT%H:%M:%SZ")
+conductor.now = (now + timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+conductor.configure_council_workflow(audit="full")
+
+obligation = {
+    "id": "document-council-fallback",
+    "kind": "technical-debt",
+    "statement": "Document the governed council fallback.",
+    "priority": "medium",
+    "blocking": False,
+    "accountable_role": "architect",
+    "target": "DM-1-02",
+    "citations": ["evidence:council-evidence"],
+    "acceptance": "The fallback has an evidence-backed contract.",
+    "state": "open",
+}
+certified = conductor.start()
+driver = conductor.core.ProgramFixtureDriver({
+    "council-judgment": {"obligations": [obligation]},
+})
+certified_result = conductor.core.supervise_program(
+    conductor.root, certified["run_id"], max_ticks=30,
+    driver_config=conductor.config, adapters={"fixture": driver},
+    now=conductor.now,
+)
+assert (certified_result["state"], certified_result["stop"]) == (
+    "story-certified", "checkpoint",
+)
 
 from dw_pmo.program_surface import (  # noqa: E402
     apply_program_act,
     build_program_act_preview,
 )
 
-_plan, active = fixture.start(
-    intent="ui-active", expires_at=fixture.expires_at
-)
+active = conductor.start()
 for _index in range(2):
-    preview = build_program_act_preview(fixture.root, active["run_id"], "tick")
+    preview = build_program_act_preview(authority.root, active["run_id"], "tick")
     apply_program_act(
-        fixture.root, active["run_id"], "tick", preview["act_token"]
+        authority.root, active["run_id"], "tick", preview["act_token"]
     )
 
-_plan, stopped = fixture.start(
-    intent="ui-revoked", expires_at=fixture.expires_at
-)
+stopped = conductor.start()
 reason = "Viewport fixture revocation."
 preview = build_program_act_preview(
-    fixture.root, stopped["run_id"], "revoke", reason=reason
+    authority.root, stopped["run_id"], "revoke", reason=reason
 )
 apply_program_act(
-    fixture.root, stopped["run_id"], "revoke", preview["act_token"],
+    authority.root, stopped["run_id"], "revoke", preview["act_token"],
     reason=reason,
 )
 Path(sys.argv[2]).write_text(
-    f"{fixture.root}\n{active['run_id']}\n{stopped['run_id']}\n",
+    f"{authority.root}\n{active['run_id']}\n{stopped['run_id']}\n"
+    f"{certified['run_id']}\n",
     encoding="utf-8",
 )
 PY
 PROGRAM_REPO="$(sed -n '1p' "$PROGRAM_FIXTURE_INFO")"
 PROGRAM_ACTIVE="$(sed -n '2p' "$PROGRAM_FIXTURE_INFO")"
 PROGRAM_REVOKED="$(sed -n '3p' "$PROGRAM_FIXTURE_INFO")"
+PROGRAM_CERTIFIED="$(sed -n '4p' "$PROGRAM_FIXTURE_INFO")"
 PORT=$(( (RANDOM % 2000) + 23001 ))
 "$PMO_DIR/bin/dw-workbench" --root "$PROGRAM_REPO" --port "$PORT" --quiet &
 SERVER_PID=$!
@@ -507,5 +534,7 @@ shot "program-active-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_ACT
 shot "program-active-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_ACTIVE"
 shot "program-revoked-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_REVOKED"
 shot "program-revoked-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_REVOKED"
+shot "program-certified-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
+shot "program-certified-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 
-echo "workbench-ui-smoke.sh: ok (58 viewport renders: 23 data views + empty Studio + program planning/active/revoked + attention + ambiguity, desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (60 viewport renders: 23 data views + empty Studio + program planning/active/certified/revoked + attention + ambiguity, desktop+mobile)"
