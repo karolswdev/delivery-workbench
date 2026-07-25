@@ -8746,6 +8746,59 @@ class OrchestrationConductorTest(unittest.TestCase):
         self.assertIn("budgets", first)
         self.assertIn("timeline", first)
         self.assertTrue(any(item["action"] == "tick" for item in first["controls"]))
+        progress = first["live_progress"]
+        self.assertEqual(
+            progress["kind"], "delivery-workbench-live-progress"
+        )
+        self.assertEqual(
+            [item["id"] for item in progress["answers"]],
+            [
+                "delivery", "team", "passed", "blocked", "decision",
+                "remaining-change-spend", "next",
+            ],
+        )
+        self.assertEqual(
+            progress["next_step"]["target"],
+            first["graph"]["scheduled_on_confirm"][0]["node_id"],
+        )
+        self.assertEqual(
+            progress["next_step"]["source"],
+            {
+                "model": "delivery-workbench-conductor-decision",
+                "path": "/scheduled/0",
+            },
+        )
+        self.assertEqual(progress["blocker"]["status"], "clear")
+        self.assertFalse(progress["progress"]["groups"]["blocked"])
+        self.assertEqual(
+            progress["technical_details"]["event_hashes"],
+            [item["event_hash"] for item in first["timeline"]],
+        )
+        self.assertEqual(
+            {
+                item["id"]: (item["used"], item["limit"])
+                for item in progress["limits"]["counts"]
+            },
+            {
+                key: (value["used"], value["limit"])
+                for key, value in first["budgets"].items()
+            },
+        )
+        self.assertEqual(
+            progress["limits"]["cost"]["status"], "not-recorded"
+        )
+        self.assertEqual(
+            set(progress["review"]),
+            {
+                "mechanical", "agent_judgment", "dissent", "repair",
+                "final_governed_decisions", "failed_evidence",
+            },
+        )
+        for key in (
+            "starts_work", "writes_events", "selects_next_work",
+            "decides_recovery", "grants_authority",
+        ):
+            self.assertFalse(progress[key], key)
 
         keys: set[str] = set()
         def collect(value):
@@ -8857,7 +8910,7 @@ class OrchestrationConductorTest(unittest.TestCase):
             app.index("/* ── optional Program / Workflow Studio")
         ]
         for token in (
-            "live run · ledger replay", "fail checks", "Artifact metadata and lineage",
+            "Live delivery", "Technical details", "fail checks", "Artifact metadata and lineage",
             "failure routes", "human checkpoints", "hash-chained receipts",
             "preview exact grant", "confirm this exact act", "no automatic continuation",
             "No certification, commit, elevation, retry", "close explicit stream",
@@ -13262,6 +13315,8 @@ class ProgramDeliveryTest(unittest.TestCase):
         )
 
     def test_two_story_commits_phase_transition_and_every_effect_recover(self):
+        from dw_pmo.program_surface import build_program_view
+
         projection, fixture = self.start_and_certify()
         run_id = projection["run_id"]
         initial_count = int(
@@ -13275,7 +13330,9 @@ class ProgramDeliveryTest(unittest.TestCase):
         # Crash after every durable effect, before its immutable receipt.
         # Each following tick must reconcile that exact effect and complete
         # the same ledger claim without a duplicate mutation/commit/push.
-        for expected in [item["kind"] for item in preview["actions"]]:
+        for action_index, expected in enumerate(
+            item["kind"] for item in preview["actions"]
+        ):
             def crash(name, detail, action_kind=expected):
                 if (
                     name == "after-effect"
@@ -13294,6 +13351,24 @@ class ProgramDeliveryTest(unittest.TestCase):
                     now=self.now,
                     boundary_hook=crash,
                 )
+            if action_index == 0:
+                recovering_view = build_program_view(
+                    self.root, run_id, now=self.now
+                )
+                recovering = recovering_view["live_progress"]
+                self.assertEqual(
+                    recovering["status"]["group"], "recovering"
+                )
+                self.assertEqual(
+                    recovering["next_step"]["kind"], "recovering"
+                )
+                self.assertGreater(
+                    recovering["recovery"]["active_work_tracked"], 0
+                )
+                self.assertIn(
+                    "not been declared lost or restarted",
+                    recovering["recovery"]["summary"],
+                )
             recovered = self.core.tick_program_delivery(
                 self.root,
                 run_id,
@@ -13309,6 +13384,19 @@ class ProgramDeliveryTest(unittest.TestCase):
         self.assertTrue(first["complete"])
         self.assertEqual(
             len(first["receipts"]), len(preview["actions"])
+        )
+        completed_view = build_program_view(
+            self.root, run_id, now=self.now
+        )
+        completed_recovery = completed_view["live_progress"]["recovery"]
+        self.assertEqual(completed_recovery["status"], "verified")
+        self.assertEqual(
+            completed_recovery["completed_delivery_actions_preserved"],
+            len(preview["actions"]),
+        )
+        self.assertIn(
+            "refuses conflicting duplicates",
+            completed_recovery["duplicate_protection"],
         )
         self.assertEqual(
             self.authority.fixture._git(
@@ -13733,6 +13821,173 @@ class ProgramDeliveryTest(unittest.TestCase):
         )
 
 
+class LiveProgressProjectionTest(unittest.TestCase):
+    """WLA-27-06: presentation groups facts but owns no run policy."""
+
+    def test_repair_and_recovery_use_only_canonical_run_facts(self):
+        from dw_pmo.live_progress import build_run_live_progress
+
+        projection = {
+            "run_id": "run-fixture",
+            "state": "active",
+            "story": {"id": "WLA-27-06", "title": "Explain progress"},
+            "project": "work-log-automation",
+            "dispatch_allowed": True,
+            "expired": False,
+            "expires_at": "2026-07-25T00:00:00Z",
+            "control_generation": 2,
+            "ledger_head": "sha256:" + "1" * 64,
+            "ledger_events": 4,
+            "active_claims": [],
+            "completed_claims": [],
+            "outstanding_requests": [],
+            "budgets": {
+                "max_concurrency": {"used": 0, "limit": 1},
+                "max_agent_starts": {"used": 1, "limit": 2},
+            },
+            "capabilities": ["repository-read", "repository-write"],
+            "permanent_exclusions": ["remote-admin"],
+        }
+        nodes = [{
+            "id": "repair-ux", "type": "agent", "activation": "failure",
+            "role": "repair", "state": "eligible", "attempt": 2,
+            "blocked_reason": None,
+        }]
+        decision = {
+            "scheduled": [{
+                "node_id": "repair-ux", "attempt": 2,
+                "kind": "claim", "reason": "failure-route",
+            }],
+            "eligible": [],
+            "blocked": [],
+            "action_needed": [],
+            "resolution_needed": [],
+            "terminal_needed": False,
+        }
+        repair = build_run_live_progress(
+            projection, decision, nodes, [], []
+        )
+        self.assertEqual(repair["status"]["group"], "repair")
+        self.assertEqual(repair["next_step"]["target"], "repair-ux")
+        self.assertEqual(repair["next_step"]["action"], "tick")
+        self.assertFalse(repair["selects_next_work"])
+        waiting = build_run_live_progress(
+            projection,
+            {**decision, "scheduled": []},
+            [{
+                **nodes[0],
+                "id": "review-after-work",
+                "activation": "success",
+                "role": "review",
+                "state": "blocked",
+                "blocked_reason": "dependencies",
+            }],
+            [],
+            [],
+        )
+        self.assertEqual(waiting["progress"]["groups"]["blocked"], [])
+        self.assertEqual(
+            waiting["progress"]["groups"]["waiting"][0][
+                "technical_ref"
+            ],
+            "review-after-work",
+        )
+
+        lost_projection = {
+            **projection,
+            "active_claims": [{
+                "claim_id": "claim-existing",
+                "node_id": "repair-ux",
+                "last_receipt": {"state": "lost"},
+            }],
+        }
+        recovering = build_run_live_progress(
+            lost_projection, {**decision, "scheduled": []},
+            [{**nodes[0], "state": "active"}], [], [],
+        )
+        self.assertEqual(recovering["status"]["group"], "recovering")
+        self.assertEqual(recovering["next_step"]["kind"], "wait")
+        self.assertEqual(
+            recovering["recovery"]["active_technical_refs"],
+            ["claim-existing"],
+        )
+        self.assertIn(
+            "not been declared lost or restarted",
+            recovering["recovery"]["summary"],
+        )
+
+        empty_decision = {
+            **decision,
+            "scheduled": [],
+            "action_needed": [],
+            "resolution_needed": [],
+        }
+        cases = [
+            (
+                {
+                    **projection,
+                    "active_claims": [{
+                        "claim_id": "claim-active",
+                        "node_id": "implement",
+                    }],
+                },
+                [{**nodes[0], "id": "implement", "activation": "success",
+                  "role": "implementation", "state": "active"}],
+                "active",
+            ),
+            (
+                {
+                    **projection,
+                    "state": "awaiting-approval",
+                    "outstanding_requests": [{
+                        "origin_node": "checkpoint",
+                        "response_schema": {
+                            "decision": ["approve", "reject"],
+                        },
+                    }],
+                },
+                [{**nodes[0], "id": "checkpoint", "type": "approval",
+                  "activation": "success", "state": "awaiting-approval"}],
+                "review",
+            ),
+            ({**projection, "state": "blocked"}, nodes, "blocked"),
+            ({**projection, "state": "revoked"}, nodes, "stopped"),
+            ({**projection, "state": "complete"}, nodes, "complete"),
+        ]
+        for facts, work, expected_group in cases:
+            with self.subTest(expected_group=expected_group):
+                view = build_run_live_progress(
+                    facts, empty_decision, work, [], []
+                )
+                self.assertEqual(
+                    view["status"]["group"], expected_group
+                )
+                if expected_group in {"stopped", "complete"}:
+                    self.assertIsNone(view["next_step"]["action"])
+                    self.assertEqual(
+                        view["next_step"]["kind"], expected_group
+                    )
+        terminal = build_run_live_progress(
+            {**projection, "state": "awaiting-certification"},
+            decision,
+            [{
+                **nodes[0],
+                "id": "handoff",
+                "type": "approval",
+                "activation": "success",
+                "state": "eligible",
+            }],
+            [],
+            [],
+        )
+        self.assertEqual(terminal["status"]["group"], "complete")
+        self.assertEqual(terminal["next_step"]["kind"], "complete")
+        self.assertIsNone(terminal["next_step"]["action"])
+        self.assertEqual(
+            terminal["next_step"]["source"]["path"], "/state"
+        )
+
+
 class ProgramSurfaceTest(unittest.TestCase):
     """WLA-26-11: one exact program control room across every adapter."""
 
@@ -13944,6 +14199,64 @@ class ProgramSurfaceTest(unittest.TestCase):
             self.assertNotIn(excluded, rendered)
         self.assertFalse(expected["starts_work"])
         self.assertFalse(expected["writes_events"])
+        progress = expected["live_progress"]
+        self.assertEqual(
+            progress["kind"], "delivery-workbench-live-progress"
+        )
+        self.assertEqual(
+            [item["id"] for item in progress["answers"]],
+            [
+                "delivery", "team", "passed", "blocked", "decision",
+                "remaining-change-spend", "next",
+            ],
+        )
+        if expected["current"]["next_action"] is not None:
+            self.assertEqual(
+                progress["next_step"]["action"],
+                expected["current"]["next_action"],
+            )
+            self.assertEqual(
+                progress["next_step"]["source"],
+                {
+                    "model": "delivery-workbench-program-frontier",
+                    "path": "/next_actions/0",
+                },
+            )
+        self.assertEqual(
+            set(progress["review"]),
+            {
+                "mechanical", "agent_judgment", "dissent", "repair",
+                "final_governed_decisions",
+            },
+        )
+        self.assertIn(
+            "refuses conflicting duplicates",
+            progress["recovery"]["duplicate_protection"],
+        )
+        self.assertEqual(progress["limits"]["cost"]["status"], "measured")
+        self.assertIn(
+            "model tokens used",
+            progress["limits"]["cost"]["summary"],
+        )
+        self.assertEqual(
+            {
+                item["id"]: (
+                    item["used"], item["limit"], item["remaining"],
+                )
+                for item in progress["limits"]["counts"]
+            },
+            {
+                key: (
+                    value["used"], value["limit"], value["remaining"],
+                )
+                for key, value in expected["budgets"].items()
+            },
+        )
+        for key in (
+            "starts_work", "writes_events", "selects_next_work",
+            "decides_recovery", "grants_authority",
+        ):
+            self.assertFalse(progress[key], key)
         team_review = expected["team_review"]
         self.assertEqual(
             team_review["kind"], "delivery-workbench-team-review"

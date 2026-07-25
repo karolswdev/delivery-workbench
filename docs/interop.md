@@ -92,6 +92,7 @@ is added when an external consumer asks for one.
 | Program Studio round trip | `delivery-workbench-program-studio-round-trip` v1 | `program_studio.graph_config_round_trip` |
 | Delivery-plan authoring view | `delivery-workbench-delivery-plan-authoring` v1 | `plan_authoring.build_delivery_plan_authoring` |
 | Team-and-review application view | `delivery-workbench-team-review` v1 | `team_review.build_team_review` / `team_review.build_live_team_review` |
+| Live delivery progress view | `delivery-workbench-live-progress` v1 | `live_progress.build_run_live_progress` / `live_progress.build_program_live_progress` |
 | Program Studio mutation preview | `delivery-workbench-program-studio-mutation-preview` v1 | `program_studio.studio_mutation_preview` |
 | Program Studio mutation result | `delivery-workbench-program-studio-mutation-result` v1 | `program_studio.apply_studio_mutation` |
 | Program frontier | `delivery-workbench-program-frontier` v1 | `program_conductor.derive_program_frontier` |
@@ -149,7 +150,7 @@ is added when an external consumer asks for one.
 | `dw program plan <program> --json` | `programs.build_program_plan` | without `--mode`: repository/roadmap snapshot, selected story, workflow/team/roles, policy/roster hashes, and complete derivation; pure |
 | `dw program plan <program> --mode <mode> … --json` | `program_run.build_program_start_plan` | pure exact finite-grant preview with a single-use `start_token`; creates no grant or child |
 | `dw program start --plan <file> --expect <token> --approve --json` | `program_surface.start_program_by_id` | rebuilds the reviewed plan from its ids and bounded scalar request, then issues exactly one local grant; starts no child |
-| `dw program show <run> --json` | `program_surface.build_program_view` | canonical content-safe control-room projection: why/current lineage, resolved organization, activity, quality/dissent, gates, obligations, deliveries, budgets, controls, and verified timeline |
+| `dw program show <run> --json` | `program_surface.build_program_view` | canonical content-safe control-room projection with the shared seven-question live-progress view plus exact lineage, organization, activity, quality/dissent, gates, obligations, deliveries, limits, controls, and verified timeline |
 | `dw program preview <run> <action> --json` | `program_surface.build_program_act_preview` | pure action/closed-parameters/ledger-bound preview and exact `act_token` |
 | `dw program tick <run> --expect <act-token> --json` | `program_surface.apply_program_act` | exactly one conductor, delivery-plan, or delivery tick through the existing grant and ledger |
 | `dw program supervise <run> --max-ticks <n> --max-seconds <s> --expect <act-token> --json` | `program_surface.apply_program_act` | explicit finite repetition of the same public tick; returns every tick and stops on no-progress, checkpoint, refusal, budget, duration, or terminal state |
@@ -168,7 +169,7 @@ is added when an external consumer asks for one.
 | `dw run plan <score> --project <slug> --story <id> --json` | `orchestration_run.build_run_plan` | pure exact score/repository/status/story/capability/budget/expiry binding plus single-use start token |
 | `dw run start --plan <file> --expect <token> --approve --operator <id> --json` | `orchestration_run.start_run` | immutable local grant and initial hash-chained projection; no node dispatch |
 | `dw run list|show [<run>] --json` | `orchestration_run.run_inventory/replay_run` | authoritative ledger-derived projections, including outstanding requests and their history; disposable cache is ignored |
-| `dw run view <run> --json` | `orchestration_surface.build_run_view` | pure content-safe live graph, attempts, sessions/checks, artifact lineage, budgets, routes, outstanding requests, inspect-only decision lineage, controls, and ledger |
+| `dw run view <run> --json` | `orchestration_surface.build_run_view` | pure content-safe seven-question live-progress view plus exact graph, attempts, sessions/checks, artifact lineage, limits, routes, outstanding requests, inspect-only decision lineage, controls, and ledger |
 | `dw run preview <run> <act> --json` | `orchestration_surface.build_run_act_preview` | pure action+parameters+correlation+ledger-bound consent document and exact `act_token` |
 | `dw run pause|resume|revoke|cancel <run> --expect <act-token> --json` | `orchestration_surface.apply_run_act` | one exact preview-confirm lifecycle transition that immediately gates future dispatch |
 | `dw run tick <run> --expect <act-token> --json` | `orchestration_surface.apply_run_act` → `orchestration_conductor.tick_run` | one explicitly confirmed replay/reconcile/route/schedule boundary with exact receipts and no hidden continuation |
@@ -239,7 +240,7 @@ or provider argv.
 | `POST /api/program-studio/preview` | `program_studio.build_studio_mutation_plan` | one selected policy save/delete diff, compiler projections and stale fingerprint; no grant/run/agent/check/roadmap effect |
 | `POST /api/program-studio/apply` | `program_studio.apply_studio_mutation` | one fresh direct-contained policy save/delete with read-back validation and explicit false runtime effects |
 | `GET /api/programs` | `program_surface.program_summary_inventory` | healthy empty policy/run inventory in ordinary mode, otherwise canonical content-safe run summaries; pure |
-| `GET /api/programs/<run>` / `GET /api/programs/<run>/view` | `program_surface.build_program_view` | the same canonical control-room document returned by CLI and MCP |
+| `GET /api/programs/<run>` / `GET /api/programs/<run>/view` | `program_surface.build_program_view` | the same canonical control-room document returned by CLI and MCP, including the shared live-progress application view |
 | `GET /api/programs/<run>/act/<action>` / `POST /api/programs/preview` | `program_surface.build_program_act_preview` | pure exact action preview; POST carries bounded reason/decision/request/ceiling fields outside the URL |
 | `GET /api/programs/<run>/tail?after=N&limit=N` | `program_surface.tail_program_events` | stamped bounded verified ledger suffix; no token or mutation authority |
 | `GET /api/programs/<run>/streams/<session>/<stdout\|stderr>` | `program_surface.read_program_stream` | one explicit independently bounded session log; never included in list/view/event payloads |

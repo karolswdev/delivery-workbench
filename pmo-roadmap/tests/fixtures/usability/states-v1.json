@@ -115,14 +115,35 @@
       "route": "#/orchestration/research-build-review",
       "capture_id": "orchestration-run-active",
       "canonical_models": [
+        "delivery-workbench-live-progress",
         "delivery-workbench-run-view",
+        "delivery-workbench-conductor-decision",
         "delivery-workbench-run-act-preview"
       ],
       "fact_paths": [
-        "view.state",
-        "view.nodes",
-        "view.budgets",
-        "view.controls"
+        "view.live_progress.answers",
+        "view.live_progress.progress",
+        "view.live_progress.next_step",
+        "view.live_progress.recovery",
+        "view.graph.scheduled_on_confirm"
+      ]
+    },
+    {
+      "id": "bounded-stale",
+      "title": "Last verified bounded delivery after disconnect",
+      "capability_tier": "bounded-run",
+      "route": "?orchview=run&liveconnection=stale#/orchestration/research-build-review",
+      "capture_id": "orchestration-run-stale",
+      "canonical_models": [
+        "delivery-workbench-live-progress",
+        "delivery-workbench-run-view",
+        "delivery-workbench-run-event"
+      ],
+      "fact_paths": [
+        "view.live_progress.recovery",
+        "view.live_progress.activity",
+        "view.ledger_head",
+        "view.timeline"
       ]
     },
     {
@@ -132,14 +153,16 @@
       "route": "#/orchestration/repair-visual",
       "capture_id": "orchestration-run-repair",
       "canonical_models": [
+        "delivery-workbench-live-progress",
         "delivery-workbench-run-view",
         "delivery-workbench-check-receipt",
         "delivery-workbench-run-act-preview"
       ],
       "fact_paths": [
-        "view.nodes",
+        "view.live_progress.status",
+        "view.live_progress.review.repair",
+        "view.live_progress.next_step",
         "view.routes",
-        "view.controls",
         "check.outcome"
       ]
     },
@@ -150,13 +173,15 @@
       "route": "#/orchestration/terminal-visual",
       "capture_id": "orchestration-run-terminal",
       "canonical_models": [
+        "delivery-workbench-live-progress",
         "delivery-workbench-run-view",
         "delivery-workbench-decision",
         "delivery-workbench-run-act-preview"
       ],
       "fact_paths": [
+        "view.live_progress.decision",
+        "view.live_progress.next_step",
         "view.outstanding_request",
-        "view.controls",
         "decision.options",
         "decision.status"
       ]
@@ -168,15 +193,17 @@
       "route": "#/programs/{run_id}",
       "capture_id": "program-active",
       "canonical_models": [
+        "delivery-workbench-live-progress",
         "delivery-workbench-program-view",
         "delivery-workbench-program-frontier",
         "delivery-workbench-program-grant",
         "delivery-workbench-program-act-preview"
       ],
       "fact_paths": [
-        "view.current",
-        "view.budgets",
-        "view.controls",
+        "view.live_progress.answers",
+        "view.live_progress.progress",
+        "view.live_progress.next_step",
+        "view.live_progress.recovery",
         "frontier.next_actions"
       ]
     },
@@ -187,12 +214,14 @@
       "route": "#/programs/{run_id}",
       "capture_id": "program-revoked",
       "canonical_models": [
+        "delivery-workbench-live-progress",
         "delivery-workbench-program-view",
         "delivery-workbench-program-frontier"
       ],
       "fact_paths": [
+        "view.live_progress.status",
+        "view.live_progress.next_step",
         "view.current.stop",
-        "view.controls",
         "frontier.stop",
         "frontier.next_actions"
       ]
@@ -204,13 +233,16 @@
       "route": "#/programs/{run_id}",
       "capture_id": "program-certified",
       "canonical_models": [
+        "delivery-workbench-live-progress",
         "delivery-workbench-program-view",
         "delivery-workbench-quality-gate",
         "delivery-workbench-verdict",
         "delivery-workbench-program-frontier"
       ],
       "fact_paths": [
-        "view.quality",
+        "view.live_progress.progress",
+        "view.live_progress.review",
+        "view.live_progress.next_step",
         "view.deliveries",
         "view.current.next_action",
         "frontier.next_actions"
@@ -237,18 +269,19 @@
       "id": "run-technical",
       "title": "Exact bounded-delivery document",
       "capability_tier": "bounded-run",
-      "route": "?orchview=json#/orchestration/research-build-review",
-      "capture_id": "orchestration-json",
+      "route": "?orchview=run&livetechnical=1#/orchestration/research-build-review",
+      "capture_id": "orchestration-run-technical",
       "canonical_models": [
+        "delivery-workbench-live-progress",
         "delivery-workbench-orchestration",
         "delivery-workbench-compiled-orchestration",
         "delivery-workbench-run-view"
       ],
       "fact_paths": [
-        "orchestration.nodes",
-        "compiled.semantic_hash",
-        "compiled.document_hash",
-        "view.ledger"
+        "view.live_progress.technical_details",
+        "view.graph.nodes",
+        "view.controls",
+        "view.timeline"
       ]
     },
     {
@@ -296,14 +329,16 @@
       "id": "program-technical",
       "title": "Exact optional-program state",
       "capability_tier": "program",
-      "route": "#/programs/{run_id}",
-      "capture_id": "program-active",
+      "route": "?livetechnical=1#/programs/{run_id}",
+      "capture_id": "program-technical",
       "canonical_models": [
+        "delivery-workbench-live-progress",
         "delivery-workbench-program-view",
         "delivery-workbench-program-projection",
         "delivery-workbench-program-event"
       ],
       "fact_paths": [
+        "view.live_progress.technical_details",
         "view.timeline",
         "view.ledger",
         "projection.state",

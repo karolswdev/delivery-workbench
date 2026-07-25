@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-24 (Phase 27 complete 5/10: product language, whole-task journeys, delivery-shaped setup, task-shaped plan/work-flow authoring, and understandable team/review design are evidence-backed).
-**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (active, 5/10).
-**Status:** Organization authoring now answers five plain responsibility and review questions over one shared design/live projection. It distinguishes policy-ready candidates from runtime-proven identity, work-area, and session separation; advanced decision groups and exact provenance stay under Technical details. Targeted edits preserve the source and references, invalid or unknown content refuses safely, and all view paths remain pure. WLA-27-06 live progress and next-step explanation is next; landing and release remain separate decisions.
+**Last updated:** 2026-07-24 (Phase 27 complete 6/10: live bounded-run and program views now explain progress, proof, recovery, and the canonical next step).
+**Current phase:** [Phase 27 - Usability Improvements](./phase-27-usability-improvements/) (active, 6/10).
+**Status:** Live delivery now answers seven ordinary operator questions from one pure bounded-run/program projection. Understandable states, evidence classes, remaining permission and measured cost, readable activity, stale/recovery truth, and one canonical next step lead the view; exact identities, controls, provenance, and ordered hash-linked events remain one click away under Technical details. WLA-27-07 bounded actions is next; landing and release remain separate decisions.
 
 ## Vision
 
