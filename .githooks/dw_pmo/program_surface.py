@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import time
 
+from .live_progress import build_program_live_progress
 from .model import DwError
 from .orchestration import canonical_json
 from .program_conductor import (
@@ -1081,6 +1082,30 @@ def build_program_view(
         None,
     )
     deliveries = _delivery_documents(root, run_id, now=now)
+    integrations = [
+        receipt
+        for delivery in deliveries
+        for receipt in delivery["receipts"]
+        if receipt["action_kind"] in {
+            "integration", "commit", "push", "story-complete",
+            "phase-advance", "story-start",
+        }
+    ]
+    live_progress = build_program_live_progress(
+        authority,
+        frontier,
+        selection=selection if isinstance(selection, dict) else None,
+        next_action=next_action,
+        roles=roles,
+        receipts=receipts,
+        artifacts=artifacts,
+        verdicts=verdicts,
+        decisions=decisions,
+        dissent=dissent,
+        gates=gates,
+        deliveries=deliveries,
+        integrations=integrations,
+    )
     timeline = tail_program_events(
         root, run_id, after_seq=0, limit=_MAX_TAIL_EVENTS
     )["events"]
@@ -1117,6 +1142,7 @@ def build_program_view(
         "expires_at": authority["expires_at"],
         "expired": authority["expired"],
         "scope": authority["scope"],
+        "live_progress": live_progress,
         "current": {
             "selection": selection,
             "lineage": frontier.get("lineage"),
@@ -1195,15 +1221,7 @@ def build_program_view(
             if item["action_kind"] == "child-grant"
         ],
         "deliveries": deliveries,
-        "integrations": [
-            receipt
-            for delivery in deliveries
-            for receipt in delivery["receipts"]
-            if receipt["action_kind"] in {
-                "integration", "commit", "push", "story-complete",
-                "phase-advance", "story-start",
-            }
-        ],
+        "integrations": integrations,
         "obligations": {
             "all": authority["obligations"],
             "open": authority["open_obligations"],

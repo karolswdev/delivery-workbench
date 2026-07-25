@@ -1491,6 +1491,40 @@ direct-contained to one selected tracked JSON policy and
 returns explicit false facts for grant, run, agent, check, observer,
 notification, integration, roadmap, and background-polling effects.
 
+### Live progress and exact inspection
+
+The bounded Run view and program control room both attach
+`delivery-workbench-live-progress@1`. This pure application view answers the
+same seven operator questions: delivery scope, doing and reviewing ownership,
+passed work, blockers, decision ownership, remaining permission/cost, and one
+next step. Progress uses the declared work/story denominator; activity or
+event volume is never presented as completed work.
+
+The projection receives already replayed and validated facts. For a bounded
+run, its executable next step is exactly the first
+`schedule_decision(...).scheduled` item, an existing active claim, an
+outstanding request, or the canonical terminal/stop fact. For a program, it is
+exactly the public first `derive_program_frontier(...).next_actions` item, an
+existing reconciliation claim, an outstanding request, or the canonical
+terminal/stop fact. The builder reports `selects_next_work: false`,
+`decides_recovery: false`, and `grants_authority: false`; browser renderers do
+not contain a fallback scheduler.
+
+Mechanical checks, agent judgment, dissent, repair, and final governed
+decisions remain separate sections. Readable activity groups related work and
+outcomes, while **Technical details** retains exact node/action identities,
+assigned provenance, controls, streams, budgets, ordered hash-linked events,
+and the full audit timeline.
+
+Every application read replays the authoritative history first. An unresolved
+claim renders as active or recovering rather than as lost or restarted.
+Program delivery frontiers are included only after their replay has validated
+one outcome per action; identical retry is idempotent and conflicting duplicate
+receipts refuse. If browser SSE disconnects, Workbench retains the last
+verified view, labels it stale, and offers an explicit refresh that replays the
+history again. A disconnected snapshot never claims that completed work
+vanished or that active work ran twice.
+
 The Authority and Organization inspectors also project an execution contract:
 portable logical profiles, exact or closed-fallback execution ports, council
 seat mandates and perspectives, rule-versus-judge/checkpoint authority,

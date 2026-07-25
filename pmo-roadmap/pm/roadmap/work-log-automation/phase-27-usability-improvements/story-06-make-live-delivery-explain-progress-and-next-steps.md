@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 27
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-27-03, WLA-27-04, WLA-27-05
 - **Unblocks:** WLA-27-07 through WLA-27-10
 - **Owner:** unassigned
@@ -32,22 +32,22 @@ handoff and derives every answer from the existing canonical state.
 
 ## Acceptance criteria
 
-- [ ] The default live view directly answers what is being delivered, who is
+- [x] The default live view directly answers what is being delivered, who is
   doing and reviewing it, what passed, what is blocked, who must decide, what
   permission/cost remains, and what happens next.
-- [ ] Work is grouped by understandable delivery state with exact story/run
+- [x] Work is grouped by understandable delivery state with exact story/run
   identity available on demand; waiting, idle, complete, stopped, revoked,
   failed, and recovering states cannot be confused.
-- [ ] Review outcomes distinguish mechanical checks, agent judgment, dissent,
+- [x] Review outcomes distinguish mechanical checks, agent judgment, dissent,
   repair, and final governed decisions without overstating what any one result
   proves.
-- [ ] The displayed next step and blocker are projections of canonical
+- [x] The displayed next step and blocker are projections of canonical
   conductor/status facts; the renderer contains no alternate selection,
   authority, or recovery policy.
-- [ ] A readable activity view groups related work and outcomes, while the
+- [x] A readable activity view groups related work and outcomes, while the
   exact ordered/hash-linked events and provenance remain accessible in the
   technical/audit view.
-- [ ] Disconnect, replay, crash recovery, duplicate delivery receipts, and
+- [x] Disconnect, replay, crash recovery, duplicate delivery receipts, and
   stale snapshots produce honest state and recovery guidance without
   suggesting that work was lost or repeated when the ledger proves otherwise.
 

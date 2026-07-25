@@ -164,7 +164,7 @@
     {
       "journey_id": "preflight",
       "starting_capture": "orchestration-validate",
-      "technical_capture": "orchestration-json",
+      "technical_capture": "orchestration-run-technical",
       "steps": [
         "Select an orchestration score.",
         "Open Validate.",
@@ -204,7 +204,7 @@
     {
       "journey_id": "live-progress",
       "starting_capture": "orchestration-run-active",
-      "technical_capture": "orchestration-json",
+      "technical_capture": "orchestration-run-technical",
       "steps": [
         "Open the Run view.",
         "Identify the selected run from its generated identifier.",
@@ -242,7 +242,7 @@
     {
       "journey_id": "failed-review-and-repair",
       "starting_capture": "orchestration-run-repair",
-      "technical_capture": "orchestration-json",
+      "technical_capture": "orchestration-run-technical",
       "steps": [
         "Open the repair run.",
         "Interpret active state and completed attempt counts.",
@@ -280,7 +280,7 @@
     {
       "journey_id": "blocked-human-decision",
       "starting_capture": "orchestration-run-terminal",
-      "technical_capture": "orchestration-json",
+      "technical_capture": "orchestration-run-technical",
       "steps": [
         "Open the terminal run.",
         "Interpret awaiting-certification.",
@@ -318,7 +318,7 @@
     {
       "journey_id": "remaining-permission-and-cost",
       "starting_capture": "program-active",
-      "technical_capture": "program-active",
+      "technical_capture": "program-technical",
       "steps": [
         "Open the active program.",
         "Identify the run from its generated identifier.",
@@ -357,7 +357,7 @@
     {
       "journey_id": "stop-and-revoke",
       "starting_capture": "program-active",
-      "technical_capture": "program-active",
+      "technical_capture": "program-technical",
       "steps": [
         "Open the active program.",
         "Find program controls below the primary state.",
@@ -394,8 +394,8 @@
     },
     {
       "journey_id": "crash-recovery",
-      "starting_capture": "orchestration-run-active",
-      "technical_capture": "orchestration-json",
+      "starting_capture": "orchestration-run-stale",
+      "technical_capture": "orchestration-run-technical",
       "steps": [
         "Reopen the Workbench after interruption.",
         "Select the generated run.",
@@ -433,7 +433,7 @@
     {
       "journey_id": "completion",
       "starting_capture": "program-certified",
-      "technical_capture": "program-active",
+      "technical_capture": "program-technical",
       "steps": [
         "Open the certified program capture.",
         "Interpret the running status.",
@@ -473,7 +473,7 @@
     {
       "journey_id": "technical-inspection",
       "starting_capture": "orchestration-run-active",
-      "technical_capture": "orchestration-json",
+      "technical_capture": "orchestration-run-technical",
       "steps": [
         "Open the live delivery.",
         "Choose the JSON tab.",

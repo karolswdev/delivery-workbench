@@ -20,6 +20,8 @@ function esc(s) {
  * that capture at the window load event see fully rendered data. Not
  * for interactive use. */
 const SNAPSHOT_MODE = new URLSearchParams(location.search).has("snapshot");
+const SNAPSHOT_LIVE_STATE = new URLSearchParams(location.search).get("liveconnection");
+const LIVE_TECHNICAL_OPEN = new URLSearchParams(location.search).has("livetechnical");
 
 function syncGet(path) {
   const xhr = new XMLHttpRequest();
@@ -1178,6 +1180,7 @@ let orchState = {
   preview: null, inventory: [], validationTimer: null, jsonDraft: "",
   runInventory: [], runs: [], runId: "", runView: null, runLoading: false,
   runError: "", runPlan: null, runAct: null, runStream: null,
+  runConnection: { status: SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "checking" },
   grantDraft: { project: "", story: "", operator: "", minutes: 60 },
   controlReason: "",
 };
@@ -1618,13 +1621,118 @@ function runEmptyHtml() {
     <form id="run-grant-form" class="run-grant-form"><label>project slug<input name="project" required value="${esc(draft.project || orchState.score.project || "")}"></label><label>in-progress story id<input name="story" required value="${esc(draft.story)}" placeholder="WLA-24-07"></label><label>operator identity<input name="operator" required value="${esc(draft.operator)}" placeholder="human or accountable agent"></label><label>grant minutes<input name="minutes" type="number" min="1" max="1440" value="${esc(draft.minutes || 60)}"></label><button type="submit">preview exact grant</button></form>${grantPreviewHtml(orchState.runPlan)}</div>`;
 }
 
+function liveConnectionHtml(connection, recovery) {
+  const state = connection?.status || "checking";
+  if (state === "stale") {
+    return `<div class="live-connection stale" role="status"><strong>Live updates interrupted</strong><p>This is the last verified view. Completed work remains recorded; “Check for updates” replays the saved history before showing anything newer. No work is declared lost or repeated.</p></div>`;
+  }
+  const copy = state === "live" ? "Live updates on"
+    : state === "verified" ? "Saved history checked"
+      : state === "manual" ? "Check for updates manually"
+        : "Checking for updates";
+  return `<div class="live-connection ${esc(state)}" role="status">${badge(copy, state === "live" || state === "verified" ? "ok" : "")}<span>${esc(recovery?.summary || "The saved history was checked before this view was built.")}</span></div>`;
+}
+
+function liveStateBadge(progress) {
+  const group = progress?.status?.group || "waiting";
+  const cls = ["active", "complete"].includes(group) ? "ok"
+    : ["blocked", "stopped"].includes(group) ? "issue"
+      : ["review", "repair", "recovering", "waiting"].includes(group) ? "warn" : "";
+  return badge(progress?.status?.label || group, cls);
+}
+
+function liveAnswerGrid(progress) {
+  return `<section class="live-answers" aria-label="Delivery questions">${(progress.answers || []).map((item) => `<article data-answer="${esc(item.id)}" class="status-${esc(item.status)}"><span>${esc(item.question)}</span><p>${esc(item.answer)}</p></article>`).join("")}</section>`;
+}
+
+function liveProgressGroups(progress) {
+  const model = progress.progress || {};
+  const groups = model.groups || {};
+  const items = Array.isArray(model.items) ? model.items : Object.entries(groups).flatMap(([status, values]) => (values || []).map((item) => ({ ...item, status })));
+  const ordered = ["active", "review", "repair", "recovering", "blocked", "waiting", "complete"];
+  return `<section class="live-panel live-scope"><div class="live-panel-head"><div><span>Scope and progress</span><strong>${esc(model.completed || 0)} of ${esc(model.known_total || 0)} declared work items complete</strong></div><b>${esc(model.percent || 0)}%</b></div>
+    <div class="live-progress-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${esc(model.percent || 0)}"><i style="width:${Math.max(0, Math.min(100, Number(model.percent || 0)))}%"></i></div>
+    <div class="live-work-groups">${ordered.map((status) => {
+      const matching = items.filter((item) => item.status === status);
+      if (!matching.length) return "";
+      return `<section class="state-${esc(status)}"><h3>${esc(status)} <small>${esc(matching.length)}</small></h3><ul>${matching.map((item) => `<li><strong>${esc(item.title)}</strong>${item.summary ? `<span>${esc(item.summary)}</span>` : ""}</li>`).join("")}</ul></section>`;
+    }).join("")}</div>
+  </section>`;
+}
+
+function livePeopleHtml(progress) {
+  const team = progress.team || {};
+  const people = (title, items, empty) => `<section><h3>${esc(title)}</h3>${(items || []).map((item) => `<article><strong>${esc(item.name)}</strong><span>${esc(item.responsibility || item.assignment || "")}</span>${item.status ? badge(item.status, item.status === "active" ? "ok" : "") : ""}</article>`).join("") || `<p>${esc(empty)}</p>`}</section>`;
+  return `<section class="live-panel live-team"><div class="live-panel-head"><div><span>Team and review</span><strong>Doing, checking, and deciding stay separate</strong></div></div><p>${esc(team.summary || "")}</p><div>${people("Doing the work", team.owners, "No work owner is assigned.")}${people("Independent review", team.reviewers, "No independent reviewer is assigned.")}${(team.decision_owners || []).length ? people("Decision owners", team.decision_owners, "") : ""}</div>${team.identity_note ? `<small>${esc(team.identity_note)}</small>` : ""}</section>`;
+}
+
+function liveReviewHtml(progress) {
+  const review = progress.review || {};
+  const sections = [
+    ["Mechanical checks", review.mechanical],
+    ["Agent judgment", review.agent_judgment],
+    ["Dissent", review.dissent],
+    ["Repair", review.repair],
+    ["Final governed decisions", review.final_governed_decisions],
+  ];
+  return `<section class="live-panel live-review"><div class="live-panel-head"><div><span>Evidence and decisions</span><strong>Different kinds of proof are shown separately</strong></div></div><div>${sections.map(([title, items]) => `<section><h3>${esc(title)}</h3>${(items || []).map((item) => `<article><strong>${esc(item.title)}</strong>${badge(item.status || item.exact_state || "recorded", ["passed", "pass", "succeeded", "approved", "complete"].includes(String(item.status || item.exact_state)) ? "ok" : "")}</article>`).join("") || '<p>None recorded.</p>'}</section>`).join("")}</div></section>`;
+}
+
+function liveNextHtml(progress) {
+  const next = progress.next_step || {};
+  const blocker = progress.blocker || {};
+  const decision = progress.decision || {};
+  return `<section class="live-next state-${esc(next.kind || "wait")}"><div><span>What happens next?</span><h2>${esc(next.label || "Wait")}</h2><p>${esc(next.detail || "")}</p></div><div class="live-next-facts"><article class="${blocker.status === "blocked" ? "issue" : "clear"}"><span>Blocked</span><strong>${esc(blocker.status === "blocked" ? "Yes" : "No")}</strong><p>${esc(blocker.summary || "")}</p></article><article class="${decision.status === "needed" ? "warn" : "clear"}"><span>Decision needed</span><strong>${esc(decision.status === "needed" ? "Yes" : "No")}</strong><p>${esc(decision.summary || "")}</p></article></div><small>The next step is copied from the saved delivery state. This page does not choose another one.</small></section>`;
+}
+
+function liveLimitsHtml(progress) {
+  const limits = progress.limits || {};
+  const permission = limits.permission || {};
+  const cost = limits.cost || {};
+  const primaryCounts = (limits.counts || []).filter((item) => item.primary !== false);
+  return `<section class="live-panel live-limits"><div class="live-panel-head"><div><span>Remaining permission and cost</span><strong>What this delivery may still use</strong></div></div><div class="live-limit-summary"><article><span>Change permission</span><strong>${esc(permission.status || "unknown")}</strong><p>${esc(permission.summary || "")}</p>${(permission.will_not_use || []).length ? `<small>Will not use: ${esc(permission.will_not_use.join(", "))}</small>` : ""}</article><article><span>Money cost</span><strong>${esc(cost.status || "unknown")}</strong><p>${esc(cost.summary || "")}</p></article></div><div class="live-limit-counts">${primaryCounts.map((item) => `<article class="${item.status === "none-left" ? "empty" : ""}"><span>${esc(item.label)}</span><strong>${esc(item.remaining)} ${esc(item.unit)} left</strong><small>${esc(item.used)} used of ${esc(item.limit)}</small></article>`).join("")}</div>${limits.expires_at ? `<p class="live-expiry">Permission ends ${esc(limits.expires_at)}.</p>` : ""}</section>`;
+}
+
+function liveActivityHtml(progress) {
+  const activity = progress.activity || [];
+  return `<section class="live-panel live-activity"><div class="live-panel-head"><div><span>Readable activity</span><strong>Related work and outcomes grouped together</strong></div>${badge(`${activity.length} groups`)}</div><ol>${activity.map((item) => `<li class="state-${esc(item.status)}"><div><strong>${esc(item.title)}</strong>${badge(item.status, ["active", "complete"].includes(item.status) ? "ok" : ["blocked"].includes(item.status) ? "issue" : "warn")}</div><p>${esc(item.summary || "")}</p>${(item.outcomes || []).length ? `<small>Outcomes: ${esc(item.outcomes.join(", "))}</small>` : ""}</li>`).join("") || "<li><p>No delivery activity has been recorded yet.</p></li>"}</ol></section>`;
+}
+
+function liveProgressShell(progress, connection, toolbar, technicalHtml, technicalOpen = false) {
+  const ordinary = `<section class="live-state-summary state-${esc(progress.status?.group)}"><div><span>Delivery state</span><strong>${esc(progress.status?.label)}</strong><p>${esc(progress.status?.meaning)}</p></div><div><span>Current scope</span><strong>${esc(progress.delivery?.scope || "")}</strong><p>${esc(progress.delivery?.current_story || progress.delivery?.work_id || "")}</p></div></section>
+    ${liveAnswerGrid(progress)}
+    ${liveNextHtml(progress)}
+    ${liveProgressGroups(progress)}
+    <div class="live-two-column">${livePeopleHtml(progress)}${liveReviewHtml(progress)}</div>
+    ${liveLimitsHtml(progress)}
+    ${liveActivityHtml(progress)}
+    <section class="live-recovery state-${esc(progress.recovery?.status)}"><div><span>Recovery truth</span><strong>${esc(progress.recovery?.status === "recovering" ? "Reconciliation in progress" : "Saved history verified")}</strong></div><p>${esc(progress.recovery?.summary || "")}</p><small>${esc(progress.recovery?.duplicate_protection || "")}</small></section>`;
+  const technical = `<details class="live-technical"${technicalOpen || LIVE_TECHNICAL_OPEN ? " open" : ""}><summary>Technical details</summary><p class="live-technical-intro">Exact identities, ordered history, hashes, controls, and provenance remain available here.</p>${technicalHtml}</details>`;
+  return `<div class="live-delivery" data-live-context="${esc(progress.context)}">
+    <header class="live-header"><div><span class="orch-eyebrow">Live delivery</span><h1>${esc(progress.title)} ${liveStateBadge(progress)}</h1><p>${esc(progress.subtitle)}</p></div>${toolbar}</header>
+    ${liveConnectionHtml(connection, progress.recovery)}
+    ${LIVE_TECHNICAL_OPEN ? `${technical}${ordinary}` : `${ordinary}${technical}`}
+  </div>`;
+}
+
+function openLiveTechnical() {
+  const details = document.querySelector(".live-technical");
+  if (!details) return;
+  details.open = true;
+  details.scrollIntoView({
+    behavior: SNAPSHOT_MODE ? "auto" : "smooth",
+    block: "start",
+  });
+  details.querySelector("summary")?.focus();
+}
+
 function runViewHtml() {
   if (orchState.runLoading) return `<div class="orch-run-shell">${stateHtml("Replaying the authoritative run ledger…")}</div>`;
   const error = orchState.runError ? `<div class="guard run-error" role="alert">${esc(orchState.runError)}</div>` : "";
   if (!orchState.runs.length || !orchState.runView) return `<div class="orch-run-shell">${error}${runEmptyHtml()}</div>`;
   const view = orchState.runView;
-  return `<div class="orch-run-shell" data-run-id="${esc(view.run_id)}">${error}<header class="run-toolbar"><div><span class="orch-eyebrow">live run · ledger replay</span><h2>${esc(view.run_id)} ${runStateBadge(view.state)}</h2><p>${esc(view.story.id)} · ${esc(view.story.title)} · expires ${esc(view.expires_at)}</p></div><div><label>run<select id="run-select">${orchState.runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run_id)} · ${esc(item.run.state)}</option>`).join("")}</select></label><button type="button" id="run-refresh">refresh once</button></div></header>
-    <div class="run-summary"><div><span>state</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>ledger</span><strong>${esc(view.ledger_events)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>attempts</span><strong>${esc(view.attempts.active.length)} active · ${esc(view.attempts.completed.length)} complete</strong><small>generation ${esc(view.control_generation)}</small></div><div><span>authority</span><strong>${view.dispatch_allowed ? "dispatch permitted" : "dispatch stopped"}</strong><small>${view.expired ? "grant expired" : "grant fresh by time"}</small></div></div>
+  const toolbar = `<div class="live-toolbar"><label>delivery run<select id="run-select">${orchState.runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run.story?.id || item.run_id)} · ${esc(item.run.state)}</option>`).join("")}</select></label><button type="button" id="run-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
+  const technical = `<div class="run-summary"><div><span>exact state</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>ledger</span><strong>${esc(view.ledger_events)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>attempts</span><strong>${esc(view.attempts.active.length)} active · ${esc(view.attempts.completed.length)} complete</strong><small>generation ${esc(view.control_generation)}</small></div><div><span>authority</span><strong>${view.dispatch_allowed ? "dispatch permitted" : "dispatch stopped"}</strong><small>${view.expired ? "grant expired" : "grant fresh by time"}</small></div></div>
     ${runBudgetHtml(view.budgets)}
     <section class="run-panel"><div class="run-panel-head"><div><span>authoritative graph state</span><strong>Why every node is waiting, eligible, active, failed, or complete</strong></div>${badge("inspection is pure", "ok")}</div>${liveRunGraph(view)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>executors and fail checks</span><strong>Sessions expose receipts and bounded streams, never prompts or commands</strong></div></div>${runSessionsHtml(view)}${runStreamHtml(orchState.runStream)}</section>
@@ -1633,8 +1741,8 @@ function runViewHtml() {
     <section class="run-panel">${runRoutesHtml(view)}</section>
     ${runControlsHtml(view)}${runActPreviewHtml(orchState.runAct)}
     <section class="run-panel"><div class="run-panel-head"><div><span>operator notifications</span><strong>Derived from the ledger and signal chains; ack is receipted</strong></div>${badge("previews, never tokens", "ok")}</div>${runNotificationsHtml(view)}</section>
-    <section class="run-panel"><div class="run-panel-head"><div><span>hash-chained receipts</span><strong>Run ledger timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${runTimelineHtml(view)}</section>
-  </div>`;
+    <section class="run-panel"><div class="run-panel-head"><div><span>hash-chained receipts</span><strong>Run ledger timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${runTimelineHtml(view)}</section>`;
+  return `<div class="orch-run-shell" data-run-id="${esc(view.run_id)}">${error}${liveProgressShell(view.live_progress, orchState.runConnection, toolbar, technical, Boolean(orchState.runAct || orchState.runStream))}</div>`;
 }
 
 function runNotificationsHtml(view) {
@@ -1910,16 +2018,20 @@ function selectScoreRuns() {
 }
 
 async function refreshRunData() {
-  orchState.runLoading = true; orchState.runError = ""; renderOrchestration();
+  const previousView = orchState.runView;
+  orchState.runLoading = true; orchState.runError = ""; orchState.runConnection.status = "checking"; renderOrchestration();
   try {
     const inventory = await api("/api/runs");
     orchState.runInventory = inventory.data.runs || [];
     selectScoreRuns();
     orchState.runView = orchState.runId ? (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data : null;
+    orchState.runConnection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
     try { orchState.notifications = (await api("/api/notifications")).data.notifications; }
     catch (err) { orchState.notifications = []; }
   } catch (err) {
-    orchState.runError = err.message; orchState.runView = null;
+    orchState.runError = err.message;
+    orchState.runView = previousView;
+    orchState.runConnection.status = previousView ? "stale" : "manual";
   } finally {
     orchState.runLoading = false; renderOrchestration();
   }
@@ -1939,9 +2051,19 @@ function stopRunLive() {
 
 function startRunLive() {
   stopRunLive();
-  if (!orchState.runId || orchState.view !== "run" || typeof EventSource === "undefined") return;
+  if (!orchState.runId || orchState.view !== "run") return;
+  if (SNAPSHOT_MODE || typeof EventSource === "undefined") {
+    if (SNAPSHOT_LIVE_STATE !== "stale") orchState.runConnection.status = SNAPSHOT_MODE ? "verified" : "manual";
+    renderOrchestration();
+    return;
+  }
   const runId = orchState.runId;
   runLive = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
+  runLive.onopen = () => {
+    if (orchState.runId !== runId || orchState.view !== "run") return;
+    orchState.runConnection.status = "live";
+    renderOrchestration();
+  };
   runLive.addEventListener("ledger", () => {
     if (runLiveTimer) return;
     runLiveTimer = setTimeout(async () => {
@@ -1949,13 +2071,21 @@ function startRunLive() {
       if (orchState.runId !== runId || orchState.view !== "run") return;
       try {
         orchState.runView = (await api(`/api/runs/${encodeURIComponent(runId)}/view`)).data;
+        orchState.runConnection.status = "live";
         try { orchState.notifications = (await api("/api/notifications")).data.notifications; }
         catch (err) { /* notifications stay stale until the next refresh */ }
         renderOrchestration();
-      } catch (err) { /* keep the last rendered view; refresh stays manual */ }
+      } catch (err) {
+        orchState.runConnection.status = "stale";
+        renderOrchestration();
+      }
     }, 400);
   });
-  runLive.onerror = () => { stopRunLive(); };
+  runLive.onerror = () => {
+    orchState.runConnection.status = "stale";
+    stopRunLive();
+    renderOrchestration();
+  };
 }
 
 async function previewRunGrant(form) {
@@ -2018,6 +2148,7 @@ async function openRunStream(button) {
 
 function wireRunView() {
   document.getElementById("run-refresh")?.addEventListener("click", refreshRunData);
+  document.querySelector("[data-live-technical]")?.addEventListener("click", openLiveTechnical);
   document.getElementById("run-select")?.addEventListener("change", async (event) => { orchState.runId = event.target.value; orchState.runAct = null; orchState.runStream = null; await refreshRunData(); });
   document.getElementById("run-grant-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewRunGrant(event.currentTarget); });
   document.getElementById("run-start-confirm")?.addEventListener("click", confirmRunGrant);
@@ -2079,7 +2210,10 @@ async function viewOrchestration(name) {
   const requestedView = new URLSearchParams(location.search).get("orchview");
   if (["design", "validate", "json", "run"].includes(requestedView)) orchState.view = requestedView;
   if (orchState.view === "run" && orchState.runId) {
-    try { orchState.runView = (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data; }
+    try {
+      orchState.runView = (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data;
+      orchState.runConnection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
+    }
     catch (err) { orchState.runError = err.message; orchState.runView = null; }
     startRunLive();
   }
@@ -2097,6 +2231,7 @@ let programState = {
   inventory: null, runId: "", view: null, plan: null, planRequest: null,
   act: null, stream: null, result: null, error: "", loading: false,
   reason: "", maxTicks: 100, maxSeconds: 300, notifications: [],
+  connection: { status: SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "checking" },
 };
 let programLive = null;
 let programLiveTimer = null;
@@ -2246,10 +2381,8 @@ function programNotificationsHtml(view) {
 function programRunHtml(view) {
   const runs = programState.inventory?.runs || [];
   const progress = view.phase_progress || {};
-  return `<div class="program-room" data-program-run="${esc(view.run_id)}">
-    <header class="program-room-toolbar"><div><span class="orch-eyebrow">live program · canonical ledger replay</span><h1>${esc(view.program?.title || view.program?.slug || "program")} ${programStateBadge(view.state)}</h1><p><code>${esc(view.run_id)}</code> · ${esc(view.mode)} · expires ${esc(view.expires_at)}</p></div><div><label>run<select id="program-run-select">${runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run_id)} · ${esc(item.state)}</option>`).join("")}</select></label><button type="button" id="program-refresh">refresh once</button></div></header>
-    ${programState.error ? `<div class="guard" role="alert">${esc(programState.error)}</div>` : ""}
-    ${programState.result ? `<div class="program-result" role="status"><strong>bounded operation completed</strong><span>${esc(programState.result.kind)} · ${esc(programState.result.stop || programState.result.state || programState.result.result || "recorded")}</span></div>` : ""}
+  const toolbar = `<div class="live-toolbar"><label>delivery run<select id="program-run-select">${runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(view.program?.title || item.program || "program")} · ${esc(item.state)}</option>`).join("")}</select></label><button type="button" id="program-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
+  const technical = `${programState.result ? `<div class="program-result" role="status"><strong>bounded operation completed</strong><span>${esc(programState.result.kind)} · ${esc(programState.result.stop || programState.result.state || programState.result.result || "recorded")}</span></div>` : ""}
     <div class="program-summary"><div><span>authority</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>operational frontier</span><strong>${esc(view.operational_state)}</strong><small>${esc(view.current?.stop || "ready")}</small></div><div><span>ledger</span><strong>${esc(view.event_count)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>scope progress</span><strong>${esc((progress.selected_stories || []).length)} selected</strong><small>${esc(programScalar(progress.scope_completion))}</small></div></div>
     ${programWhyHtml(view)}
     ${runBudgetHtml(view.budgets)}
@@ -2259,8 +2392,8 @@ function programRunHtml(view) {
     ${programNotificationsHtml(view)}
     ${programControlsHtml(view)}
     <section class="program-panel"><div class="program-panel-head"><div><span>phase and authority boundary</span><strong>Granted scope, selected progress, capabilities, and permanent exclusions</strong></div></div><div class="program-boundary"><section><h3>phase progress</h3><pre>${esc(JSON.stringify(progress, null, 2))}</pre></section><section><h3>capabilities</h3><p>${(view.capabilities || []).map((item) => badge(item, "ok")).join(" ") || "none"}</p><h3>permanently excluded</h3><p>${(view.permanent_exclusions || []).map((item) => badge(item, "warn")).join(" ") || "none"}</p></section></div></section>
-    <section class="program-panel"><div class="program-panel-head"><div><span>hash-chained receipts</span><strong>Program authority timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${programTimelineHtml(view)}</section>
-  </div>`;
+    <section class="program-panel"><div class="program-panel-head"><div><span>hash-chained receipts</span><strong>Program authority timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${programTimelineHtml(view)}</section>`;
+  return `<div class="program-room" data-program-run="${esc(view.run_id)}">${programState.error ? `<div class="guard" role="alert">${esc(programState.error)}</div>` : ""}${liveProgressShell(view.live_progress, programState.connection, toolbar, technical, Boolean(programState.act || programState.stream))}</div>`;
 }
 
 function renderPrograms() {
@@ -2278,7 +2411,8 @@ function renderPrograms() {
 
 async function refreshProgramView() {
   if (!programState.runId) return;
-  programState.loading = true; programState.error = ""; renderPrograms();
+  const previousView = programState.view;
+  programState.loading = true; programState.error = ""; programState.connection.status = "checking"; renderPrograms();
   try {
     const [inventory, view, notifications] = await Promise.all([
       api("/api/programs"),
@@ -2288,18 +2422,31 @@ async function refreshProgramView() {
     programState.inventory = inventory.data;
     programState.view = view.data;
     programState.notifications = notifications.data.notifications || [];
+    programState.connection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
   } catch (err) {
-    programState.error = err.message; programState.view = null;
+    programState.error = err.message;
+    programState.view = previousView;
+    programState.connection.status = previousView ? "stale" : "manual";
   }
   programState.loading = false; renderPrograms(); startProgramLive();
 }
 
 function startProgramLive() {
   stopProgramLive();
-  if (!programState.runId || !programState.view || SNAPSHOT_MODE || typeof EventSource === "undefined") return;
+  if (!programState.runId || !programState.view) return;
+  if (SNAPSHOT_MODE || typeof EventSource === "undefined") {
+    if (SNAPSHOT_LIVE_STATE !== "stale") programState.connection.status = SNAPSHOT_MODE ? "verified" : "manual";
+    renderPrograms();
+    return;
+  }
   const runId = programState.runId;
   const cursor = Number(programState.view.event_count || 0);
   programLive = new EventSource(`/api/programs/${encodeURIComponent(runId)}/events?from=${cursor}&follow=1`);
+  programLive.onopen = () => {
+    if (programState.runId !== runId) return;
+    programState.connection.status = "live";
+    renderPrograms();
+  };
   programLive.addEventListener("program-ledger", () => {
     if (programLiveTimer) return;
     programLiveTimer = setTimeout(async () => {
@@ -2307,13 +2454,21 @@ function startProgramLive() {
       if (programState.runId !== runId) return;
       try {
         programState.view = (await api(`/api/programs/${encodeURIComponent(runId)}/view`)).data;
+        programState.connection.status = "live";
         programState.inventory = (await api("/api/programs")).data;
         programState.notifications = (await api("/api/notifications")).data.notifications || [];
         renderPrograms();
-      } catch (err) { /* keep last verified replay; explicit refresh remains */ }
+      } catch (err) {
+        programState.connection.status = "stale";
+        renderPrograms();
+      }
     }, 350);
   });
-  programLive.onerror = () => { stopProgramLive(); };
+  programLive.onerror = () => {
+    programState.connection.status = "stale";
+    stopProgramLive();
+    renderPrograms();
+  };
 }
 
 async function previewProgramStart(form) {
@@ -2410,6 +2565,7 @@ function wirePrograms() {
   document.getElementById("program-start-confirm")?.addEventListener("click", confirmProgramStart);
   document.getElementById("program-plan-close")?.addEventListener("click", () => { programState.plan = null; renderPrograms(); });
   document.getElementById("program-refresh")?.addEventListener("click", refreshProgramView);
+  document.querySelector("[data-live-technical]")?.addEventListener("click", openLiveTechnical);
   document.getElementById("program-run-select")?.addEventListener("change", (event) => { location.hash = `#/programs/${encodeURIComponent(event.target.value)}`; });
   document.getElementById("program-control-reason")?.addEventListener("input", (event) => { programState.reason = event.target.value; });
   document.getElementById("program-max-ticks")?.addEventListener("input", (event) => { programState.maxTicks = Number(event.target.value); });
@@ -2433,6 +2589,7 @@ async function viewPrograms(runId = "") {
   programState.notifications = notifications.data.notifications || [];
   if (runId) {
     programState.view = (await api(`/api/programs/${encodeURIComponent(runId)}/view`)).data;
+    programState.connection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
     startProgramLive();
   }
   renderPrograms();

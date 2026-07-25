@@ -791,22 +791,22 @@
         {
           "concept_id": "work",
           "statement": "Current, waiting, completed, and blocked work are visibly distinct.",
-          "source_model": "delivery-workbench-run-view"
+          "source_model": "delivery-workbench-live-progress"
         },
         {
           "concept_id": "review",
           "statement": "Completed checks and reviews state what they establish.",
-          "source_model": "delivery-workbench-run-view"
+          "source_model": "delivery-workbench-live-progress"
         },
         {
           "concept_id": "progress",
           "statement": "Consumed and remaining work, time, and cost are shown with their limits.",
-          "source_model": "delivery-workbench-run-view"
+          "source_model": "delivery-workbench-live-progress"
         },
         {
           "concept_id": "next_step",
           "statement": "One canonical next step explains whether to advance, wait, decide, repair, or stop.",
-          "source_model": "delivery-workbench-run-view"
+          "source_model": "delivery-workbench-live-progress"
         }
       ],
       "bounded_actions": [
@@ -1310,7 +1310,7 @@
     {
       "id": "crash-recovery",
       "title": "Crash recovery",
-      "starting_state": "bounded-active",
+      "starting_state": "bounded-stale",
       "capability_tiers": [
         "bounded-run"
       ],
@@ -1325,22 +1325,22 @@
         {
           "concept_id": "progress",
           "statement": "Completed and in-progress effects are reconstructed from canonical state.",
-          "source_model": "delivery-workbench-run-view"
+          "source_model": "delivery-workbench-live-progress"
         },
         {
           "concept_id": "blocker",
           "statement": "Any uncertain or incomplete boundary remains stopped for review.",
-          "source_model": "delivery-workbench-run-view"
+          "source_model": "delivery-workbench-live-progress"
         },
         {
           "concept_id": "permission",
           "statement": "Resume uses only still-valid permission and remaining limits.",
-          "source_model": "delivery-workbench-run-act-preview"
+          "source_model": "delivery-workbench-live-progress"
         },
         {
           "concept_id": "next_step",
           "statement": "Reload state, then resume deliberately or permanently stop.",
-          "source_model": "delivery-workbench-run-view"
+          "source_model": "delivery-workbench-live-progress"
         }
       ],
       "bounded_actions": [

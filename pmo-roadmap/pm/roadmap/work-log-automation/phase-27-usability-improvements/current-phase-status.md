@@ -62,7 +62,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 | WLA-27-03 | Give first-time users a delivery-shaped front door | done | [story-03-give-first-time-users-a-delivery-shaped-front-door](./story-03-give-first-time-users-a-delivery-shaped-front-door.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-27-04 | Make plan and workflow authoring task-shaped | done | [story-04-make-plan-and-workflow-authoring-task-shaped](./story-04-make-plan-and-workflow-authoring-task-shaped.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-27-05 | Make teams and review rules understandable | done | [story-05-make-teams-and-review-rules-understandable](./story-05-make-teams-and-review-rules-understandable.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-27-06 | Make live delivery explain progress and next steps | backlog | [story-06-make-live-delivery-explain-progress-and-next-steps](./story-06-make-live-delivery-explain-progress-and-next-steps.md) | - |
+| WLA-27-06 | Make live delivery explain progress and next steps | done | [story-06-make-live-delivery-explain-progress-and-next-steps](./story-06-make-live-delivery-explain-progress-and-next-steps.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-27-07 | Turn decisions, blockers, permissions, and cost into actions | backlog | [story-07-turn-decisions-blockers-permissions-and-cost-into-actions](./story-07-turn-decisions-blockers-permissions-and-cost-into-actions.md) | - |
 | WLA-27-08 | Make every everyday word agree | backlog | [story-08-make-every-everyday-word-agree](./story-08-make-every-everyday-word-agree.md) | - |
 | WLA-27-09 | Harden keyboard, screen-size, and assistive use | backlog | [story-09-harden-keyboard-screen-size-and-assistive-use](./story-09-harden-keyboard-screen-size-and-assistive-use.md) | - |
@@ -70,20 +70,23 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 
 ## Where we are
 
-Phase 27 is OPEN 5/10. Program Studio now opens organization design on five
-plain questions covering work responsibility, independent review, contested
-decisions, help and escalation, and review-of-review. The shared
-`delivery-workbench-team-review@1` projection distinguishes policy-ready
-candidate separation from runtime-proven principal/work-area/session
-separation and is reused by the live program control room. Advanced panels,
-councils, dissent, judges, review auditors, architecture checks, stable IDs,
-and exact provider/model/auth provenance remain under Technical details.
-Targeted edits preserve the exact source and its references, advanced
-organizations round-trip unchanged, unknown extensions remain present and
-refuse save, and every view effect is explicitly false. The 70-render
-wide/narrow harness, core suite, fresh Python 3.9 wheel, and
-autonomous/no-program consumers are green. WLA-27-06 is next: make live
-delivery explain progress and next steps. There are no known blockers.
+Phase 27 is OPEN 6/10. Bounded-run and program control rooms now share the pure
+`delivery-workbench-live-progress@1` projection. Their default view directly
+answers what is being delivered, who is doing and reviewing it, what passed,
+what is blocked, who must decide, what permission and measured cost remain,
+and the one next step already selected by canonical state. Understandable
+active, waiting, review, repair, blocked, stopped, revoked, recovering, and
+complete groups remain traceable to exact identities. Mechanical checks, agent
+judgment, dissent, repair, and final governed decisions remain separate.
+Readable activity never replaces the ordered hash-linked audit record:
+`Technical details` opens exact state, limits, controls, provenance, and
+events. Stale and recovery views preserve verified completed work and explain
+duplicate protection without claiming lost or repeated delivery. The
+76-render wide/narrow harness, seventeen-state journey contract, focused
+recovery/parity tests, fresh Python 3.9 wheel, and autonomous/no-program
+consumers are green. WLA-27-07 is next: turn the already projected decisions,
+blockers, permission, cost, stop/revoke, and recoverable failures into clear
+bounded actions. There are no known blockers.
 
 ## Active risks
 
@@ -203,6 +206,22 @@ delivery explain progress and next steps. There are no known blockers.
   and refuse invalid save; team design and live review displays remain pure
   and never start work or mint authority - lossless/no-side-effect boundary -
   WLA-27-05.
+- 2026-07-24 - Add `delivery-workbench-live-progress@1` as one pure
+  application projection over canonical bounded-run and program state; its
+  seven answers, grouped activity, and recovery explanation may summarize
+  saved facts but never select work, start work, write events, recover work, or
+  grant authority - source-of-truth boundary - WLA-27-06.
+- 2026-07-24 - Derive one visible next step with terminal, outstanding
+  request, active reconciliation, repair, and saved-frontier precedence from
+  canonical facts; dependency waits remain waiting unless a declared blocker
+  exists, and incomparable remaining units are never added together -
+  truth-in-status boundary - WLA-27-06.
+- 2026-07-24 - Keep readable delivery state, evidence classes, and activity in
+  the default view while placing exact identities, ordered hash-linked events,
+  controls, limits, and provenance behind one-click `Technical details`;
+  disconnects retain the last verified view and recovery names both preserved
+  work and duplicate protection - progressive inspection and recovery
+  contract - WLA-27-06.
 
 ## Decisions deferred
 

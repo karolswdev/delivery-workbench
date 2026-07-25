@@ -152,6 +152,34 @@
       "expected": []
     },
     {
+      "id": "mixed-live-progress",
+      "classification": "mixed",
+      "technical_label": "Technical details",
+      "technical_explicit": true,
+      "regions": [
+        {
+          "classification": "everyday",
+          "text": "Delivery: improve live progress. Maya is doing the work and Rowan is reviewing it. Three of five work items passed; one repair is blocked and no decision is needed. Permission allows two more work starts, money cost is not recorded, and the next step is to let the current review finish. If updates disconnect, keep the last verified view and check the saved history again without claiming that work was lost or repeated."
+        },
+        {
+          "classification": "technical_audit",
+          "text": "projection=delivery-workbench-live-progress; conductor scheduled node repair-ux; ledger_head=sha256:0123; receipt_hash=sha256:4567; schema_version=1"
+        }
+      ],
+      "concept_names": {
+        "team": "team",
+        "work": "work",
+        "review": "review",
+        "decision": "decision",
+        "blocker": "blocker",
+        "permission": "permission",
+        "progress": "progress",
+        "cost": "cost",
+        "next_step": "next step"
+      },
+      "expected": []
+    },
+    {
       "id": "technical-architecture-language",
       "classification": "technical_audit",
       "text": "The conductor projection replays the ledger before deriving the operational frontier.",

@@ -72,15 +72,24 @@ for token in ("Delivery readiness", "delivery decision", "Affected decision",
               "semantic hash", "scheduling simulation", "failure routes and checkpoints"):
     assert token in preflight, token
 assert "postJson" not in preflight and "creates permission" in preflight
-for token in ("live run · ledger replay", "fail checks", "failure routes",
-              "human checkpoints", "hash-chained receipts",
+for token in ("Live delivery", "What happens next?", "Scope and progress",
+              "Team and review", "Evidence and decisions",
+              "Remaining permission and cost", "Readable activity",
+              "Recovery truth", "Technical details",
+              "Live updates interrupted", "last verified view",
+              "saved delivery state", "live_progress",
+              "fail checks", "failure routes", "human checkpoints", "hash-chained receipts",
               "confirm this exact act", "no automatic continuation",
               "close explicit stream"):
     assert token in run, token
 assert "setInterval" not in run and "driver_config" not in run and "argv:" not in run
 assert 'aria-labelledby="run-graph-title"' in run
 assert "@media (max-width: 520px)" in css and ".run-node.state-active" in css
-for token in ("Program control room", "why this frontier", "team and review",
+for token in (".live-answers", ".live-next", ".live-work-groups",
+              ".live-two-column", ".live-recovery", ".live-technical"):
+    assert token in css, token
+for token in ("Program control room", "liveProgressShell(view.live_progress",
+              "Check for updates", "why this frontier", "team and review",
               "runtime independence proven", "decision groups / exact authority",
               "separation facts", "Technical details: exact seats",
               "nested execution", "quality, dissent, and gates",
@@ -447,7 +456,7 @@ for path, document in documents.items():
     path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 PY
 
-VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-team-review:#/program-studio/organization/autonomous-story-cell studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-team-technical:#/program-studio/organization/autonomous-story-cell"
+VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-stale:#/orchestration/research-build-review orchestration-run-technical:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-team-review:#/program-studio/organization/autonomous-story-cell studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-team-technical:#/program-studio/organization/autonomous-story-cell"
 for spec in $VIEWS; do
   name="${spec%%:*}"
   route="${spec#*:}"
@@ -457,6 +466,8 @@ for spec in $VIEWS; do
     step-confirm) extra="&confirmstep=1" ;;
     orchestration-validate) extra="&orchview=validate" ;;
     orchestration-json) extra="&orchview=json" ;;
+    orchestration-run-stale) extra="&orchview=run&liveconnection=stale" ;;
+    orchestration-run-technical) extra="&orchview=run&livetechnical=1" ;;
     orchestration-run-*) extra="&orchview=run" ;;
     studio-debate-active) extra="&studioview=simulate&studioscenario=debate-active" ;;
     studio-budget-exhausted) extra="&studioview=simulate&studioscenario=budget-exhausted" ;;
@@ -590,9 +601,11 @@ done
 BASE="http://127.0.0.1:$PORT"
 shot "program-active-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_ACTIVE"
 shot "program-active-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_ACTIVE"
+shot "program-technical-desktop" 1440,900 "$BASE/?snapshot=1&livetechnical=1#/programs/$PROGRAM_ACTIVE"
+shot "program-technical-mobile" 390,844 "$BASE/?snapshot=1&livetechnical=1#/programs/$PROGRAM_ACTIVE"
 shot "program-revoked-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_REVOKED"
 shot "program-revoked-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_REVOKED"
 shot "program-certified-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 shot "program-certified-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 
-echo "workbench-ui-smoke.sh: ok (70 viewport renders: 27 data views + delivery setup/review + program planning/active/certified/revoked + attention + ambiguity, desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (76 viewport renders: 29 data views + delivery setup/review + program planning/active/technical/certified/revoked + attention + ambiguity, desktop+mobile)"

@@ -207,6 +207,36 @@ and correction while preserving the draft and refusing save. The existing
 review/fingerprint/confirmation boundary remains the only tracked write and
 starts no work. See [team and review design](./team-review.md).
 
+## WLA-27-06 delivered slice
+
+`live-progress`, `failed-review-and-repair`, `crash-recovery`, `completion`,
+and `technical-inspection` now use
+`delivery-workbench-live-progress@1`. The same pure projection is nested in
+both the bounded Run view and optional-program view, so CLI, MCP, HTTP, SSE,
+and Workbench receive identical answers to all seven operator questions.
+
+The default live page leads with delivery state, declared scope denominator,
+one canonical next step, doing/reviewing ownership, passed and blocked work,
+decision need, remaining permission and counted limits, readable activity,
+and recovery truth. Work is grouped as active, waiting, review, repair,
+blocked, recovering, stopped, or complete while preserving its exact identity
+for inspection. Mechanical checks, agent judgment, dissent, repair, and final
+governed decisions remain separate proof classes.
+
+The bounded next step copies the canonical scheduled item, active work,
+request, or terminal/stop fact. The program next step copies the canonical
+first action, reconciliation work, request, checkpoint, or terminal/stop fact.
+The application builder and browser both declare that they select no work,
+decide no recovery, grant no permission, and write no state.
+
+Readable activity groups related work and outcomes; the exact graph,
+assignments, controls, streams, counters, ordered hash-linked history, and
+provenance remain under **Technical details**. A stale live connection keeps
+the last verified view, says that completed work remains recorded, and asks
+the user to check the saved history again without claiming loss or duplicate
+execution. The harness includes dedicated wide/narrow active, review/repair,
+terminal, stale, and Technical-details captures.
+
 The baseline below remains the dated pre-redesign observation. Its stable
 capture IDs now exercise the improved routes, allowing later whole-journey
 comparison without erasing the original finding.
@@ -222,7 +252,7 @@ DW_UI_CAPTURE_PATTERN='*' \
 pmo-roadmap/tests/workbench-ui-smoke.sh
 ```
 
-The harness now produces all 70 views and passes. Each mapped state has a
+The harness now produces all 76 views and passes. Each mapped state has a
 1440×900 desktop capture and a 390×844 mobile capture. The screenshots are
 reproducible test output under ignored `.tmp/`; the versioned baseline records
 the observable findings, not machine-specific image bytes.

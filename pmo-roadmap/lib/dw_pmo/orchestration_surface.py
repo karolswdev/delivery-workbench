@@ -15,6 +15,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from .live_progress import build_run_live_progress
 from .model import DwError
 from .orchestration import canonical_json
 from .orchestration_conductor import TERMINAL_STATES, schedule_decision, tick_run
@@ -552,6 +553,13 @@ def build_run_view(
         for artifact in artifacts
     ]
     events = _read_events(run_dir, run_id)
+    live_progress = build_run_live_progress(
+        projection,
+        decision,
+        graph_nodes,
+        safe_artifacts,
+        events,
+    )
     terminal = projection["state"] in TERMINAL_STATES
     terminal_meaning = {
         "awaiting-certification": "work is handed back for human inspection, certification, and commit",
@@ -577,6 +585,7 @@ def build_run_view(
         "control_generation": projection["control_generation"],
         "ledger_head": projection["ledger_head"],
         "ledger_events": projection["ledger_events"],
+        "live_progress": live_progress,
         "graph": {
             "nodes": graph_nodes,
             "layout": compiled.get("layout", {}),
