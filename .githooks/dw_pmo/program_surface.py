@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import time
 
+from .bounded_actions import build_program_bounded_actions
 from .live_progress import build_program_live_progress
 from .model import DwError
 from .orchestration import canonical_json
@@ -892,6 +893,14 @@ def _control_catalog(authority: dict[str, object]) -> list[dict[str, object]]:
         {
             "action": action,
             "available": available,
+            "issue": (
+                None
+                if available
+                else (
+                    f"{action} is unavailable while program permission "
+                    f"is {state}"
+                )
+            ),
             "reason_required": action in _REASON_ACTIONS,
             "decision": None,
             "request_id": None,
@@ -1109,6 +1118,16 @@ def build_program_view(
     timeline = tail_program_events(
         root, run_id, after_seq=0, limit=_MAX_TAIL_EVENTS
     )["events"]
+    controls = _control_catalog(authority)
+    bounded_actions = build_program_bounded_actions(
+        authority,
+        frontier,
+        controls,
+        live_progress,
+        timeline,
+        refusal=refusal,
+        receipts=receipts,
+    )
     stop = frontier.get("stop")
     terminal_meaning = {
         "complete": "the exact granted roadmap scope completed",
@@ -1143,6 +1162,7 @@ def build_program_view(
         "expired": authority["expired"],
         "scope": authority["scope"],
         "live_progress": live_progress,
+        "bounded_actions": bounded_actions,
         "current": {
             "selection": selection,
             "lineage": frontier.get("lineage"),
@@ -1237,10 +1257,12 @@ def build_program_view(
             "scope_completion": authority["scope_completion"],
         },
         "budgets": authority["budgets"],
+        "stop_conditions": authority["stop_conditions"],
+        "cost_accounting": authority["cost_accounting"],
         "capabilities": authority["capabilities"],
         "permanent_exclusions": authority["permanent_exclusions"],
         "timeline": timeline,
-        "controls": _control_catalog(authority),
+        "controls": controls,
         "terminal": authority["state"] in TERMINAL_AUTHORITY_STATES,
         "terminal_meaning": terminal_meaning,
         "privacy": {

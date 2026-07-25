@@ -1753,6 +1753,8 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
         "event_count": len(events),
         "capabilities": list(grant["authority"]["capabilities"]),  # type: ignore[index]
         "budgets": budget_state,
+        "stop_conditions": list(grant["authority"]["stop_conditions"]),  # type: ignore[index]
+        "cost_accounting": grant["authority"]["cost_accounting"],  # type: ignore[index]
         "scope": grant["scope"],
         "selection": grant["selection"],
         "roster": grant["roster"],

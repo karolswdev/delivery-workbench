@@ -118,6 +118,42 @@ class RailsClient:
              "--expect", str(preview.get("act_token", "")), "--json"],
         )
 
+    def program_request_decide(
+        self, repo: Path, run_id: str, request_id: str, decision: str
+    ) -> tuple[dict | None, str]:
+        """Carry one response through the local canonical program boundary.
+
+        Telegram supplies neither authority nor a token.  This local client
+        obtains a fresh preview after the paired-owner check, then applies
+        exactly that request and closed response.  The program surface still
+        owns request identity, freshness, generation, and ledger checks.
+        """
+        reason = "Response carried from the paired Telegram owner."
+        preview, why = self._json_doc(
+            repo,
+            [
+                "program", "preview", run_id, "request",
+                "--request-id", request_id,
+                "--decision", decision,
+                "--reason", reason,
+                "--json",
+            ],
+        )
+        if preview is None:
+            return None, why
+        if not preview.get("applicable"):
+            issues = "; ".join(preview.get("issues", [])) or "not applicable"
+            return None, f"program request preview refused: {issues}"
+        return self._json_doc(
+            repo,
+            [
+                "program", "request", run_id, request_id, decision,
+                "--reason", reason,
+                "--expect", str(preview.get("act_token", "")),
+                "--json",
+            ],
+        )
+
     def read_feed(self, repo: Path) -> tuple[dict | None, str]:
         doc, reason = self._json_doc(repo, ["state", "--json"])
         if doc is None:

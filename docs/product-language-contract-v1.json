@@ -439,7 +439,7 @@
       "id": "workbench-bounded-delivery",
       "channel": "workbench",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/live_progress.py", "pmo-roadmap/lib/dw_pmo/orchestration_surface.py"],
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/bounded_actions.py", "pmo-roadmap/lib/dw_pmo/live_progress.py", "pmo-roadmap/lib/dw_pmo/orchestration_surface.py"],
       "entry_points": ["#/orchestration", "#/orchestration/<score>"],
       "boundary": "Plan, team, work, review, decisions, limits, and progress lead; exact score nodes, run events, tokens, hashes, streams, and policy fields live under Technical details.",
       "owner_stories": ["WLA-27-04", "WLA-27-05", "WLA-27-06", "WLA-27-07", "WLA-27-08"]
@@ -457,7 +457,7 @@
       "id": "workbench-live-delivery",
       "channel": "workbench",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/live_progress.py", "pmo-roadmap/lib/dw_pmo/program_surface.py", "pmo-roadmap/lib/dw_pmo/team_review.py"],
+      "sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/bounded_actions.py", "pmo-roadmap/lib/dw_pmo/live_progress.py", "pmo-roadmap/lib/dw_pmo/program_surface.py", "pmo-roadmap/lib/dw_pmo/team_review.py"],
       "entry_points": ["#/programs", "#/programs/<run>"],
       "boundary": "Progress, ownership, review, blockers, decisions, permission, cost, and next step lead; exact grants, ledgers, hashes, identifiers, events, and streams live under Technical details.",
       "owner_stories": ["WLA-27-06", "WLA-27-07", "WLA-27-08"]
@@ -484,7 +484,7 @@
       "id": "cli-bounded-delivery",
       "channel": "cli",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/lib/dw_pmo/live_progress.py", "pmo-roadmap/lib/dw_pmo/orchestration_surface.py"],
+      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/lib/dw_pmo/bounded_actions.py", "pmo-roadmap/lib/dw_pmo/live_progress.py", "pmo-roadmap/lib/dw_pmo/orchestration_surface.py"],
       "entry_points": ["dw orchestration", "dw run"],
       "boundary": "Human output uses delivery plan, team, work, review, decision, permission, progress, cost, and next step; --json and copyable commands retain exact fields and identifiers as Technical details.",
       "owner_stories": ["WLA-27-04", "WLA-27-05", "WLA-27-06", "WLA-27-07", "WLA-27-08"]
@@ -493,7 +493,7 @@
       "id": "cli-program-delivery",
       "channel": "cli",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/lib/dw_pmo/live_progress.py", "pmo-roadmap/lib/dw_pmo/program_surface.py"],
+      "sources": ["pmo-roadmap/bin/dw", "pmo-roadmap/lib/dw_pmo/bounded_actions.py", "pmo-roadmap/lib/dw_pmo/live_progress.py", "pmo-roadmap/lib/dw_pmo/program_surface.py"],
       "entry_points": ["dw program", "dw organization", "dw workflow", "dw rubric", "dw notifications"],
       "boundary": "Task and outcome prose use product language; exact command names, JSON, identifiers, policy vocabulary, and audit tails remain under Technical details.",
       "owner_stories": ["WLA-27-04", "WLA-27-05", "WLA-27-06", "WLA-27-07", "WLA-27-08"]
@@ -511,7 +511,7 @@
       "id": "operator-notifications-and-telegram",
       "channel": "notification",
       "classification": "mixed",
-      "sources": ["pmo-roadmap/lib/dw_pmo/notifications.py", "integrations/telegram/dw_telegram/interface.py"],
+      "sources": ["pmo-roadmap/lib/dw_pmo/notifications.py", "integrations/telegram/dw_telegram/interface.py", "integrations/telegram/dw_telegram/rails.py"],
       "entry_points": ["derived notifications", "Telegram summaries and buttons"],
       "boundary": "The notification states affected work, blocker or decision, choices, and next step; exact request identity and transport receipt are secondary technical details and transport never creates permission.",
       "owner_stories": ["WLA-27-07", "WLA-27-08"]

@@ -1,6 +1,6 @@
 # Phase 27 - Usability Improvements
 
-**Last updated:** 2026-07-24.
+**Last updated:** 2026-07-25.
 
 ## Goal
 
@@ -39,7 +39,7 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 - [x] Program Studio makes delivery-plan/workflow authoring and team/review
   design understandable while round-tripping the existing exact configuration
   without semantic loss (WLA-27-04, WLA-27-05).
-- [ ] Live operation answers the seven operator questions from the Phase 26
+- [x] Live operation answers the seven operator questions from the Phase 26
   handoff and turns decisions, blockers, permission, cost, stop/revoke, and
   recoverable failures into clear bounded actions (WLA-27-06, WLA-27-07).
 - [ ] Workbench, human CLI output, notifications, help, errors, onboarding, and
@@ -63,30 +63,29 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 | WLA-27-04 | Make plan and workflow authoring task-shaped | done | [story-04-make-plan-and-workflow-authoring-task-shaped](./story-04-make-plan-and-workflow-authoring-task-shaped.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-27-05 | Make teams and review rules understandable | done | [story-05-make-teams-and-review-rules-understandable](./story-05-make-teams-and-review-rules-understandable.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-27-06 | Make live delivery explain progress and next steps | done | [story-06-make-live-delivery-explain-progress-and-next-steps](./story-06-make-live-delivery-explain-progress-and-next-steps.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-27-07 | Turn decisions, blockers, permissions, and cost into actions | backlog | [story-07-turn-decisions-blockers-permissions-and-cost-into-actions](./story-07-turn-decisions-blockers-permissions-and-cost-into-actions.md) | - |
+| WLA-27-07 | Turn decisions, blockers, permissions, and cost into actions | done | [story-07-turn-decisions-blockers-permissions-and-cost-into-actions](./story-07-turn-decisions-blockers-permissions-and-cost-into-actions.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-27-08 | Make every everyday word agree | backlog | [story-08-make-every-everyday-word-agree](./story-08-make-every-everyday-word-agree.md) | - |
 | WLA-27-09 | Harden keyboard, screen-size, and assistive use | backlog | [story-09-harden-keyboard-screen-size-and-assistive-use](./story-09-harden-keyboard-screen-size-and-assistive-use.md) | - |
 | WLA-27-10 | Prove the redesigned application end to end | backlog | [story-10-prove-the-redesigned-application-end-to-end](./story-10-prove-the-redesigned-application-end-to-end.md) | - |
 
 ## Where we are
 
-Phase 27 is OPEN 6/10. Bounded-run and program control rooms now share the pure
-`delivery-workbench-live-progress@1` projection. Their default view directly
-answers what is being delivered, who is doing and reviewing it, what passed,
-what is blocked, who must decide, what permission and measured cost remain,
-and the one next step already selected by canonical state. Understandable
-active, waiting, review, repair, blocked, stopped, revoked, recovering, and
-complete groups remain traceable to exact identities. Mechanical checks, agent
-judgment, dissent, repair, and final governed decisions remain separate.
-Readable activity never replaces the ordered hash-linked audit record:
-`Technical details` opens exact state, limits, controls, provenance, and
-events. Stale and recovery views preserve verified completed work and explain
-duplicate protection without claiming lost or repeated delivery. The
-76-render wide/narrow harness, seventeen-state journey contract, focused
-recovery/parity tests, fresh Python 3.9 wheel, and autonomous/no-program
-consumers are green. WLA-27-07 is next: turn the already projected decisions,
-blockers, permission, cost, stop/revoke, and recoverable failures into clear
-bounded actions. There are no known blockers.
+Phase 27 is OPEN 7/10. Bounded-run and program control rooms now share the pure
+`delivery-workbench-live-progress@1` and
+`delivery-workbench-bounded-actions@1` projections. The default action center
+shows affected work, exact current choices, permission scope, ceilings,
+expiry/stops, current use, forbidden effects, and distinct consequences before
+the existing exact confirmation. Zero, finite, unbounded, unknown, and not
+applicable values remain different. Pause, saved repair, resume, permanent
+revoke, cancel, and rejection do not collapse into one generic control.
+Structured refusals explain what happened, what stayed unchanged, effect
+uncertainty, and the safe reload/inspection path; notifications and Telegram
+carry responses without manufacturing authority. Exact identities, tokens,
+controls, and receipts remain under `Technical details`. The 88-render
+wide/narrow harness, 23-state journey contract, focused action/refusal/parity
+tests, fresh Python 3.9 wheel, and autonomous/no-program consumers are green.
+WLA-27-08 is next: make every everyday renderer use the same product terms.
+There are no known blockers.
 
 ## Active risks
 
@@ -222,6 +221,27 @@ bounded actions. There are no known blockers.
   disconnects retain the last verified view and recovery names both preserved
   work and duplicate protection - progressive inspection and recovery
   contract - WLA-27-06.
+- 2026-07-25 - Add `delivery-workbench-bounded-actions@1` as one pure
+  application projection over existing run/program controls, requests,
+  blockers, permission, usage, failures, and receipts; it may explain and
+  group facts but never select/apply an action, start work, write events, grant
+  authority, change retry policy, or notify - source-of-truth boundary -
+  WLA-27-07.
+- 2026-07-25 - Put allowed effects, affected scope, ceilings, expiry/stops,
+  measured consumption, remaining capacity, and permanent exclusions before
+  actions; preserve finite, zero, explicitly unbounded, unknown, and not
+  applicable as different measurement states - informed-permission boundary -
+  WLA-27-07.
+- 2026-07-25 - Keep continue/repair, pause, resume, permanent revoke, cancel,
+  reject, unavailable retry, and separate permission elevation materially
+  distinct; explain their effects before the existing exact preview and show
+  readable receipts after completion - consequence-first action contract -
+  WLA-27-07.
+- 2026-07-25 - Treat notifications and Telegram as response carriers only:
+  they may present and carry an exact closed response, while local principal,
+  outstanding request, response-set, freshness, ledger/generation, and exact
+  confirmation checks remain decisive - transport-is-not-authority boundary -
+  WLA-27-07.
 
 ## Decisions deferred
 

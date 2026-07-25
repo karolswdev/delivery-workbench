@@ -241,6 +241,42 @@ The baseline below remains the dated pre-redesign observation. Its stable
 capture IDs now exercise the improved routes, allowing later whole-journey
 comparison without erasing the original finding.
 
+## WLA-27-07 delivered slice
+
+`failed-review-and-repair`, `blocked-human-decision`,
+`remaining-permission-and-cost`, `stop-and-revoke`, `crash-recovery`, and
+`technical-inspection` now also use
+`delivery-workbench-bounded-actions@1`. The pure application document is
+nested in both canonical run and program views, so Workbench, CLI JSON, MCP,
+HTTP, and SSE receive the same action facts.
+
+The action center leads with permission, affected scope, finite ceilings,
+expiry and stops, current consumption, and forbidden effects before any
+state-changing control. Limit, estimate, actual, and remaining are separate
+columns. Finite, zero, explicitly unbounded, unknown, and not applicable are
+distinct values, and incomparable units are never added.
+
+The decision and blocker inbox names affected work, why it cannot proceed,
+who or what can resolve it, each choice copied from the exact current request,
+what follows each choice, and what happens if the person decides later.
+Continue or saved repair, pause, resume, permanent revoke, cancel, reject, and
+unavailable retry or permission elevation remain distinct. Every available
+change opens its existing exact preview only after its ordinary consequences;
+completion adds a readable receipt with exact proof under **Technical
+details**.
+
+Refusals and failures state what happened, what stayed unchanged, whether an
+effect may already have occurred, the safe next step, and an exact-inspection
+path. An inconclusive transport outcome is unknown until saved history is
+reloaded, never permission for an ambiguous retry. Notifications and Telegram
+may carry one exact closed response, but local principal, request, response,
+freshness, ledger, generation, and confirmation checks remain decisive.
+
+The reachable-state inventory now contains 23 states. Six deterministic
+wide/narrow capture pairs add run decision actions, decision preview, refusal,
+program remaining limits, pause preview, and stop receipt. The full browser
+harness therefore renders 88 viewports.
+
 ## Current-friction baseline
 
 The baseline was captured on 2026-07-24 from the existing canonical UI
@@ -252,7 +288,7 @@ DW_UI_CAPTURE_PATTERN='*' \
 pmo-roadmap/tests/workbench-ui-smoke.sh
 ```
 
-The harness now produces all 76 views and passes. Each mapped state has a
+The harness now produces all 88 views and passes. Each mapped state has a
 1440×900 desktop capture and a 390×844 mobile capture. The screenshots are
 reproducible test output under ignored `.tmp/`; the versioned baseline records
 the observable findings, not machine-specific image bytes.

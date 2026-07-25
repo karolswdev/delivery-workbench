@@ -193,9 +193,12 @@ The optional `dw program` namespace now spans pure
 `preview`→`tick|supervise|request|pause|resume|revoke|cancel`, verified
 `tail`, and bounded `stream`. MCP, localhost HTTP, SSE, and the progressively
 disclosed Workbench `#/programs` control room adapt the same content-safe
-projection and exact-token acts. No program configuration remains a healthy
-ordinary mode, and opening a read or the Workbench starts no program, poller,
-stream, process, or notification.
+projection and exact-token acts. Run and program control rooms now lead each
+bounded action with affected work, permission, limits, cost, and distinct
+consequences; decisions come only from the exact outstanding response set,
+and refusals name unchanged state plus a safe recovery step. No program
+configuration remains a healthy ordinary mode, and opening a read or the
+Workbench starts no program, poller, stream, process, or notification.
 
 Parked work is first-class: a story goes on-hold only with a
 recorded reason, whole phases pause and resume (`dw phase pause

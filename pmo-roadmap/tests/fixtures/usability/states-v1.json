@@ -116,6 +116,7 @@
       "capture_id": "orchestration-run-active",
       "canonical_models": [
         "delivery-workbench-live-progress",
+        "delivery-workbench-bounded-actions",
         "delivery-workbench-run-view",
         "delivery-workbench-conductor-decision",
         "delivery-workbench-run-act-preview"
@@ -125,6 +126,7 @@
         "view.live_progress.progress",
         "view.live_progress.next_step",
         "view.live_progress.recovery",
+        "view.bounded_actions.actions",
         "view.graph.scheduled_on_confirm"
       ]
     },
@@ -136,6 +138,7 @@
       "capture_id": "orchestration-run-stale",
       "canonical_models": [
         "delivery-workbench-live-progress",
+        "delivery-workbench-bounded-actions",
         "delivery-workbench-run-view",
         "delivery-workbench-run-event"
       ],
@@ -162,6 +165,8 @@
         "view.live_progress.status",
         "view.live_progress.review.repair",
         "view.live_progress.next_step",
+        "view.bounded_actions.permission",
+        "view.bounded_actions.actions",
         "view.routes",
         "check.outcome"
       ]
@@ -174,6 +179,7 @@
       "capture_id": "orchestration-run-terminal",
       "canonical_models": [
         "delivery-workbench-live-progress",
+        "delivery-workbench-bounded-actions",
         "delivery-workbench-run-view",
         "delivery-workbench-decision",
         "delivery-workbench-run-act-preview"
@@ -181,6 +187,8 @@
       "fact_paths": [
         "view.live_progress.decision",
         "view.live_progress.next_step",
+        "view.bounded_actions.inbox",
+        "view.bounded_actions.actions",
         "view.outstanding_request",
         "decision.options",
         "decision.status"
@@ -194,6 +202,7 @@
       "capture_id": "program-active",
       "canonical_models": [
         "delivery-workbench-live-progress",
+        "delivery-workbench-bounded-actions",
         "delivery-workbench-program-view",
         "delivery-workbench-program-frontier",
         "delivery-workbench-program-grant",
@@ -204,6 +213,8 @@
         "view.live_progress.progress",
         "view.live_progress.next_step",
         "view.live_progress.recovery",
+        "view.bounded_actions.permission",
+        "view.bounded_actions.actions",
         "frontier.next_actions"
       ]
     },
@@ -215,12 +226,14 @@
       "capture_id": "program-revoked",
       "canonical_models": [
         "delivery-workbench-live-progress",
+        "delivery-workbench-bounded-actions",
         "delivery-workbench-program-view",
         "delivery-workbench-program-frontier"
       ],
       "fact_paths": [
         "view.live_progress.status",
         "view.live_progress.next_step",
+        "view.bounded_actions.receipts",
         "view.current.stop",
         "frontier.stop",
         "frontier.next_actions"
@@ -343,6 +356,114 @@
         "view.ledger",
         "projection.state",
         "event.previous_hash"
+      ]
+    },
+    {
+      "id": "bounded-decision-actions",
+      "title": "Affected work, decision owner, and exact valid choices",
+      "capability_tier": "bounded-run",
+      "route": "?orchview=run&boundedfocus=inbox#/orchestration/terminal-visual",
+      "capture_id": "run-decision-actions",
+      "canonical_models": [
+        "delivery-workbench-bounded-actions",
+        "delivery-workbench-run-view",
+        "delivery-workbench-decision"
+      ],
+      "fact_paths": [
+        "view.bounded_actions.inbox[].affected_work",
+        "view.bounded_actions.inbox[].resolver",
+        "view.bounded_actions.inbox[].valid_choices",
+        "view.outstanding_requests"
+      ]
+    },
+    {
+      "id": "bounded-decision-preview",
+      "title": "Decision consequence before exact confirmation",
+      "capability_tier": "bounded-run",
+      "route": "?orchview=run&boundedpreview=decision&boundedfocus=preview#/orchestration/terminal-visual",
+      "capture_id": "run-decision-preview",
+      "canonical_models": [
+        "delivery-workbench-bounded-actions",
+        "delivery-workbench-run-act-preview",
+        "delivery-workbench-run-view"
+      ],
+      "fact_paths": [
+        "view.bounded_actions.actions",
+        "preview.action",
+        "preview.correlation_id",
+        "preview.act_token"
+      ]
+    },
+    {
+      "id": "bounded-action-refusal",
+      "title": "Structured stale action refusal and safe recovery",
+      "capability_tier": "bounded-run",
+      "route": "?orchview=run&boundederror=stale&boundedfocus=error#/orchestration/repair-visual",
+      "capture_id": "run-action-refusal",
+      "canonical_models": [
+        "delivery-workbench-bounded-actions",
+        "delivery-workbench-run-act-preview",
+        "delivery-workbench-run-event"
+      ],
+      "fact_paths": [
+        "view.bounded_actions.error_contract",
+        "error.what_happened",
+        "error.what_stayed_unchanged",
+        "error.safe_next_step"
+      ]
+    },
+    {
+      "id": "program-permission-cost",
+      "title": "Program permission, consumption, limits, and exclusions",
+      "capability_tier": "program",
+      "route": "?boundedfocus=limits#/programs/{run_id}",
+      "capture_id": "program-remaining-limits",
+      "canonical_models": [
+        "delivery-workbench-bounded-actions",
+        "delivery-workbench-program-view",
+        "delivery-workbench-program-grant"
+      ],
+      "fact_paths": [
+        "view.bounded_actions.permission",
+        "view.bounded_actions.usage",
+        "view.budgets",
+        "view.permanent_exclusions"
+      ]
+    },
+    {
+      "id": "program-pause-preview",
+      "title": "Reversible pause consequence before confirmation",
+      "capability_tier": "program",
+      "route": "?boundedpreview=pause&boundedfocus=preview#/programs/{run_id}",
+      "capture_id": "program-pause-preview",
+      "canonical_models": [
+        "delivery-workbench-bounded-actions",
+        "delivery-workbench-program-act-preview",
+        "delivery-workbench-program-view"
+      ],
+      "fact_paths": [
+        "view.bounded_actions.actions",
+        "preview.action",
+        "preview.operation.effect",
+        "preview.act_token"
+      ]
+    },
+    {
+      "id": "program-stop-receipt",
+      "title": "Permanent stop consequence and exact receipt",
+      "capability_tier": "program",
+      "route": "?boundedfocus=receipts#/programs/{run_id}",
+      "capture_id": "program-stop-receipt",
+      "canonical_models": [
+        "delivery-workbench-bounded-actions",
+        "delivery-workbench-program-view",
+        "delivery-workbench-program-event"
+      ],
+      "fact_paths": [
+        "view.bounded_actions.receipts",
+        "view.state",
+        "view.timeline",
+        "event.event_hash"
       ]
     }
   ]

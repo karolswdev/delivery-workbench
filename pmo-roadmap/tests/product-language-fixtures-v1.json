@@ -180,6 +180,32 @@
       "expected": []
     },
     {
+      "id": "mixed-bounded-actions",
+      "classification": "mixed",
+      "technical_label": "Technical details",
+      "technical_explicit": true,
+      "regions": [
+        {
+          "classification": "everyday",
+          "text": "Blocker: checkout review cannot proceed until Maya approves or rejects the repair. Permission may update checkout in this story until the finite limit or expiry, but cannot merge or release. Cost shows a zero signal limit, unknown money use, and four thousand measured tokens remaining. Review what pause, resume, permanent stop, cancel, and reject each do before confirming. If a response fails, reload the saved state instead of guessing whether to retry."
+        },
+        {
+          "classification": "technical_audit",
+          "text": "projection=delivery-workbench-bounded-actions; act_token=sha256:0123; correlation_id=req-01; ledger_head=sha256:4567; receipt_hash=sha256:89ab; grant_generation=2"
+        }
+      ],
+      "concept_names": {
+        "work": "work",
+        "review": "review",
+        "decision": "decision",
+        "blocker": "blocker",
+        "permission": "permission",
+        "cost": "cost",
+        "next_step": "next step"
+      },
+      "expected": []
+    },
+    {
       "id": "technical-architecture-language",
       "classification": "technical_audit",
       "text": "The conductor projection replays the ledger before deriving the operational frontier.",

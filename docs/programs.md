@@ -1525,6 +1525,36 @@ verified view, labels it stale, and offers an explicit refresh that replays the
 history again. A disconnected snapshot never claims that completed work
 vanished or that active work ran twice.
 
+### Bounded action application view
+
+Both control rooms also attach
+`delivery-workbench-bounded-actions@1`. It receives the canonical controls,
+requests, blockers, permission limits, progress facts, failures, and receipts
+that the core has already derived. The view may explain and group those facts,
+but reports false for selecting an action or next work, starting work, writing
+an event, granting authority, changing retry policy, and sending a
+notification.
+
+The default Workbench action center puts permission and consumption before
+state-changing controls. It names allowed effects, exact scope, ceilings,
+expiry and stops, measured use, and permanent exclusions. Each measure keeps
+limit, estimate, actual, and remaining values separate; zero is never rendered
+as unbounded, and a missing value is unknown rather than zero. Decision and
+blocker items name affected work, cause, resolver, exact valid choices, the
+result of each choice, and what happens if the person leaves it pending.
+
+Continue, saved repair, pause, resume, permanent revoke, cancel, reject, and
+unavailable retry or permission elevation remain materially different
+actions. Consequences appear before the existing exact act preview, and the
+resulting readable receipt links back to exact history. A refusal names what
+happened, what stayed unchanged, whether an effect may already exist, the safe
+next step, and exact evidence. An inconclusive transport failure requires
+ledger reload, never a blind retry.
+
+Notification and Telegram presentation may carry one exact closed response
+but cannot create authority. Local principal, request identity, response-set,
+fresh-token, ledger, and generation checks remain the only decisive boundary.
+
 The Authority and Organization inspectors also project an execution contract:
 portable logical profiles, exact or closed-fallback execution ports, council
 seat mandates and perspectives, rule-versus-judge/checkpoint authority,

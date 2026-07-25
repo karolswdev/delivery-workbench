@@ -14,6 +14,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .bounded_actions import build_response_guidance
 from .model import DwError
 from .orchestration import canonical_json
 from .orchestration_run import run_inventory
@@ -118,6 +119,25 @@ def _run_notifications(root, now=None):
         projection = entry["run"]
         for request in projection.get("outstanding_requests", []):
             request_kind = str(request.get("kind") or "")
+            affected_work = str(
+                request.get("origin_node")
+                or request.get("origin")
+                or projection.get("story", {}).get("id")
+                or "bounded delivery"
+            )
+            decisions = [
+                str(item)
+                for item in request.get("response_schema", {}).get(
+                    "decision", []
+                )
+            ]
+            correlation_id = str(request.get("correlation_id") or "")
+            guidance = build_response_guidance(
+                context="bounded-run",
+                affected_work=affected_work,
+                correlation_id=correlation_id,
+                decisions=decisions,
+            )
             kind = (
                 "checkpoint-pending"
                 if request_kind == "checkpoint"
@@ -140,9 +160,10 @@ def _run_notifications(root, now=None):
                     else "an uncovered nudge preview is waiting for a decision"
                 ),
                 "request": {
-                    "correlation_id": request.get("correlation_id"),
+                    "correlation_id": correlation_id,
                     "response_schema": request.get("response_schema"),
                     "boundary": "dw run request (fresh exact act token)",
+                    "guidance": guidance,
                 },
             })
             for republish in request.get("republished", []):
@@ -159,9 +180,10 @@ def _run_notifications(root, now=None):
                     "node": str(request.get("origin_node") or request.get("origin") or ""),
                     "detail": "an outstanding request was republished after resume or restart",
                     "request": {
-                        "correlation_id": request.get("correlation_id"),
+                        "correlation_id": correlation_id,
                         "response_schema": request.get("response_schema"),
                         "boundary": "dw run request (fresh exact act token)",
+                        "guidance": guidance,
                     },
                 })
         for request in projection.get("request_history", []):
@@ -271,6 +293,21 @@ def _program_notifications(root, now=None):
                     },
                     "boundary": (
                         "dw program request (fresh exact act token)"
+                    ),
+                    "guidance": build_response_guidance(
+                        context="program",
+                        affected_work=str(
+                            (view.get("phase_progress") or {}).get(
+                                "selected_stories", []
+                            )[-1]
+                            if (view.get("phase_progress") or {}).get(
+                                "selected_stories"
+                            )
+                            else request.get("port")
+                            or "current program work"
+                        ),
+                        correlation_id=request_id,
+                        decisions=["approve", "reject"],
                     ),
                 },
             })
@@ -672,16 +709,25 @@ def render_outbound(notification):
     lines.append(notification.get("detail", ""))
     request = notification.get("request")
     if request:
+        guidance = request.get("guidance") or {}
+        if guidance.get("affected_work"):
+            lines.append(f"affected work: {guidance['affected_work']}")
         options = request.get("response_schema", {}).get(
             "decision", ["approve", "reject"]
         )
+        for choice in guidance.get("choices", []):
+            lines.append(
+                f"choice {choice.get('decision')}: "
+                f"{choice.get('after') or choice.get('effect')}"
+            )
         lines.append(
-            "to decide, reply: "
+            "to carry this response, reply: "
             f"/decision {request['correlation_id']} {'|'.join(options)}"
         )
         lines.append(
-            "the decision applies only through the local exact-token "
-            "request boundary"
+            "chat does not grant permission: the canonical local principal, "
+            "outstanding request, closed response, freshness, and exact-token "
+            "checks still decide"
         )
     lines.append(f"ack: {notification['id']}")
     return "\n".join(line for line in lines if line)

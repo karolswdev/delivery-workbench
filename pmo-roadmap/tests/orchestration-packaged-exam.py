@@ -596,8 +596,12 @@ def main():
             app.index("function runStateBadge"):
             app.index("/* ── optional Program / Workflow Studio")
         ]
-        for token in ("Live delivery", "Technical details", "fail checks",
-                      "failure routes", "human checkpoints", "confirm this exact act"):
+        for token in (
+            "Live delivery", "Technical details", "fail checks",
+            "failure routes", "human checkpoints", "Actions and decisions",
+            "Before any action", "Could an effect already have occurred?",
+            "view.bounded_actions",
+        ):
             assert token in run_source
         assert "setInterval" not in run_source
         assert "driver_config" not in run_source and "argv:" not in run_source

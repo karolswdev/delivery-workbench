@@ -7378,6 +7378,14 @@ class OrchestrationConductorTest(unittest.TestCase):
         correlation = entry["request"]["correlation_id"]
         self.assertRegex(correlation, r"^req-[0-9a-f]{24}$")
         self.assertNotEqual(correlation, entry["id"])
+        guidance = entry["request"]["guidance"]
+        self.assertEqual(
+            [item["decision"] for item in guidance["choices"]],
+            ["approve", "reject"],
+        )
+        self.assertFalse(guidance["transport_grants_authority"])
+        self.assertIn("affected work:", entry["outbound"])
+        self.assertIn("chat does not grant permission", entry["outbound"])
         for excluded in ("sha256:", "--expect", "apply_command"):
             self.assertNotIn(excluded, entry["outbound"])
         self.assertIn("ack: " + entry["id"], entry["outbound"])
@@ -8799,6 +8807,33 @@ class OrchestrationConductorTest(unittest.TestCase):
             "decides_recovery", "grants_authority",
         ):
             self.assertFalse(progress[key], key)
+        bounded = first["bounded_actions"]
+        self.assertEqual(
+            bounded["kind"], "delivery-workbench-bounded-actions"
+        )
+        self.assertEqual(bounded["context"], "bounded-run")
+        self.assertEqual(
+            {
+                item["action"]: item["available"]
+                for item in bounded["actions"]
+                if item.get("action") in {"tick", "pause", "revoke", "cancel"}
+            },
+            {
+                item["action"]: item["available"]
+                for item in first["controls"]
+                if item["action"] in {"tick", "pause", "revoke", "cancel"}
+            },
+        )
+        self.assertEqual(
+            bounded["permission"]["scope"]["story_id"],
+            first["story"]["id"],
+        )
+        for key in (
+            "starts_work", "writes_events", "selects_action",
+            "selects_next_work", "grants_authority",
+            "changes_retry_policy", "sends_notifications",
+        ):
+            self.assertFalse(bounded[key], key)
 
         keys: set[str] = set()
         def collect(value):
@@ -8912,8 +8947,10 @@ class OrchestrationConductorTest(unittest.TestCase):
         for token in (
             "Live delivery", "Technical details", "fail checks", "Artifact metadata and lineage",
             "failure routes", "human checkpoints", "hash-chained receipts",
-            "preview exact grant", "confirm this exact act", "no automatic continuation",
-            "No certification, commit, elevation, retry", "close explicit stream",
+            "preview exact grant", "Actions and decisions", "Before any action",
+            "Decision and blocker inbox", "Could an effect already have occurred?",
+            "view.bounded_actions", "exact control catalog",
+            "close explicit stream",
         ):
             self.assertIn(token, run_source)
         self.assertNotIn("setInterval", run_source)
@@ -8922,6 +8959,12 @@ class OrchestrationConductorTest(unittest.TestCase):
         self.assertIn("aria-labelledby=\"run-graph-title\"", run_source)
         self.assertIn("@media (max-width: 520px)", css)
         self.assertIn(".run-node.state-active", css)
+        for token in (
+            ".bounded-action-center", ".bounded-permission",
+            ".bounded-inbox-grid", ".bounded-action-grid",
+            ".bounded-failure", ".bounded-usage-table",
+        ):
+            self.assertIn(token, css)
 
 
 class AgentHooksTest(unittest.TestCase):
@@ -13988,6 +14031,343 @@ class LiveProgressProjectionTest(unittest.TestCase):
         )
 
 
+class BoundedActionsProjectionTest(unittest.TestCase):
+    """WLA-27-07: readable actions retain exact canonical boundaries."""
+
+    def test_measurements_never_confuse_zero_unbounded_unknown_or_na(self):
+        from dw_pmo.bounded_actions import classify_measurement
+
+        cases = [
+            (0, {}, "zero", 0),
+            (17, {}, "finite", 17),
+            ("unbounded", {}, "unbounded", None),
+            (None, {}, "unknown", None),
+            (None, {"applicable": False}, "not-applicable", None),
+        ]
+        for value, kwargs, state, normalized in cases:
+            with self.subTest(state=state):
+                measured = classify_measurement(
+                    "limit", value, unit="checks", **kwargs
+                )
+                self.assertEqual(measured["state"], state)
+                self.assertEqual(measured["value"], normalized)
+        self.assertNotEqual(
+            classify_measurement("limit", 0)["state"],
+            classify_measurement("limit", "unbounded")["state"],
+        )
+
+    def test_run_decisions_blockers_permission_and_actions_are_closed(self):
+        from dw_pmo.bounded_actions import build_run_bounded_actions
+
+        correlation = "req-" + "1" * 24
+        projection = {
+            "run_id": "run-" + "2" * 24,
+            "state": "awaiting-approval",
+            "project": "sample",
+            "story": {"id": "SMP-1-01", "title": "Repair checkout"},
+            "expires_at": "2026-07-26T00:00:00Z",
+            "capabilities": ["repository-read", "repository-write"],
+            "permanent_exclusions": ["publication", "release"],
+            "budgets": {
+                "max_agent_starts": {
+                    "used": 2, "limit": 3, "remaining": 1,
+                },
+                "max_nudges": {"used": 0, "limit": 0, "remaining": 0},
+            },
+            "outstanding_requests": [{
+                "correlation_id": correlation,
+                "kind": "checkpoint",
+                "origin": "human",
+                "origin_node": "review-repair",
+                "schema_summary": "Approve or reject the repaired checkout.",
+                "response_schema": {
+                    "decision": ["approve", "reject"],
+                },
+            }],
+            "request_refusals": [{
+                "seq": 7,
+                "correlation_id": "req-" + "3" * 24,
+                "origin_node": "old-review",
+                "reason": "correlation-mismatch",
+                "response_hash": "sha256:" + "4" * 64,
+            }],
+        }
+        decision = {
+            "blocked": [{
+                "node_id": "repair-checkout",
+                "reason": "failed-check",
+            }],
+        }
+        graph = [{
+            "id": "repair-checkout",
+            "title": "Repair checkout",
+            "state": "blocked",
+        }]
+        controls = [
+            {
+                "action": "tick", "decision": "", "correlation_id": "",
+                "available": True, "issues": [], "reason_required": False,
+                "preview_required": True, "starts_work": True,
+            },
+            {
+                "action": "pause", "decision": "", "correlation_id": "",
+                "available": True, "issues": [], "reason_required": True,
+                "preview_required": True, "starts_work": False,
+            },
+            {
+                "action": "resume", "decision": "", "correlation_id": "",
+                "available": False, "issues": [
+                    "cannot resume a run in state awaiting-approval",
+                ], "reason_required": False, "preview_required": True,
+                "starts_work": False,
+            },
+            {
+                "action": "revoke", "decision": "", "correlation_id": "",
+                "available": True, "issues": [], "reason_required": True,
+                "preview_required": True, "starts_work": False,
+            },
+            {
+                "action": "cancel", "decision": "", "correlation_id": "",
+                "available": True, "issues": [], "reason_required": True,
+                "preview_required": True, "starts_work": False,
+            },
+            *[
+                {
+                    "action": "request", "decision": option,
+                    "correlation_id": correlation, "available": True,
+                    "issues": [], "reason_required": False,
+                    "preview_required": True, "starts_work": False,
+                }
+                for option in ("approve", "reject")
+            ],
+            {
+                "action": "retry", "decision": "", "available": False,
+                "issues": [
+                    "retry is governed only by the immutable score failure policy",
+                ], "reason_required": False, "preview_required": False,
+                "starts_work": False,
+            },
+        ]
+        progress = {
+            "progress": {"known_total": 3, "completed": 1},
+            "limits": {
+                "permission": {
+                    "status": "available",
+                    "may_still_use": ["repository read", "repository write"],
+                    "will_not_use": ["publication", "release"],
+                    "summary": "Allowed change types are bounded.",
+                },
+                "counts": [
+                    {
+                        "id": "max_agent_starts", "label": "work starts",
+                        "unit": "starts", "primary": True,
+                    },
+                    {
+                        "id": "max_nudges", "label": "follow-up signals",
+                        "unit": "signals", "primary": True,
+                    },
+                ],
+                "expires_at": projection["expires_at"],
+            },
+            "next_step": {"kind": "repair", "action": "tick"},
+            "review": {"failed_evidence": [{"work": "Checkout check"}]},
+        }
+        events = [{
+            "seq": 5,
+            "event": "run_paused",
+            "ts": "2026-07-25T00:00:00Z",
+            "event_hash": "sha256:" + "5" * 64,
+            "detail": {"reason": "Review failure."},
+        }]
+        model = build_run_bounded_actions(
+            projection, decision, graph, controls, progress, events
+        )
+
+        exact_decision = next(
+            item for item in model["inbox"]
+            if item["id"] == f"decision:{correlation}"
+        )
+        self.assertEqual(
+            [item["decision"] for item in exact_decision["valid_choices"]],
+            ["approve", "reject"],
+        )
+        for item in model["inbox"]:
+            for key in (
+                "affected_work", "why", "resolver", "valid_choices",
+                "after_no_choice",
+            ):
+                self.assertTrue(item[key], (item["id"], key))
+
+        action_by_name = {
+            str(item["action"]): item
+            for item in model["actions"]
+            if item.get("action") and item["action"] != "request"
+        }
+        self.assertEqual(
+            action_by_name["tick"]["label"], "Retry the bounded repair"
+        )
+        self.assertEqual(action_by_name["tick"]["action"], "tick")
+        self.assertNotEqual(
+            action_by_name["pause"]["consequences"]["effect"],
+            action_by_name["revoke"]["consequences"]["effect"],
+        )
+        self.assertNotEqual(
+            action_by_name["revoke"]["consequences"]["effect"],
+            action_by_name["cancel"]["consequences"]["effect"],
+        )
+        self.assertFalse(action_by_name["retry"]["available"])
+        self.assertIn(
+            "does not change retry policy",
+            action_by_name["tick"]["consequences"]["unchanged"],
+        )
+
+        permission = model["permission"]
+        self.assertEqual(permission["scope"]["story_id"], "SMP-1-01")
+        self.assertTrue(permission["allowed_effects"])
+        self.assertTrue(permission["stop_conditions"])
+        self.assertIn("publication", permission["forbidden_effects"])
+        usage = {
+            item["id"]: item for item in model["usage"]["items"]
+        }
+        self.assertEqual(
+            usage["max_nudges"]["measurements"]["limit"]["state"], "zero"
+        )
+        self.assertEqual(
+            usage["money-cost"]["measurements"]["actual"]["state"], "unknown"
+        )
+        self.assertEqual(
+            usage["money-cost"]["measurements"]["limit"]["state"],
+            "not-applicable",
+        )
+        self.assertTrue(model["receipts"][0]["exact_reference"])
+        for key in (
+            "starts_work", "writes_events", "selects_action",
+            "selects_next_work", "grants_authority",
+            "changes_retry_policy", "sends_notifications",
+        ):
+            self.assertFalse(model[key], key)
+
+    def test_program_request_and_remote_guidance_never_mint_authority(self):
+        from dw_pmo.bounded_actions import (
+            build_program_bounded_actions,
+            build_response_guidance,
+        )
+
+        request_id = "claim-" + "6" * 24
+        authority = {
+            "run_id": "program-" + "7" * 24,
+            "state": "checkpoint",
+            "selection": {"story": "SMP-1-02"},
+            "scope": {
+                "project": "sample", "phases": [1],
+                "story_ids": ["SMP-1-02"],
+            },
+            "expires_at": "2026-07-26T00:00:00Z",
+            "capabilities": ["agent:dispatch"],
+            "permanent_exclusions": ["deployment", "release"],
+            "stop_conditions": [
+                "checkpoint-required", "budget-exhausted", "grant-revoked",
+            ],
+            "budgets": {
+                "max_tokens": {
+                    "used": 8_000, "limit": 12_000, "remaining": 4_000,
+                },
+            },
+            "outstanding_requests": [{
+                "claim_id": request_id,
+                "port": "phase-boundary",
+                "status": "open",
+            }],
+            "blocking_obligations": [{
+                "id": "debt-1", "target": "SMP-1-02",
+                "statement": "Verify the migration receipt.",
+                "accountable_role": "verifier", "blocking": True,
+            }],
+        }
+        frontier = {"stop": "checkpoint", "state": "checkpoint"}
+        controls = [
+            *[
+                {
+                    "action": "request", "decision": option,
+                    "request_id": request_id, "available": True,
+                    "reason_required": True, "preview_required": True,
+                    "starts_work": False,
+                }
+                for option in ("approve", "reject")
+            ],
+            {
+                "action": "pause", "decision": None, "request_id": None,
+                "available": True, "reason_required": True,
+                "preview_required": True, "starts_work": False,
+            },
+            {
+                "action": "revoke", "decision": None, "request_id": None,
+                "available": True, "reason_required": True,
+                "preview_required": True, "starts_work": False,
+            },
+        ]
+        progress = {
+            "progress": {"known_total": 1, "completed": 0},
+            "limits": {
+                "permission": {
+                    "status": "available",
+                    "may_still_use": ["agent dispatch"],
+                    "will_not_use": ["deployment", "release"],
+                    "summary": "One exact program scope.",
+                },
+                "counts": [{
+                    "id": "max_tokens", "label": "model tokens",
+                    "unit": "tokens", "primary": True,
+                }],
+            },
+            "next_step": {"kind": "decision"},
+            "review": {},
+        }
+        model = build_program_bounded_actions(
+            authority, frontier, controls, progress, [],
+            refusal=None, receipts=[],
+        )
+        decision = next(
+            item for item in model["inbox"]
+            if item["id"] == f"decision:{request_id}"
+        )
+        self.assertEqual(
+            [item["decision"] for item in decision["valid_choices"]],
+            ["approve", "reject"],
+        )
+        self.assertEqual(
+            model["permission"]["stop_conditions"],
+            ["Checkpoint required", "Budget exhausted", "Grant revoked"],
+        )
+        tokens = next(
+            item for item in model["usage"]["items"]
+            if item["id"] == "max_tokens"
+        )
+        self.assertEqual(
+            tokens["measurements"]["actual"]["value"], 8_000
+        )
+        self.assertEqual(
+            tokens["measurements"]["remaining"]["value"], 4_000
+        )
+
+        guidance = build_response_guidance(
+            context="program",
+            affected_work="SMP-1-02",
+            correlation_id=request_id,
+            decisions=["approve", "reject"],
+        )
+        self.assertEqual(
+            [item["decision"] for item in guidance["choices"]],
+            ["approve", "reject"],
+        )
+        self.assertFalse(guidance["transport_grants_authority"])
+        self.assertFalse(guidance["grants_authority"])
+        self.assertIn(
+            "the local preview token is fresh for the current ledger and generation",
+            guidance["decisive_checks"],
+        )
+
+
 class ProgramSurfaceTest(unittest.TestCase):
     """WLA-26-11: one exact program control room across every adapter."""
 
@@ -14257,6 +14637,34 @@ class ProgramSurfaceTest(unittest.TestCase):
             "decides_recovery", "grants_authority",
         ):
             self.assertFalse(progress[key], key)
+        bounded = expected["bounded_actions"]
+        self.assertEqual(
+            bounded["kind"], "delivery-workbench-bounded-actions"
+        )
+        self.assertEqual(bounded["context"], "program")
+        self.assertEqual(
+            bounded["permission"]["scope"], expected["scope"]
+        )
+        self.assertEqual(
+            len(bounded["permission"]["stop_conditions"]),
+            len(expected["stop_conditions"]),
+        )
+        self.assertTrue(all(
+            item[:1].isupper()
+            for item in bounded["permission"]["stop_conditions"]
+        ))
+        self.assertEqual(
+            expected["stop_conditions"],
+            self.authority.core.replay_program(
+                self.root, run_id
+            )["stop_conditions"],
+        )
+        for key in (
+            "starts_work", "writes_events", "selects_action",
+            "selects_next_work", "grants_authority",
+            "changes_retry_policy", "sends_notifications",
+        ):
+            self.assertFalse(bounded[key], key)
         team_review = expected["team_review"]
         self.assertEqual(
             team_review["kind"], "delivery-workbench-team-review"
@@ -14552,6 +14960,18 @@ class ProgramSurfaceTest(unittest.TestCase):
         self.assertEqual(
             notification["request"]["response_schema"]["decision"],
             ["approve", "reject"],
+        )
+        self.assertEqual(
+            [
+                item["decision"]
+                for item in notification["request"]["guidance"]["choices"]
+            ],
+            ["approve", "reject"],
+        )
+        self.assertFalse(
+            notification["request"]["guidance"][
+                "transport_grants_authority"
+            ]
         )
         self.assertNotIn("act_token", notification["outbound"])
         self.assertEqual(
