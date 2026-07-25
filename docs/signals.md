@@ -317,13 +317,15 @@ unread/acknowledged state, acknowledge idempotently, and list identically
 across CLI, MCP, HTTP, and the Workbench.
 
 Delivery rides the existing Telegram surface under Phase-20 per-person
-consent, unchanged. An outbound message carries facts, references, and the
-pending request's preview document — never a consent token, never an apply
-command. A phone reply is only ever the typed response document to a
-request port; the decision itself still crosses the local exact-token
-boundary. With the channel unconfigured or unreachable, facts still persist
-and surface locally; delivery failure is a recorded, ceiling-bounded retry,
-never a crash and never a silent drop.
+consent, unchanged. An outbound message names affected work, presents only the
+pending request's exact closed choices and what follows each one, and carries
+facts and references — never a consent token and never an apply command. A
+phone reply is only a response carrier to one request port. The local
+principal, exact outstanding request, closed response set, current
+ledger/generation, and fresh preview token still decide whether the response
+is accepted. With the channel unconfigured or unreachable, facts still
+persist and surface locally; delivery failure is a recorded, ceiling-bounded
+retry, never a crash and never a silent drop.
 
 ## Storage and privacy
 

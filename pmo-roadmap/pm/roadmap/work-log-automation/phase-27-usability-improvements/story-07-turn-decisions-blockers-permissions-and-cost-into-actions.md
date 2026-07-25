@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 27
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-27-03, WLA-27-05, WLA-27-06
 - **Unblocks:** WLA-27-08, WLA-27-09, WLA-27-10
 - **Owner:** unassigned
@@ -32,25 +32,25 @@ or already-applied requests.
 
 ## Acceptance criteria
 
-- [ ] Every blocker says what work is affected, why it cannot proceed, who or
+- [x] Every blocker says what work is affected, why it cannot proceed, who or
   what can resolve it, which choices are currently valid, and what will happen
   after each choice.
-- [ ] Decision controls are generated from the exact outstanding request and
+- [x] Decision controls are generated from the exact outstanding request and
   closed response set; stale, revoked, already-applied, unauthorized, or
   mismatched responses refuse without an ambiguous retry.
-- [ ] Before granting or consuming permission, the application states the
+- [x] Before granting or consuming permission, the application states the
   concrete effects allowed, scope, ceilings, expiry/stop conditions, current
   consumption, and what remains forbidden in ordinary language.
-- [ ] Cost and progress distinguish limits, estimates, actual consumption,
+- [x] Cost and progress distinguish limits, estimates, actual consumption,
   remaining capacity, and unknown/not-applicable values; zero and unbounded
   cannot be confused.
-- [ ] Pause, stop, revoke, cancel, reject, retry, and resume are distinct
+- [x] Pause, stop, revoke, cancel, reject, retry, and resume are distinct
   actions with consequences shown before confirmation and exact receipts after
   completion.
-- [ ] Errors and refusals state what happened, what state remained unchanged,
+- [x] Errors and refusals state what happened, what state remained unchanged,
   whether an effect may already have occurred, the safe next step, and how to
   inspect exact technical evidence.
-- [ ] Notification/remote presentation may carry or draft a response but
+- [x] Notification/remote presentation may carry or draft a response but
   cannot manufacture authority; canonical principal, token, freshness, and
   request checks remain decisive.
 

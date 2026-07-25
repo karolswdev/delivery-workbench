@@ -22,6 +22,9 @@ function esc(s) {
 const SNAPSHOT_MODE = new URLSearchParams(location.search).has("snapshot");
 const SNAPSHOT_LIVE_STATE = new URLSearchParams(location.search).get("liveconnection");
 const LIVE_TECHNICAL_OPEN = new URLSearchParams(location.search).has("livetechnical");
+const SNAPSHOT_BOUNDED_FOCUS = new URLSearchParams(location.search).get("boundedfocus");
+const SNAPSHOT_BOUNDED_PREVIEW = new URLSearchParams(location.search).get("boundedpreview");
+const SNAPSHOT_BOUNDED_ERROR = new URLSearchParams(location.search).get("boundederror");
 
 function syncGet(path) {
   const xhr = new XMLHttpRequest();
@@ -1179,7 +1182,7 @@ let orchState = {
   name: "", score: null, exists: false, selected: null, view: "design",
   preview: null, inventory: [], validationTimer: null, jsonDraft: "",
   runInventory: [], runs: [], runId: "", runView: null, runLoading: false,
-  runError: "", runPlan: null, runAct: null, runStream: null,
+  runError: "", runPlan: null, runAct: null, runResult: null, runStream: null,
   runConnection: { status: SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "checking" },
   grantDraft: { project: "", story: "", operator: "", minutes: 60 },
   controlReason: "",
@@ -1567,25 +1570,15 @@ function runTimelineHtml(view) {
 }
 
 function runControlsHtml(view) {
-  const available = (view.controls || []).filter((control) => control.available);
-  const unavailable = (view.controls || []).filter((control) => !control.available);
-  const requestControls = available.filter((control) => control.action === "request");
-  if (view.terminal && !requestControls.length) return `<section class="run-controls terminal"><div><span>terminal handoff</span><strong>${esc(view.state)}</strong></div><p>${esc(view.terminal_meaning)}</p><p class="guard">No certification, commit, elevation, retry, or apply control is exposed in this state.</p></section>`;
-  const shown = view.terminal ? requestControls : available;
-  return `<section class="run-controls${view.terminal ? " terminal-with-request" : ""}">${view.terminal ? `<div><span>terminal handoff with a typed request</span><strong>${esc(view.state)}</strong></div><p>${esc(view.terminal_meaning)}</p><p class="guard">Only the correlated request response is available; certification, commit, elevation, and retry remain absent.</p>` : ""}<div class="run-control-head"><div><span>separate act boundary</span><strong>Preview, inspect, then confirm exactly one control</strong></div>${badge("no automatic continuation", "warn")}</div>
-    ${available.some((control) => control.reason_required) ? `<label class="run-reason">operator reason<input id="run-control-reason" value="${esc(orchState.controlReason)}" placeholder="bounded reason, required"></label>` : ""}
-    <div class="run-control-buttons">${shown.map((control) => `<button type="button" data-run-act="${esc(control.action)}" data-run-decision="${esc(control.decision)}" data-run-correlation="${esc(control.correlation_id || "")}" class="${control.action === "cancel" || control.decision === "reject" ? "danger" : control.starts_work ? "starts-work" : ""}">preview ${esc(control.action)}${control.correlation_id ? ` · ${esc(control.correlation_id)}` : ""}${control.decision ? ` · ${esc(control.decision)}` : ""}${control.starts_work ? " (may start work)" : ""}</button>`).join("") || '<span class="hint">No bounded control is applicable.</span>'}</div>
-    <div class="run-unavailable">${unavailable.map((control) => `<div><strong>${esc(control.action)}${control.decision ? ` · ${esc(control.decision)}` : ""}</strong><span>${esc((control.issues || []).join("; "))}</span></div>`).join("")}</div>
+  return `<section class="run-controls exact-control-audit"><div class="run-control-head"><div><span>exact control catalog</span><strong>Applicability copied from the current saved run</strong></div>${badge("inspection only", "ok")}</div>
+    <div class="run-unavailable">${(view.controls || []).map((control, index) => `<div><strong>${esc(control.action)}${control.decision ? ` · ${esc(control.decision)}` : ""}</strong><span>${control.available ? "available through the ordinary action review above" : esc((control.issues || []).join("; ") || "not applicable in the current state")}</span><code>/controls/${esc(index)}</code></div>`).join("")}</div>
   </section>`;
 }
 
 function runActPreviewHtml(preview) {
   if (!preview) return "";
-  return `<section class="run-consent ${preview.applicable ? "" : "refused"}" aria-live="polite"><div class="run-consent-head"><div><span>exact control preview</span><strong>${esc(preview.action)}${preview.decision ? ` · ${esc(preview.decision)}` : ""}</strong></div>${badge(preview.starts_work ? "may start bounded work" : "one ledger act", preview.starts_work ? "warn" : "ok")}</div>
-    <div class="run-token"><span>state + intent token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.control_generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p>
-    ${preview.correlation_id ? `<p><strong>bound request:</strong> <code>${esc(preview.correlation_id)}</code> · ${esc(preview.response_outcome)}</p>` : ""}${preview.reason ? `<p><strong>bound reason:</strong> ${esc(preview.reason)}</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}
-    <div class="run-consent-actions">${preview.applicable ? '<button type="button" id="run-act-confirm">confirm this exact act</button>' : ""}<button type="button" id="run-act-close">close preview</button></div>
-    <small>Any ledger change, action change, decision change, or reason change invalidates this token.</small></section>`;
+  return `<details class="bounded-exact-preview"><summary>Exact run preview</summary><div class="run-token"><span>state + intent token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.control_generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p>
+    ${preview.correlation_id ? `<p><strong>bound request:</strong> <code>${esc(preview.correlation_id)}</code> · ${esc(preview.response_outcome)}</p>` : ""}${preview.reason ? `<p><strong>bound reason:</strong> ${esc(preview.reason)}</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
 }
 
 function runStreamHtml(stream) {
@@ -1693,15 +1686,147 @@ function liveLimitsHtml(progress) {
   return `<section class="live-panel live-limits"><div class="live-panel-head"><div><span>Remaining permission and cost</span><strong>What this delivery may still use</strong></div></div><div class="live-limit-summary"><article><span>Change permission</span><strong>${esc(permission.status || "unknown")}</strong><p>${esc(permission.summary || "")}</p>${(permission.will_not_use || []).length ? `<small>Will not use: ${esc(permission.will_not_use.join(", "))}</small>` : ""}</article><article><span>Money cost</span><strong>${esc(cost.status || "unknown")}</strong><p>${esc(cost.summary || "")}</p></article></div><div class="live-limit-counts">${primaryCounts.map((item) => `<article class="${item.status === "none-left" ? "empty" : ""}"><span>${esc(item.label)}</span><strong>${esc(item.remaining)} ${esc(item.unit)} left</strong><small>${esc(item.used)} used of ${esc(item.limit)}</small></article>`).join("")}</div>${limits.expires_at ? `<p class="live-expiry">Permission ends ${esc(limits.expires_at)}.</p>` : ""}</section>`;
 }
 
+function boundedScopeText(scope) {
+  if (!scope || typeof scope !== "object") return String(scope || "No scope is recorded.");
+  return Object.entries(scope)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => `${key.replaceAll("_", " ")}: ${Array.isArray(value) ? value.join(", ") : typeof value === "object" ? JSON.stringify(value) : value}`)
+    .join(" · ") || "No scope is recorded.";
+}
+
+function boundedMeasurementHtml(measurement) {
+  const item = measurement || { state: "unknown", unit: "units" };
+  if (item.state === "finite" || item.state === "zero") return `<strong>${esc(item.value)} ${esc(item.unit)}</strong><small>${esc(item.state)}</small>`;
+  const label = item.state === "not-applicable" ? "Not applicable"
+    : item.state === "unbounded" ? "Unbounded"
+      : "Unknown";
+  return `<strong>${label}</strong><small>${esc(item.state)}</small>`;
+}
+
+function boundedMeasurementText(measurement) {
+  const item = measurement || { state: "unknown", unit: "units" };
+  if (item.state === "finite" || item.state === "zero") return `${item.value} ${item.unit}`;
+  return item.state === "not-applicable" ? "not applicable"
+    : item.state === "unbounded" ? "unbounded" : "unknown";
+}
+
+function boundedUsageTable(model, all = false) {
+  const items = (model?.usage?.items || []).filter((item) => all || item.primary !== false);
+  return `<div class="tablewrap bounded-usage-table"><table><thead><tr><th>Measure</th><th>Limit</th><th>Estimate</th><th>Actual</th><th>Remaining</th></tr></thead><tbody>${items.map((item) => `<tr><td><strong>${esc(item.label)}</strong><small>${esc(item.category)}</small></td>${["limit", "estimate", "actual", "remaining"].map((kind) => `<td>${boundedMeasurementHtml(item.measurements?.[kind])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function boundedPermissionHtml(model) {
+  const permission = model?.permission || {};
+  const allowed = permission.allowed_effects || [];
+  const forbidden = permission.forbidden_effects || [];
+  const current = permission.current_use || [];
+  return `<section class="bounded-permission" data-bounded-section="limits"><div class="bounded-section-head"><div><span>Before any action</span><h3>Permission, scope, limits, and cost</h3></div>${badge(permission.status || "unknown", permission.status === "available" ? "ok" : "warn")}</div>
+    <div class="bounded-permission-grid"><article><span>Allowed effects</span><p>${allowed.map((item) => badge(String(item).replace(/[_:.-]/g, " "), "ok")).join(" ") || "No change effect is currently available."}</p></article><article><span>Affected scope</span><p>${esc(boundedScopeText(permission.scope))}</p></article><article><span>Expiry and stops</span><p>${permission.expires_at ? `Permission ends ${esc(permission.expires_at)}.` : "No expiry value is recorded."}</p><ul>${(permission.stop_conditions || []).map((item) => `<li>${esc(item)}</li>`).join("")}</ul></article><article><span>Still forbidden</span><p>${forbidden.map((item) => badge(String(item).replace(/[_:.-]/g, " "), "issue")).join(" ") || "No explicit exclusion is recorded."}</p></article></div>
+    <p class="bounded-current-use"><strong>Current consumption:</strong> ${current.slice(0, 8).map((item) => `${esc(item.label)} — ${esc(boundedMeasurementText(item.actual))} used, ${esc(boundedMeasurementText(item.remaining))} remaining`).join(" · ") || "No counted consumption is recorded."}</p>
+    ${boundedUsageTable(model)}
+    <details class="bounded-all-usage"><summary>Every limit and measurement</summary>${boundedUsageTable(model, true)}<p>${esc(model?.usage?.legend?.zero || "")} ${esc(model?.usage?.legend?.unbounded || "")} Unknown and not applicable remain separate.</p></details>
+  </section>`;
+}
+
+function boundedInboxHtml(model) {
+  const inbox = model?.inbox || [];
+  return `<section class="bounded-inbox" data-bounded-section="failure"><div class="bounded-section-head"><div><span>Decision and blocker inbox</span><h3>${inbox.length ? `${esc(inbox.length)} item${inbox.length === 1 ? "" : "s"} need attention` : "Nothing needs a decision right now"}</h3></div>${badge(inbox.length ? "attention" : "clear", inbox.length ? "warn" : "ok")}</div>
+    <div class="bounded-inbox-grid">${inbox.map((item) => `<article class="bounded-inbox-item kind-${esc(item.kind)}"><div><span>${esc(item.kind)}</span>${badge(item.status, item.kind === "refusal" ? "issue" : "warn")}</div><h4>${esc(item.affected_work)}</h4><dl><div><dt>Why it cannot proceed</dt><dd>${esc(item.why)}</dd></div><div><dt>Who or what resolves it</dt><dd>${esc(item.resolver)}</dd></div></dl><h5>Valid choices and what follows</h5><ul>${(item.valid_choices || []).map((choice) => `<li><strong>${esc(choice.label)}${choice.available ? "" : " — unavailable"}</strong><span>${esc(choice.effect)} ${esc(choice.after)}</span></li>`).join("") || "<li><strong>Inspect only</strong><span>No state-changing choice is currently valid; review exact evidence.</span></li>"}</ul><p><strong>If you do nothing:</strong> ${esc(item.after_no_choice)}</p>${item.explanation ? boundedFailureDetailsHtml(item.explanation, "Recorded refusal") : ""}<details><summary>Technical details</summary><code>${esc(item.technical_reference || "no exact reference")}</code></details></article>`).join("") || '<p class="hint">The saved state has no blocker, pending decision, or refusal.</p>'}</div>
+  </section>`;
+}
+
+function boundedFailureDetailsHtml(explanation, label = "Action could not be completed") {
+  const item = explanation || {};
+  const effect = item.effect_answer === "no" || item.effect_may_have_occurred === false
+    ? "No — this refusal records no effect."
+    : item.effect_answer === "yes" || item.effect_may_have_occurred === true
+      ? "Yes — inspect the saved receipt before another action."
+      : "Unknown — reload the saved history before another action.";
+  return `<section class="bounded-failure" role="alert"><h4>${esc(label)}</h4><dl><div><dt>What happened</dt><dd>${esc(item.what_happened || "The action was refused.")}</dd></div><div><dt>What stayed unchanged</dt><dd>${esc(item.what_stayed_unchanged || "The last verified delivery state remains visible.")}</dd></div><div><dt>Could an effect already have occurred?</dt><dd>${esc(effect)}</dd></div><div><dt>Safe next step</dt><dd>${esc(item.safe_next_step || "Reload the saved state before acting again.")}</dd></div></dl><details><summary>Technical details</summary><pre>${esc(JSON.stringify(item.technical_evidence || {}, null, 2))}</pre></details></section>`;
+}
+
+function boundedErrorHtml(message) {
+  if (!message) return "";
+  const refusedBeforeEffect = /before work|no event was appended|no decision was applied|no grant was created/i.test(message);
+  return boundedFailureDetailsHtml({
+    what_happened: message,
+    what_stayed_unchanged: refusedBeforeEffect
+      ? "No work or saved event changed at this refusal boundary."
+      : "The last verified view remains visible; no alternative action was inferred.",
+    effect_may_have_occurred: refusedBeforeEffect ? false : null,
+    safe_next_step: "Reload the saved state, inspect the exact history, and preview only a currently available action.",
+    technical_evidence: { message },
+  });
+}
+
+function boundedActionMatch(model, preview, target) {
+  if (!preview) return null;
+  return (model?.actions || []).find((item) => item.action === preview.action
+    && String(item.decision || "") === String(preview.decision || "")
+    && String(item.correlation_id || "") === String(target === "program" ? preview.request_id || "" : preview.correlation_id || ""));
+}
+
+function boundedPreviewHtml(model, preview, target) {
+  if (!preview) return "";
+  const action = boundedActionMatch(model, preview, target);
+  const consequences = action?.consequences || {};
+  const applicable = Boolean(preview.applicable);
+  const exact = target === "run" ? runActPreviewHtml(preview) : `<details class="bounded-exact-preview"><summary>Exact program preview</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
+  const refusal = applicable ? "" : boundedFailureDetailsHtml({
+    what_happened: (preview.issues || []).join("; ") || "The current saved state refused this preview.",
+    what_stayed_unchanged: "Previewing changed no work, permission, cost, or saved event.",
+    effect_may_have_occurred: false,
+    safe_next_step: "Close this preview and choose only a currently available action.",
+    technical_evidence: { action: preview.action, issues: preview.issues || [] },
+  }, "Preview refused");
+  return `<section class="bounded-preview ${applicable ? "" : "refused"}" aria-live="polite"><div class="bounded-section-head"><div><span>Review before confirmation</span><h3>${esc(action?.label || preview.action)}</h3></div>${badge(preview.starts_work ? "may start bounded work" : "one saved action", preview.starts_work ? "warn" : "ok")}</div><dl class="bounded-consequence"><div><dt>What this will do</dt><dd>${esc(consequences.effect || "Apply only this exact reviewed operation.")}</dd></div><div><dt>What it will not do</dt><dd>${esc(consequences.unchanged || "It will not broaden permission or select a different action.")}</dd></div><div><dt>What follows</dt><dd>${esc(consequences.after || "The saved state and receipt will be reloaded.")}</dd></div></dl>${refusal}${exact}<div class="run-consent-actions">${applicable ? `<button type="button" id="${target === "run" ? "run" : "program"}-act-confirm" class="${action?.severity === "danger" ? "danger" : action?.may_start_work ? "starts-work" : ""}">Confirm ${esc(String(action?.label || preview.action).toLowerCase())}</button>` : ""}<button type="button" id="${target === "run" ? "run" : "program"}-act-close">Return without applying</button></div></section>`;
+}
+
+function boundedReceiptsHtml(model, result) {
+  const receipts = model?.receipts || [];
+  const resultHtml = result ? `<article class="bounded-result"><div><span>Just completed</span>${badge("recorded", "ok")}</div><h4>${esc(result.kind || "Bounded action completed")}</h4><p>${esc(result.stop || result.state || result.result || result.decision || "The saved operation completed.")}</p><details><summary>Exact receipt</summary><pre>${esc(JSON.stringify(result, null, 2))}</pre></details></article>` : "";
+  return `<section class="bounded-receipts"><div class="bounded-section-head"><div><span>After completion</span><h3>Readable receipts</h3></div>${badge(`${receipts.length + (result ? 1 : 0)} shown`, "ok")}</div><div class="bounded-receipt-grid">${resultHtml}${receipts.map((item) => `<article><div><span>${esc(item.action)}</span>${badge(item.outcome || "recorded", "ok")}</div><h4>${esc(item.label)}</h4><p>${esc(item.at || "time recorded in exact history")}</p><details><summary>Exact receipt</summary><code>${esc(item.exact_reference || "see ordered history")}</code></details></article>`).join("") || (!result ? '<p class="hint">No bounded action receipt has been recorded yet.</p>' : "")}</div></section>`;
+}
+
+function boundedActionButtonsHtml(model, target) {
+  const actions = model?.actions || [];
+  const read = actions.filter((item) => item.kind === "read");
+  const controls = actions.filter((item) => item.kind !== "read");
+  const controlButton = (item) => {
+    const attrs = target === "run"
+      ? `data-run-act="${esc(item.action)}" data-run-decision="${esc(item.decision || "")}" data-run-correlation="${esc(item.correlation_id || "")}"`
+      : `data-program-act="${esc(item.action)}" data-program-decision="${esc(item.decision || "")}" data-program-request="${esc(item.correlation_id || "")}"`;
+    return `<article class="bounded-action-card severity-${esc(item.severity)} ${item.available ? "" : "unavailable"}"><div><span>${esc(item.kind)}</span>${badge(item.available ? "available" : "unavailable", item.available ? "ok" : "warn")}</div><h4>${esc(item.label)}</h4><p>${esc(item.consequences?.effect)}</p><small><strong>Then:</strong> ${esc(item.consequences?.after)}</small>${item.available ? `<button type="button" ${attrs} class="${item.severity === "danger" ? "danger" : item.may_start_work ? "starts-work" : ""}">Review ${esc(item.label.toLowerCase())}</button>` : `<p class="bounded-action-issue">${esc(item.issue)}</p>`}</article>`;
+  };
+  return `<div class="bounded-read-actions">${read.map((item) => `<button type="button" data-bounded-read="${esc(item.read_action)}"><strong>${esc(item.label)}</strong><span>${esc(item.consequences?.effect)}</span></button>`).join("")}</div><div class="bounded-action-grid">${controls.map(controlButton).join("")}</div>`;
+}
+
+function boundedActionCenterHtml(model, preview, error, result, target) {
+  if (!model) return "";
+  const available = (model.actions || []).filter((item) => item.available);
+  const needsReason = available.some((item) => item.reason_required);
+  const hasSupervise = available.some((item) => item.action === "supervise");
+  const reason = target === "run" ? orchState.controlReason : programState.reason;
+  return `<section class="bounded-action-center" aria-labelledby="${esc(target)}-bounded-actions"><div class="bounded-action-hero"><div><span>Actions and decisions</span><h2 id="${esc(target)}-bounded-actions">Understand the consequence, then review one exact action</h2><p>${esc(model.summary)}</p></div>${badge("nothing applies without confirmation", "warn")}</div>
+    ${boundedInboxHtml(model)}
+    ${boundedPermissionHtml(model)}
+    <section class="bounded-choices"><div class="bounded-section-head"><div><span>Available choices</span><h3>Pause, resume, stop, cancel, reject, and continue stay distinct</h3></div></div>${needsReason ? `<label class="run-reason">Why are you taking this action?<input id="${target === "run" ? "run" : "program"}-control-reason" maxlength="${target === "run" ? "200" : "1000"}" value="${esc(reason)}" placeholder="Required for stop and decision actions"></label>` : ""}${hasSupervise ? `<div class="program-ceilings"><label>maximum steps in this pass<input id="program-max-ticks" type="number" min="1" max="10000" value="${esc(programState.maxTicks)}"></label><label>maximum duration (seconds)<input id="program-max-seconds" type="number" min="1" max="86400" value="${esc(programState.maxSeconds)}"></label></div>` : ""}${boundedActionButtonsHtml(model, target)}</section>
+    ${boundedErrorHtml(error)}
+    ${boundedPreviewHtml(model, preview, target)}
+    ${boundedReceiptsHtml(model, result)}
+  </section>`;
+}
+
 function liveActivityHtml(progress) {
   const activity = progress.activity || [];
   return `<section class="live-panel live-activity"><div class="live-panel-head"><div><span>Readable activity</span><strong>Related work and outcomes grouped together</strong></div>${badge(`${activity.length} groups`)}</div><ol>${activity.map((item) => `<li class="state-${esc(item.status)}"><div><strong>${esc(item.title)}</strong>${badge(item.status, ["active", "complete"].includes(item.status) ? "ok" : ["blocked"].includes(item.status) ? "issue" : "warn")}</div><p>${esc(item.summary || "")}</p>${(item.outcomes || []).length ? `<small>Outcomes: ${esc(item.outcomes.join(", "))}</small>` : ""}</li>`).join("") || "<li><p>No delivery activity has been recorded yet.</p></li>"}</ol></section>`;
 }
 
-function liveProgressShell(progress, connection, toolbar, technicalHtml, technicalOpen = false) {
+function liveProgressShell(progress, connection, toolbar, actionHtml, technicalHtml, technicalOpen = false) {
   const ordinary = `<section class="live-state-summary state-${esc(progress.status?.group)}"><div><span>Delivery state</span><strong>${esc(progress.status?.label)}</strong><p>${esc(progress.status?.meaning)}</p></div><div><span>Current scope</span><strong>${esc(progress.delivery?.scope || "")}</strong><p>${esc(progress.delivery?.current_story || progress.delivery?.work_id || "")}</p></div></section>
     ${liveAnswerGrid(progress)}
     ${liveNextHtml(progress)}
+    ${actionHtml}
     ${liveProgressGroups(progress)}
     <div class="live-two-column">${livePeopleHtml(progress)}${liveReviewHtml(progress)}</div>
     ${liveLimitsHtml(progress)}
@@ -1726,11 +1851,73 @@ function openLiveTechnical() {
   details.querySelector("summary")?.focus();
 }
 
+async function handleBoundedRead(action, target) {
+  if (action === "reload") {
+    if (target === "run") await refreshRunData();
+    else await refreshProgramView();
+    return;
+  }
+  if (action === "technical") {
+    openLiveTechnical();
+    return;
+  }
+  if (action === "leave") {
+    if (target === "run") {
+      orchState.runAct = null; orchState.runError = "";
+      renderOrchestration();
+    } else {
+      programState.act = null; programState.error = "";
+      renderPrograms();
+    }
+    return;
+  }
+  const selector = action === "limits"
+    ? '[data-bounded-section="limits"]'
+    : '[data-bounded-section="failure"]';
+  const section = document.querySelector(selector);
+  section?.scrollIntoView({
+    behavior: SNAPSHOT_MODE ? "auto" : "smooth",
+    block: "start",
+  });
+  section?.querySelector("h3, h4")?.setAttribute("tabindex", "-1");
+  section?.querySelector("h3, h4")?.focus();
+}
+
+function focusBoundedSnapshot() {
+  if (!SNAPSHOT_MODE || !SNAPSHOT_BOUNDED_FOCUS) return;
+  const selectors = {
+    actions: ".bounded-action-center",
+    inbox: ".bounded-inbox",
+    limits: ".bounded-permission",
+    preview: ".bounded-preview",
+    error: ".bounded-failure",
+    receipts: ".bounded-receipts",
+  };
+  const focus = () => {
+    const target = document.querySelector(
+      selectors[SNAPSHOT_BOUNDED_FOCUS] || ".bounded-action-center"
+    );
+    if (!target) return;
+    const center = target.closest(".bounded-action-center");
+    const live = center?.closest(".live-delivery");
+    const hero = center?.querySelector(".bounded-action-hero");
+    if (center && target !== center && hero) hero.after(target);
+    const header = live?.querySelector(".live-header");
+    if (center && header) header.after(center);
+    const top = target.getBoundingClientRect().top + window.scrollY - 8;
+    window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+  };
+  focus();
+  requestAnimationFrame(() => requestAnimationFrame(focus));
+  setTimeout(focus, 100);
+}
+
 function runViewHtml() {
   if (orchState.runLoading) return `<div class="orch-run-shell">${stateHtml("Replaying the authoritative run ledger…")}</div>`;
   const error = orchState.runError ? `<div class="guard run-error" role="alert">${esc(orchState.runError)}</div>` : "";
   if (!orchState.runs.length || !orchState.runView) return `<div class="orch-run-shell">${error}${runEmptyHtml()}</div>`;
   const view = orchState.runView;
+  const actions = boundedActionCenterHtml(view.bounded_actions, orchState.runAct, orchState.runError, orchState.runResult, "run");
   const toolbar = `<div class="live-toolbar"><label>delivery run<select id="run-select">${orchState.runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run.story?.id || item.run_id)} · ${esc(item.run.state)}</option>`).join("")}</select></label><button type="button" id="run-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
   const technical = `<div class="run-summary"><div><span>exact state</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>ledger</span><strong>${esc(view.ledger_events)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>attempts</span><strong>${esc(view.attempts.active.length)} active · ${esc(view.attempts.completed.length)} complete</strong><small>generation ${esc(view.control_generation)}</small></div><div><span>authority</span><strong>${view.dispatch_allowed ? "dispatch permitted" : "dispatch stopped"}</strong><small>${view.expired ? "grant expired" : "grant fresh by time"}</small></div></div>
     ${runBudgetHtml(view.budgets)}
@@ -1739,10 +1926,10 @@ function runViewHtml() {
     <section class="run-panel"><div class="run-panel-head"><div><span>declared output conventions</span><strong>Artifact metadata and lineage</strong></div></div>${runArtifactHtml(view)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>typed human request ports</span><strong>Outstanding requests, age, origin, schemas, and checkpoint lineage</strong></div>${badge("inspect-only history", "ok")}</div>${runRequestsHtml(view)}</section>
     <section class="run-panel">${runRoutesHtml(view)}</section>
-    ${runControlsHtml(view)}${runActPreviewHtml(orchState.runAct)}
+    ${runControlsHtml(view)}
     <section class="run-panel"><div class="run-panel-head"><div><span>operator notifications</span><strong>Derived from the ledger and signal chains; ack is receipted</strong></div>${badge("previews, never tokens", "ok")}</div>${runNotificationsHtml(view)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>hash-chained receipts</span><strong>Run ledger timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${runTimelineHtml(view)}</section>`;
-  return `<div class="orch-run-shell" data-run-id="${esc(view.run_id)}">${error}${liveProgressShell(view.live_progress, orchState.runConnection, toolbar, technical, Boolean(orchState.runAct || orchState.runStream))}</div>`;
+  return `<div class="orch-run-shell" data-run-id="${esc(view.run_id)}">${liveProgressShell(view.live_progress, orchState.runConnection, toolbar, actions, technical, Boolean(orchState.runStream))}</div>`;
 }
 
 function runNotificationsHtml(view) {
@@ -2119,7 +2306,7 @@ async function confirmRunGrant() {
 async function previewRunAct(action, decision, correlation) {
   const control = (orchState.runView?.controls || []).find((item) => item.action === action && String(item.decision || "") === String(decision || "") && String(item.correlation_id || "") === String(correlation || ""));
   const reason = control?.reason_required ? orchState.controlReason.trim() : "";
-  orchState.runAct = null; orchState.runError = ""; renderOrchestration();
+  orchState.runAct = null; orchState.runError = ""; orchState.runResult = null; renderOrchestration();
   const { status, body } = await postJson("/api/runs/preview", { run_id: orchState.runId, action, ...(reason ? { reason } : {}), ...(decision ? { decision } : {}), ...(correlation ? { correlation_id: correlation } : {}) });
   if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run preview failed (${status})`; }
   else orchState.runAct = body.data;
@@ -2135,7 +2322,7 @@ async function confirmRunAct() {
   orchState.runLoading = false;
   if (status === 409) { orchState.runAct = null; orchState.runError = "Stale run act refused before work or ledger change. Refresh once and preview the current state."; renderOrchestration(); return; }
   if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run act failed (${status})`; renderOrchestration(); return; }
-  orchState.runAct = null; orchState.controlReason = ""; await refreshRunData();
+  orchState.runResult = body.data; orchState.runAct = null; orchState.controlReason = ""; await refreshRunData();
 }
 
 async function openRunStream(button) {
@@ -2149,7 +2336,7 @@ async function openRunStream(button) {
 function wireRunView() {
   document.getElementById("run-refresh")?.addEventListener("click", refreshRunData);
   document.querySelector("[data-live-technical]")?.addEventListener("click", openLiveTechnical);
-  document.getElementById("run-select")?.addEventListener("change", async (event) => { orchState.runId = event.target.value; orchState.runAct = null; orchState.runStream = null; await refreshRunData(); });
+  document.getElementById("run-select")?.addEventListener("change", async (event) => { orchState.runId = event.target.value; orchState.runAct = null; orchState.runResult = null; orchState.runStream = null; await refreshRunData(); });
   document.getElementById("run-grant-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewRunGrant(event.currentTarget); });
   document.getElementById("run-start-confirm")?.addEventListener("click", confirmRunGrant);
   document.getElementById("run-plan-close")?.addEventListener("click", () => { orchState.runPlan = null; renderOrchestration(); });
@@ -2157,6 +2344,7 @@ function wireRunView() {
   document.querySelectorAll("[data-run-act]").forEach((button) => button.addEventListener("click", () => previewRunAct(button.dataset.runAct, button.dataset.runDecision, button.dataset.runCorrelation)));
   document.getElementById("run-act-confirm")?.addEventListener("click", confirmRunAct);
   document.getElementById("run-act-close")?.addEventListener("click", () => { orchState.runAct = null; renderOrchestration(); });
+  document.querySelectorAll("[data-bounded-read]").forEach((button) => button.addEventListener("click", () => handleBoundedRead(button.dataset.boundedRead, "run")));
   document.querySelectorAll("[data-run-stream]").forEach((button) => button.addEventListener("click", () => openRunStream(button)));
   document.querySelectorAll("[data-ntf-ack]").forEach((button) => button.addEventListener("click", () => ackNotification(button.dataset.ntfAck)));
   document.getElementById("run-stream-close")?.addEventListener("click", () => { orchState.runStream = null; renderOrchestration(); });
@@ -2206,6 +2394,7 @@ async function viewOrchestration(name) {
     orchState.score = minimalScore(); orchState.name = orchState.score.slug; orchState.exists = false; orchState.preview = null;
   }
   orchState.selected = null; orchState.jsonDraft = "";
+  orchState.runAct = null; orchState.runResult = null; orchState.runError = "";
   selectScoreRuns();
   const requestedView = new URLSearchParams(location.search).get("orchview");
   if (["design", "validate", "json", "run"].includes(requestedView)) orchState.view = requestedView;
@@ -2213,12 +2402,41 @@ async function viewOrchestration(name) {
     try {
       orchState.runView = (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data;
       orchState.runConnection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
+      if (SNAPSHOT_MODE && SNAPSHOT_BOUNDED_PREVIEW) {
+        const control = (orchState.runView.controls || []).find((item) => item.available && (
+          SNAPSHOT_BOUNDED_PREVIEW === "decision"
+            ? item.action === "request" && item.decision === "approve"
+            : item.action === SNAPSHOT_BOUNDED_PREVIEW
+        ));
+        if (control) {
+          orchState.controlReason = control.reason_required
+            ? "Review this deterministic viewport action."
+            : "";
+          const response = await postJson("/api/runs/preview", {
+            run_id: orchState.runId,
+            action: control.action,
+            ...(orchState.controlReason ? { reason: orchState.controlReason } : {}),
+            ...(control.decision ? { decision: control.decision } : {}),
+            ...(control.correlation_id ? { correlation_id: control.correlation_id } : {}),
+          });
+          if (response.status < 400 && response.body.ok !== false) {
+            orchState.runAct = response.body.data;
+          }
+        }
+      }
+      if (SNAPSHOT_MODE && SNAPSHOT_BOUNDED_ERROR) {
+        orchState.runError = SNAPSHOT_BOUNDED_ERROR === "stale"
+          ? "Stale run action refused before work or saved event change. Reload once and review the current action."
+          : "The action response ended without a confirmed receipt.";
+      }
     }
     catch (err) { orchState.runError = err.message; orchState.runView = null; }
     startRunLive();
   }
   renderOrchestration();
+  focusBoundedSnapshot();
   await refreshOrchValidation();
+  focusBoundedSnapshot();
 }
 
 /* ── autonomous program control room (WLA-26-11) ─────────────────
@@ -2345,24 +2563,14 @@ function programQualityHtml(view) {
 }
 
 function programControlsHtml(view) {
-  const available = (view.controls || []).filter((item) => item.available);
-  const unavailable = (view.controls || []).filter((item) => !item.available);
-  return `<section class="program-controls"><div class="program-panel-head"><div><span>separate act boundary</span><strong>Preview, inspect, then confirm one exact program operation</strong></div>${badge("no auto-start daemon", "warn")}</div>
-    ${available.some((item) => item.reason_required) ? `<label class="run-reason">operator reason<input id="program-control-reason" maxlength="1000" value="${esc(programState.reason)}" placeholder="bounded single-line reason"></label>` : ""}
-    ${available.some((item) => item.action === "supervise") ? `<div class="program-ceilings"><label>supervise tick ceiling<input id="program-max-ticks" type="number" min="1" max="10000" value="${esc(programState.maxTicks)}"></label><label>duration ceiling (seconds)<input id="program-max-seconds" type="number" min="1" max="86400" value="${esc(programState.maxSeconds)}"></label></div>` : ""}
-    <div class="run-control-buttons">${available.map((item) => `<button type="button" data-program-act="${esc(item.action)}" data-program-decision="${esc(item.decision || "")}" data-program-request="${esc(item.request_id || "")}" class="${item.action === "cancel" || item.action === "revoke" || item.decision === "reject" ? "danger" : item.starts_work ? "starts-work" : ""}">preview ${esc(item.action)}${item.request_id ? ` · ${esc(item.request_id)}` : ""}${item.decision ? ` · ${esc(item.decision)}` : ""}${item.starts_work ? " (may start bounded work)" : ""}</button>`).join("") || '<span class="hint">No control is applicable in this authority state.</span>'}</div>
-    <div class="run-unavailable">${unavailable.map((item) => `<div><strong>${esc(item.action)}</strong><span>${esc(item.issue || "not applicable in the current authority state")}</span></div>`).join("")}</div>
-    ${programActHtml(programState.act)}
+  return `<section class="program-controls exact-control-audit"><div class="program-panel-head"><div><span>exact control catalog</span><strong>Applicability copied from the current saved program</strong></div>${badge("inspection only", "ok")}</div>
+    <div class="run-unavailable">${(view.controls || []).map((item, index) => `<div><strong>${esc(item.action)}${item.decision ? ` · ${esc(item.decision)}` : ""}</strong><span>${item.available ? "available through the ordinary action review above" : esc(item.issue || "not applicable in the current authority state")}</span><code>/controls/${esc(index)}</code></div>`).join("")}</div>
   </section>`;
 }
 
 function programActHtml(preview) {
   if (!preview) return "";
-  return `<div class="program-consent ${preview.applicable ? "" : "refused"}" aria-live="polite"><div class="program-consent-head"><div><span>exact act preview</span><strong>${esc(preview.action)}${preview.decision ? ` · ${esc(preview.decision)}` : ""}</strong></div>${badge(preview.starts_work ? "bounded work may start" : "one ledger act", preview.starts_work ? "warn" : "ok")}</div>
-    <div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>
-    ${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}
-    <div class="run-consent-actions">${preview.applicable ? '<button type="button" id="program-act-confirm">confirm this exact act</button>' : ""}<button type="button" id="program-act-close">close preview</button></div><small>Any ledger, generation, action, reason, request, decision, or ceiling change invalidates this token.</small>
-  </div>`;
+  return `<details class="bounded-exact-preview"><summary>Exact program preview</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
 }
 
 function programTimelineHtml(view) {
@@ -2381,6 +2589,7 @@ function programNotificationsHtml(view) {
 function programRunHtml(view) {
   const runs = programState.inventory?.runs || [];
   const progress = view.phase_progress || {};
+  const actions = boundedActionCenterHtml(view.bounded_actions, programState.act, programState.error, programState.result, "program");
   const toolbar = `<div class="live-toolbar"><label>delivery run<select id="program-run-select">${runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(view.program?.title || item.program || "program")} · ${esc(item.state)}</option>`).join("")}</select></label><button type="button" id="program-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
   const technical = `${programState.result ? `<div class="program-result" role="status"><strong>bounded operation completed</strong><span>${esc(programState.result.kind)} · ${esc(programState.result.stop || programState.result.state || programState.result.result || "recorded")}</span></div>` : ""}
     <div class="program-summary"><div><span>authority</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>operational frontier</span><strong>${esc(view.operational_state)}</strong><small>${esc(view.current?.stop || "ready")}</small></div><div><span>ledger</span><strong>${esc(view.event_count)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>scope progress</span><strong>${esc((progress.selected_stories || []).length)} selected</strong><small>${esc(programScalar(progress.scope_completion))}</small></div></div>
@@ -2393,7 +2602,7 @@ function programRunHtml(view) {
     ${programControlsHtml(view)}
     <section class="program-panel"><div class="program-panel-head"><div><span>phase and authority boundary</span><strong>Granted scope, selected progress, capabilities, and permanent exclusions</strong></div></div><div class="program-boundary"><section><h3>phase progress</h3><pre>${esc(JSON.stringify(progress, null, 2))}</pre></section><section><h3>capabilities</h3><p>${(view.capabilities || []).map((item) => badge(item, "ok")).join(" ") || "none"}</p><h3>permanently excluded</h3><p>${(view.permanent_exclusions || []).map((item) => badge(item, "warn")).join(" ") || "none"}</p></section></div></section>
     <section class="program-panel"><div class="program-panel-head"><div><span>hash-chained receipts</span><strong>Program authority timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${programTimelineHtml(view)}</section>`;
-  return `<div class="program-room" data-program-run="${esc(view.run_id)}">${programState.error ? `<div class="guard" role="alert">${esc(programState.error)}</div>` : ""}${liveProgressShell(view.live_progress, programState.connection, toolbar, technical, Boolean(programState.act || programState.stream))}</div>`;
+  return `<div class="program-room" data-program-run="${esc(view.run_id)}">${liveProgressShell(view.live_progress, programState.connection, toolbar, actions, technical, Boolean(programState.stream))}</div>`;
 }
 
 function renderPrograms() {
@@ -2535,7 +2744,9 @@ async function confirmProgramAct() {
   const { status, body } = await postJson(`/api/programs/${encodeURIComponent(preview.action)}`, request);
   if (status >= 400 || body.ok === false) {
     programState.act = null;
-    programState.error = (body.issues && body.issues[0]) || `program act failed (${status})`;
+    programState.error = status === 409
+      ? "Stale program action refused before work or saved event change. Reload once and review the current action."
+      : (body.issues && body.issues[0]) || `program act failed (${status})`;
     renderPrograms(); return;
   }
   programState.result = body.data; programState.act = null; programState.reason = "";
@@ -2573,6 +2784,7 @@ function wirePrograms() {
   document.querySelectorAll("[data-program-act]").forEach((button) => button.addEventListener("click", () => previewProgramAct(button)));
   document.getElementById("program-act-confirm")?.addEventListener("click", confirmProgramAct);
   document.getElementById("program-act-close")?.addEventListener("click", () => { programState.act = null; renderPrograms(); });
+  document.querySelectorAll("[data-bounded-read]").forEach((button) => button.addEventListener("click", () => handleBoundedRead(button.dataset.boundedRead, "program")));
   document.querySelectorAll("[data-program-stream]").forEach((button) => button.addEventListener("click", () => openProgramStream(button)));
   document.querySelectorAll("[data-program-ntf-ack]").forEach((button) => button.addEventListener("click", () => ackProgramNotification(button.dataset.programNtfAck)));
   document.getElementById("program-stream-close")?.addEventListener("click", () => { programState.stream = null; renderPrograms(); });
@@ -2590,9 +2802,40 @@ async function viewPrograms(runId = "") {
   if (runId) {
     programState.view = (await api(`/api/programs/${encodeURIComponent(runId)}/view`)).data;
     programState.connection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
+    if (SNAPSHOT_MODE && SNAPSHOT_BOUNDED_PREVIEW) {
+      const control = (programState.view.controls || []).find((item) => item.available && (
+        SNAPSHOT_BOUNDED_PREVIEW === "decision"
+          ? item.action === "request" && item.decision === "approve"
+          : item.action === SNAPSHOT_BOUNDED_PREVIEW
+      ));
+      if (control) {
+        programState.reason = control.reason_required
+          ? "Review this deterministic viewport action."
+          : "";
+        const response = await postJson("/api/programs/preview", {
+          run_id: programState.runId,
+          action: control.action,
+          ...(programState.reason ? { reason: programState.reason } : {}),
+          ...(control.decision ? { decision: control.decision } : {}),
+          ...(control.request_id ? { request_id: control.request_id } : {}),
+          ...(["tick", "supervise"].includes(control.action) ? {
+            max_ticks: 100, max_seconds: 300,
+          } : {}),
+        });
+        if (response.status < 400 && response.body.ok !== false) {
+          programState.act = response.body.data;
+        }
+      }
+    }
+    if (SNAPSHOT_MODE && SNAPSHOT_BOUNDED_ERROR) {
+      programState.error = SNAPSHOT_BOUNDED_ERROR === "stale"
+        ? "Stale program action refused before work or saved event change. Reload once and review the current action."
+        : "The action response ended without a confirmed receipt.";
+    }
     startProgramLive();
   }
   renderPrograms();
+  focusBoundedSnapshot();
 }
 
 /* ── delivery-shaped front door (WLA-27-03) ────────────────────────

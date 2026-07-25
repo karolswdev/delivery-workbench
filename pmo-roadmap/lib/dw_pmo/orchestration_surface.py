@@ -15,6 +15,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from .bounded_actions import build_run_bounded_actions
 from .live_progress import build_run_live_progress
 from .model import DwError
 from .orchestration import canonical_json
@@ -462,7 +463,9 @@ def _control_catalog(
             "issues": issues,
             "reason_required": reason_required,
             "preview_required": True,
-            "starts_work": starts_work,
+            "starts_work": (
+                starts_work and projection["state"] == "active"
+            ),
         })
     controls.extend([
         {
@@ -560,6 +563,15 @@ def build_run_view(
         safe_artifacts,
         events,
     )
+    controls = _control_catalog(root, projection)
+    bounded_actions = build_run_bounded_actions(
+        projection,
+        decision,
+        graph_nodes,
+        controls,
+        live_progress,
+        events,
+    )
     terminal = projection["state"] in TERMINAL_STATES
     terminal_meaning = {
         "awaiting-certification": "work is handed back for human inspection, certification, and commit",
@@ -586,6 +598,7 @@ def build_run_view(
         "ledger_head": projection["ledger_head"],
         "ledger_events": projection["ledger_events"],
         "live_progress": live_progress,
+        "bounded_actions": bounded_actions,
         "graph": {
             "nodes": graph_nodes,
             "layout": compiled.get("layout", {}),
@@ -615,7 +628,7 @@ def build_run_view(
         "fact_binding": projection["fact_binding"],
         "external_commits": projection["external_commits"],
         "timeline": events,
-        "controls": _control_catalog(root, projection),
+        "controls": controls,
         "terminal": terminal,
         "terminal_meaning": terminal_meaning,
         "privacy": {

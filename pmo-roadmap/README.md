@@ -687,7 +687,14 @@ It distinguishes compatible policy from runtime-proven identity/work-area/
 session separation; advanced decision groups and exact provider/model/auth/
 principal provenance stay inspectable under **Technical details**. The live
 program control room consumes the same projection for assigned ownership and
-review. See [`docs/team-review.md`](../docs/team-review.md).
+review. Run and program control rooms also share the pure bounded-actions view:
+permission, scope, ceilings, actual and remaining use lead; blockers list the
+exact current choices; pause, resume, revoke, cancel, reject, and saved repair
+remain distinct; and every preview explains consequences before the exact
+confirmation. Refusals state what changed, what did not, uncertain-effect
+status, and the safe reload/inspection path. See
+[`docs/team-review.md`](../docs/team-review.md) and
+[`docs/product-language.md`](../docs/product-language.md).
 Its own preview→diff→fingerprint→apply pair can write or delete one
 direct-contained tracked policy and cannot create a grant, run, agent, check,
 observer, notification, integration, or roadmap act. An empty policy inventory

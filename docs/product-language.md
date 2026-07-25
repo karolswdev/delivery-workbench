@@ -226,6 +226,44 @@ Plain language must become more precise when an action matters.
 Friendly language never softens a refusal, merges materially different
 actions, or hides uncertainty.
 
+## Bounded actions and refusals
+
+Run and program views attach
+`delivery-workbench-bounded-actions@1` beside the shared live-progress view.
+This pure application document turns already-derived controls, outstanding
+requests, blockers, permission, limits, failures, and receipts into one
+ordinary action language. It does not decide whether an action applies,
+choose a response, mint a confirmation, start work, write an event, grant
+permission, change retry policy, or send a notification.
+
+The default action view follows a fixed order:
+
+1. show concrete allowed effects, affected scope, finite ceilings, expiry and
+   stop conditions, measured use, and still-forbidden effects;
+2. distinguish limit, estimate, actual use, and remaining capacity for each
+   unit, preserving zero, unbounded, unknown, and not applicable as different
+   values;
+3. show every decision or blocker with affected work, cause, resolver, the
+   exact currently valid choices, and what follows both a choice and no choice;
+4. distinguish continue/repair, pause, resume, revoke, cancel, reject, and
+   unavailable retry or permission elevation by their real consequences;
+5. explain effects before the existing exact preview/confirmation boundary;
+   and
+6. show a readable receipt after completion with its exact reference under
+   **Technical details**.
+
+An error or refusal always states what happened, what stayed unchanged,
+whether an effect may already have occurred, the next safe step, and where to
+inspect exact evidence. If a transport ends without a conclusive refusal or
+receipt, the effect is unknown until saved history is reloaded; the
+application must not recommend a blind retry.
+
+Notifications and remote clients are response carriers only. They may present
+or carry one choice from the exact closed response set, but the canonical
+local principal, outstanding-request identity, response set, current
+ledger/generation, and fresh confirmation remain decisive. A chat response
+never creates permission.
+
 ## Versioning
 
 `delivery-workbench-application-language@1` is the Phase 27 contract.

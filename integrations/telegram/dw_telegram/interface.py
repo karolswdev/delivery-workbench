@@ -488,6 +488,7 @@ class TelegramInterface:
             if (
                 item.get("kind") in {
                     "checkpoint-pending", "request-pending", "request-republished",
+                    "program-intervention-required",
                 }
                 and request.get("correlation_id") == correlation
             ):
@@ -496,8 +497,10 @@ class TelegramInterface:
         if match is None:
             self._say(
                 chat_id,
-                "✕ stale or unknown checkpoint correlation id; "
-                "no decision was applied",
+                "✕ response refused: the request is stale, closed, or unknown.\n"
+                "Unchanged: no decision was applied by this refusal and "
+                "affected work remains in its saved state.\n"
+                "Next: refresh current notifications before responding again.",
             )
             return
         options = (match.get("request") or {}).get(
@@ -509,16 +512,31 @@ class TelegramInterface:
                 "usage: /decision <correlation-id> " + "|".join(options),
             )
             return
-        result, why = self.rails.checkpoint_decide(
-            repo, str(match.get("run_id", "")), correlation, decision
-        )
+        if match.get("kind") == "program-intervention-required":
+            result, why = self.rails.program_request_decide(
+                repo, str(match.get("run_id", "")), correlation, decision
+            )
+        else:
+            result, why = self.rails.checkpoint_decide(
+                repo, str(match.get("run_id", "")), correlation, decision
+            )
         if result is None:
-            self._say(chat_id, f"✕ {why}")
+            self._say(
+                chat_id,
+                f"✕ response refused: {why}\n"
+                "Unchanged: no alternative response or permission was "
+                "inferred. If the local command ended after submission, an "
+                "effect is unknown until the exact ledger is refreshed.\n"
+                "Next: refresh current notifications and inspect the local "
+                "receipt before responding again.",
+            )
             return
         self._say(
             chat_id,
-            f"✓ request {decision} applied to {match.get('run_id')} "
-            f"(state: {result.get('state', 'unknown')})",
+            f"✓ exact request response recorded: {decision}\n"
+            f"Affected run: {match.get('run_id')}\n"
+            f"Saved state: {result.get('state', 'unknown')}\n"
+            f"Receipt: {result.get('receipt_hash', 'inspect local exact history')}",
         )
 
     def push_notifications(self, repo) -> tuple[int, int]:

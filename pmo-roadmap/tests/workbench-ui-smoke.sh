@@ -79,14 +79,19 @@ for token in ("Live delivery", "What happens next?", "Scope and progress",
               "Live updates interrupted", "last verified view",
               "saved delivery state", "live_progress",
               "fail checks", "failure routes", "human checkpoints", "hash-chained receipts",
-              "confirm this exact act", "no automatic continuation",
+              "Actions and decisions", "Before any action",
+              "Decision and blocker inbox", "Could an effect already have occurred?",
+              "view.bounded_actions", "exact control catalog",
               "close explicit stream"):
     assert token in run, token
 assert "setInterval" not in run and "driver_config" not in run and "argv:" not in run
 assert 'aria-labelledby="run-graph-title"' in run
 assert "@media (max-width: 520px)" in css and ".run-node.state-active" in css
 for token in (".live-answers", ".live-next", ".live-work-groups",
-              ".live-two-column", ".live-recovery", ".live-technical"):
+              ".live-two-column", ".live-recovery", ".live-technical",
+              ".bounded-action-center", ".bounded-permission",
+              ".bounded-inbox-grid", ".bounded-action-grid",
+              ".bounded-failure", ".bounded-usage-table"):
     assert token in css, token
 for token in ("Program control room", "liveProgressShell(view.live_progress",
               "Check for updates", "why this frontier", "team and review",
@@ -95,8 +100,9 @@ for token in ("Program control room", "liveProgressShell(view.live_progress",
               "nested execution", "quality, dissent, and gates",
               "obligations / debt", "phase progress", "permanently excluded",
               "operator notifications", "transport ≠ authority",
-              "Preview, inspect, then confirm", "supervise tick ceiling",
-              "confirm this exact act", "close explicit stream",
+              "boundedActionCenterHtml(view.bounded_actions",
+              "exact control catalog", "program-max-ticks",
+              "program-act-confirm", "close explicit stream",
               "/api/programs", "program-ledger", "from=${cursor}"):
     assert token in program, token
 assert "setInterval" not in program and "driver_config" not in program
@@ -204,7 +210,7 @@ DW="$PMO_DIR/bin/dw"
 "$PMO_DIR/install.sh" "$REPO" --skip-bootstrap >/dev/null
 DW="$REPO/.githooks/dw"
 "$DW" --root "$REPO" story status sample 0 SMP-0-02 in-progress >/dev/null
-python3 - "$REPO/pm/orchestration/repair-visual.json" "$REPO/pm/orchestration/terminal-visual.json" <<'PY'
+python3 - "$REPO/pm/orchestration/repair-visual.json" "$REPO/pm/orchestration/terminal-visual.json" "$REPO/pm/orchestration/decision-visual.json" <<'PY'
 import json
 import sys
 
@@ -248,7 +254,17 @@ terminal = {
     "layout": {"nodes": {"handoff": {"x": 180, "y": 100}},
                "viewport": {"x": 0, "y": 0, "zoom": 1}},
 }
-for path, document in zip(sys.argv[1:], (repair, terminal)):
+decision = {
+    "kind": "delivery-workbench-orchestration", "schema_version": 1,
+    "slug": "decision-visual", "title": "Human decision", "project": "sample",
+    "nodes": [{
+        "id": "review", "type": "approval",
+        "prompt": "Approve or reject the reviewed checkout repair.",
+    }],
+    "layout": {"nodes": {"review": {"x": 180, "y": 100}},
+               "viewport": {"x": 0, "y": 0, "zoom": 1}},
+}
+for path, document in zip(sys.argv[1:], (repair, terminal, decision)):
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(document, handle, indent=2)
         handle.write("\n")
@@ -296,6 +312,8 @@ tick_run(root, repair["run_id"], driver_config=config,
          adapters={"fixture": fixture}, now=now + timedelta(seconds=1))
 terminal = start("terminal-visual", 2)
 tick_run(root, terminal["run_id"], now=now + timedelta(seconds=2))
+decision = start("decision-visual", 3)
+tick_run(root, decision["run_id"], now=now + timedelta(seconds=3))
 PY
 
 PORT=$(( (RANDOM % 2000) + 21000 ))
@@ -483,6 +501,17 @@ for spec in $VIEWS; do
   shot "$name-mobile" 390,844 "$BASE/?snapshot=1$extra$route"
 done
 
+# WLA-27-07 action journeys: focus the real canonical decision model, its
+# exact pure preview, and the structured stale refusal without applying an
+# action. Both viewport sizes start at the action context rather than the
+# top-of-page delivery recap.
+shot "run-decision-actions-desktop" 1440,900 "$BASE/?snapshot=1&orchview=run&boundedfocus=inbox#/orchestration/decision-visual"
+shot "run-decision-actions-mobile" 390,844 "$BASE/?snapshot=1&orchview=run&boundedfocus=inbox#/orchestration/decision-visual"
+shot "run-decision-preview-desktop" 1440,900 "$BASE/?snapshot=1&orchview=run&boundedpreview=decision&boundedfocus=preview#/orchestration/decision-visual"
+shot "run-decision-preview-mobile" 390,844 "$BASE/?snapshot=1&orchview=run&boundedpreview=decision&boundedfocus=preview#/orchestration/decision-visual"
+shot "run-action-refusal-desktop" 1440,900 "$BASE/?snapshot=1&orchview=run&boundederror=stale&boundedfocus=error#/orchestration/repair-visual"
+shot "run-action-refusal-mobile" 390,844 "$BASE/?snapshot=1&orchview=run&boundederror=stale&boundedfocus=error#/orchestration/repair-visual"
+
 # Program planning remains a deliberately entered optional workspace. These
 # renders exercise the policy inventory and pure finite-grant form without
 # creating local program authority.
@@ -607,5 +636,11 @@ shot "program-revoked-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_RE
 shot "program-revoked-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_REVOKED"
 shot "program-certified-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
 shot "program-certified-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
+shot "program-remaining-limits-desktop" 1440,900 "$BASE/?snapshot=1&boundedfocus=limits#/programs/$PROGRAM_ACTIVE"
+shot "program-remaining-limits-mobile" 390,844 "$BASE/?snapshot=1&boundedfocus=limits#/programs/$PROGRAM_ACTIVE"
+shot "program-pause-preview-desktop" 1440,900 "$BASE/?snapshot=1&boundedpreview=pause&boundedfocus=preview#/programs/$PROGRAM_ACTIVE"
+shot "program-pause-preview-mobile" 390,844 "$BASE/?snapshot=1&boundedpreview=pause&boundedfocus=preview#/programs/$PROGRAM_ACTIVE"
+shot "program-stop-receipt-desktop" 1440,900 "$BASE/?snapshot=1&boundedfocus=receipts#/programs/$PROGRAM_REVOKED"
+shot "program-stop-receipt-mobile" 390,844 "$BASE/?snapshot=1&boundedfocus=receipts#/programs/$PROGRAM_REVOKED"
 
-echo "workbench-ui-smoke.sh: ok (76 viewport renders: 29 data views + delivery setup/review + program planning/active/technical/certified/revoked + attention + ambiguity, desktop+mobile)"
+echo "workbench-ui-smoke.sh: ok (88 viewport renders: 29 data views + action decision/preview/refusal/limits/stop receipts + delivery setup/review + program planning/active/technical/certified/revoked + attention + ambiguity, desktop+mobile)"

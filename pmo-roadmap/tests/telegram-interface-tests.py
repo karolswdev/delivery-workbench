@@ -2303,6 +2303,7 @@ class _StubRails:
         self.doc = {"notifications": notifications or []}
         self.decide_result = decide_result or {"state": "active"}
         self.decisions = []
+        self.program_decisions = []
         self.deliveries = []
 
     def notifications(self, _repo):
@@ -2314,6 +2315,15 @@ class _StubRails:
 
     def checkpoint_decide(self, _repo, run_id, correlation_id, decision):
         self.decisions.append({
+            "run_id": run_id, "correlation_id": correlation_id,
+            "decision": decision,
+        })
+        return self.decide_result, "ok"
+
+    def program_request_decide(
+        self, _repo, run_id, correlation_id, decision
+    ):
+        self.program_decisions.append({
             "run_id": run_id, "correlation_id": correlation_id,
             "decision": decision,
         })
@@ -2343,6 +2353,28 @@ def _pending_notification(unread=True):
     }
 
 
+def _program_pending_notification(unread=True):
+    request_id = "claim-abc123abc123abc123abc123"
+    return {
+        **_pending_notification(unread=unread),
+        "kind": "program-intervention-required",
+        "run_id": "program-0123456789abcdef01234567",
+        "request": {
+            "correlation_id": request_id,
+            "response_schema": {"decision": ["approve", "reject"]},
+            "boundary": "dw program request (fresh exact act token)",
+            "guidance": {
+                "affected_work": "SMP-1-02",
+                "choices": [
+                    {"decision": "approve"},
+                    {"decision": "reject"},
+                ],
+                "transport_grants_authority": False,
+            },
+        },
+    }
+
+
 class NotificationDecisionTest(InterfaceCase):
     """WLA-25-06: typed checkpoint responses and the bounded push pass."""
 
@@ -2364,7 +2396,9 @@ class NotificationDecisionTest(InterfaceCase):
                 "decision": "approve",
             }],
         )
-        self.assertIn("request approve applied", self.last_text())
+        self.assertIn(
+            "exact request response recorded: approve", self.last_text()
+        )
 
     def test_decision_refuses_stale_correlation_and_bad_usage(self):
         self.pair()
@@ -2374,7 +2408,7 @@ class NotificationDecisionTest(InterfaceCase):
             OWNER, "/decision req-abc123abc123abc123abc123 approve"
         ))
         self.assertEqual(stub.decisions, [])
-        self.assertIn("stale or unknown checkpoint correlation", self.last_text())
+        self.assertIn("request is stale, closed, or unknown", self.last_text())
         self.iface.handle_update(message(OWNER, "/decision onlyone"))
         self.assertIn("usage: /decision", self.last_text())
         stub.doc = {"notifications": [_pending_notification()]}
@@ -2382,6 +2416,31 @@ class NotificationDecisionTest(InterfaceCase):
             OWNER, "/decision req-abc123abc123abc123abc123 maybe"
         ))
         self.assertIn("usage: /decision", self.last_text())
+
+    def test_program_response_is_carried_to_the_local_exact_boundary(self):
+        self.pair()
+        stub = _StubRails(
+            notifications=[_program_pending_notification()],
+            decide_result={
+                "state": "checkpoint",
+                "receipt_hash": "sha256:" + "a" * 64,
+            },
+        )
+        self.iface.rails = stub
+        self.iface.handle_update(message(
+            OWNER,
+            "/decision claim-abc123abc123abc123abc123 approve",
+        ))
+        self.assertEqual(stub.decisions, [])
+        self.assertEqual(
+            stub.program_decisions,
+            [{
+                "run_id": "program-0123456789abcdef01234567",
+                "correlation_id": "claim-abc123abc123abc123abc123",
+                "decision": "approve",
+            }],
+        )
+        self.assertIn("Receipt: sha256:", self.last_text())
 
     def test_decision_from_a_stranger_is_refused(self):
         token = new_pairing_token(self.state, self.clock())
