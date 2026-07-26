@@ -19585,6 +19585,139 @@ class RepositoryFactsContractTest(unittest.TestCase):
         )
 
 
+class ProofCostBudgetTest(unittest.TestCase):
+    """WLA-28-05: the cost of proof is measured, capped, and enforced.
+
+    Performance work that is not guarded rots. The habit that produced 2,435
+    redundant `rev-parse --git-dir` spawns was not one bad commit; it was many
+    reasonable local decisions to re-read a fact rather than reason about
+    whether reuse was safe. Nothing objected, because nothing measured it.
+
+    Wall clock is deliberately not the guard: it is machine-dependent and noisy
+    in CI. Subprocess counts are deterministic, and counting is what actually
+    regressed.
+    """
+
+    # Ceilings sit above the measured counts, not at them, so ordinary
+    # refactoring does not trip the guard for no reason. Measured 2026-07-26:
+    # 58 git spawns per conductor tick, and the git directory resolved once
+    # per process rather than ~53 times per tick.
+    MAX_GIT_SPAWNS_PER_TICK = 75
+    MAX_GIT_DIR_RESOLUTIONS = 1
+
+    def setUp(self):
+        self.conductor = ProgramConductorTest(
+            "test_tick_conducts_implementer_then_independent_verifier"
+        )
+        self.conductor.setUp()
+        self.addCleanup(self.conductor.doCleanups)
+
+    def _measure_two_ticks(self, extra_spawn=None):
+        import dw_pmo.gitio as gitio
+        import dw_pmo.program_run as pr
+        import dw_pmo.repofacts as rf
+
+        counts = collections.Counter()
+        armed = {"on": False}
+        real = gitio.run_git
+
+        def counting(root, *args):
+            if armed["on"]:
+                counts[" ".join(args[:2])] += 1
+                if extra_spawn:
+                    armed["on"] = False
+                    try:
+                        real(root, *extra_spawn)
+                        counts[" ".join(extra_spawn[:2])] += 1
+                    finally:
+                        armed["on"] = True
+            return real(root, *args)
+
+        projection = self.conductor.start()
+        with mock.patch.object(gitio, "run_git", counting), \
+                mock.patch.object(pr, "run_git", counting), \
+                mock.patch.object(rf, "run_git", counting):
+            armed["on"] = True
+            self.conductor.advance_to_agent(projection)  # exactly two ticks
+            armed["on"] = False
+        return counts
+
+    @staticmethod
+    def _overruns(counts, per_tick_budget, git_dir_budget, ticks=2):
+        """Return human-readable overruns, naming the command and the excess."""
+        problems = []
+        total = sum(counts.values())
+        allowed = per_tick_budget * ticks
+        if total > allowed:
+            problems.append(
+                f"total git spawns {total} over {ticks} ticks exceeds the "
+                f"{allowed} allowed ({total - allowed} too many)"
+            )
+        git_dir = counts.get("rev-parse --git-dir", 0)
+        if git_dir > git_dir_budget:
+            problems.append(
+                f"`git rev-parse --git-dir` ran {git_dir} times, budget is "
+                f"{git_dir_budget} ({git_dir - git_dir_budget} too many) — the "
+                "repository-fact boundary should resolve it once per process"
+            )
+        return problems
+
+    def test_one_conductor_tick_stays_within_its_git_budget(self):
+        counts = self._measure_two_ticks()
+        problems = self._overruns(
+            counts, self.MAX_GIT_SPAWNS_PER_TICK, self.MAX_GIT_DIR_RESOLUTIONS
+        )
+        self.assertEqual(
+            problems, [],
+            "the cost of one conductor tick regressed:\n  "
+            + "\n  ".join(problems)
+            + f"\n  observed: {dict(counts)}",
+        )
+
+    def test_the_budget_bites_when_a_redundant_spawn_is_planted(self):
+        # A guard nobody has seen fail is not a guard.
+        counts = self._measure_two_ticks(
+            extra_spawn=("rev-parse", "--git-dir")
+        )
+        problems = self._overruns(
+            counts, self.MAX_GIT_SPAWNS_PER_TICK, self.MAX_GIT_DIR_RESOLUTIONS
+        )
+        self.assertTrue(
+            problems,
+            "planting a redundant rev-parse --git-dir on every git call must "
+            "overrun the budget",
+        )
+        self.assertTrue(
+            any("--git-dir" in p for p in problems),
+            f"the failure must name the offending command; got: {problems}",
+        )
+
+    def test_the_overrun_message_names_the_command_and_the_excess(self):
+        problems = self._overruns(
+            collections.Counter({"rev-parse --git-dir": 40, "write-tree": 500}),
+            self.MAX_GIT_SPAWNS_PER_TICK,
+            self.MAX_GIT_DIR_RESOLUTIONS,
+        )
+        joined = " ".join(problems)
+        self.assertIn("--git-dir", joined)
+        self.assertIn("39 too many", joined)
+        self.assertIn("390 too many", joined)
+
+    def test_the_private_resolver_guard_is_still_wired(self):
+        # WLA-28-01's fitness test is the other half of this budget: counts
+        # cannot stay low if modules start resolving the git directory
+        # privately again.
+        import dw_pmo.repofacts as rf
+
+        self.assertEqual(tuple(rf.PENDING_PRIVATE_RESOLVERS), ())
+        self.assertEqual(tuple(rf.PRIVATE_NON_SPAWNING_RESOLVERS), ())
+        self.assertTrue(
+            hasattr(RepositoryFactsContractTest,
+                    "test_no_new_module_resolves_the_git_directory_privately"),
+            "the private-resolver fitness guard must remain in the suite",
+        )
+
+
 class DerivationReadsTest(unittest.TestCase):
     """WLA-28-03: one derivation asks git each question at most once.
 

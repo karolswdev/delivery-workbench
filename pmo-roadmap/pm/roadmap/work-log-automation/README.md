@@ -1,8 +1,8 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-26 (Phase 27 closed 10/10; Phase 28 opened on measured profiling evidence).
-**Current phase:** [Phase 28 - Faster Proof](./phase-28-faster-proof/) (active, 0/5).
-**Status:** Phase 27 closed the usability work: one product vocabulary, one shared presentation boundary, a keyboard and assistive contract, and a fresh-consumer exam. Phase 28 now attacks the cost of proof itself. Profiling found the core suite spending 94% of its slowest test inside `git` subprocesses — 2,435 of them re-asking where `.git` is, a fact that cannot change while the process runs. The phase resolves repository facts once, re-reads changing facts exactly when they can have changed, runs the suite in parallel, and guards the result with an executable budget. Speed may not buy itself with staleness; every fail-closed refusal must still fire. Landing and release remain separate decisions.
+**Last updated:** 2026-07-26 (Phase 28 closed 5/5: the suite proves the same work 8.8x faster).
+**Current phase:** [Phase 28 - Faster Proof](./phase-28-faster-proof/) (closed, 5/5). Next phase not yet chosen.
+**Status:** Phase 28 closed the cost of proof. Repository-derived facts now live behind one versioned boundary that says, per fact, what may be reused: where the repository *is* resolves once per process, what it *contains* is read once per observation and never retained. `rev-parse --git-dir` went from 2,435 spawns in the slowest test to zero, the suite runs sharded across processes, and an executable budget fails the build if a tick starts spending again. The core suite went **814s to ~93-147s while growing from 499 to 530 tests** — 8.8x at best, 5.5x on a loaded desk — with nothing weakened, skipped, or removed. Two latent worktree defects were found and fixed on the way. Landing and release remain separate decisions; phases 25-28 are all unreleased.
 
 ## Vision
 
@@ -108,10 +108,10 @@ summarization can improve those entries after the lifecycle is proven.
   zero-SDK "CLI is the plugin API" ecosystem flywheel — candidate phase-26
   material recorded in the Phase 25 status.
 
-## Current phase: faster proof
+## Last closed phase: faster proof
 
-Phase 28 makes proving work cheap enough that nobody is tempted to skip it. It
-was opened on measurement, not suspicion. Profiling the core suite on
+Phase 28 made proving work cheap enough that nobody is tempted to skip it. It
+was opened on measurement, not suspicion, and closed 5/5. Profiling the core suite on
 2026-07-26 found 499 tests taking 814s, with 80% of that time in the slowest
 10% of tests, and the slowest single test spending 94% of its life inside
 `git` subprocesses — 2,435 of them asking `rev-parse --git-dir`, a fact that
@@ -179,7 +179,7 @@ Phase 28 adds no new autonomy, hosted authority, release, or publication scope.
 | 25 | Delivery Workbench hears the world outside the run — CI, reviews, merge state, agent activity — records it as durable facts, and under an explicit grant nudges the right agent back to work: observed, bounded, ledgered, revocable. | done | [phase-25-outward-signals](./phase-25-outward-signals/) |
 | 26 | Delivery Workbench optionally adds governed autonomous delivery programs across an explicit roadmap scope—without changing vanilla or bounded-run usage—with hierarchical workflows, independent verification, advanced bounded loops, and only the quality, integration, and roadmap acts named by a finite revocable program grant. | done | [phase-26-autonomous-delivery-programs](./phase-26-autonomous-delivery-programs/) |
 | 27 | Make Delivery Workbench's everyday application layer speak and behave like a practical delivery tool, with one plain-language vocabulary and coherent task flows across setup, Program Studio, live operation, help, errors, onboarding, and product documentation, while keeping exact protocol terms available in machine contracts, architecture, and explicit audit views. | done | [phase-27-usability-improvements](./phase-27-usability-improvements/) |
-| 28 | Cut the cost of proving work — repository facts resolved once, no redundant git spawns, a parallel proof suite — without weakening any freshness, authority, or fail-closed guarantee. | in-progress | [phase-28-faster-proof](./phase-28-faster-proof/) |
+| 28 | Cut the cost of proving work — repository facts resolved once, no redundant git spawns, a parallel proof suite — without weakening any freshness, authority, or fail-closed guarantee. | done | [phase-28-faster-proof](./phase-28-faster-proof/) |
 
 ## Operating cadence
 

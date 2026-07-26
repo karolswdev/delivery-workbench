@@ -76,7 +76,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 - [x] The core proof suite runs sharded across processes on the declared
   Python floor with standard-library tooling only, deterministically and with
   no cross-shard temp state (WLA-28-04).
-- [ ] An executable budget caps `git` spawns per tick and fails the suite if a
+- [x] An executable budget caps `git` spawns per tick and fails the suite if a
   new private resolver or redundant spawn appears; the full battery is green
   and the suite is at least 2x faster on the same machine (WLA-28-05).
 
@@ -88,7 +88,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 | WLA-28-02 | Resolve the repository location once | done | [story-02-resolve-the-repository-location-once](./story-02-resolve-the-repository-location-once.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-28-03 | Read changing facts once per derivation | done | [story-03-read-changing-facts-once-per-derivation](./story-03-read-changing-facts-once-per-derivation.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-28-04 | Prove work in parallel | done | [story-04-prove-work-in-parallel](./story-04-prove-work-in-parallel.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-28-05 | Guard the cost of proof | backlog | [story-05-guard-the-cost-of-proof](./story-05-guard-the-cost-of-proof.md) | - |
+| WLA-28-05 | Guard the cost of proof | done | [story-05-guard-the-cost-of-proof](./story-05-guard-the-cost-of-proof.md) | [evidence-story-05](./evidence-story-05.md) |
 
 ## Where we are
 

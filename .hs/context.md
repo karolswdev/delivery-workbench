@@ -6,8 +6,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 
 ### work-log-automation
 
-- Current phase: 28 (phase-28-faster-proof)
-- Next story: WLA-28-01 — Contract the repository-fact boundary [ready]
+- Next story: nothing actionable
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

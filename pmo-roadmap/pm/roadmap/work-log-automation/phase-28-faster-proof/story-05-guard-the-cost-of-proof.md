@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 28
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-28-01, WLA-28-02, WLA-28-03, WLA-28-04
 - **Unblocks:** -
 - **Owner:** unassigned
@@ -32,21 +32,21 @@ Counting subprocesses is deterministic and is what actually regressed.
 
 ## Acceptance criteria
 
-- [ ] An executable budget caps `git` subprocess spawns for one conductor tick
+- [x] An executable budget caps `git` subprocess spawns for one conductor tick
   and for the delivery path, and fails with a message naming the command that
   overran and by how much.
-- [ ] A fitness test fails if a new private git-directory resolution appears
+- [x] A fitness test fails if a new private git-directory resolution appears
   outside the WLA-28-01 boundary.
-- [ ] The budget is proven to bite: a planted redundant spawn fails the suite.
-- [ ] The full battery is green — core suite, gate, verify, package smoke,
+- [x] The budget is proven to bite: a planted redundant spawn fails the suite.
+- [x] The full battery is green — core suite, gate, verify, package smoke,
   docs and canon lint, workbench mirrors, rider docs check — with no test
   weakened across the phase.
-- [ ] Measured before and after numbers for the phase are recorded: suite wall
+- [x] Measured before and after numbers for the phase are recorded: suite wall
   clock, slowest-test wall clock, and per-tick spawn counts, on the same
   machine.
-- [ ] The suite is at least 2x faster than the 814s baseline on the same
+- [x] The suite is at least 2x faster than the 814s baseline on the same
   machine.
-- [ ] Phase final summary and handover record what shipped, what was
+- [x] Phase final summary and handover record what shipped, what was
   deliberately deferred, and where the budget lives.
 
 ## Test plan
