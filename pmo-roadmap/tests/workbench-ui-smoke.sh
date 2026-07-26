@@ -13,6 +13,7 @@ TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/pmo-ui-smoke.XXXXXX")"
 SERVER_PID=""
 CAPTURE_DIR="${DW_UI_CAPTURE_DIR:-}"
 CAPTURE_PATTERN="${DW_UI_CAPTURE_PATTERN:-}"
+FAST_A11Y="${DW_UI_FAST_A11Y:-}"
 
 cleanup() {
   if [ -n "$SERVER_PID" ]; then
@@ -63,6 +64,8 @@ for token in ("data-verdict", "project", "workspace", "contract", "gate"):
     assert token in panel, token
 assert '/api/status' in overview and '/api/step' in overview
 assert '/api/delivery-setup' in overview and "Promise.all" in overview
+assert '/api/presentation/status' in overview
+assert 'presentationBody.data' in overview
 assert "overflow-wrap: anywhere" in css
 assert ".step-confirmation" in css and ".brief-step-unavailable" in css
 assert "@media (max-width: 430px)" in css
@@ -93,7 +96,9 @@ for token in (".live-answers", ".live-next", ".live-work-groups",
               ".bounded-inbox-grid", ".bounded-action-grid",
               ".bounded-failure", ".bounded-usage-table"):
     assert token in css, token
-for token in ("Program control room", "liveProgressShell(view.live_progress",
+for token in ("Optional multi-phase delivery", "delivery plan",
+              "Review optional delivery permission",
+              "Technical details", "liveProgressShell(view.live_progress",
               "Check for updates", "why this frontier", "team and review",
               "runtime independence proven", "decision groups / exact authority",
               "separation facts", "Technical details: exact seats",
@@ -167,6 +172,14 @@ for token in (".studio-node.type-loop", ".studio-node.type-debate",
               "@media (max-width: 600px)"):
     assert token in css, token
 assert ".studio-workarea" in css and "overflow: auto" in css
+for token in ("captureAppFocus", "restoreAppFocus", "wireDismissibleRegion",
+              "enhanceSemantics", "announceLiveUpdate", "wireTablist",
+              'role="dialog"', 'role="tablist"', "focusMain: true"):
+    assert token in app, token
+for token in (":focus-visible", ".skip-link", "overflow-x: clip",
+              "@media (prefers-reduced-motion: reduce)",
+              "@media (forced-colors: active)"):
+    assert token in css, token
 PY
 
 FF=""
@@ -326,6 +339,9 @@ done
 BASE="http://127.0.0.1:$PORT"
 
 shot() { # name geometry url
+  if [ "$FAST_A11Y" = "1" ]; then
+    return
+  fi
   out="$TMP_ROOT/$1.png"
   profile="$(mktemp -d)"
   "$FF" --headless --no-remote --profile "$profile" \
@@ -518,6 +534,12 @@ shot "run-action-refusal-mobile" 390,844 "$BASE/?snapshot=1&orchview=run&bounded
 shot "program-planning-desktop" 1440,900 "$BASE/?snapshot=1#/programs"
 shot "program-planning-mobile" 390,844 "$BASE/?snapshot=1#/programs"
 
+# Real keyboard/semantic exam over the canonical ordinary, setup, bounded,
+# repair, decision, recovery, and technical-inspection journeys.
+python3 "$SCRIPT_DIR/workbench-accessibility.py" \
+  --firefox "$FF" --base "$BASE" --suite core \
+  || fail "core accessibility journey exam failed"
+
 # Red-path prominence: the same overview must render a broken rail as
 # attention while keeping execution behind deliberate-step review.
 mv "$REPO/.githooks/pre-commit" "$REPO/.githooks/pre-commit.off"
@@ -643,4 +665,11 @@ shot "program-pause-preview-mobile" 390,844 "$BASE/?snapshot=1&boundedpreview=pa
 shot "program-stop-receipt-desktop" 1440,900 "$BASE/?snapshot=1&boundedfocus=receipts#/programs/$PROGRAM_REVOKED"
 shot "program-stop-receipt-mobile" 390,844 "$BASE/?snapshot=1&boundedfocus=receipts#/programs/$PROGRAM_REVOKED"
 
-echo "workbench-ui-smoke.sh: ok (88 viewport renders: 29 data views + action decision/preview/refusal/limits/stop receipts + delivery setup/review + program planning/active/technical/certified/revoked + attention + ambiguity, desktop+mobile)"
+python3 "$SCRIPT_DIR/workbench-accessibility.py" \
+  --firefox "$FF" --base "$BASE" --suite program \
+  --program-active "$PROGRAM_ACTIVE" \
+  --program-revoked "$PROGRAM_REVOKED" \
+  --program-certified "$PROGRAM_CERTIFIED" \
+  || fail "program accessibility journey exam failed"
+
+echo "workbench-ui-smoke.sh: ok (88 viewport renders plus 13 keyboard, semantic, focus, and wide/narrow journey exams)"

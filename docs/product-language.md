@@ -302,10 +302,14 @@ The check:
 - verifies this guide, the root documentation index, and CI remain wired.
 
 The versioned positive and red fixtures live in
-`pmo-roadmap/tests/product-language-fixtures-v1.json`. They are a contract
-self-test, not a claim that the current application has already been
-redesigned. WLA-27-03 through WLA-27-08 migrate the inventoried surfaces;
-WLA-27-10 proves the whole application from a fresh package.
+`pmo-roadmap/tests/product-language-fixtures-v1.json`. Real-renderer snapshots
+live in `pmo-roadmap/tests/everyday-presentation-snapshots-v1.json`, and the
+complete disposition of all eighteen inventoried surfaces lives in
+`pmo-roadmap/tests/product-language-surfaces-v1.json`. The checker compares
+the shared runtime catalog to this contract, scans marked everyday source
+regions, proves every inventoried source is dispositioned, and executes the
+status, live-delivery, start-review, action-review, and notification
+presenters. WLA-27-10 still proves the whole application from a fresh package.
 
 ## Phase 27 implementation boundary
 
@@ -332,7 +336,17 @@ runtime-proven assignment. Provider/model/auth/principal/workspace/session
 facts remain distinct and inspectable under **Technical details**; the view
 never promotes provider or model diversity into a claim of independence.
 
-Later stories follow the same rule. If a desired sentence cannot be supported
-by canonical facts, the renderer must say it is unknown or the canonical model
-must be changed in a separately reviewed story. The UI may never fill the gap
-with policy of its own.
+WLA-27-08 adds `delivery-workbench-presentation@1`, the shared terminal,
+Workbench, and notification presentation boundary. Its catalog owns the ten
+preferred terms and common labels. Its status, roadmap-step preview/result,
+live-delivery, start-review, action-review, and notification presenters group
+facts already selected by the exact source models; every section retains a
+model/path source, and all exact commands, identifiers, state names, and
+protocol facts remain under **Technical details**. Human CLI output and help
+use these presenters while `--json` output is unchanged. Workbench fetches the
+same catalog and status presentation through `/api/presentation` and
+`/api/presentation/status`.
+
+If a desired sentence cannot be supported by canonical facts, the renderer
+must say it is unknown or the canonical model must be changed in a separately
+reviewed story. The UI may never fill the gap with policy of its own.

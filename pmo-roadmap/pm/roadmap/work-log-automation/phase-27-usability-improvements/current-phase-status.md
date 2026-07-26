@@ -42,13 +42,13 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 - [x] Live operation answers the seven operator questions from the Phase 26
   handoff and turns decisions, blockers, permission, cost, stop/revoke, and
   recoverable failures into clear bounded actions (WLA-27-06, WLA-27-07).
-- [ ] Workbench, human CLI output, notifications, help, errors, onboarding, and
+- [x] Workbench, human CLI output, notifications, help, errors, onboarding, and
   everyday docs use the same product terms; machine JSON and explicit
   technical/audit views retain exact engineering language (WLA-27-08).
-- [ ] Setup, authoring, live operation, decisions, and technical inspection are
+- [x] Setup, authoring, live operation, decisions, and technical inspection are
   usable by keyboard, at narrow and wide viewports, and with meaningful
   structure/labels and stable focus (WLA-27-09).
-- [ ] A fresh installed-wheel exam completes the canonical journeys, proves
+- [x] A fresh installed-wheel exam completes the canonical journeys, proves
   plain-language defaults plus exact audit escape hatches, and keeps the
   no-program, bounded-run, program, parity, recovery, and distribution suites
   green (WLA-27-10).
@@ -64,28 +64,36 @@ Make Delivery Workbench's everyday application layer speak and behave like a pra
 | WLA-27-05 | Make teams and review rules understandable | done | [story-05-make-teams-and-review-rules-understandable](./story-05-make-teams-and-review-rules-understandable.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-27-06 | Make live delivery explain progress and next steps | done | [story-06-make-live-delivery-explain-progress-and-next-steps](./story-06-make-live-delivery-explain-progress-and-next-steps.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-27-07 | Turn decisions, blockers, permissions, and cost into actions | done | [story-07-turn-decisions-blockers-permissions-and-cost-into-actions](./story-07-turn-decisions-blockers-permissions-and-cost-into-actions.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-27-08 | Make every everyday word agree | backlog | [story-08-make-every-everyday-word-agree](./story-08-make-every-everyday-word-agree.md) | - |
-| WLA-27-09 | Harden keyboard, screen-size, and assistive use | backlog | [story-09-harden-keyboard-screen-size-and-assistive-use](./story-09-harden-keyboard-screen-size-and-assistive-use.md) | - |
-| WLA-27-10 | Prove the redesigned application end to end | backlog | [story-10-prove-the-redesigned-application-end-to-end](./story-10-prove-the-redesigned-application-end-to-end.md) | - |
+| WLA-27-08 | Make every everyday word agree | done | [story-08-make-every-everyday-word-agree](./story-08-make-every-everyday-word-agree.md) | [evidence-story-08](./evidence-story-08.md) |
+| WLA-27-09 | Harden keyboard, screen-size, and assistive use | done | [story-09-harden-keyboard-screen-size-and-assistive-use](./story-09-harden-keyboard-screen-size-and-assistive-use.md) | [evidence-story-09](./evidence-story-09.md) |
+| WLA-27-10 | Prove the redesigned application end to end | done | [story-10-prove-the-redesigned-application-end-to-end](./story-10-prove-the-redesigned-application-end-to-end.md) | [evidence-story-10](./evidence-story-10.md) |
 
 ## Where we are
 
-Phase 27 is OPEN 7/10. Bounded-run and program control rooms now share the pure
-`delivery-workbench-live-progress@1` and
-`delivery-workbench-bounded-actions@1` projections. The default action center
-shows affected work, exact current choices, permission scope, ceilings,
-expiry/stops, current use, forbidden effects, and distinct consequences before
-the existing exact confirmation. Zero, finite, unbounded, unknown, and not
-applicable values remain different. Pause, saved repair, resume, permanent
-revoke, cancel, and rejection do not collapse into one generic control.
-Structured refusals explain what happened, what stayed unchanged, effect
-uncertainty, and the safe reload/inspection path; notifications and Telegram
-carry responses without manufacturing authority. Exact identities, tokens,
-controls, and receipts remain under `Technical details`. The 88-render
-wide/narrow harness, 23-state journey contract, focused action/refusal/parity
-tests, fresh Python 3.9 wheel, and autonomous/no-program consumers are green.
-WLA-27-08 is next: make every everyday renderer use the same product terms.
-There are no known blockers.
+Phase 27 is complete 10/10. One Python-floor installed consumer begins with
+ordinary status, current work, next-step inspection, and setup while optional
+policy, run/program stores, and processes remain absent. The same consumer then
+deliberately authors lossless optional policy, resolves a real bounded human
+decision, permanently stops a second bounded run, preflights exact team/review/
+effects/limits, separately starts the program, and completes all thirteen
+canonical journeys.
+
+Independent `needs-repair` → repair → `pass`, preserved council dissent, nine
+conductor and eighteen delivery-boundary crash recoveries, 3/3 completed
+stories, and 203 ledger events equal to 203 SSE events prove the readable and
+exact views together. Five planted report corruptions refuse. The acceptance
+transcript records four explicit authority confirmations, thirteen safe
+refusal paths, zero unresolved dead ends, and zero reserved engineering terms
+in everyday regions.
+
+All 499 core tests pass. Firefox 152 passes 88 retained wide/narrow renders,
+thirteen keyboard/focus/semantic journey exams, 26 DOM audits, and 92
+assertions. Python 3.9 builds and installs the wheel/sdist and passes every
+packaged delivery mode; docs, parity, upgrade, history, and distribution
+entry points are green. Exact proof is in
+[evidence-story-10](./evidence-story-10.md), the phase outcome is in
+[final-summary](./final-summary.md), and the owner snapshot is in
+[handover](./handover.md). No landing or release action was inferred.
 
 ## Active risks
 
@@ -242,15 +250,74 @@ There are no known blockers.
   outstanding request, response-set, freshness, ledger/generation, and exact
   confirmation checks remain decisive - transport-is-not-authority boundary -
   WLA-27-07.
+- 2026-07-25 - Add `delivery-workbench-presentation@1` as the single pure
+  renderer-facing projection for status, roadmap steps, bounded/program live
+  delivery, start and action review, and notifications; it groups canonical
+  facts but explicitly starts no work, writes no state, selects no next work,
+  and grants no permission - shared-language/source-of-truth boundary -
+  WLA-27-08.
+- 2026-07-25 - Account for every WLA-27-01 surface in an executable census:
+  migrate fifteen everyday or mixed surfaces and retain three exact
+  architecture/reference surfaces as technical/audit, with no unclassified
+  remainder - whole-surface completion boundary - WLA-27-08.
+- 2026-07-25 - Lead every human path with the ordinary task and outcome while
+  keeping commands, paths, identities, hashes, tokens, states, source facts,
+  and raw machine documents under the explicit `Technical details` label;
+  machine JSON/MCP/HTTP/event/persistence contracts remain unchanged -
+  readable-default/lossless-audit boundary - WLA-27-08.
+- 2026-07-25 - Give route changes and background updates different focus
+  contracts: navigation focuses and announces the destination heading, while
+  refresh, polling, SSE, and compiler redraws restore the active control -
+  predictable-focus boundary - WLA-27-09.
+- 2026-07-25 - Announce only a changed ledger head and suppress duplicate
+  poll/SSE versions and stable reconnect facts; interactive controls never sit
+  inside a chatty live region - discoverable-without-flooding boundary -
+  WLA-27-09.
+- 2026-07-25 - Keep disclosures native and reviews non-modal; a safe Escape
+  dismissal returns to the exact opener and retains in-memory draft input,
+  while every existing preview/apply authority boundary remains unchanged -
+  keyboard-without-new-authority boundary - WLA-27-09.
+- 2026-07-25 - Fix the reviewed viewports at 1440×900 and 390×844, require
+  locally owned overflow and no horizontal page scroll, and use Firefox's
+  native page zoom to overcome its 500-pixel WebDriver outer-window floor
+  while retaining exact unzoomed screenshots - reproducible viewport boundary
+  - WLA-27-09.
+- 2026-07-25 - Bind the dated assistive-use record to all thirteen canonical
+  journey/state IDs and reject missing coverage, mismatched states, viewport
+  drift, incomplete review notes, or a failed review result - accessibility is
+  executable story evidence rather than a closeout waiver - WLA-27-09.
+- 2026-07-25 - Compose the Phase 27 exit proof over one execution of the
+  existing Phase 26 autonomous exam, then bind its production observations to
+  the thirteen canonical journey IDs - the usability layer cannot fork or
+  weaken delivery, authority, recovery, or adapter semantics - WLA-27-10.
+- 2026-07-25 - Perform ordinary status, step, next-work, and setup inspection
+  on the same installed consumer before authoring optional policy; assert an
+  empty healthy inventory, absent stores/process start, and an unchanged file
+  snapshot - a second no-program fixture remains a backstop, not a substitute
+  for the ordered journey - WLA-27-10.
+- 2026-07-25 - Render the acceptance transcript directly from
+  `journeys-v1.json`, scan every everyday string against the reserved-language
+  contract, and reject five planted report corruptions - friendly prose cannot
+  manufacture a pass without the corresponding production fact - WLA-27-10.
+- 2026-07-25 - Record thirteen journey checkpoints, four authority
+  confirmations, thirteen safe refusals, zero transcript dead ends, and zero
+  reserved everyday terms without subtracting them from the differently
+  defined pre-redesign screen baseline - measured friction must not become a
+  fabricated improvement score - WLA-27-10.
+- 2026-07-25 - Close Phase 27 after the full core, browser, docs, parity,
+  package, upgrade, history, and distribution audit while leaving version,
+  commit, merge, tag, release, publication, deployment, and landing to separate
+  owner decisions - phase completion is evidence, not release authority -
+  WLA-27-10.
 
 ## Decisions deferred
 
-- Channel-specific microcopy refinements - trigger: the owning WLA-27-03
-  through WLA-27-08 journey implementation and device review - default: the v1
-  preferred concept names and meanings are fixed; a preferred-name or meaning
-  change requires a new application-language schema version.
+- Channel-specific microcopy refinements - trigger: a concrete journey defect
+  or observed user-research finding - default: the v1 preferred concept names
+  and meanings are fixed; a preferred-name or meaning change requires a new
+  application-language schema version.
 - Quantitative product analytics or hosted usability telemetry - trigger: an
   explicit privacy, transport, retention, and authority contract - default:
   deterministic local fixtures and human review only.
-- Release/version target - trigger: all ten stories and the exit audit are
-  complete plus a separate owner decision - default: remain unreleased.
+- Release/version target - trigger: a separate owner landing/release decision
+  after reviewing this closeout - default: remain unreleased.

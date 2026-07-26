@@ -379,8 +379,16 @@ assert status["next_action"]["command"] == [
 ]
 assert status["actions"] == [status["next_action"]]
 PY
-"$STATUS_DW" --root "$STATUS_REPO" status status-demo | grep -q '^next=start-story command=' \
-  || fail "human status should lead with the same next action"
+"$STATUS_DW" --root "$STATUS_REPO" status status-demo > "$TMP_ROOT/status-human.txt"
+grep -q '^Delivery is ready$' "$TMP_ROOT/status-human.txt" \
+  || fail "human status should lead with delivery readiness"
+grep -q '^Start current work:' "$TMP_ROOT/status-human.txt" \
+  || fail "human status should explain the same next action"
+grep -q '^Technical details:$' "$TMP_ROOT/status-human.txt" \
+  || fail "human status should preserve an explicit technical boundary"
+grep -q '^  Command: .githooks/dw story status status-demo 0 SD-0-01 in-progress$' \
+  "$TMP_ROOT/status-human.txt" \
+  || fail "human status should keep the exact command copyable"
 
 # Attention is a valid JSON briefing with exit 1, not an empty failure.
 mv "$STATUS_REPO/.githooks/pre-commit" "$STATUS_REPO/.githooks/pre-commit.off"
@@ -588,7 +596,11 @@ PY
 )"
 "$STATUS_DW" --root "$STATUS_REPO" step status-demo \
   --apply --expect "$READ_TOKEN" > "$TMP_ROOT/read-step.out"
-grep -q '^dw step: applied continue-story; next=continue-story$' "$TMP_ROOT/read-step.out" \
+grep -q '^Delivery step complete$' "$TMP_ROOT/read-step.out" \
+  || fail "human apply should report the delivery outcome"
+grep -q '^Continue current work:' "$TMP_ROOT/read-step.out" \
+  || fail "human apply should name the reloaded next step"
+grep -q '^Technical details:$' "$TMP_ROOT/read-step.out" \
   || fail "human apply should stop after one read-only child"
 if "$STATUS_DW" --root "$STATUS_REPO" step status-demo --json \
   --apply --expect "$READ_TOKEN" > "$TMP_ROOT/replay-result.json"; then

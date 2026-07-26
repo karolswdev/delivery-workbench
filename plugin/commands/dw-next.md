@@ -5,6 +5,13 @@ description: Start from the Delivery Workbench status briefing and pick up the n
 Orient yourself in this repository's Delivery Workbench roadmap and
 report what to work on next. Do not change anything yet.
 
+## Delivery task
+
+Report readiness, current work, any blocker, progress, and the source-backed
+next step. Ask for a missing delivery-scope decision instead of guessing.
+
+## Technical details
+
 1. Run `.githooks/dw status --json` and read its JSON even if it exits 1.
    Exit 0 means `ready`; exit 1 means `attention`, which is valid data. If
    its action is blocking, report the named repair and stop. If it requires

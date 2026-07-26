@@ -4,6 +4,13 @@ description: Generate and honestly certify the commit contract for the staged wo
 
 Author the PMO commit contract for the currently staged work.
 
+## Delivery task
+
+Review the intended files and their proof, then prepare the final commit check.
+Never claim a rule passed without verifying it.
+
+## Technical details
+
 1. Confirm staging is final (`git status`, `git diff --cached --stat`).
    The contract stamps the staged index tree — restaging afterwards
    invalidates it.

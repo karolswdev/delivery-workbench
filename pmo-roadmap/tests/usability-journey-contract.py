@@ -27,6 +27,11 @@ RED_PATH = FIXTURE_DIR / "red-fixtures-v1.json"
 LANGUAGE_PATH = ROOT / "docs" / "product-language-contract-v1.json"
 INTEROP_PATH = ROOT / "docs" / "interop.md"
 HARNESS_PATH = ROOT / "pmo-roadmap" / "tests" / "workbench-ui-smoke.sh"
+EXIT_EXAM_PATH = ROOT / "pmo-roadmap" / "tests" / "usability-packaged-exam.py"
+AUTONOMOUS_EXAM_PATH = (
+    ROOT / "pmo-roadmap" / "tests" / "autonomous-program-packaged-exam.py"
+)
+PACKAGE_SMOKE_PATH = ROOT / "pmo-roadmap" / "tests" / "package-smoke.sh"
 DOC_PATH = ROOT / "docs" / "usability-journeys.md"
 README_PATH = ROOT / "README.md"
 WORKFLOW_PATH = ROOT / ".github" / "workflows" / "validation.yml"
@@ -1606,6 +1611,7 @@ def validate_docs(
         "states-v1.json",
         "baseline-v1.json",
         "red-fixtures-v1.json",
+        "usability-packaged-exam.py",
     ):
         if filename not in doc:
             issue(
@@ -1651,12 +1657,74 @@ def validate_docs(
     else:
         command = "python3 pmo-roadmap/tests/usability-journey-contract.py"
         compile_path = "pmo-roadmap/tests/usability-journey-contract.py"
-        if command not in workflow or compile_path not in workflow:
+        exit_compile = "pmo-roadmap/tests/usability-packaged-exam.py"
+        if (
+            command not in workflow
+            or compile_path not in workflow
+            or exit_compile not in workflow
+        ):
             issue(
                 issues,
                 "ci-wiring-missing",
                 str(WORKFLOW_PATH.relative_to(ROOT)),
-                "checker must compile and run in CI",
+                "checker and fresh-wheel exit exam must compile in CI",
+            )
+    try:
+        exit_exam = EXIT_EXAM_PATH.read_text(encoding="utf-8")
+        autonomous_exam = AUTONOMOUS_EXAM_PATH.read_text(encoding="utf-8")
+        package_smoke = PACKAGE_SMOKE_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        issue(
+            issues,
+            "exit-exam-wiring-missing",
+            "pmo-roadmap/tests",
+            str(exc),
+        )
+    else:
+        for marker in (
+            "delivery-workbench-usability-packaged-exam",
+            "validate_report",
+            "build_transcript",
+            "planted_red_cases",
+            "everyday_reserved_terms",
+            "Technical details",
+        ):
+            if marker not in exit_exam:
+                issue(
+                    issues,
+                    "exit-exam-wiring-missing",
+                    str(EXIT_EXAM_PATH.relative_to(ROOT)),
+                    f"missing marker {marker!r}",
+                )
+        for journey_id in JOURNEY_IDS:
+            if journey_id not in exit_exam:
+                issue(
+                    issues,
+                    "exit-exam-wiring-missing",
+                    str(EXIT_EXAM_PATH.relative_to(ROOT)),
+                    f"missing journey binding {journey_id!r}",
+                )
+        for marker in (
+            "phase27_observations",
+            "same_consumer",
+            "bounded_decision",
+            "stop_and_revoke",
+            "preflight",
+            "technical_details",
+        ):
+            if marker not in autonomous_exam:
+                issue(
+                    issues,
+                    "exit-exam-wiring-missing",
+                    str(AUTONOMOUS_EXAM_PATH.relative_to(ROOT)),
+                    f"missing production observation {marker!r}",
+                )
+        if "usability-packaged-exam.py" not in package_smoke:
+            issue(
+                issues,
+                "exit-exam-wiring-missing",
+                str(PACKAGE_SMOKE_PATH.relative_to(ROOT)),
+                "package smoke must invoke the composed fresh-wheel exam",
             )
 
 

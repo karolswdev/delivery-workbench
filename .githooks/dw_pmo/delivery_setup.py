@@ -18,12 +18,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from .orchestration import score_inventory
+from .presentation import TECHNICAL_DETAILS_LABEL
 from .program_studio import build_program_studio
 from .status import build_status
 
 DELIVERY_SETUP_KIND = "delivery-workbench-delivery-setup"
 DELIVERY_SETUP_SCHEMA_VERSION = 1
-TECHNICAL_DETAILS_LABEL = "Technical details"
 
 
 def _selected_project(status: dict[str, object]) -> dict[str, object] | None:

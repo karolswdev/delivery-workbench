@@ -2864,7 +2864,8 @@ class MCPServerTest(unittest.TestCase):
         direct = core.build_status(self.root, "demo")
         self.assertEqual(result["structuredContent"], direct)
         self.assertEqual(direct["verdict"], "attention")  # fixture has no installed hooks
-        self.assertIn("status=attention", result["content"][0]["text"])
+        self.assertIn("Delivery needs attention", result["content"][0]["text"])
+        self.assertIn("Technical details:", result["content"][0]["text"])
 
         import inspect
         source = inspect.getsource(self.mcp._tool_status)
@@ -2876,7 +2877,12 @@ class MCPServerTest(unittest.TestCase):
         self.assertNotIn("isError", preview_result)
         preview = core.build_step(self.root, "demo")
         self.assertEqual(preview_result["structuredContent"], preview)
-        self.assertIn("step=preview", preview_result["content"][0]["text"])
+        self.assertIn(
+            "Review next step", preview_result["content"][0]["text"]
+        )
+        self.assertIn(
+            "Technical details:", preview_result["content"][0]["text"]
+        )
 
         apply_result = self.call(
             "dw_step_apply",
@@ -3957,8 +3963,158 @@ class StatusBriefingTest(unittest.TestCase):
     def test_human_render_leads_with_verdict_and_next(self) -> None:
         rendered = core.render_status(self.status())
         lines = rendered.splitlines()
-        self.assertTrue(lines[0].startswith("status=ready summary="))
-        self.assertTrue(lines[1].startswith("next=start-story command="))
+        self.assertEqual(lines[0], "Delivery is ready")
+        self.assertIn("Current work: DM-1-02: Second thing", lines)
+        self.assertIn("Progress: 1 of 2 work items complete in phase 1.", lines)
+        self.assertTrue(
+            any(line.startswith("Start current work:") for line in lines)
+        )
+        technical = lines.index("Technical details:")
+        self.assertGreater(technical, 3)
+        self.assertIn(
+            "  Command: .githooks/dw story status demo 1 DM-1-02 in-progress",
+            lines[technical + 1 :],
+        )
+
+    def test_http_status_presentation_wraps_but_does_not_replace_exact_status(
+        self,
+    ) -> None:
+        from dw_pmo.workbench import handle_api
+
+        exact_status, exact_body = handle_api(
+            self.root, "/api/status", {"project": ["demo"]}
+        )
+        human_status, human_body = handle_api(
+            self.root, "/api/presentation/status", {"project": ["demo"]}
+        )
+        self.assertEqual(exact_status, 200)
+        self.assertEqual(human_status, 200)
+        self.assertEqual(exact_body["data"], self.status("demo"))
+        self.assertEqual(
+            exact_body["data"]["kind"], "delivery-workbench-status"
+        )
+        self.assertEqual(
+            human_body["data"]["kind"], "delivery-workbench-presentation"
+        )
+        self.assertEqual(human_body["data"]["surface"], "status")
+        self.assertEqual(
+            human_body["data"]["source"],
+            {"kind": "delivery-workbench-status", "schema_version": 1},
+        )
+        for flag in (
+            "starts_work",
+            "writes_state",
+            "selects_next_work",
+            "grants_permission",
+        ):
+            self.assertIs(human_body["data"][flag], False)
+
+
+class EverydayPresentationTest(unittest.TestCase):
+    """WLA-27-08: one executable vocabulary and presentation boundary."""
+
+    REPO_ROOT = TESTS_DIR.parent.parent
+
+    def test_runtime_catalog_matches_the_reviewed_contract(self) -> None:
+        from dw_pmo.workbench import handle_api
+
+        contract = json.loads(
+            (self.REPO_ROOT / "docs/product-language-contract-v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        expected = {
+            item["id"]: {
+                "preferred": item["preferred"],
+                "definition": item["definition"],
+            }
+            for item in contract["concepts"]
+        }
+        catalog = core.build_presentation_catalog()
+        self.assertEqual(catalog["concepts"], expected)
+        self.assertEqual(
+            catalog["technical_details_label"], "Technical details"
+        )
+        status, body = handle_api(
+            self.REPO_ROOT, "/api/presentation", {}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"], catalog)
+        for flag in (
+            "starts_work",
+            "writes_state",
+            "selects_next_work",
+            "grants_permission",
+        ):
+            self.assertIs(catalog[flag], False)
+
+    def test_real_presenters_match_versioned_human_snapshots(self) -> None:
+        snapshots = json.loads(
+            (
+                TESTS_DIR / "everyday-presentation-snapshots-v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        builders = {
+            "status": lambda source, _aux: core.build_status_presentation(
+                source
+            ),
+            "step": lambda source, _aux: core.build_step_presentation(source),
+            "step-result": (
+                lambda source, _aux:
+                core.build_step_result_presentation(source)
+            ),
+            "live": lambda source, _aux: core.build_live_presentation(source),
+            "start": (
+                lambda source, _aux: core.build_start_presentation(source)
+            ),
+            "action": (
+                lambda source, aux:
+                core.build_action_presentation(source, aux)
+            ),
+            "notification": (
+                lambda source, _aux:
+                core.build_notification_presentation(source)
+            ),
+        }
+        seen = set()
+        for case in snapshots["cases"]:
+            with self.subTest(case=case["id"]):
+                seen.add(case["builder"])
+                source = json.loads(json.dumps(case["input"]))
+                auxiliary = json.loads(json.dumps(case["auxiliary"]))
+                before = json.loads(json.dumps([source, auxiliary]))
+                view = builders[case["builder"]](source, auxiliary)
+                self.assertEqual(
+                    core.render_presentation(view), case["expected"]
+                )
+                self.assertEqual([source, auxiliary], before)
+                self.assertEqual(
+                    case["expected"].count("Technical details:\n"), 1
+                )
+        self.assertEqual(seen, set(builders))
+
+    def test_cli_help_uses_the_shared_task_language(self) -> None:
+        result = subprocess.run(
+            [str(TESTS_DIR.parent / "bin/dw"), "--help"],
+            cwd=self.REPO_ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        self.assertIn(
+            "Plan, do, review, and prove repository delivery",
+            result.stdout,
+        )
+        for term in (
+            "current work",
+            "blockers",
+            "progress",
+            "next step",
+            "permission",
+            "cost",
+        ):
+            self.assertIn(term, result.stdout)
 
 
 class StateFeedTest(unittest.TestCase):
@@ -7384,11 +7540,13 @@ class OrchestrationConductorTest(unittest.TestCase):
             ["approve", "reject"],
         )
         self.assertFalse(guidance["transport_grants_authority"])
-        self.assertIn("affected work:", entry["outbound"])
-        self.assertIn("chat does not grant permission", entry["outbound"])
+        self.assertIn("Affected work:", entry["outbound"])
+        self.assertIn(
+            "response carrier supplies no permission", entry["outbound"]
+        )
         for excluded in ("sha256:", "--expect", "apply_command"):
             self.assertNotIn(excluded, entry["outbound"])
-        self.assertIn("ack: " + entry["id"], entry["outbound"])
+        self.assertIn("Acknowledge: " + entry["id"], entry["outbound"])
 
         # The correlation resolves while pending and refuses once decided.
         match = ntf.resolve_correlation(self.root, correlation)
@@ -8399,7 +8557,9 @@ class OrchestrationConductorTest(unittest.TestCase):
         self.assertEqual(core_preview, http_preview["data"])
         self.assertEqual(core_preview, cli_preview)
         shown = self._dw("run", "show", run_id).stdout
-        self.assertIn("outstanding-request\t" + correlation, shown)
+        self.assertIn("Technical details:", shown)
+        self.assertIn("Pending requests:", shown)
+        self.assertIn(correlation, shown)
         cli_applied = json.loads(self._dw(
             "run", "request", run_id, correlation, "approve",
             "--expect", core_preview["act_token"], "--json",
@@ -8965,6 +9125,281 @@ class OrchestrationConductorTest(unittest.TestCase):
             ".bounded-failure", ".bounded-usage-table",
         ):
             self.assertIn(token, css)
+
+
+class WorkbenchAccessibilityContractTest(unittest.TestCase):
+    """WLA-27-09: accessibility behavior remains part of every UI render."""
+
+    def setUp(self):
+        self.workbench = TESTS_DIR.parent / "workbench"
+        self.app = (self.workbench / "app.js").read_text(encoding="utf-8")
+        self.css = (self.workbench / "style.css").read_text(encoding="utf-8")
+        self.html = (self.workbench / "index.html").read_text(encoding="utf-8")
+
+    def test_shell_landmarks_skip_link_and_live_regions_are_named(self):
+        for marker in (
+            'id="skip-link"', 'aria-label="Primary"',
+            'aria-label="Breadcrumb"', 'id="app"', 'aria-busy="true"',
+            'id="route-status"', 'id="live-status"',
+        ):
+            self.assertIn(marker, self.html)
+        self.assertIn("labelMainRegion", self.app)
+        self.assertIn("announceRoute", self.app)
+        self.assertIn("updatePrimaryNavigation", self.app)
+
+    def test_focus_dialog_tab_and_live_update_contracts_are_executable(self):
+        for marker in (
+            "captureAppFocus", "restoreAppFocus", "rememberReturnFocus",
+            "restoreReturnFocus", "wireDismissibleRegion", "focusRegion",
+            "wireTablist", "wireArrowGroup", "announceLiveUpdate",
+            "liveAnnouncementKeys", 'role="dialog"', 'aria-modal="false"',
+            'role="tablist"', 'role="tab"', 'role="tabpanel"',
+            'event.key !== "Escape"', "focusMain: true",
+        ):
+            self.assertIn(marker, self.app)
+        self.assertEqual(self.app.count('aria-live="'), 0)
+        self.assertNotIn('role="status" aria-label="Live update status"', self.app)
+
+    def test_visible_focus_motion_color_and_overflow_rules_are_present(self):
+        for marker in (
+            ":focus-visible", ".skip-link", "overflow-x: clip",
+            "overflow-wrap: anywhere", ".tablewrap",
+            '[role="tab"][aria-selected="true"]', '[role="dialog"]',
+            "@media (pointer: coarse)",
+            "@media (prefers-reduced-motion: reduce)",
+            "@media (forced-colors: active)",
+        ):
+            self.assertIn(marker, self.css)
+        self.assertIn('setAttribute("aria-current", "page")', self.app)
+
+    def test_review_matrix_covers_each_canonical_journey(self):
+        accessibility = json.loads(
+            (TESTS_DIR / "accessibility-journeys-v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        usability = json.loads(
+            (
+                TESTS_DIR / "fixtures" / "usability" / "journeys-v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        expected = {item["id"] for item in usability["journeys"]}
+        reviewed = {item["id"] for item in accessibility["journeys"]}
+        self.assertEqual(reviewed, expected)
+        self.assertEqual(accessibility["viewports"]["wide"], {
+            "width": 1440, "height": 900,
+        })
+        self.assertEqual(accessibility["viewports"]["narrow"], {
+            "width": 390, "height": 844,
+        })
+        for journey in accessibility["journeys"]:
+            self.assertEqual(journey["manual_review"]["result"], "pass")
+            self.assertGreaterEqual(len(journey["keyboard_path"]), 3)
+            self.assertGreaterEqual(len(journey["focus_contract"]), 3)
+
+
+class UsabilityPackagedExamContractTest(unittest.TestCase):
+    """WLA-27-10: one installed consumer proves all canonical journeys."""
+
+    @classmethod
+    def setUpClass(cls):
+        path = TESTS_DIR / "usability-packaged-exam.py"
+        spec = importlib.util.spec_from_file_location(
+            "dw_usability_packaged_exam", path
+        )
+        if spec is None or spec.loader is None:
+            raise AssertionError(f"cannot load {path}")
+        cls.exam = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.exam)
+        cls.contract = cls.exam.load_json(cls.exam.JOURNEYS_PATH)
+        cls.baseline = cls.exam.load_json(cls.exam.BASELINE_PATH)
+        cls.language = cls.exam.load_json(cls.exam.LANGUAGE_PATH)
+        cls.journey_ids = {
+            item["id"] for item in cls.contract["journeys"]
+        }
+
+    @staticmethod
+    def _hash(character):
+        return "sha256:" + character * 64
+
+    def _valid_report(self):
+        return {
+            "kind": "delivery-workbench-autonomous-program-exam",
+            "schema_version": 1,
+            "green": {
+                "state": "complete",
+                "ledger_events": 9,
+                "stream_events": 5,
+            },
+            "phase27_observations": {
+                "same_consumer": {
+                    "initial": {
+                        "status_kind": "delivery-workbench-status",
+                        "step_kind": "delivery-workbench-step",
+                        "next_available": True,
+                        "current_story": "DM-1-01",
+                        "programs": 0,
+                        "program_store": False,
+                        "run_store": False,
+                        "process_starts": False,
+                        "setup_writes": False,
+                        "setup_starts_work": False,
+                        "ordinary_work_requires_setup": False,
+                        "optional_policy_present": False,
+                    },
+                    "optional_configuration": {
+                        "configured_after_initial_use": True,
+                        "workflow_round_trips_lossless": True,
+                        "organization_round_trip_lossless": True,
+                        "program_round_trip_lossless": True,
+                        "starts_work": False,
+                        "creates_permission": False,
+                    },
+                },
+                "bounded_decision": {
+                    "state_before": "awaiting-approval",
+                    "question": "Should reviewed work continue?",
+                    "resolver": "Delivery owner",
+                    "visible_next_step": "Record the decision",
+                    "choices": ["approve", "reject"],
+                    "response_preview_pure": True,
+                    "decision": "approve",
+                    "exact": {
+                        "ledger_before": self._hash("1"),
+                        "ledger_after": self._hash("2"),
+                        "act_token": self._hash("3"),
+                    },
+                },
+                "stop_and_revoke": {
+                    "preview_pure": True,
+                    "state_after": "revoked",
+                    "label": "Permanently stop",
+                    "effect": "Stops this bounded delivery permanently.",
+                    "unchanged": "Completed work stays recorded.",
+                    "exact": {
+                        "generation_before": 2,
+                        "generation_after": 3,
+                        "ledger_head": self._hash("4"),
+                    },
+                },
+                "preflight": {
+                    "independent_review": True,
+                    "team": [
+                        {"duty": "implementer"},
+                        {"duty": "verifier"},
+                    ],
+                    "decision_councils": ["architecture"],
+                    "allowed_effects": ["workspace write"],
+                    "limits": {"work": 3},
+                    "stops": ["limit reached"],
+                    "permanently_excluded": ["release"],
+                    "preview_effects": {
+                        "roadmap": False,
+                        "git": False,
+                        "process": False,
+                        "network": False,
+                        "permission": False,
+                    },
+                    "separate_start_required": True,
+                },
+                "start": {
+                    "separate_confirmation": True,
+                    "preview_started_work": False,
+                    "start_state": "running",
+                },
+                "delivery": {
+                    "review_results": ["needs-repair", "pass"],
+                    "repair_rounds": 1,
+                    "governed_decision": {"dissent_preserved": True},
+                    "answers": ["answer"] * 7,
+                    "limits": {"remaining": 1},
+                    "permission": {"remaining": True},
+                    "usage": {"cost": 1},
+                },
+                "recovery": {
+                    "conductor_crashes": 1,
+                    "delivery_crashes": 1,
+                    "unique_claim_ids": True,
+                    "unique_dispatch_ids": True,
+                    "unique_receipt_hashes": True,
+                    "no_duplicate_delivery_actions": True,
+                    "saved_state": {"status": "verified"},
+                },
+                "completion": {
+                    "state": "complete",
+                    "progress": {"known_total": 3, "completed": 3},
+                    "next_step": {"label": "Review completed work"},
+                },
+                "technical_details": {
+                    "label": "Technical details",
+                    "run_id": "run-fixture",
+                    "grant_hash": self._hash("5"),
+                    "plan_hash": self._hash("6"),
+                    "ledger_head": self._hash("7"),
+                    "generation": 3,
+                    "receipt_hashes": [self._hash("8")],
+                    "principal_fingerprints": [self._hash("9")],
+                    "event_count": 9,
+                    "stream_events": 5,
+                    "exact_view_parity": [
+                        "CLI", "MCP", "HTTP", "Workbench",
+                    ],
+                    "exact_event_parity": ["CLI", "MCP", "HTTP", "SSE"],
+                },
+            },
+        }
+
+    def test_canonical_transcript_covers_every_journey_without_reserved_terms(self):
+        transcript = self.exam.build_transcript(
+            self.contract, self.baseline, self.language
+        )
+        self.assertEqual(set(self.exam.JOURNEY_EVIDENCE), self.journey_ids)
+        self.assertEqual(
+            {item["id"] for item in transcript["journeys"]},
+            self.journey_ids,
+        )
+        friction = transcript["friction"]
+        self.assertEqual(friction["journey_checkpoints"], 13)
+        self.assertEqual(friction["authority_confirmations"], 4)
+        self.assertEqual(friction["safe_refusal_paths"], 13)
+        self.assertEqual(friction["unresolved_dead_ends"], 0)
+        self.assertEqual(friction["everyday_reserved_terms"], [])
+        self.assertEqual(friction["baseline_descriptive_counts"], {
+            "steps": 88,
+            "decisions": 38,
+            "engineering_terms": 81,
+            "dead_ends": 13,
+            "context_switches": 26,
+        })
+
+    def test_observation_validator_rejects_each_planted_regression(self):
+        report = self._valid_report()
+        self.assertEqual(
+            self.exam.validate_report(report, self.journey_ids), []
+        )
+        self.assertEqual(
+            self.exam.planted_red_cases(report, self.journey_ids), []
+        )
+
+    def test_public_package_and_ci_entry_points_run_the_composed_exam(self):
+        package = (TESTS_DIR / "package-smoke.sh").read_text(encoding="utf-8")
+        workflow = (
+            TESTS_DIR.parent.parent / ".github" / "workflows" / "validation.yml"
+        ).read_text(encoding="utf-8")
+        journeys = (
+            TESTS_DIR.parent.parent / "docs" / "usability-journeys.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            '"$SCRIPT_DIR/usability-packaged-exam.py" --dw "$DW"',
+            package,
+        )
+        self.assertIn(
+            "python3 -m py_compile "
+            "pmo-roadmap/tests/usability-packaged-exam.py",
+            workflow,
+        )
+        self.assertIn("Fresh-wheel exit proof", journeys)
+        self.assertIn("Five planted mutations prove", journeys)
 
 
 class AgentHooksTest(unittest.TestCase):

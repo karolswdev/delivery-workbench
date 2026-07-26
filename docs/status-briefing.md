@@ -228,16 +228,22 @@ criteria and test plan determine the real command.
 
 ## Human rendering and exit codes
 
-Human output begins with two greppable lines:
+Human output begins with the delivery task and one source-backed next step:
 
 ```text
-status=ready summary=...
-next=continue-story command=.githooks/dw story show ...
+Delivery is ready
+The selected work is already active and can continue.
+Current work: APP-2-01: Improve checkout
+Progress: 2 of 4 work items complete in phase 2.
+Continue current work: The selected work is already active and can continue.
+Technical details:
+  Exact action: continue-story
+  Command: .githooks/dw story show myapp 2 APP-2-01
 ```
 
-It then shows compact repository, rails, roadmap, and warning lines.
-Arguments are shell-quoted only for display; the structured source stays
-argv.
+Repository checks, exact state, and copyable argv remain in the labelled
+**Technical details** section. The structured source stays argv, and `--json`
+still returns the unchanged status document.
 
 - exit 0: verdict `ready` (including select-project and normal dirty/staged
   delivery states);

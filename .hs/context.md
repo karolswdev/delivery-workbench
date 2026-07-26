@@ -7,7 +7,7 @@ This block is rendered from the rails by `dw rider docs`; edit outside the marke
 ### work-log-automation
 
 - Current phase: 27 (phase-27-usability-improvements)
-- Next story: WLA-27-06 — Make live delivery explain progress and next steps [backlog]
+- Next story: WLA-27-09 — Harden keyboard, screen-size, and assistive use [backlog]
 - Open roadmap warnings: 1
 
 <!-- END DELIVERY WORKBENCH -->

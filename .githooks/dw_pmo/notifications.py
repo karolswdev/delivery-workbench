@@ -701,36 +701,15 @@ def render_outbound(notification):
     Facts, references, and the typed-response instruction only. Never a
     token, an apply command, or third-party content.
     """
-    lines = [f"delivery-workbench: {notification['kind']}"]
-    if notification.get("run_id"):
-        lines.append(f"run: {notification['run_id']}")
-    if notification.get("node"):
-        lines.append(f"where: {notification['node']}")
-    lines.append(notification.get("detail", ""))
-    request = notification.get("request")
-    if request:
-        guidance = request.get("guidance") or {}
-        if guidance.get("affected_work"):
-            lines.append(f"affected work: {guidance['affected_work']}")
-        options = request.get("response_schema", {}).get(
-            "decision", ["approve", "reject"]
-        )
-        for choice in guidance.get("choices", []):
-            lines.append(
-                f"choice {choice.get('decision')}: "
-                f"{choice.get('after') or choice.get('effect')}"
-            )
-        lines.append(
-            "to carry this response, reply: "
-            f"/decision {request['correlation_id']} {'|'.join(options)}"
-        )
-        lines.append(
-            "chat does not grant permission: the canonical local principal, "
-            "outstanding request, closed response, freshness, and exact-token "
-            "checks still decide"
-        )
-    lines.append(f"ack: {notification['id']}")
-    return "\n".join(line for line in lines if line)
+    from .presentation import (
+        build_notification_presentation,
+        render_presentation,
+    )
+
+    return render_presentation(
+        build_notification_presentation(notification),
+        technical=True,
+    ).rstrip("\n")
 
 
 def pending_deliveries(root):

@@ -9,11 +9,244 @@ const app = document.getElementById("app");
 const crumbs = document.getElementById("crumbs");
 const refreshTime = document.getElementById("refresh-time");
 const footRoot = document.getElementById("foot-root");
+const routeStatus = document.getElementById("route-status");
+const liveStatus = document.getElementById("live-status");
+let presentationCatalog = null;
+let semanticId = 0;
+const returnFocus = new Map();
+const liveAnnouncementKeys = new Map();
+
+const FOCUSABLE_SELECTOR = [
+  "a[href]", "button:not([disabled])", "input:not([disabled])",
+  "select:not([disabled])", "textarea:not([disabled])",
+  "summary", "[tabindex]:not([tabindex='-1'])",
+].join(",");
+const FOCUS_IDENTITY_ATTRIBUTES = [
+  "data-delivery-choice", "data-orch-view", "data-studio-view",
+  "data-studio-technical", "data-plan-section", "data-run-act",
+  "data-program-act", "data-bounded-read", "data-studio-scenario",
+  "data-studio-node", "data-node-id", "name", "href",
+];
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[c]));
+}
+
+function selectorEscape(value) {
+  if (globalThis.CSS?.escape) return CSS.escape(String(value));
+  return String(value).replace(/["\\]/g, "\\$&");
+}
+
+function focusSelector(element) {
+  if (!(element instanceof Element)) return "";
+  if (element.id) return `#${selectorEscape(element.id)}`;
+  for (const attribute of FOCUS_IDENTITY_ATTRIBUTES) {
+    const value = element.getAttribute(attribute);
+    if (value !== null && value !== "") {
+      return `${element.localName}[${attribute}="${selectorEscape(value)}"]`;
+    }
+  }
+  return "";
+}
+
+function captureAppFocus() {
+  const active = document.activeElement;
+  if (!active || !app.contains(active)) return null;
+  const focusable = [...app.querySelectorAll(FOCUSABLE_SELECTOR)];
+  return {
+    selector: focusSelector(active),
+    index: focusable.indexOf(active),
+    tag: active.localName,
+  };
+}
+
+function restoreAppFocus(identity) {
+  if (!identity) return false;
+  let target = identity.selector
+    ? app.querySelector(identity.selector)
+    : null;
+  if (!target && identity.index >= 0) {
+    const focusable = [...app.querySelectorAll(FOCUSABLE_SELECTOR)];
+    const candidate = focusable[identity.index];
+    if (candidate?.localName === identity.tag) target = candidate;
+  }
+  if (!target || typeof target.focus !== "function") return false;
+  target.focus({ preventScroll: true });
+  return document.activeElement === target;
+}
+
+function rememberReturnFocus(key, element = document.activeElement) {
+  const selector = focusSelector(element);
+  if (selector) returnFocus.set(key, selector);
+}
+
+function restoreReturnFocus(key, fallback = "") {
+  const selector = returnFocus.get(key) || fallback;
+  returnFocus.delete(key);
+  requestAnimationFrame(() => {
+    document.querySelector(selector)?.focus({ preventScroll: true });
+  });
+}
+
+function focusRegion(selector) {
+  requestAnimationFrame(() => {
+    const region = document.querySelector(selector);
+    if (!region) return;
+    if (!region.hasAttribute("tabindex")) region.setAttribute("tabindex", "-1");
+    region.focus({ preventScroll: true });
+    region.scrollIntoView({ block: "nearest" });
+  });
+}
+
+function wireDismissibleRegion(selector, close, returnKey, fallback = "") {
+  const region = document.querySelector(selector);
+  if (!region) return;
+  region.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    close();
+    if (returnFocus.has(returnKey)) {
+      restoreReturnFocus(returnKey, fallback);
+    }
+  });
+}
+
+function semanticLabel(root, selector, prefix) {
+  root.querySelectorAll(selector).forEach((element) => {
+    if (element.hasAttribute("aria-label")
+        || element.hasAttribute("aria-labelledby")) return;
+    const heading = element.querySelector("h1, h2, h3, h4, h5, h6");
+    if (heading) {
+      if (!heading.id) heading.id = `${prefix}-${++semanticId}`;
+      element.setAttribute("aria-labelledby", heading.id);
+    }
+  });
+}
+
+function enhanceSemantics(root = app) {
+  semanticLabel(root, "section", "section-title");
+  semanticLabel(root, "form", "form-title");
+  root.querySelectorAll("form:not([aria-label]):not([aria-labelledby])").forEach((form) => {
+    form.setAttribute(
+      "aria-label",
+      (form.id || "delivery form").replaceAll("-", " "),
+    );
+  });
+  root.querySelectorAll("table").forEach((table) => {
+    if (table.querySelector("caption")
+        || table.hasAttribute("aria-label")
+        || table.hasAttribute("aria-labelledby")) return;
+    const heading = table.closest("section, article, .section, .card")
+      ?.querySelector("h1, h2, h3, h4, h5, h6, strong");
+    if (heading) {
+      if (!heading.id) heading.id = `table-title-${++semanticId}`;
+      table.setAttribute("aria-labelledby", heading.id);
+    } else {
+      table.setAttribute("aria-label", "Delivery details");
+    }
+  });
+  root.querySelectorAll("[role='progressbar']").forEach((meter) => {
+    if (!meter.hasAttribute("aria-label")
+        && !meter.hasAttribute("aria-labelledby")) {
+      meter.setAttribute("aria-label", "Delivery progress");
+    }
+    if (!meter.hasAttribute("aria-valuetext")) {
+      meter.setAttribute(
+        "aria-valuetext",
+        `${meter.getAttribute("aria-valuenow") || "0"} percent complete`,
+      );
+    }
+  });
+  root.querySelectorAll(".guard:not([role]), .state.error:not([role])")
+    .forEach((error) => error.setAttribute("role", "alert"));
+}
+
+function finishDynamicRender(identity = null) {
+  enhanceSemantics(app);
+  labelMainRegion();
+  restoreAppFocus(identity);
+}
+
+function labelMainRegion() {
+  const heading = app.querySelector("h1");
+  const title = heading?.textContent?.trim() || "Delivery Workbench view";
+  if (heading) {
+    if (!heading.id) heading.id = `page-title-${++semanticId}`;
+    app.setAttribute("aria-labelledby", heading.id);
+    app.removeAttribute("aria-label");
+  } else {
+    app.removeAttribute("aria-labelledby");
+    app.setAttribute("aria-label", title);
+  }
+  return title;
+}
+
+function announceRoute() {
+  const title = labelMainRegion();
+  routeStatus.textContent = `${title} loaded`;
+}
+
+function announceLiveUpdate(surface, version, message) {
+  const key = String(version || "");
+  if (!key || liveAnnouncementKeys.get(surface) === key) return false;
+  liveAnnouncementKeys.set(surface, key);
+  liveStatus.textContent = message;
+  return true;
+}
+
+function wireTablist(selector) {
+  const tablist = document.querySelector(selector);
+  if (!tablist) return;
+  const tabs = [...tablist.querySelectorAll("[role='tab']:not([disabled])")];
+  tablist.addEventListener("keydown", (event) => {
+    const current = event.target.closest?.("[role='tab']");
+    const index = tabs.indexOf(current);
+    if (index < 0) return;
+    const key = event.key;
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) return;
+    event.preventDefault();
+    const nextIndex = key === "Home" ? 0
+      : key === "End" ? tabs.length - 1
+        : (index + (key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    const nextSelector = focusSelector(tabs[nextIndex]);
+    tabs[nextIndex].click();
+    requestAnimationFrame(() => {
+      document.querySelector(nextSelector)?.focus({ preventScroll: true });
+    });
+  });
+}
+
+function wireArrowGroup(selector, itemSelector = "button:not([disabled])") {
+  const group = document.querySelector(selector);
+  if (!group) return;
+  group.addEventListener("keydown", (event) => {
+    const items = [...group.querySelectorAll(itemSelector)];
+    const current = event.target.closest?.(itemSelector);
+    const index = items.indexOf(current);
+    if (index < 0
+        || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+      return;
+    }
+    event.preventDefault();
+    const backwards = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    const nextIndex = event.key === "Home" ? 0
+      : event.key === "End" ? items.length - 1
+        : (index + (backwards ? -1 : 1) + items.length) % items.length;
+    items[nextIndex]?.focus();
+  });
+}
+
+function updatePrimaryNavigation(hash) {
+  document.querySelectorAll(".primary-nav a").forEach((link) => {
+    const target = link.getAttribute("href")?.replace(/^#/, "") || "";
+    const active = target !== "/" && hash.startsWith(target);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  if (hash === "/") document.querySelector(".brand")?.setAttribute("aria-current", "page");
+  else document.querySelector(".brand")?.removeAttribute("aria-current");
 }
 
 /* ?snapshot=1 switches to synchronous XHR so headless screenshot tools
@@ -74,6 +307,24 @@ async function api(path) {
   return body;
 }
 
+async function loadPresentationCatalog() {
+  if (presentationCatalog) return presentationCatalog;
+  presentationCatalog = (await api("/api/presentation")).data;
+  document.querySelectorAll("[data-presentation-copy]").forEach((element) => {
+    const key = element.dataset.presentationCopy;
+    element.textContent = presentationCatalog.copy?.[key] || key.replaceAll("_", " ");
+  });
+  return presentationCatalog;
+}
+
+function presentationCopy(key) {
+  return presentationCatalog?.copy?.[key] || key.replaceAll("_", " ");
+}
+
+function productTerm(key) {
+  return presentationCatalog?.concepts?.[key]?.preferred || key.replaceAll("_", " ");
+}
+
 function setCrumbs(parts) {
   crumbs.innerHTML = parts
     .map((p, i) => (i < parts.length - 1 && p.href
@@ -83,7 +334,7 @@ function setCrumbs(parts) {
 }
 
 function stateHtml(text, isError) {
-  return `<div class="state${isError ? " error" : ""}">${esc(text)}</div>`;
+  return `<div class="state${isError ? " error" : ""}" role="${isError ? "alert" : "status"}">${esc(text)}</div>`;
 }
 
 function badge(text, cls) {
@@ -137,13 +388,14 @@ function stepControlHtml(step) {
       <div><strong>separate act boundary</strong><span>Review the state-bound lease, then authorize only this one action.</span></div>
       <button type="button" id="step-review">review one deliberate step</button>
     </div>
-    <div id="step-confirm" aria-live="polite"></div>
+    <div id="step-confirm"></div>
   </div>`;
 }
 
 function stepConfirmationHtml(step) {
-  return `<div class="step-confirmation" data-step-token="${esc(step.token)}">
-    <div class="step-confirm-head"><span>confirmation</span><strong>${esc(step.action.id)}</strong>${badge("one child maximum", "warn")}</div>
+  return `<section class="step-confirmation" data-step-token="${esc(step.token)}"
+      role="dialog" aria-modal="false" aria-labelledby="step-confirm-title" tabindex="-1">
+    <div class="step-confirm-head"><span>confirmation</span><strong id="step-confirm-title">${esc(step.action.id)}</strong>${badge("one child maximum", "warn")}</div>
     <p>${esc(step.action.reason)}</p>
     <div class="step-token"><span>state token</span><code>${esc(step.token)}</code></div>
     ${stepArgvHtml(step.action.command, "authorized argv")}
@@ -153,7 +405,7 @@ function stepConfirmationHtml(step) {
       <button type="button" id="step-cancel">cancel</button>
     </div>
     <div class="brief-readonly">One POST, at most one child, then a fresh briefing. No automatic continuation.</div>
-  </div>`;
+  </section>`;
 }
 
 function stepNoticeHtml(notice) {
@@ -220,16 +472,21 @@ function wireStepControl(step) {
   const openConfirmation = () => {
     const slot = document.getElementById("step-confirm");
     if (!slot) return;
+    rememberReturnFocus("step-confirm", review);
     slot.innerHTML = stepConfirmationHtml(step);
     review.disabled = true;
+    enhanceSemantics(slot);
     document.getElementById("step-apply").addEventListener("click", (event) => {
       applyReviewedStep(step, event.currentTarget);
     });
-    document.getElementById("step-cancel").addEventListener("click", () => {
+    const close = () => {
       slot.innerHTML = "";
       review.disabled = false;
-      review.focus();
-    });
+      restoreReturnFocus("step-confirm", "#step-review");
+    };
+    document.getElementById("step-cancel").addEventListener("click", close);
+    wireDismissibleRegion(".step-confirmation", close, "step-confirm", "#step-review");
+    focusRegion(".step-confirmation");
   };
   review.addEventListener("click", openConfirmation);
   if (SNAPSHOT_MODE && new URLSearchParams(location.search).has("confirmstep")) {
@@ -284,30 +541,33 @@ function setupChoice(setup, id) {
   return (setup.choices || []).find((choice) => choice.id === id);
 }
 
-function arrivalPanel(setup, status, step, notice) {
+function arrivalPanel(setup, status, step, notice, presentation) {
   const scope = setup.delivery_scope || {};
   const work = scope.current_work;
   const ordinary = setupChoice(setup, "roadmap");
+  const presentedWork = (presentation.sections || []).find((section) => section.id === "work");
+  const nextStep = presentation.next_step || {};
   const technicalOpen = Boolean(
     notice || (SNAPSHOT_MODE && new URLSearchParams(location.search).has("confirmstep"))
   );
   const workLine = work
-    ? `<div class="arrival-work"><span>Current work</span><div><strong>${esc(work.title)}</strong><small>${esc(work.story_id)} · ${esc(work.status)}</small></div></div>`
-    : `<div class="arrival-work"><span>Current work</span><div><strong>No work is currently actionable</strong><small>Check readiness for the affected delivery decision.</small></div></div>`;
+    ? `<div class="arrival-work"><span>${esc(presentationCopy("current_work"))}</span><div><strong>${esc(work.title)}</strong><small>${esc(work.story_id)} · ${esc(work.status)}</small></div></div>`
+    : `<div class="arrival-work"><span>${esc(presentationCopy("current_work"))}</span><div><strong>${esc(presentedWork?.value || "No work is currently actionable")}</strong><small>${esc(presentationCopy("check_readiness"))} for the affected ${esc(productTerm("decision"))}.</small></div></div>`;
   return `<section class="arrival-panel readiness-${esc(setup.readiness)}" aria-labelledby="arrival-title">
     <div class="arrival-hero">
       <div><span class="arrival-eyebrow">${setup.healthy ? "healthy ordinary delivery" : "delivery needs attention"}</span>
-        <h1 id="arrival-title">${esc(setup.title)}</h1><p>${esc(setup.summary)}</p></div>
+        <h1 id="arrival-title">${esc(presentation.title)}</h1><p>${esc(presentation.summary)}</p></div>
       ${badge(setup.readiness, setup.readiness === "ready" ? "ok" : "issue")}
     </div>
     ${workLine}
+    <div class="arrival-next"><span>${esc(productTerm("next_step"))}</span><strong>${esc(nextStep.label || presentationCopy("check_readiness"))}</strong><p>${esc(nextStep.summary || "")}</p></div>
     <div class="arrival-actions">
-      ${ordinary?.available && work ? `<a class="primary" href="${esc(ordinary.route)}">Open current work</a>` : '<a class="primary" href="#/health">Check readiness</a>'}
-      <a href="#/program-studio">Review delivery options</a>
+      ${ordinary?.available && work ? `<a class="primary" href="${esc(ordinary.route)}">${esc(presentationCopy("open_current_work"))}</a>` : `<a class="primary" href="#/health">${esc(presentationCopy("check_readiness"))}</a>`}
+      <a href="#/program-studio">${esc(presentationCopy("review_delivery_options"))}</a>
       <span>Optional coordination is not required.</span>
     </div>
     <details class="arrival-technical"${technicalOpen ? " open" : ""}>
-      <summary>Technical details</summary>
+      <summary>${esc(presentationCopy("technical_details"))}</summary>
       <p>Exact repository, contract, gate, command, and one-step facts remain available here.</p>
       ${statusPanel(status, step, notice)}
     </details>
@@ -329,7 +589,7 @@ function stopMcPoll() {
 
 function mcPin(s) {
   return `<span class="mc-pin${s.awaiting_response ? " awaiting" : ""}${s.stale ? " stale" : ""}"
-    title="${esc(s.key)}${s.awaiting_response ? " — awaiting a response" : ""}${s.stale ? " (stale)" : ""}">${s.awaiting_response ? "🙋" : "🤖"}${esc(s.agent)}</span>`;
+    title="${s.awaiting_response ? "A decision is waiting" : "Team activity"}${s.stale ? " (update may be stale)" : ""}">${s.awaiting_response ? "🙋" : "🤖"}${esc(s.agent)}</span>`;
 }
 
 function mcBelt(project, pins) {
@@ -358,17 +618,18 @@ function mcBelt(project, pins) {
 
 function mcOffBelt(doc, offBelt) {
   if (!doc || doc.registry !== "ok") {
-    return `<div class="sub">sessions: registry ${esc(doc ? String(doc.registry) : "unavailable")}</div>`;
+    return `<div class="sub">Team activity is unavailable.</div>`;
   }
-  if (!offBelt.length) return `<div class="sub">every live session is pinned to its story on the belt</div>`;
+  if (!offBelt.length) return `<div class="sub">Every live team activity is matched to current work.</div>`;
   return offBelt.map((s) => {
     const where = s.correlation === "ambiguous" && s.stories.length
       ? `ambiguous: ${s.stories.map((st) => st.story_id).join(", ")}`
       : s.correlation.replace(/_/g, " ");
     return `<div class="mc-session${s.awaiting_response ? " awaiting" : ""}${s.stale ? " stale" : ""}">
-      <code>${esc(s.key)}</code> — ${esc(s.agent)} — ${esc(where)}
+      <strong>${esc(s.agent)}</strong> — ${esc(where)}
       ${s.awaiting_response ? badge("awaiting a response", "warn") : ""}
       ${s.stale ? badge("stale") : ""}
+      <details><summary>Technical details</summary><code>${esc(s.key)}</code></details>
     </div>`;
   }).join("");
 }
@@ -389,26 +650,40 @@ function mcEvents(events) {
 async function loadMissionControl() {
   if (mcInFlight) return; // single-flight: a slow poll skips ticks
   mcInFlight = true;
+  const focus = captureAppFocus();
   try {
     const body = await api("/api/missioncontrol");
     const data = body.data;
     const el = document.getElementById("mc-root");
     if (!el) { stopMcPoll(); return; } // view left; stop polling
     el.innerHTML = `
-      <div class="section"><h2>the belt</h2>
-        ${data.feed.projects.map((p) => mcBelt(p, data.pins || {})).join("") || stateHtml("no projects on the rails here")}
+      <div class="section"><h1>Current activity</h1><p>Work, team activity, decisions, and recent saved changes. This view is read-only.</p><h2>Current phase work</h2>
+        ${data.feed.projects.map((p) => mcBelt(p, data.pins || {})).join("") || stateHtml("No current work is available.")}
       </div>
-      <div class="section"><h2>off the belt</h2>${mcOffBelt(data.sessions, data.off_belt || [])}</div>
-      <div class="section"><h2>rail events</h2>${mcEvents(data.events)}</div>
-      <div class="sub">read-only — the workbench never stages or commits; steering lives on the phone and the Desk.</div>`;
+      <div class="section"><h2>Team activity not matched to work</h2>${mcOffBelt(data.sessions, data.off_belt || [])}</div>
+      <details class="section"><summary>Technical details</summary><h2>Exact saved events</h2>${mcEvents(data.events)}</details>
+      <div class="sub">Reading activity starts no work and changes no files.</div>`;
+    enhanceSemantics(el);
+    restoreAppFocus(focus);
+    const latest = data.events?.[data.events.length - 1];
+    const version = `${data.events?.length || 0}:${latest?.ts || ""}:${latest?.event || ""}`;
+    if (liveAnnouncementKeys.has("mission-control")) {
+      announceLiveUpdate(
+        "mission-control",
+        version,
+        "Activity changed. Use Check for updates or review Current activity.",
+      );
+    } else {
+      liveAnnouncementKeys.set("mission-control", version);
+    }
   } finally {
     mcInFlight = false;
   }
 }
 
 async function viewMissionControl() {
-  setCrumbs([{ label: "overview", href: "#/" }, { label: "mission control" }]);
-  app.innerHTML = `<div id="mc-root">${stateHtml("Loading the belt…")}</div>`;
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "activity" }]);
+  app.innerHTML = `<div id="mc-root">${stateHtml("Loading current activity…")}</div>`;
   await loadMissionControl();
   mcPoll = setInterval(() => { loadMissionControl().catch(() => {}); }, 10000);
 }
@@ -417,13 +692,15 @@ async function viewMissionControl() {
 
 async function viewOverview(notice = null) {
   setCrumbs([{ label: "overview" }]);
-  const [statusBody, stepBody, body, setupBody] = await Promise.all([
+  const [statusBody, stepBody, body, setupBody, presentationBody] = await Promise.all([
     api("/api/status"), api("/api/step"), api("/api/projects"),
-    api("/api/delivery-setup"),
+    api("/api/delivery-setup"), api("/api/presentation/status"),
   ]);
   const projects = body.data.projects;
   const step = stepBody.data;
-  const briefing = arrivalPanel(setupBody.data, statusBody.data, step, notice);
+  const briefing = arrivalPanel(
+    setupBody.data, statusBody.data, step, notice, presentationBody.data,
+  );
   if (!projects.length) {
     app.innerHTML = briefing + stateHtml("No roadmap projects found under pm/roadmap/. Scaffold one with `dw phase create` or `dw adopt`.");
     wireStepControl(step);
@@ -477,8 +754,8 @@ async function viewProject(slug) {
         <tr><th>Phase</th><th>State</th><th>Stories</th><th>Evidence</th><th>Summary</th></tr>
         ${phases || '<tr><td colspan="5">no phases yet</td></tr>'}
       </table></div></div>
-    ${p.issues.length ? `<div class="guard">mutations guarded — <a href="#/health">${p.issues.length} validation issue${p.issues.length === 1 ? "" : "s"}</a> must be resolved first</div>
-    <div class="section"><h2>Validation issues (<a href="#/health">health console</a>)</h2>
+    ${p.issues.length ? `<div class="guard">Roadmap changes are blocked — <a href="#/health">${p.issues.length} readiness issue${p.issues.length === 1 ? "" : "s"}</a> must be resolved first.</div>
+    <div class="section"><h2>Readiness blockers (<a href="#/health">open readiness</a>)</h2>
       <ul class="plain">${p.issues.map((i) => `<li class="issue">${esc(i)}</li>`).join("")}</ul></div>` : ""}
     ${p.warnings.length ? `<div class="section"><h2>Warnings</h2>
       <ul class="plain">${p.warnings.map((w) => `<li class="warn">${esc(w)}</li>`).join("")}</ul></div>` : ""}
@@ -579,11 +856,12 @@ function healthItem(item) {
   const folders = item.phase_folders
     ? `<div class="why">phase folders: ${item.phase_folders.map((f) => `<code>${esc(f)}</code>`).join(", ")}</div>` : "";
   return `<div class="hitem">
-    ${badge(item.severity, item.severity === "error" ? "issue" : "warn")}
-    ${badge(item.kind, kindCls)}
-    <span class="msg">${item.path ? `<a href="#/f/${encodeURIComponent(item.path)}"><code>${esc(item.path)}</code></a> — ` : ""}${esc(item.message)}</span>
+    ${badge(item.severity === "error" ? "blocker" : "attention", item.severity === "error" ? "issue" : "warn")}
+    <span class="msg">${esc(item.message)}</span>
     ${item.explanation ? `<div class="why">${esc(item.explanation)}</div>` : ""}
-    ${folders}
+    <details><summary>Technical details</summary>${badge(item.kind, kindCls)}
+      ${item.path ? `<a href="#/f/${encodeURIComponent(item.path)}"><code>${esc(item.path)}</code></a>` : ""}
+      ${folders}</details>
   </div>`;
 }
 
@@ -601,7 +879,7 @@ async function viewHealth() {
       <div class="section"><h2>${esc(proj.slug)} · ${esc(CATEGORY_LABELS[cat] || cat)} (${byCat[cat].length})</h2>
         ${byCat[cat].map(healthItem).join("")}</div>`).join("");
     sections.push(cats || `<div class="section"><h2>${esc(proj.slug)}</h2>
-      <div class="guard ok">no validation issues or warnings — mutations safe</div></div>`);
+      <div class="guard ok">Delivery is ready; no readiness blocker was found.</div></div>`);
   }
   const hook = h.hook_snapshot;
   const hookRows = [
@@ -613,21 +891,23 @@ async function viewHealth() {
   ].map(([k, v]) => `<div class="hitem">${badge(v ? "ok" : "missing", v ? "ok" : "issue")}<span class="msg">${esc(k)}</span></div>`).join("");
   app.innerHTML = `
     <div class="guard ${h.mutation_safe ? "ok" : ""}">${h.mutation_safe
-      ? "mutation-safe: no validation issues; editor operations (future) are unguarded"
-      : `mutations guarded: ${h.total_issues} validation issue${h.total_issues === 1 ? "" : "s"} must be resolved in the source Markdown first`}</div>
+      ? "Delivery changes are ready. Review each change before saving it."
+      : `Delivery changes are blocked: resolve ${h.total_issues} readiness issue${h.total_issues === 1 ? "" : "s"} in the affected work first.`}</div>
     ${sections.join("")}
-    <div class="section"><h2>Hook snapshot</h2>${hookRows}
-      ${h.hook_explanations.length ? `<ul class="plain">${h.hook_explanations.map((e) => `<li class="warn">${esc(e)}</li>`).join("")}</ul>` : ""}</div>
-    <div class="section"><h2>Work-log configuration (read-only)</h2>
-      <div class="meta">
-        <div class="kv"><div class="k">enabled</div><div class="v">${esc(h.work_log_config.enabled)}</div></div>
-        <div class="kv"><div class="k">directory</div><div class="v">${esc(h.work_log_config.dir)}</div></div>
-        <div class="kv"><div class="k">project slug</div><div class="v">${esc(h.work_log_config.project_slug)}</div></div>
-        <div class="kv"><div class="k">exclude regex</div><div class="v">${esc(h.work_log_config.exclude_regex)}</div></div>
-      </div></div>
-    <div class="section"><h2>dw check (copyable)</h2>
-      <div class="copybar"><button id="copy-check" type="button">copy</button></div>
-      <pre class="src" id="check-output">${esc(h.check_output)}</pre></div>`;
+    <details class="section"><summary>Technical details</summary>
+      <h2>Repository setup checks</h2>${hookRows}
+      ${h.hook_explanations.length ? `<ul class="plain">${h.hook_explanations.map((e) => `<li class="warn">${esc(e)}</li>`).join("")}</ul>` : ""}
+      <h2>Work-log configuration (read-only)</h2>
+        <div class="meta">
+          <div class="kv"><div class="k">enabled</div><div class="v">${esc(h.work_log_config.enabled)}</div></div>
+          <div class="kv"><div class="k">directory</div><div class="v">${esc(h.work_log_config.dir)}</div></div>
+          <div class="kv"><div class="k">project slug</div><div class="v">${esc(h.work_log_config.project_slug)}</div></div>
+          <div class="kv"><div class="k">exclude regex</div><div class="v">${esc(h.work_log_config.exclude_regex)}</div></div>
+        </div>
+      <h2>Exact readiness check (copyable)</h2>
+        <div class="copybar"><button id="copy-check" type="button">copy</button></div>
+        <pre class="src" id="check-output">${esc(h.check_output)}</pre>
+    </details>`;
   document.getElementById("copy-check").addEventListener("click", () => {
     navigator.clipboard.writeText(document.getElementById("check-output").textContent);
   });
@@ -1445,7 +1725,7 @@ function validateView() {
   if (!p) return stateHtml("Checking delivery readiness…");
   const diagnostics = p.validation?.diagnostics || [];
   const technicalOpen = new URLSearchParams(location.search).has("orchtechnical");
-  if (!p.valid) return `<div class="orch-validation invalid delivery-preflight" aria-live="polite">
+  if (!p.valid) return `<div class="orch-validation invalid delivery-preflight" role="region" aria-label="Delivery readiness results">
     <header class="preflight-head"><div><span>Delivery readiness</span><h2>${diagnostics.length} delivery decision${diagnostics.length === 1 ? "" : "s"} need attention</h2><p>Nothing was saved or started. Correct the affected part of the delivery plan, then check readiness again.</p></div>${badge("not ready", "issue")}</header>
     <ol class="preflight-corrections">${diagnostics.map((d) => `<li data-pointer="${esc(d.pointer)}"><strong>Affected decision</strong><span>${esc(d.message)}</span><small>Next step: ${esc(d.remediation)}</small></li>`).join("")}</ol>
     <div class="preflight-actions"><a href="#/program-studio">Return to delivery choices</a></div>
@@ -1458,7 +1738,7 @@ function validateView() {
   const s = p.simulation;
   const nodeCount = c.score?.nodes?.length || orchState.score.nodes?.length || 0;
   const profiles = c.analysis.profiles || [];
-  return `<div class="orch-validation valid delivery-preflight" aria-live="polite">
+  return `<div class="orch-validation valid delivery-preflight" role="region" aria-label="Delivery readiness results">
     <header class="preflight-head"><div><span>Delivery readiness</span><h2>This delivery plan is ready to review</h2><p>The work order, checks, decisions, limits, and stops are internally valid. This inspection starts nothing.</p></div>${badge("ready to review", "ok")}</header>
     <div class="preflight-facts">
       <section><span>Work and order</span><strong>${esc(nodeCount)} planned step${nodeCount === 1 ? "" : "s"} in ${esc(s.waves.length)} group${s.waves.length === 1 ? "" : "s"}</strong><small>The displayed order comes from the shared delivery-plan simulation.</small></section>
@@ -1583,7 +1863,7 @@ function runActPreviewHtml(preview) {
 
 function runStreamHtml(stream) {
   if (!stream) return "";
-  return `<section class="run-open-stream" aria-live="polite"><div><strong>${esc(stream.executor)} · ${esc(stream.execution_id)} · ${esc(stream.stream)}</strong><button type="button" id="run-stream-close">close explicit stream</button></div><small>${esc(stream.included_bytes)} / ${esc(stream.bytes)} bytes · ${stream.truncated ? "truncated" : "complete"} · ${esc(stream.sha256)}</small><pre>${esc(stream.content)}</pre></section>`;
+  return `<section class="run-open-stream" role="dialog" aria-modal="false" aria-labelledby="run-stream-title" tabindex="-1"><div><strong id="run-stream-title">${esc(stream.executor)} · ${esc(stream.execution_id)} · ${esc(stream.stream)}</strong><button type="button" id="run-stream-close">close explicit stream</button></div><small>${esc(stream.included_bytes)} / ${esc(stream.bytes)} bytes · ${stream.truncated ? "truncated" : "complete"} · ${esc(stream.sha256)}</small><pre>${esc(stream.content)}</pre></section>`;
 }
 
 function runRequestsHtml(view) {
@@ -1600,7 +1880,7 @@ function runRequestsHtml(view) {
 
 function grantPreviewHtml(plan) {
   if (!plan) return "";
-  return `<section class="run-consent ${plan.applicable ? "" : "refused"}" aria-live="polite"><div class="run-consent-head"><div><span>immutable grant preview</span><strong>${esc(plan.story.id)} · ${esc(plan.score.slug)}</strong></div>${badge("starts no work", "ok")}</div>
+  return `<section class="run-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="run-plan-title" tabindex="-1"><div class="run-consent-head"><div><span>immutable grant preview</span><strong id="run-plan-title">${esc(plan.story.id)} · ${esc(plan.score.slug)}</strong></div>${badge("starts no work", "ok")}</div>
     <div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div>
     <div class="run-grant-facts"><div><span>repository</span><code>${esc(plan.repository.branch)} · ${esc(plan.repository.head)}</code></div><div><span>expiry</span><strong>${esc(plan.request.expires_at)}</strong></div><div><span>capabilities</span><strong>${esc(plan.authority.capabilities.join(", ") || "none")}</strong></div><div><span>profiles / workspaces</span><strong>${esc(plan.authority.profiles.join(", ") || "none")} · ${esc(plan.authority.workspace_modes.join(", ") || "none")}</strong></div></div>
     ${runBudgetHtml(Object.fromEntries(Object.entries(plan.authority.budgets).map(([key, value]) => [key, { used: 0, limit: value }]))) }
@@ -1617,13 +1897,13 @@ function runEmptyHtml() {
 function liveConnectionHtml(connection, recovery) {
   const state = connection?.status || "checking";
   if (state === "stale") {
-    return `<div class="live-connection stale" role="status"><strong>Live updates interrupted</strong><p>This is the last verified view. Completed work remains recorded; “Check for updates” replays the saved history before showing anything newer. No work is declared lost or repeated.</p></div>`;
+    return `<div class="live-connection stale" role="group" aria-label="Live update status"><strong>Live updates interrupted</strong><p>This is the last verified view. Completed work remains recorded; “Check for updates” replays the saved history before showing anything newer. No work is declared lost or repeated.</p></div>`;
   }
   const copy = state === "live" ? "Live updates on"
     : state === "verified" ? "Saved history checked"
       : state === "manual" ? "Check for updates manually"
         : "Checking for updates";
-  return `<div class="live-connection ${esc(state)}" role="status">${badge(copy, state === "live" || state === "verified" ? "ok" : "")}<span>${esc(recovery?.summary || "The saved history was checked before this view was built.")}</span></div>`;
+  return `<div class="live-connection ${esc(state)}" role="group" aria-label="Live update status">${badge(copy, state === "live" || state === "verified" ? "ok" : "")}<span>${esc(recovery?.summary || "The saved history was checked before this view was built.")}</span></div>`;
 }
 
 function liveStateBadge(progress) {
@@ -1644,7 +1924,7 @@ function liveProgressGroups(progress) {
   const items = Array.isArray(model.items) ? model.items : Object.entries(groups).flatMap(([status, values]) => (values || []).map((item) => ({ ...item, status })));
   const ordered = ["active", "review", "repair", "recovering", "blocked", "waiting", "complete"];
   return `<section class="live-panel live-scope"><div class="live-panel-head"><div><span>Scope and progress</span><strong>${esc(model.completed || 0)} of ${esc(model.known_total || 0)} declared work items complete</strong></div><b>${esc(model.percent || 0)}%</b></div>
-    <div class="live-progress-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${esc(model.percent || 0)}"><i style="width:${Math.max(0, Math.min(100, Number(model.percent || 0)))}%"></i></div>
+    <div class="live-progress-meter" role="progressbar" aria-label="Delivery progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${esc(model.percent || 0)}" aria-valuetext="${esc(model.completed || 0)} of ${esc(model.known_total || 0)} work items complete"><i style="width:${Math.max(0, Math.min(100, Number(model.percent || 0)))}%"></i></div>
     <div class="live-work-groups">${ordered.map((status) => {
       const matching = items.filter((item) => item.status === status);
       if (!matching.length) return "";
@@ -1779,7 +2059,8 @@ function boundedPreviewHtml(model, preview, target) {
     safe_next_step: "Close this preview and choose only a currently available action.",
     technical_evidence: { action: preview.action, issues: preview.issues || [] },
   }, "Preview refused");
-  return `<section class="bounded-preview ${applicable ? "" : "refused"}" aria-live="polite"><div class="bounded-section-head"><div><span>Review before confirmation</span><h3>${esc(action?.label || preview.action)}</h3></div>${badge(preview.starts_work ? "may start bounded work" : "one saved action", preview.starts_work ? "warn" : "ok")}</div><dl class="bounded-consequence"><div><dt>What this will do</dt><dd>${esc(consequences.effect || "Apply only this exact reviewed operation.")}</dd></div><div><dt>What it will not do</dt><dd>${esc(consequences.unchanged || "It will not broaden permission or select a different action.")}</dd></div><div><dt>What follows</dt><dd>${esc(consequences.after || "The saved state and receipt will be reloaded.")}</dd></div></dl>${refusal}${exact}<div class="run-consent-actions">${applicable ? `<button type="button" id="${target === "run" ? "run" : "program"}-act-confirm" class="${action?.severity === "danger" ? "danger" : action?.may_start_work ? "starts-work" : ""}">Confirm ${esc(String(action?.label || preview.action).toLowerCase())}</button>` : ""}<button type="button" id="${target === "run" ? "run" : "program"}-act-close">Return without applying</button></div></section>`;
+  const titleId = `${target}-act-preview-title`;
+  return `<section class="bounded-preview ${applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="${titleId}" tabindex="-1"><div class="bounded-section-head"><div><span>Review before confirmation</span><h3 id="${titleId}">${esc(action?.label || preview.action)}</h3></div>${badge(preview.starts_work ? "may start bounded work" : "one saved action", preview.starts_work ? "warn" : "ok")}</div><dl class="bounded-consequence"><div><dt>What this will do</dt><dd>${esc(consequences.effect || "Apply only this exact reviewed operation.")}</dd></div><div><dt>What it will not do</dt><dd>${esc(consequences.unchanged || "It will not broaden permission or select a different action.")}</dd></div><div><dt>What follows</dt><dd>${esc(consequences.after || "The saved state and receipt will be reloaded.")}</dd></div></dl>${refusal}${exact}<div class="run-consent-actions">${applicable ? `<button type="button" id="${target === "run" ? "run" : "program"}-act-confirm" class="${action?.severity === "danger" ? "danger" : action?.may_start_work ? "starts-work" : ""}">Confirm ${esc(String(action?.label || preview.action).toLowerCase())}</button>` : ""}<button type="button" id="${target === "run" ? "run" : "program"}-act-close">Return without applying</button></div></section>`;
 }
 
 function boundedReceiptsHtml(model, result) {
@@ -1822,7 +2103,16 @@ function liveActivityHtml(progress) {
   return `<section class="live-panel live-activity"><div class="live-panel-head"><div><span>Readable activity</span><strong>Related work and outcomes grouped together</strong></div>${badge(`${activity.length} groups`)}</div><ol>${activity.map((item) => `<li class="state-${esc(item.status)}"><div><strong>${esc(item.title)}</strong>${badge(item.status, ["active", "complete"].includes(item.status) ? "ok" : ["blocked"].includes(item.status) ? "issue" : "warn")}</div><p>${esc(item.summary || "")}</p>${(item.outcomes || []).length ? `<small>Outcomes: ${esc(item.outcomes.join(", "))}</small>` : ""}</li>`).join("") || "<li><p>No delivery activity has been recorded yet.</p></li>"}</ol></section>`;
 }
 
-function liveProgressShell(progress, connection, toolbar, actionHtml, technicalHtml, technicalOpen = false) {
+function liveProgressShell(
+  progress,
+  connection,
+  toolbar,
+  actionHtml,
+  technicalHtml,
+  technicalOpen = false,
+  headingLevel = "h2",
+) {
+  const heading = headingLevel === "h1" ? "h1" : "h2";
   const ordinary = `<section class="live-state-summary state-${esc(progress.status?.group)}"><div><span>Delivery state</span><strong>${esc(progress.status?.label)}</strong><p>${esc(progress.status?.meaning)}</p></div><div><span>Current scope</span><strong>${esc(progress.delivery?.scope || "")}</strong><p>${esc(progress.delivery?.current_story || progress.delivery?.work_id || "")}</p></div></section>
     ${liveAnswerGrid(progress)}
     ${liveNextHtml(progress)}
@@ -1834,7 +2124,7 @@ function liveProgressShell(progress, connection, toolbar, actionHtml, technicalH
     <section class="live-recovery state-${esc(progress.recovery?.status)}"><div><span>Recovery truth</span><strong>${esc(progress.recovery?.status === "recovering" ? "Reconciliation in progress" : "Saved history verified")}</strong></div><p>${esc(progress.recovery?.summary || "")}</p><small>${esc(progress.recovery?.duplicate_protection || "")}</small></section>`;
   const technical = `<details class="live-technical"${technicalOpen || LIVE_TECHNICAL_OPEN ? " open" : ""}><summary>Technical details</summary><p class="live-technical-intro">Exact identities, ordered history, hashes, controls, and provenance remain available here.</p>${technicalHtml}</details>`;
   return `<div class="live-delivery" data-live-context="${esc(progress.context)}">
-    <header class="live-header"><div><span class="orch-eyebrow">Live delivery</span><h1>${esc(progress.title)} ${liveStateBadge(progress)}</h1><p>${esc(progress.subtitle)}</p></div>${toolbar}</header>
+    <header class="live-header"><div><span class="orch-eyebrow">Live delivery</span><${heading}>${esc(progress.title)} ${liveStateBadge(progress)}</${heading}><p>${esc(progress.subtitle)}</p></div>${toolbar}</header>
     ${liveConnectionHtml(connection, progress.recovery)}
     ${LIVE_TECHNICAL_OPEN ? `${technical}${ordinary}` : `${ordinary}${technical}`}
   </div>`;
@@ -1845,7 +2135,8 @@ function openLiveTechnical() {
   if (!details) return;
   details.open = true;
   details.scrollIntoView({
-    behavior: SNAPSHOT_MODE ? "auto" : "smooth",
+    behavior: SNAPSHOT_MODE || matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto" : "smooth",
     block: "start",
   });
   details.querySelector("summary")?.focus();
@@ -1876,7 +2167,8 @@ async function handleBoundedRead(action, target) {
     : '[data-bounded-section="failure"]';
   const section = document.querySelector(selector);
   section?.scrollIntoView({
-    behavior: SNAPSHOT_MODE ? "auto" : "smooth",
+    behavior: SNAPSHOT_MODE || matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto" : "smooth",
     block: "start",
   });
   section?.querySelector("h3, h4")?.setAttribute("tabindex", "-1");
@@ -1965,22 +2257,26 @@ function orchestrationBody() {
 }
 
 function renderOrchestration() {
+  const focus = captureAppFocus();
   const current = orchState.name || orchState.score.slug;
   app.innerHTML = `<div class="orchestration" data-score="${esc(current)}">
     <header class="orch-toolbar"><div><span class="orch-eyebrow">visual orchestration score</span><h1>${esc(orchState.score.title || orchState.score.slug)}</h1><code>pm/orchestration/${esc(orchState.score.slug)}.json</code></div>
       <div class="orch-score-actions"><label>score<select id="orch-score-select"><option value="">new unsaved score</option>${orchState.inventory.map((s) => `<option value="${esc(s.name)}"${s.name === orchState.name ? " selected" : ""}>${esc(s.slug || s.name)}${s.valid ? "" : " (invalid)"}</option>`).join("")}</select></label><button type="button" id="orch-new">new</button><button type="button" id="orch-duplicate">duplicate</button><button type="button" id="orch-preview-save">preview save</button><button type="button" id="orch-preview-delete" class="danger"${orchState.exists ? "" : " disabled"}>preview delete</button></div>
     </header>
-    <nav class="orch-tabs" aria-label="orchestration editor views">${[
+    <div class="orch-tabs" role="tablist" aria-label="Orchestration editor views">${[
       ["design", "Design"], ["validate", "Validate"], ["json", "JSON"], ["run", "Run"],
-    ].map(([id, label]) => `<button type="button" data-orch-view="${id}" class="${orchState.view === id ? "active" : ""}">${label}${id === "validate" && orchState.preview && !orchState.preview.valid ? ` (${orchState.preview.validation.diagnostics.length})` : ""}</button>`).join("")}</nav>
-    <div id="orch-save-panel" aria-live="polite"></div>
-    <div id="orch-view">${orchestrationBody()}</div>
+    ].map(([id, label]) => `<button type="button" id="orch-tab-${id}" role="tab" aria-controls="orch-view" aria-selected="${orchState.view === id}" tabindex="${orchState.view === id ? "0" : "-1"}" data-orch-view="${id}" class="${orchState.view === id ? "active" : ""}">${label}${id === "validate" && orchState.preview && !orchState.preview.valid ? ` (${orchState.preview.validation.diagnostics.length})` : ""}</button>`).join("")}</div>
+    <div id="orch-save-panel"></div>
+    <div id="orch-view" role="tabpanel" aria-labelledby="orch-tab-${esc(orchState.view)}">${orchestrationBody()}</div>
   </div>`;
   wireOrchestration();
+  wireTablist(".orch-tabs");
+  finishDynamicRender(focus);
 }
 
 async function refreshOrchValidation() {
   if (!orchState.score) return;
+  const focus = captureAppFocus();
   const name = orchState.score.slug || orchState.name;
   try {
     const { status, body } = await postJson("/api/orchestration/preview", { action: "save", name, score: orchState.score });
@@ -2007,6 +2303,7 @@ async function refreshOrchValidation() {
     const tab = document.querySelector('[data-orch-view="validate"]');
     if (tab) tab.textContent = `Validate${orchState.preview.valid ? "" : ` (${orchState.preview.validation.diagnostics.length})`}`;
     if (orchState.view === "validate") wireOrchPreflight();
+    finishDynamicRender(focus);
   }
 }
 
@@ -2159,11 +2456,15 @@ function wireOrchDesign() {
 function renderSavePreview(preview, request) {
   const panel = document.getElementById("orch-save-panel");
   const diagnostics = preview.validation?.diagnostics || [];
-  panel.innerHTML = `<div class="orch-save-preview"><div class="orch-preview-head"><strong>${esc(preview.action)} preview</strong>${badge(preview.applicable ? "nothing written yet" : "compiler blocked apply", preview.applicable ? "ok" : "issue")}<code>${esc(preview.fingerprint)}</code></div>
+  panel.innerHTML = `<section class="orch-save-preview" role="dialog" aria-modal="false" aria-labelledby="orch-preview-title" tabindex="-1"><div class="orch-preview-head"><strong id="orch-preview-title">${esc(preview.action)} preview</strong>${badge(preview.applicable ? "nothing written yet" : "compiler blocked apply", preview.applicable ? "ok" : "issue")}<code>${esc(preview.fingerprint)}</code></div>
     ${diagnostics.length ? `<ol class="orch-diagnostics">${diagnostics.map((d) => `<li><code>${esc(d.pointer)}</code><strong>${esc(d.code)}</strong><span>${esc(d.message)}</span><small>${esc(d.remediation)}</small></li>`).join("")}</ol>` : ""}
     ${preview.diff ? `<pre class="diff">${diffHtml(preview.diff)}</pre>` : `<p class="hint">${preview.no_op ? "No content change." : "No diff is available until the score compiles."}</p>`}
-    <div class="orch-preview-actions">${preview.applicable ? `<button type="button" id="orch-apply-score">apply exact ${esc(preview.action)} — no run, stage, or commit</button>` : ""}<button type="button" id="orch-close-preview">close</button></div></div>`;
-  document.getElementById("orch-close-preview").addEventListener("click", () => { panel.innerHTML = ""; });
+    <div class="orch-preview-actions">${preview.applicable ? `<button type="button" id="orch-apply-score">apply exact ${esc(preview.action)} — no run, stage, or commit</button>` : ""}<button type="button" id="orch-close-preview">close</button></div></section>`;
+  const close = () => {
+    panel.innerHTML = "";
+    restoreReturnFocus("orch-save", "#orch-preview-save");
+  };
+  document.getElementById("orch-close-preview").addEventListener("click", close);
   document.getElementById("orch-apply-score")?.addEventListener("click", async (e) => {
     e.currentTarget.disabled = true;
     const { status, body } = await postJson("/api/orchestration/apply", { ...request, fingerprint: preview.fingerprint });
@@ -2172,9 +2473,13 @@ function renderSavePreview(preview, request) {
     if (request.action === "delete") { location.hash = "#/orchestration"; await viewOrchestration(); return; }
     orchState.exists = true; orchState.name = request.name; location.hash = `#/orchestration/${encodeURIComponent(request.name)}`; await viewOrchestration(request.name);
   });
+  enhanceSemantics(panel);
+  wireDismissibleRegion(".orch-save-preview", close, "orch-save", "#orch-preview-save");
+  focusRegion(".orch-save-preview");
 }
 
-async function previewScoreAction(action) {
+async function previewScoreAction(action, trigger = document.activeElement) {
+  rememberReturnFocus("orch-save", trigger);
   const request = action === "delete" ? { action, name: orchState.name } : { action, name: orchState.score.slug, score: orchState.score };
   const panel = document.getElementById("orch-save-panel"); panel.innerHTML = stateHtml(`Building exact ${action} preview…`);
   const { status, body } = await postJson("/api/orchestration/preview", request);
@@ -2206,7 +2511,11 @@ function selectScoreRuns() {
 
 async function refreshRunData() {
   const previousView = orchState.runView;
-  orchState.runLoading = true; orchState.runError = ""; orchState.runConnection.status = "checking"; renderOrchestration();
+  const focus = captureAppFocus();
+  orchState.runLoading = true;
+  orchState.runError = "";
+  orchState.runConnection.status = "checking";
+  if (!previousView) renderOrchestration();
   try {
     const inventory = await api("/api/runs");
     orchState.runInventory = inventory.data.runs || [];
@@ -2220,7 +2529,19 @@ async function refreshRunData() {
     orchState.runView = previousView;
     orchState.runConnection.status = previousView ? "stale" : "manual";
   } finally {
-    orchState.runLoading = false; renderOrchestration();
+    orchState.runLoading = false;
+    renderOrchestration();
+    restoreAppFocus(focus);
+  }
+  const version = String(orchState.runView?.ledger_head || "");
+  if (liveAnnouncementKeys.has("run")) {
+    announceLiveUpdate(
+      "run",
+      version,
+      "Delivery progress changed. Review What happens next or check the saved history.",
+    );
+  } else if (version) {
+    liveAnnouncementKeys.set("run", version);
   }
   startRunLive();
 }
@@ -2261,9 +2582,19 @@ function startRunLive() {
         orchState.runConnection.status = "live";
         try { orchState.notifications = (await api("/api/notifications")).data.notifications; }
         catch (err) { /* notifications stay stale until the next refresh */ }
+        announceLiveUpdate(
+          "run",
+          orchState.runView?.ledger_head,
+          "Delivery progress changed. Review What happens next or check the saved history.",
+        );
         renderOrchestration();
       } catch (err) {
         orchState.runConnection.status = "stale";
+        announceLiveUpdate(
+          "run-connection",
+          `stale:${runId}:${orchState.runView?.ledger_head || ""}`,
+          "Live delivery updates were interrupted. The last verified view remains available.",
+        );
         renderOrchestration();
       }
     }, 400);
@@ -2271,11 +2602,17 @@ function startRunLive() {
   runLive.onerror = () => {
     orchState.runConnection.status = "stale";
     stopRunLive();
+    announceLiveUpdate(
+      "run-connection",
+      `stale:${runId}:${orchState.runView?.ledger_head || ""}`,
+      "Live delivery updates were interrupted. The last verified view remains available.",
+    );
     renderOrchestration();
   };
 }
 
 async function previewRunGrant(form) {
+  rememberReturnFocus("run-plan");
   const values = Object.fromEntries(new FormData(form).entries());
   const minutes = Math.max(1, Math.min(1440, Number(values.minutes) || 60));
   orchState.grantDraft = { project: String(values.project || "").trim(), story: String(values.story || "").trim(), operator: String(values.operator || "").trim(), minutes };
@@ -2285,6 +2622,7 @@ async function previewRunGrant(form) {
   try { orchState.runPlan = (await api(`/api/run-plan?${params}`)).data; }
   catch (err) { orchState.runError = err.message; }
   renderOrchestration();
+  if (orchState.runPlan) focusRegion(".run-consent");
 }
 
 async function confirmRunGrant() {
@@ -2303,7 +2641,8 @@ async function confirmRunGrant() {
   orchState.runId = body.data.run_id; orchState.runPlan = null; await refreshRunData();
 }
 
-async function previewRunAct(action, decision, correlation) {
+async function previewRunAct(action, decision, correlation, trigger = document.activeElement) {
+  rememberReturnFocus("run-act", trigger);
   const control = (orchState.runView?.controls || []).find((item) => item.action === action && String(item.decision || "") === String(decision || "") && String(item.correlation_id || "") === String(correlation || ""));
   const reason = control?.reason_required ? orchState.controlReason.trim() : "";
   orchState.runAct = null; orchState.runError = ""; orchState.runResult = null; renderOrchestration();
@@ -2311,6 +2650,7 @@ async function previewRunAct(action, decision, correlation) {
   if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run preview failed (${status})`; }
   else orchState.runAct = body.data;
   renderOrchestration();
+  if (orchState.runAct) focusRegion(".bounded-preview");
 }
 
 async function confirmRunAct() {
@@ -2326,11 +2666,13 @@ async function confirmRunAct() {
 }
 
 async function openRunStream(button) {
+  rememberReturnFocus("run-stream", button);
   orchState.runStream = null; renderOrchestration();
   const path = `/api/runs/${encodeURIComponent(orchState.runId)}/streams/${encodeURIComponent(button.dataset.executor)}/${encodeURIComponent(button.dataset.executionId)}/${encodeURIComponent(button.dataset.runStream)}?max_bytes=20000`;
   try { orchState.runStream = (await api(path)).data; }
   catch (err) { orchState.runError = err.message; }
   renderOrchestration();
+  if (orchState.runStream) focusRegion(".run-open-stream");
 }
 
 function wireRunView() {
@@ -2339,15 +2681,33 @@ function wireRunView() {
   document.getElementById("run-select")?.addEventListener("change", async (event) => { orchState.runId = event.target.value; orchState.runAct = null; orchState.runResult = null; orchState.runStream = null; await refreshRunData(); });
   document.getElementById("run-grant-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewRunGrant(event.currentTarget); });
   document.getElementById("run-start-confirm")?.addEventListener("click", confirmRunGrant);
-  document.getElementById("run-plan-close")?.addEventListener("click", () => { orchState.runPlan = null; renderOrchestration(); });
+  const closePlan = () => {
+    orchState.runPlan = null;
+    renderOrchestration();
+    restoreReturnFocus("run-plan", "#run-grant-form button[type='submit']");
+  };
+  document.getElementById("run-plan-close")?.addEventListener("click", closePlan);
   document.getElementById("run-control-reason")?.addEventListener("input", (event) => { orchState.controlReason = event.target.value; });
-  document.querySelectorAll("[data-run-act]").forEach((button) => button.addEventListener("click", () => previewRunAct(button.dataset.runAct, button.dataset.runDecision, button.dataset.runCorrelation)));
+  document.querySelectorAll("[data-run-act]").forEach((button) => button.addEventListener("click", () => previewRunAct(button.dataset.runAct, button.dataset.runDecision, button.dataset.runCorrelation, button)));
   document.getElementById("run-act-confirm")?.addEventListener("click", confirmRunAct);
-  document.getElementById("run-act-close")?.addEventListener("click", () => { orchState.runAct = null; renderOrchestration(); });
+  const closeAct = () => {
+    orchState.runAct = null;
+    renderOrchestration();
+    restoreReturnFocus("run-act");
+  };
+  document.getElementById("run-act-close")?.addEventListener("click", closeAct);
   document.querySelectorAll("[data-bounded-read]").forEach((button) => button.addEventListener("click", () => handleBoundedRead(button.dataset.boundedRead, "run")));
   document.querySelectorAll("[data-run-stream]").forEach((button) => button.addEventListener("click", () => openRunStream(button)));
   document.querySelectorAll("[data-ntf-ack]").forEach((button) => button.addEventListener("click", () => ackNotification(button.dataset.ntfAck)));
-  document.getElementById("run-stream-close")?.addEventListener("click", () => { orchState.runStream = null; renderOrchestration(); });
+  const closeStream = () => {
+    orchState.runStream = null;
+    renderOrchestration();
+    restoreReturnFocus("run-stream");
+  };
+  document.getElementById("run-stream-close")?.addEventListener("click", closeStream);
+  wireDismissibleRegion(".run-consent", closePlan, "run-plan", "#run-grant-form button[type='submit']");
+  wireDismissibleRegion(".bounded-preview", closeAct, "run-act");
+  wireDismissibleRegion(".run-open-stream", closeStream, "run-stream");
 }
 
 function wireOrchPreflight() {
@@ -2478,11 +2838,11 @@ function programInventoryHtml() {
   const programs = inventory.programs || [];
   const runs = inventory.runs || [];
   return `<div class="program-inventory" data-healthy="${inventory.healthy ? "true" : "false"}">
-    <header class="program-room-toolbar"><div><span class="orch-eyebrow">autonomous organization · inspect first</span><h1>Program control room</h1><p>Tracked policies and replayed local grants. Opening this view starts no store, process, stream, poller, or work.</p></div>${badge(inventory.healthy ? "healthy" : "attention", inventory.healthy ? "ok" : "issue")}</header>
-    <section class="program-room-grid" aria-label="program policies">${programs.map((item) => `<article class="program-card"><div><span>policy</span>${item.valid ? badge("valid", "ok") : badge("invalid", "issue")}</div><h2>${esc(item.title || item.slug || item.name)}</h2><code>${esc(item.path)}</code><p>${item.valid ? `semantic <code>${esc(item.semantic_hash)}</code>` : esc((item.diagnostics || []).map((d) => d.message).join("; "))}</p></article>`).join("") || '<article class="program-empty"><h2>Healthy empty inventory</h2><p>No program policy is configured. The control room remains dormant and creates no local program store.</p></article>'}</section>
+    <header class="program-room-toolbar"><div><span class="orch-eyebrow">delivery options · review first</span><h1>Optional multi-phase delivery</h1><p>Review saved delivery plans and live progress. Opening this view starts no work and changes no saved delivery state.</p></div>${badge(inventory.healthy ? "ready" : "needs attention", inventory.healthy ? "ok" : "issue")}</header>
+    <section class="program-room-grid" aria-label="delivery plans">${programs.map((item) => `<article class="program-card"><div><span>delivery plan</span>${item.valid ? badge("ready to review", "ok") : badge("needs repair", "issue")}</div><h2>${esc(item.title || item.slug || item.name)}</h2><p>${item.valid ? "This plan can be reviewed for a separate start." : "Resolve the listed plan issue before starting a delivery."}</p><details><summary>Technical details</summary><code>${esc(item.path)}</code><p>${item.valid ? `Exact fingerprint: <code>${esc(item.semantic_hash)}</code>` : esc((item.diagnostics || []).map((d) => d.message).join("; "))}</p></details></article>`).join("") || '<article class="program-empty"><h2>No optional delivery plan</h2><p>Ordinary roadmap work remains available. Nothing is running or waiting here.</p></article>'}</section>
     ${programs.length ? programStartHtml(programs) : ""}
-    <section class="program-panel"><div class="program-panel-head"><div><span>local grants</span><strong>${runs.length} replayed program run${runs.length === 1 ? "" : "s"}</strong></div>${badge("read-only inventory", "ok")}</div>
-      <div class="tablewrap"><table class="run-table"><thead><tr><th>run</th><th>program / mode</th><th>authority</th><th>operational frontier</th><th>open gates</th><th>expiry</th></tr></thead><tbody>${runs.map((item) => `<tr><td><a href="#/programs/${encodeURIComponent(item.run_id)}"><code>${esc(item.run_id)}</code></a></td><td>${esc(item.program || "unknown")}<br><small>${esc(item.mode || "—")}</small></td><td>${programStateBadge(item.state)}</td><td>${programStateBadge(item.operational_state)} ${item.stop ? `<small>${esc(item.stop)}</small>` : ""}</td><td>${esc(item.outstanding_requests || 0)} requests · ${esc(item.blocking_obligations || 0)} blocking</td><td>${esc(item.expires_at || "—")}</td></tr>`).join("") || '<tr><td colspan="6">No local grants. Reading the inventory does not create one.</td></tr>'}</tbody></table></div>
+    <section class="program-panel"><div class="program-panel-head"><div><span>live delivery</span><strong>${runs.length} saved deliver${runs.length === 1 ? "y" : "ies"}</strong></div>${badge("read only", "ok")}</div>
+      <div class="program-room-grid">${runs.map((item) => `<article class="program-card"><div><span>progress</span>${programStateBadge(item.operational_state)}</div><h2>${esc(item.program || "Optional delivery")}</h2><p>${item.stop ? `Blocker: ${esc(item.stop)}.` : `${esc(item.outstanding_requests || 0)} decision${Number(item.outstanding_requests || 0) === 1 ? "" : "s"} waiting; ${esc(item.blocking_obligations || 0)} blocking follow-up${Number(item.blocking_obligations || 0) === 1 ? "" : "s"}.`}</p><a href="#/programs/${encodeURIComponent(item.run_id)}">Open live delivery</a><details><summary>Technical details</summary><code>${esc(item.run_id)}</code><p>Exact state: ${esc(item.state)} · mode: ${esc(item.mode || "—")} · expiry: ${esc(item.expires_at || "—")}</p></details></article>`).join("") || '<article class="program-empty"><h2>No live optional delivery</h2><p>Reviewing this page does not create one.</p></article>'}</div>
     </section>
   </div>`;
 }
@@ -2490,21 +2850,22 @@ function programInventoryHtml() {
 function programStartHtml(programs) {
   const plan = programState.plan;
   const request = programState.planRequest || {};
-  return `<section class="program-start"><div><span class="orch-eyebrow">policy ≠ authority</span><h2>Plan one finite program grant</h2><p>The first action builds a pure, state-bound preview. A second explicit confirmation creates authority and still dispatches nothing.</p></div>
+  const modeLabels = { continuous: "Continue within limits", checkpointed: "Pause at decisions", advisory: "Advice only" };
+  return `<section class="program-start"><div><span class="orch-eyebrow">review before start</span><h2>Review optional delivery permission</h2><p>Choose the delivery plan, accountable operator, pace, lifetime, and reason. This review starts no work; confirmation remains separate.</p></div>
     <form id="program-plan-form" class="program-plan-form">
-      <label>program policy<select name="program">${programs.filter((item) => item.valid).map((item) => `<option value="${esc(item.name)}"${request.program === item.name ? " selected" : ""}>${esc(item.title || item.slug || item.name)}</option>`).join("")}</select></label>
-      <label>mode<select name="mode">${["continuous", "checkpointed", "advisory"].map((mode) => `<option value="${mode}"${request.mode === mode ? " selected" : ""}>${mode}</option>`).join("")}</select></label>
-      <label>operator identity<input name="operator" required maxlength="200" value="${esc(request.operator || "")}" placeholder="accountable human or agent"></label>
-      <label>grant minutes<input name="minutes" type="number" min="1" max="1440" value="${esc(request.minutes || 60)}"></label>
-      <label class="program-plan-reason">approval reason<input name="reason" required maxlength="1000" value="${esc(request.reason || "")}" placeholder="single-line reviewed intent"></label>
-      <button type="submit">preview exact grant</button>
+      <label>delivery plan<select name="program">${programs.filter((item) => item.valid).map((item) => `<option value="${esc(item.name)}"${request.program === item.name ? " selected" : ""}>${esc(item.title || item.slug || item.name)}</option>`).join("")}</select></label>
+      <label>delivery pace<select name="mode">${["continuous", "checkpointed", "advisory"].map((mode) => `<option value="${mode}"${request.mode === mode ? " selected" : ""}>${esc(modeLabels[mode])}</option>`).join("")}</select></label>
+      <label>accountable operator<input name="operator" required maxlength="200" value="${esc(request.operator || "")}" placeholder="accountable person or agent"></label>
+      <label>permission lifetime in minutes<input name="minutes" type="number" min="1" max="1440" value="${esc(request.minutes || 60)}"></label>
+      <label class="program-plan-reason">delivery reason<input name="reason" required maxlength="1000" value="${esc(request.reason || "")}" placeholder="one-line reviewed intent"></label>
+      <button type="submit">Review this delivery</button>
     </form>
-    ${plan ? `<div class="program-consent ${plan.applicable ? "" : "refused"}" aria-live="polite"><div class="program-consent-head"><div><span>immutable grant preview</span><strong>${esc(plan.program?.slug || request.program)} · ${esc(plan.mode || request.mode)}</strong></div>${badge("starts no work", "ok")}</div>
-      <div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div>
-      <div class="program-facts"><div><span>selection</span><strong>${esc(plan.selection?.story?.id || plan.selection?.story || "—")}</strong></div><div><span>team</span><strong>${esc(plan.roster?.team || "—")}</strong></div><div><span>expires</span><strong>${esc(plan.request?.expires_at || request.expires_at)}</strong></div><div><span>capabilities</span><strong>${esc((plan.authority?.capabilities || []).length)}</strong></div></div>
+    ${plan ? `<section class="program-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="program-plan-title" tabindex="-1"><div class="program-consent-head"><div><span>start review</span><strong id="program-plan-title">${esc(plan.program?.title || plan.program?.slug || request.program)}</strong></div>${badge(plan.applicable ? "ready for confirmation" : "blocked", plan.applicable ? "ok" : "issue")}</div>
+      <div class="program-facts"><div><span>work</span><strong>${esc(plan.selection?.story?.id || plan.selection?.story || "—")}</strong></div><div><span>team</span><strong>${esc(plan.roster?.team || "—")}</strong></div><div><span>permission ends</span><strong>${esc(plan.request?.expires_at || request.expires_at)}</strong></div><div><span>allowed action types</span><strong>${esc((plan.authority?.capabilities || []).length)}</strong></div></div>
       ${(plan.issues || []).map((issue) => `<p class="guard">${esc(typeof issue === "object" ? issue.message || issue.code : issue)}</p>`).join("")}
-      <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="program-start-confirm">create this grant — dispatch nothing</button>' : ""}<button type="button" id="program-plan-close">close preview</button></div>
-    </div>` : ""}
+      <details><summary>Technical details</summary><div class="run-token"><span>Exact start confirmation</span><code>${esc(plan.start_token)}</code></div><pre>${esc(JSON.stringify({ kind: plan.kind, mode: plan.mode, authority: plan.authority, request: plan.request }, null, 2))}</pre></details>
+      <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="program-start-confirm">Confirm this reviewed delivery</button>' : ""}<button type="button" id="program-plan-close">Cancel review</button></div>
+    </section>` : ""}
   </section>`;
 }
 
@@ -2545,7 +2906,7 @@ function programActivityHtml(view) {
 
 function programStreamHtml(stream) {
   if (!stream) return "";
-  return `<div class="program-open-stream" aria-live="polite"><div><strong>${esc(stream.session_id)} · ${esc(stream.stream)}</strong><button type="button" id="program-stream-close">close explicit stream</button></div><small>${esc(stream.included_bytes)} / ${esc(stream.bytes)} bytes · ${stream.truncated ? "truncated" : "complete"} · ${esc(stream.sha256)}</small><pre>${esc(stream.content)}</pre></div>`;
+  return `<section class="program-open-stream" role="dialog" aria-modal="false" aria-labelledby="program-stream-title" tabindex="-1"><div><strong id="program-stream-title">${esc(stream.session_id)} · ${esc(stream.stream)}</strong><button type="button" id="program-stream-close">close explicit stream</button></div><small>${esc(stream.included_bytes)} / ${esc(stream.bytes)} bytes · ${stream.truncated ? "truncated" : "complete"} · ${esc(stream.sha256)}</small><pre>${esc(stream.content)}</pre></section>`;
 }
 
 function programQualityHtml(view) {
@@ -2602,26 +2963,34 @@ function programRunHtml(view) {
     ${programControlsHtml(view)}
     <section class="program-panel"><div class="program-panel-head"><div><span>phase and authority boundary</span><strong>Granted scope, selected progress, capabilities, and permanent exclusions</strong></div></div><div class="program-boundary"><section><h3>phase progress</h3><pre>${esc(JSON.stringify(progress, null, 2))}</pre></section><section><h3>capabilities</h3><p>${(view.capabilities || []).map((item) => badge(item, "ok")).join(" ") || "none"}</p><h3>permanently excluded</h3><p>${(view.permanent_exclusions || []).map((item) => badge(item, "warn")).join(" ") || "none"}</p></section></div></section>
     <section class="program-panel"><div class="program-panel-head"><div><span>hash-chained receipts</span><strong>Program authority timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${programTimelineHtml(view)}</section>`;
-  return `<div class="program-room" data-program-run="${esc(view.run_id)}">${liveProgressShell(view.live_progress, programState.connection, toolbar, actions, technical, Boolean(programState.stream))}</div>`;
+  return `<div class="program-room" data-program-run="${esc(view.run_id)}">${liveProgressShell(view.live_progress, programState.connection, toolbar, actions, technical, Boolean(programState.stream), "h1")}</div>`;
 }
 
 function renderPrograms() {
+  const focus = captureAppFocus();
   if (programState.loading) {
     app.innerHTML = stateHtml("Replaying the authoritative program ledger…");
+    finishDynamicRender(focus);
     return;
   }
   if (programState.error && !programState.inventory) {
     app.innerHTML = stateHtml(programState.error, true);
+    finishDynamicRender(focus);
     return;
   }
   app.innerHTML = programState.view ? programRunHtml(programState.view) : programInventoryHtml();
   wirePrograms();
+  finishDynamicRender(focus);
 }
 
 async function refreshProgramView() {
   if (!programState.runId) return;
   const previousView = programState.view;
-  programState.loading = true; programState.error = ""; programState.connection.status = "checking"; renderPrograms();
+  const focus = captureAppFocus();
+  programState.loading = true;
+  programState.error = "";
+  programState.connection.status = "checking";
+  if (!previousView) renderPrograms();
   try {
     const [inventory, view, notifications] = await Promise.all([
       api("/api/programs"),
@@ -2637,7 +3006,22 @@ async function refreshProgramView() {
     programState.view = previousView;
     programState.connection.status = previousView ? "stale" : "manual";
   }
-  programState.loading = false; renderPrograms(); startProgramLive();
+  programState.loading = false;
+  renderPrograms();
+  restoreAppFocus(focus);
+  const version = String(
+    programState.view?.ledger_head || programState.view?.event_count || "",
+  );
+  if (liveAnnouncementKeys.has("program")) {
+    announceLiveUpdate(
+      "program",
+      version,
+      "Delivery progress changed. Review What happens next or check the saved history.",
+    );
+  } else if (version) {
+    liveAnnouncementKeys.set("program", version);
+  }
+  startProgramLive();
 }
 
 function startProgramLive() {
@@ -2666,9 +3050,19 @@ function startProgramLive() {
         programState.connection.status = "live";
         programState.inventory = (await api("/api/programs")).data;
         programState.notifications = (await api("/api/notifications")).data.notifications || [];
+        announceLiveUpdate(
+          "program",
+          programState.view?.ledger_head || programState.view?.event_count,
+          "Delivery progress changed. Review What happens next or check the saved history.",
+        );
         renderPrograms();
       } catch (err) {
         programState.connection.status = "stale";
+        announceLiveUpdate(
+          "program-connection",
+          `stale:${runId}:${programState.view?.event_count || ""}`,
+          "Live delivery updates were interrupted. The last verified view remains available.",
+        );
         renderPrograms();
       }
     }, 350);
@@ -2676,11 +3070,17 @@ function startProgramLive() {
   programLive.onerror = () => {
     programState.connection.status = "stale";
     stopProgramLive();
+    announceLiveUpdate(
+      "program-connection",
+      `stale:${runId}:${programState.view?.event_count || ""}`,
+      "Live delivery updates were interrupted. The last verified view remains available.",
+    );
     renderPrograms();
   };
 }
 
 async function previewProgramStart(form) {
+  rememberReturnFocus("program-plan");
   const values = Object.fromEntries(new FormData(form).entries());
   const minutes = Math.max(1, Math.min(1440, Number(values.minutes) || 60));
   const issued = new Date();
@@ -2695,6 +3095,7 @@ async function previewProgramStart(form) {
   if (status >= 400 || body.ok === false) programState.error = (body.issues && body.issues[0]) || `program plan failed (${status})`;
   else programState.plan = body.data;
   renderPrograms();
+  if (programState.plan) focusRegion(".program-consent");
 }
 
 async function confirmProgramStart() {
@@ -2712,6 +3113,7 @@ async function confirmProgramStart() {
 }
 
 async function previewProgramAct(button) {
+  rememberReturnFocus("program-act", button);
   const action = button.dataset.programAct;
   const reasonRequired = ["request", "pause", "resume", "revoke", "cancel"].includes(action);
   const request = {
@@ -2729,6 +3131,7 @@ async function previewProgramAct(button) {
   if (status >= 400 || body.ok === false) programState.error = (body.issues && body.issues[0]) || `program preview failed (${status})`;
   else programState.act = body.data;
   renderPrograms();
+  if (programState.act) focusRegion(".bounded-preview");
 }
 
 async function confirmProgramAct() {
@@ -2754,11 +3157,13 @@ async function confirmProgramAct() {
 }
 
 async function openProgramStream(button) {
+  rememberReturnFocus("program-stream", button);
   programState.stream = null; programState.error = ""; renderPrograms();
   try {
     programState.stream = (await api(`/api/programs/${encodeURIComponent(programState.runId)}/streams/${encodeURIComponent(button.dataset.sessionId)}/${encodeURIComponent(button.dataset.programStream)}?max_bytes=20000`)).data;
   } catch (err) { programState.error = err.message; }
   renderPrograms();
+  if (programState.stream) focusRegion(".program-open-stream");
 }
 
 async function ackProgramNotification(id) {
@@ -2774,7 +3179,12 @@ async function ackProgramNotification(id) {
 function wirePrograms() {
   document.getElementById("program-plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewProgramStart(event.currentTarget); });
   document.getElementById("program-start-confirm")?.addEventListener("click", confirmProgramStart);
-  document.getElementById("program-plan-close")?.addEventListener("click", () => { programState.plan = null; renderPrograms(); });
+  const closePlan = () => {
+    programState.plan = null;
+    renderPrograms();
+    restoreReturnFocus("program-plan", "#program-plan-form button[type='submit']");
+  };
+  document.getElementById("program-plan-close")?.addEventListener("click", closePlan);
   document.getElementById("program-refresh")?.addEventListener("click", refreshProgramView);
   document.querySelector("[data-live-technical]")?.addEventListener("click", openLiveTechnical);
   document.getElementById("program-run-select")?.addEventListener("change", (event) => { location.hash = `#/programs/${encodeURIComponent(event.target.value)}`; });
@@ -2783,11 +3193,24 @@ function wirePrograms() {
   document.getElementById("program-max-seconds")?.addEventListener("input", (event) => { programState.maxSeconds = Number(event.target.value); });
   document.querySelectorAll("[data-program-act]").forEach((button) => button.addEventListener("click", () => previewProgramAct(button)));
   document.getElementById("program-act-confirm")?.addEventListener("click", confirmProgramAct);
-  document.getElementById("program-act-close")?.addEventListener("click", () => { programState.act = null; renderPrograms(); });
+  const closeAct = () => {
+    programState.act = null;
+    renderPrograms();
+    restoreReturnFocus("program-act");
+  };
+  document.getElementById("program-act-close")?.addEventListener("click", closeAct);
   document.querySelectorAll("[data-bounded-read]").forEach((button) => button.addEventListener("click", () => handleBoundedRead(button.dataset.boundedRead, "program")));
   document.querySelectorAll("[data-program-stream]").forEach((button) => button.addEventListener("click", () => openProgramStream(button)));
   document.querySelectorAll("[data-program-ntf-ack]").forEach((button) => button.addEventListener("click", () => ackProgramNotification(button.dataset.programNtfAck)));
-  document.getElementById("program-stream-close")?.addEventListener("click", () => { programState.stream = null; renderPrograms(); });
+  const closeStream = () => {
+    programState.stream = null;
+    renderPrograms();
+    restoreReturnFocus("program-stream");
+  };
+  document.getElementById("program-stream-close")?.addEventListener("click", closeStream);
+  wireDismissibleRegion(".program-consent", closePlan, "program-plan", "#program-plan-form button[type='submit']");
+  wireDismissibleRegion(".bounded-preview", closeAct, "program-act");
+  wireDismissibleRegion(".program-open-stream", closeStream, "program-stream");
 }
 
 async function viewPrograms(runId = "") {
@@ -2858,12 +3281,14 @@ function setupEffectList(items, emptyText) {
 
 function deliveryChoiceCard(choice) {
   const selected = deliverySetupState.choice === choice.id;
+  const titleId = `delivery-choice-${choice.id}-title`;
+  const summaryId = `delivery-choice-${choice.id}-summary`;
   return `<article class="delivery-choice${selected ? " selected" : ""}" data-choice="${esc(choice.id)}">
     <div class="delivery-choice-head"><span>${esc(choice.tier === "vanilla" ? "ordinary roadmap" : choice.tier === "bounded-run" ? "one bounded delivery" : "optional delivery program")}</span>${badge(choice.readiness, choice.available ? "ok" : "warn")}</div>
-    <h2>${esc(choice.label)}</h2><p>${esc(choice.summary)}</p>
+    <h2 id="${titleId}">${esc(choice.label)}</h2><p id="${summaryId}">${esc(choice.summary)}</p>
     ${choice.recommended ? '<strong class="delivery-default">Ready now · no optional setup</strong>' : ""}
     ${choice.correction ? `<div class="delivery-correction"><strong>Affected decision</strong><span>${esc(choice.correction)}</span></div>` : ""}
-    <button type="button" data-delivery-choice="${esc(choice.id)}" aria-pressed="${selected ? "true" : "false"}">Review this option</button>
+    <button type="button" data-delivery-choice="${esc(choice.id)}" aria-pressed="${selected ? "true" : "false"}" aria-labelledby="${titleId}" aria-describedby="${summaryId}">Review this option</button>
   </article>`;
 }
 
@@ -2878,7 +3303,7 @@ function deliveryChoiceReview(model, choice) {
       ? (choice.available ? "Review delivery readiness" : "Open delivery plans")
       : (choice.available ? "Continue to a delivery-plan draft" : "Choose a project first");
   const continueAllowed = choice.id === "bounded" || choice.available;
-  return `<section class="delivery-review" tabindex="-1" id="delivery-review" aria-labelledby="delivery-review-title">
+  return `<section class="delivery-review" id="delivery-review" role="dialog" aria-modal="false" tabindex="-1" aria-labelledby="delivery-review-title">
     <header><div><span>Review before continuing</span><h2 id="delivery-review-title">${esc(choice.label)}</h2></div>${badge("nothing started", "ok")}</header>
     <div class="delivery-effect-grid">
       <section><h3>What setup creates</h3>${setupEffectList(choice.creates_during_setup, "Nothing.")}</section>
@@ -2908,8 +3333,13 @@ function deliveryTechnicalDetails(model) {
 }
 
 function renderDeliverySetup() {
+  const focus = captureAppFocus();
   const model = deliverySetupState.model;
-  if (!model) { app.innerHTML = stateHtml("Checking delivery readiness…"); return; }
+  if (!model) {
+    app.innerHTML = stateHtml("Checking delivery readiness…");
+    finishDynamicRender(focus);
+    return;
+  }
   const scope = model.delivery_scope || {};
   const projects = scope.projects || [];
   const current = projects.find((item) => item.slug === deliverySetupState.project)
@@ -2928,12 +3358,13 @@ function renderDeliverySetup() {
     </section>
     ${(model.issues || []).map((issue) => `<div class="delivery-issue" role="status"><strong>${esc(issue.decision)}</strong><span>${esc(issue.summary)}</span><small>${esc(issue.next_step)}</small></div>`).join("")}
     <section class="delivery-choice-step" aria-labelledby="delivery-choice-title"><div><span>Step 2</span><h2 id="delivery-choice-title">Choose the operating mode</h2><p>Compare all three. A higher mode is never selected or started for you.</p></div>
-      <div class="delivery-choice-grid">${(model.choices || []).map(deliveryChoiceCard).join("")}</div>
+      <div class="delivery-choice-grid" role="group" aria-labelledby="delivery-choice-title">${(model.choices || []).map(deliveryChoiceCard).join("")}</div>
     </section>
     ${deliveryChoiceReview(model, choice)}
     ${deliveryTechnicalDetails(model)}
   </div>`;
   wireDeliverySetup();
+  finishDynamicRender(focus);
 }
 
 function wireDeliverySetup() {
@@ -2951,14 +3382,19 @@ function wireDeliverySetup() {
     deliverySetupState.phase = event.target.value;
   });
   document.querySelectorAll("[data-delivery-choice]").forEach((button) => button.addEventListener("click", () => {
+    rememberReturnFocus("delivery-review", button);
     deliverySetupState.choice = button.dataset.deliveryChoice;
     renderDeliverySetup();
     requestAnimationFrame(() => document.getElementById("delivery-review")?.focus());
   }));
   document.getElementById("delivery-back")?.addEventListener("click", () => {
+    const selected = deliverySetupState.choice;
     deliverySetupState.choice = "";
     renderDeliverySetup();
-    requestAnimationFrame(() => document.querySelector("[data-delivery-choice]")?.focus());
+    restoreReturnFocus(
+      "delivery-review",
+      `[data-delivery-choice="${selectorEscape(selected)}"]`,
+    );
   });
   document.getElementById("delivery-cancel")?.addEventListener("click", () => {
     pendingProgramSetup = null;
@@ -2979,6 +3415,21 @@ function wireDeliverySetup() {
   document.querySelector(".delivery-technical")?.addEventListener("toggle", (event) => {
     deliverySetupState.technical = event.currentTarget.open;
   });
+  const closeReview = () => {
+    const selected = deliverySetupState.choice;
+    deliverySetupState.choice = "";
+    renderDeliverySetup();
+    restoreReturnFocus(
+      "delivery-review",
+      `[data-delivery-choice="${selectorEscape(selected)}"]`,
+    );
+  };
+  wireDismissibleRegion(
+    "#delivery-review",
+    closeReview,
+    "delivery-review",
+  );
+  wireArrowGroup(".delivery-choice-grid", "[data-delivery-choice]");
 }
 
 async function viewDeliverySetup() {
@@ -3510,8 +3961,8 @@ function studioPlanView() {
 function studioTechnicalView() {
   const team = studioState.family === "organization";
   return `<div class="studio-technical-view"><header><div><span class="orch-eyebrow">Technical details</span><h2>${team ? "Exact responsibilities, provenance, and configuration" : "Exact graph, fields, and configuration"}</h2><p>${team ? "Inspect stable role IDs, candidate profiles, provider and model resolution, auth and principal fingerprints, work areas, sessions, packet bounds, decision rules, and the lossless source." : "Use this view for hierarchical flows, bounded loops, discussion cells, exact conditions, raw import/export, and source-level diagnostics."}</p></div>${badge("same source document", "ok")}</header>
-    <nav class="studio-technical-tabs" aria-label="Technical editor mode"><button type="button" data-studio-technical="graph" class="${studioState.technicalMode === "graph" ? "active" : ""}">Graph and fields</button><button type="button" data-studio-technical="config" class="${studioState.technicalMode === "config" ? "active" : ""}">Lossless configuration</button></nav>
-    ${studioState.technicalMode === "config" ? studioJsonView() : studioDesignView()}
+    <div class="studio-technical-tabs" role="tablist" aria-label="Technical editor mode"><button type="button" id="studio-technical-tab-graph" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "graph"}" tabindex="${studioState.technicalMode === "graph" ? "0" : "-1"}" data-studio-technical="graph" class="${studioState.technicalMode === "graph" ? "active" : ""}">Graph and fields</button><button type="button" id="studio-technical-tab-config" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "config"}" tabindex="${studioState.technicalMode === "config" ? "0" : "-1"}" data-studio-technical="config" class="${studioState.technicalMode === "config" ? "active" : ""}">Lossless configuration</button></div>
+    <div id="studio-technical-panel" role="tabpanel" aria-labelledby="studio-technical-tab-${esc(studioState.technicalMode)}">${studioState.technicalMode === "config" ? studioJsonView() : studioDesignView()}</div>
   </div>`;
 }
 
@@ -3592,7 +4043,7 @@ function studioSimulateView() {
   const scenarios = studioState.model?.simulation_scenarios || [];
   const current = scenarios.find((item) => item.id === studioState.scenario) || scenarios.find((item) => item.available) || scenarios[0];
   if (current) studioState.scenario = current.id;
-  return `<div class="studio-simulation" data-scenario="${esc(studioState.scenario)}"><header><div><span class="orch-eyebrow">Try the delivery flow</span><h2>See how work could move before saving or requesting permission</h2><p>This is an inspection-only example. It starts no work and changes no plan.</p></div>${badge("starts nothing", "ok")}</header><div class="studio-scenario-tabs" role="tablist" aria-label="Delivery examples">${scenarios.map((scenario) => `<button type="button" role="tab" data-studio-scenario="${esc(scenario.id)}" aria-selected="${scenario.id === studioState.scenario}"${scenario.available ? "" : " disabled"}>${esc(scenario.label)}</button>`).join("")}</div>${studioScenarioSummary(studioState.scenario)}${studioSimulationDetails()}</div>`;
+  return `<div class="studio-simulation" data-scenario="${esc(studioState.scenario)}"><header><div><span class="orch-eyebrow">Try the delivery flow</span><h2>See how work could move before saving or requesting permission</h2><p>This is an inspection-only example. It starts no work and changes no plan.</p></div>${badge("starts nothing", "ok")}</header><div class="studio-scenario-tabs" role="tablist" aria-label="Delivery examples">${scenarios.map((scenario) => `<button type="button" id="studio-scenario-tab-${esc(scenario.id)}" role="tab" aria-controls="studio-scenario-panel" data-studio-scenario="${esc(scenario.id)}" aria-selected="${scenario.id === studioState.scenario}" tabindex="${scenario.id === studioState.scenario ? "0" : "-1"}"${scenario.available ? "" : " disabled"}>${esc(scenario.label)}</button>`).join("")}</div><div id="studio-scenario-panel" role="tabpanel" aria-labelledby="studio-scenario-tab-${esc(studioState.scenario)}">${studioScenarioSummary(studioState.scenario)}${studioSimulationDetails()}</div></div>`;
 }
 
 function studioValidateView() {
@@ -3616,7 +4067,7 @@ function studioValidateView() {
 
 function studioJsonView() {
   const value = studioState.jsonDraft || JSON.stringify(studioState.document, null, 2);
-  return `<div class="studio-json"><header><div><span class="orch-eyebrow">lossless configuration</span><h2>Every contract field, portable and reviewable</h2></div>${badge("same compiler", "ok")}</header>${studioState.jsonPointer ? `<div class="studio-json-target"><span>compiler target</span><code>${esc(studioState.jsonPointer)}</code></div>` : ""}<div class="studio-json-actions"><button type="button" id="studio-json-apply">apply JSON to graph</button><label class="filebtn">import JSON<input type="file" id="studio-json-import" accept="application/json,.json"></label></div><div id="studio-json-error" class="guard" hidden></div><label><span>${esc(studioState.family)} JSON</span><textarea id="studio-json-text" spellcheck="false">${esc(value)}</textarea></label></div>`;
+  return `<div class="studio-json"><header><div><span class="orch-eyebrow">lossless configuration</span><h2>Every contract field, portable and reviewable</h2></div>${badge("same compiler", "ok")}</header>${studioState.jsonPointer ? `<div class="studio-json-target"><span>compiler target</span><code>${esc(studioState.jsonPointer)}</code></div>` : ""}<div class="studio-json-actions"><button type="button" id="studio-json-apply">apply JSON to graph</button><label class="filebtn">import JSON<input type="file" id="studio-json-import" accept="application/json,.json"></label></div><div id="studio-json-error" class="guard" role="alert" hidden></div><label><span>${esc(studioState.family)} JSON</span><textarea id="studio-json-text" spellcheck="false" aria-describedby="studio-json-error">${esc(value)}</textarea></label></div>`;
 }
 
 function studioAuthorityView() {
@@ -3634,6 +4085,7 @@ function studioBody() {
 }
 
 function renderProgramStudio() {
+  const focus = captureAppFocus();
   const family = studioFamilyModel();
   const items = family?.items || [];
   const document = studioState.document || family?.draft || {};
@@ -3661,10 +4113,15 @@ function renderProgramStudio() {
     ${studioState.setupContext ? `<section class="studio-setup-context"><div><span>Delivery scope from setup</span><strong>${esc(studioState.setupContext.project || "project not chosen")} · phase ${esc(studioState.setupContext.phase || "review needed")}</strong><p>This is an unsaved delivery-plan draft. Editing and checking it start nothing; Save draft still requires its own exact preview and confirmation.</p></div><div><a href="#/program-studio">Back to delivery choices</a><a href="#/">Leave for now</a></div></section>` : ""}
     ${empty ? `<section class="studio-empty-neutral"><div><span class="orch-eyebrow">Optional delivery design</span><h2>Nothing has been saved here yet</h2><p>Ordinary roadmap work is ready. Drafting a ${esc(objectLabel)} is optional and starts no work.</p></div><a href="#/">Return to current work</a></section>` : ""}
     <header class="studio-toolbar"><div><span class="orch-eyebrow">${esc(familyLabels[studioState.family])}</span><h1>${esc(document.title || document.slug || "Delivery plan")}</h1><p>Draft, check, and review before saving. Nothing here starts work or provides permission.</p><details><summary>Technical details</summary><code>pm/${esc(family?.plural || `${studioState.family}s`)}/${esc(document.slug || studioState.name)}.json</code></details></div><div class="studio-policy-actions"><label>Design area<select id="studio-family-select">${STUDIO_FAMILIES.map((id) => `<option value="${id}"${id === studioState.family ? " selected" : ""}>${esc(familyLabels[id])}</option>`).join("")}</select></label><label>Saved ${esc(objectLabel)}<select id="studio-policy-select"><option value="">New unsaved ${esc(objectLabel)}</option>${items.map((item) => `<option value="${esc(item.name)}"${item.name === studioState.name && studioState.exists ? " selected" : ""}>${esc(item.slug || item.name)}${item.valid ? "" : " · needs attention"}</option>`).join("")}</select></label><button type="button" id="studio-new">New</button><button type="button" id="studio-duplicate">Duplicate</button><button type="button" id="studio-preview-save">${studioState.setupContext && studioState.family === "program" ? "Review draft save" : `Review ${esc(objectLabel)} save`}</button><button type="button" id="studio-preview-delete" class="danger"${studioState.exists ? "" : " disabled"}>Review removal</button></div></header>
-    <nav class="studio-tabs" aria-label="${studioState.family === "organization" ? "Team and review authoring views" : "Delivery-plan authoring views"}">${STUDIO_VIEWS.map((id) => `<button type="button" data-studio-view="${id}" class="${studioState.view === id ? "active" : ""}">${esc(viewLabels[id])}${id === "validate" && validation && !validation.valid ? ` (${validation.diagnostics.length})` : ""}</button>`).join("")}</nav>
-    ${studioState.error ? `<div class="studio-error" role="alert">${esc(studioState.error)}</div>` : ""}<div id="studio-save-panel" aria-live="polite"></div><div id="studio-view">${studioBody()}</div>
+    <div class="studio-tabs" role="tablist" aria-label="${studioState.family === "organization" ? "Team and review authoring views" : "Delivery-plan authoring views"}">${STUDIO_VIEWS.map((id) => `<button type="button" id="studio-tab-${id}" role="tab" aria-controls="studio-view" aria-selected="${studioState.view === id}" tabindex="${studioState.view === id ? "0" : "-1"}" data-studio-view="${id}" class="${studioState.view === id ? "active" : ""}">${esc(viewLabels[id])}${id === "validate" && validation && !validation.valid ? ` (${validation.diagnostics.length})` : ""}</button>`).join("")}</div>
+    ${studioState.error ? `<div class="studio-error" role="alert">${esc(studioState.error)}</div>` : ""}<div id="studio-save-panel"></div><div id="studio-view" role="tabpanel" aria-labelledby="studio-tab-${esc(studioState.view)}">${studioBody()}</div>
   </div>`;
   wireProgramStudio();
+  wireTablist(".studio-tabs");
+  wireTablist(".studio-technical-tabs");
+  wireTablist(".studio-scenario-tabs");
+  wireArrowGroup(".studio-plan-sections", "[data-plan-section]");
+  finishDynamicRender(focus);
 }
 
 function queueStudioModel() {
@@ -3837,16 +4294,24 @@ function renderStudioSavePreview(preview, request) {
   const actionSummary = request.action === "delete"
     ? `This would remove one saved ${objectLabel}.`
     : `This would write one reviewed ${objectLabel} file.`;
-  slot.innerHTML = `<section class="studio-save-preview ${preview.applicable ? "" : "refused"}"><div class="studio-preview-head"><div><span>Review before ${request.action === "delete" ? "removal" : "save"}</span><strong>${esc(actionSummary)}</strong></div>${badge(preview.applicable ? "ready for confirmation" : "needs attention", preview.applicable ? "ok" : "issue")}</div>
+  slot.innerHTML = `<section class="studio-save-preview ${preview.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="studio-save-preview-title" tabindex="-1"><div class="studio-preview-head"><div><span>Review before ${request.action === "delete" ? "removal" : "save"}</span><strong id="studio-save-preview-title">${esc(actionSummary)}</strong></div>${badge(preview.applicable ? "ready for confirmation" : "needs attention", preview.applicable ? "ok" : "issue")}</div>
     <p>Reviewing this change writes nothing. Confirming it changes only the named file; it starts no work, changes no roadmap status, and provides no permission.</p>
     ${preview.no_op ? '<p class="hint">The saved file already matches this draft.</p>' : ""}
     <details class="studio-save-technical"><summary>Technical details</summary><code>${esc(preview.path)}</code><code>${esc(preview.fingerprint)}</code>${preview.diff ? `<pre class="diff">${diffHtml(preview.diff)}</pre>` : '<p class="hint">No byte change.</p>'}</details>
     <div class="studio-preview-actions">${preview.applicable ? `<button type="button" id="studio-confirm-apply">${esc(applyLabel)}</button>` : ""}<button type="button" id="studio-close-preview">Close review</button></div></section>`;
-  document.getElementById("studio-close-preview")?.addEventListener("click", () => { slot.innerHTML = ""; });
+  const close = () => {
+    slot.innerHTML = "";
+    restoreReturnFocus("studio-save", "#studio-preview-save");
+  };
+  document.getElementById("studio-close-preview")?.addEventListener("click", close);
   document.getElementById("studio-confirm-apply")?.addEventListener("click", () => applyStudioAction(preview, request));
+  enhanceSemantics(slot);
+  wireDismissibleRegion(".studio-save-preview", close, "studio-save", "#studio-preview-save");
+  focusRegion(".studio-save-preview");
 }
 
-async function previewStudioAction(action) {
+async function previewStudioAction(action, trigger = document.activeElement) {
+  rememberReturnFocus("studio-save", trigger);
   const request = { family: studioState.family, action, name: studioState.document.slug || studioState.name, ...(action === "save" ? { document: studioState.document } : {}) };
   const { status, body } = await postJson("/api/program-studio/preview", request);
   if (status >= 400 || body.ok === false) { studioState.error = (body.issues && body.issues[0]) || `preview failed (${status})`; renderProgramStudio(); return; }
@@ -4314,37 +4779,60 @@ async function viewProgramStudio(family = "program", name) {
 
 /* ── router ─────────────────────────────────────────────────────────── */
 
-async function route() {
+async function route({ focusMain = false } = {}) {
   stopMcPoll(); // leaving mission control stops its poll
   stopRunLive(); // leaving the run view closes its live tail
   stopProgramLive(); // leaving an explicit program run closes its live tail
+  app.setAttribute("aria-busy", "true");
   app.innerHTML = stateHtml("Loading…");
   const hash = decodeURIComponent(location.hash.replace(/^#/, "")) || "/";
   const parts = hash.split("/").filter(Boolean);
   try {
-    if (!parts.length) return await viewOverview();
-    if (parts[0] === "p" && parts.length === 2) return await viewProject(parts[1]);
-    if (parts[0] === "p" && parts[2] === "ph") return await viewPhase(parts[1], parts[3]);
-    if (parts[0] === "p" && parts[2] === "s") return await viewStory(parts[1], parts[3]);
-    if (parts[0] === "p" && parts[2] === "t") return await viewTrace(parts[1], parts[3]);
-    if (parts[0] === "wl") return await viewWorklog(parts.slice(1).join("/"));
-    if (parts[0] === "board") return await viewBoard(parts[1]);
-    if (parts[0] === "orchestration") return await viewOrchestration(parts[1]);
-    if (parts[0] === "programs") return await viewPrograms(parts[1]);
-    if (parts[0] === "program-studio" && parts.length === 1) return await viewDeliverySetup();
-    if (parts[0] === "program-studio") return await viewProgramStudio(parts[1], parts[2]);
-    if (parts[0] === "edit") return await viewEdit(parts[1]);
-    if (parts[0] === "health") return await viewHealth();
-    if (parts[0] === "mc") return await viewMissionControl();
-    if (parts[0] === "f") return await viewFile(parts.slice(1).join("/"));
-    app.innerHTML = stateHtml(`Unknown view: ${hash}`, true);
+    await loadPresentationCatalog();
+    let handled = true;
+    if (!parts.length) await viewOverview();
+    else if (parts[0] === "p" && parts.length === 2) await viewProject(parts[1]);
+    else if (parts[0] === "p" && parts[2] === "ph") await viewPhase(parts[1], parts[3]);
+    else if (parts[0] === "p" && parts[2] === "s") await viewStory(parts[1], parts[3]);
+    else if (parts[0] === "p" && parts[2] === "t") await viewTrace(parts[1], parts[3]);
+    else if (parts[0] === "wl") await viewWorklog(parts.slice(1).join("/"));
+    else if (parts[0] === "board") await viewBoard(parts[1]);
+    else if (parts[0] === "orchestration") await viewOrchestration(parts[1]);
+    else if (parts[0] === "programs") await viewPrograms(parts[1]);
+    else if (parts[0] === "program-studio" && parts.length === 1) await viewDeliverySetup();
+    else if (parts[0] === "program-studio") await viewProgramStudio(parts[1], parts[2]);
+    else if (parts[0] === "edit") await viewEdit(parts[1]);
+    else if (parts[0] === "health") await viewHealth();
+    else if (parts[0] === "mc") await viewMissionControl();
+    else if (parts[0] === "f") await viewFile(parts.slice(1).join("/"));
+    else handled = false;
+    if (!handled) app.innerHTML = stateHtml(`Unknown view: ${hash}`, true);
   } catch (err) {
     app.innerHTML = stateHtml(err.message, true);
+  } finally {
+    enhanceSemantics(app);
+    updatePrimaryNavigation(hash);
+    announceRoute();
+    app.setAttribute("aria-busy", "false");
+    if (focusMain) {
+      requestAnimationFrame(() => {
+        const target = app.querySelector("h1") || app;
+        if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+        target.focus();
+        target.scrollIntoView({ block: "start" });
+      });
+    }
   }
 }
 
-document.getElementById("refresh-btn").addEventListener("click", route);
-window.addEventListener("hashchange", route);
+document.getElementById("skip-link").addEventListener("click", () => {
+  const target = app.querySelector("h1") || app;
+  if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+  target.focus();
+  target.scrollIntoView({ block: "start" });
+});
+document.getElementById("refresh-btn").addEventListener("click", () => route());
+window.addEventListener("hashchange", () => route({ focusMain: true }));
 
 api("/api/context").then((body) => {
   footRoot.textContent = body.data.root;

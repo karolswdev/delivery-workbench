@@ -368,3 +368,71 @@ changes, ambiguous next steps, inaccessible **Technical details**, missing
 question or screen coverage, incomplete baselines, reuse drift, and missing
 docs/README/CI wiring. It also applies every planted mutation in
 `red-fixtures-v1.json` and proves the intended refusal still fires.
+
+## Keyboard, assistive, and viewport proof
+
+WLA-27-09 keeps a second matrix keyed to these same 13 journey and canonical
+state IDs:
+[`accessibility-journeys-v1.json`](../pmo-roadmap/tests/accessibility-journeys-v1.json).
+It records each keyboard path, focus round-trip, semantic expectation,
+live-update rule, wide/narrow observation, and assistive semantic review.
+
+The real-browser exam drives Firefox with WebDriver key actions, tests route
+and dialog focus, verifies draft retention, suppresses duplicate live
+announcements, and audits headings, named regions/forms/tables/progress/tabs,
+non-color status, and horizontal overflow at 1440×900 and 390×844:
+
+```bash
+python3 pmo-roadmap/tests/workbench-accessibility-contract.py
+pmo-roadmap/tests/workbench-ui-smoke.sh
+```
+
+See [Workbench accessibility](./accessibility.md) for the supported interaction
+and browser contract.
+
+## Fresh-wheel exit proof
+
+WLA-27-10 composes the same thirteen journey IDs in
+[`usability-packaged-exam.py`](../pmo-roadmap/tests/usability-packaged-exam.py).
+The public exam takes one isolated `dw` entry point installed from the wheel.
+That consumer first performs ordinary roadmap status, next-work, and setup
+inspection with no optional policy or runtime store. It then deliberately
+authors reviewed optional policy, crosses the existing bounded-run and program
+preview/confirmation boundaries, and demonstrates:
+
+- a blocked human decision and exact response;
+- permanent stop with an inspectable receipt;
+- assigned work, independent review, and governed decision ownership;
+- reject, one repair, and pass;
+- remaining permission, count limits, and observed cost;
+- conductor and delivery-boundary crash replay without duplicate effects;
+- completed scope with one ordinary next-step answer; and
+- byte-equal exact views/events across CLI, MCP, HTTP, Workbench, and SSE.
+
+The exam renders a human acceptance transcript directly from
+`journeys-v1.json`; it does not maintain a friendlier second journey model.
+Every everyday transcript string is checked against the reserved engineering
+language contract. Exact IDs, hashes, generations, events, identities, and
+receipts appear only after the explicit **Technical details** transition.
+Five planted mutations prove that created initial program state, lost
+reject/repair evidence, missing crash recovery, false completion, or a hidden
+technical boundary makes the exam fail.
+
+`package-smoke.sh` supplies the isolated installed-wheel entry point:
+
+```bash
+pmo-roadmap/tests/package-smoke.sh
+```
+
+For an already installed artifact, the composed entry point is:
+
+```bash
+python3 pmo-roadmap/tests/usability-packaged-exam.py --dw /path/to/dw
+```
+
+The transcript measures thirteen journey checkpoints, four explicit authority
+confirmations, thirteen safe refusal paths, zero unresolved transcript dead
+ends, and zero reserved engineering terms in its everyday regions. Those are
+exit-exam measures, not a subtraction from the earlier descriptive baseline's
+88 screen steps, 38 decisions, 81 engineering terms, 13 dead ends, and 26
+context switches.

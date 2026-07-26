@@ -6,41 +6,47 @@
 
 ![Pixel-art delivery workbench: a desk with a retro computer showing a green checkmark, stamped contract papers, a rubber stamp, and a cargo cart carrying a sealed package](./pmo-roadmap/assets/delivery-workbench-icon.png)
 
-Delivery Workbench is a planning and commit gate system for Git
-repositories where AI agents do much of the work. It addresses two
-problems: agents claim work is done when it is not, and months later
-nobody can tell what a commit shipped or what tested it.
+<!-- BEGIN EVERYDAY PRODUCT GUIDE -->
+Delivery Workbench helps a person and their AI team deliver repository work
+without losing the plan, the review, or the proof. It keeps the answer to five
+questions close at hand:
 
-Plans are Markdown files in the repo, organized as phases and
-stories. A story cannot be marked done until a command run is
-recorded in its evidence file. A commit cannot land until a
-pre-commit hook checks a contract whose facts (branch, HEAD, staged
-tree) are stamped and re-verified. Each commit carries trailers
-naming the story it shipped and the contract that certified it.
-State is Markdown files and git data; there is no database or
-server.
+- What is the current work?
+- Is there a blocker or decision?
+- What progress and cost can the saved facts prove?
+- What permission remains?
+- What is the next step?
 
-Humans and agents use the same commands. Agents can also use the
-included MCP server.
+Start with `.githooks/dw status`. It shows readiness, current work, progress,
+any blocker, and one source-backed next step. Use `.githooks/dw setup` when you
+want to compare ordinary work, one bounded delivery, and an optional
+multi-phase delivery. Reading either view starts no work and changes no saved
+state.
 
-Delivery Workbench can also coordinate a bounded multi-agent delivery run.
-Its visual orchestration editor configures the exact graph—research and worker
-agents, dependencies, context, typed output conventions, checks, failure and
-repair routes, budgets, approvals, and terminal handoff. A separate revocable
-grant authorizes the compiled score; the conductor executes only those rules
-and leaves certification and commit with the operator.
+Work is complete only after its declared checks run and their proof is saved.
+The final commit check then makes sure the reviewed files still match that
+proof. Humans and agents use the same commands and see the same delivery facts.
 
-An additional, explicitly opt-in program layer sits above that one-run spine.
-It compiles governed multi-story and multi-phase policy,
-independent roles, bounded councils, carried obligations, and architecture
-gates under a separate finite grant. Its restart-safe embedded conductor can
-now execute one replay-derived act at a time through agent, check, repair,
-council, meta-review, structural-loop, phase-architect, outward-signal, nudge,
-story/phase-transition, and scope-completion boundaries. Its fresh-wheel exit
-exam proves governed delivery across three stories and two phases, planted
-crash recovery, exact refusal paths, and a separate dormant no-program
-consumer. Integration/Git/roadmap rails remain fail-closed; ordinary Delivery
-Workbench and bounded runs acquire none of this authority.
+For a complete first journey—from arrival through setup, review, recovery, and
+completion—read [Everyday delivery](./docs/everyday-delivery.md).
+The [whole-task journey proof](./docs/usability-journeys.md#fresh-wheel-exit-proof)
+shows how those same tasks are replayed from a fresh installed wheel while
+retaining exact technical inspection.
+<!-- END EVERYDAY PRODUCT GUIDE -->
+
+## Technical overview
+
+Plans are Markdown files in the repository, organized as phases and stories.
+Story evidence records exact command runs. A stamped commit contract binds the
+reviewed stage, branch, and commit facts; local hooks re-derive those facts
+before commit, while history verification catches bypassed hooks.
+
+The optional bounded-run and multi-phase program engines add exact compiled
+policy, finite grants, replayed ledgers, and guarded control actions. Those
+protocols remain opt-in and do not change ordinary roadmap delivery. Their
+machine contracts and architecture are documented in
+[Interop](./docs/interop.md), [Orchestration](./docs/orchestration.md), and
+[Programs](./docs/programs.md).
 
 ## Install
 
@@ -72,7 +78,7 @@ inspects the repo and drafts a roadmap for you. See the
 .githooks/dw status                     # is this repo ready, and what is safe next?
 .githooks/dw setup myapp                # compare ordinary, bounded, and optional-program delivery
 .githooks/dw step myapp                 # preview one state-bound, allowlisted action
-# review the preview; run its exact apply=... command when it is applicable
+# review the preview; run its exact "Apply command" when it is applicable
 .githooks/dw story status myapp 2 3 in-progress
 # ... do the work ...
 .githooks/dw evidence capture myapp 2 3 -- npm test
@@ -419,8 +425,10 @@ trailers and an archived contract, the full history passing
 
 ## Documentation
 
+- [Everyday delivery](./docs/everyday-delivery.md): the task-first path from arrival and setup through plan review, live progress, recovery, proof, and completion
 - [Everyday product language](./docs/product-language.md): the Phase 27 vocabulary, presentation-only application-view boundary, complete surface inventory, technical-details escape hatch, and executable drift contract
 - [Whole-task usability journeys](./docs/usability-journeys.md): the Phase 27 journey contract, reachable state fixtures, current-friction baseline, screen ownership, and deterministic usability proof
+- [Workbench accessibility](./docs/accessibility.md): keyboard paths, focus and live-update behavior, assistive semantics, narrow/wide layout rules, and the executable 13-journey review record
 - [Delivery setup and first arrival](./docs/delivery-setup.md): the three deliberate operating modes, pure shared model, Workbench/CLI parity, safe exits, preflight, and proof
 - [Delivery-plan authoring](./docs/plan-authoring.md): the seven task-shaped decisions, readable pre-save summary, decision-shaped corrections, lossless Technical-details editing, and no-side-effect proof
 - [Team and review design](./docs/team-review.md): five responsibility questions, policy-ready versus runtime-proven independence, progressive decision/audit rules, exact provenance, lossless editing, and shared live reuse

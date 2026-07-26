@@ -109,6 +109,35 @@ assert http["ok"] is True, http
 assert cli == http["data"] == mcp_result["structuredContent"]
 PY
 
+curl -s "$BASE/api/presentation" > "$TMP_ROOT/presentation.json"
+curl -s "$BASE/api/presentation/status?project=sample" \
+  > "$TMP_ROOT/presentation-status.json"
+python3 - "$TMP_ROOT/status-http.json" "$TMP_ROOT/presentation.json" \
+  "$TMP_ROOT/presentation-status.json" <<'PY' \
+  || fail "shared everyday presentation did not preserve the exact status boundary"
+import json, sys
+
+exact = json.load(open(sys.argv[1]))["data"]
+catalog = json.load(open(sys.argv[2]))["data"]
+human = json.load(open(sys.argv[3]))["data"]
+assert catalog["kind"] == human["kind"] == "delivery-workbench-presentation"
+assert catalog["schema_version"] == human["schema_version"] == 1
+assert catalog["surface"] == "catalog"
+assert len(catalog["concepts"]) == 10
+assert catalog["technical_details_label"] == "Technical details"
+assert human["surface"] == "status"
+assert human["source"] == {
+    "kind": exact["kind"], "schema_version": exact["schema_version"],
+}
+assert human["title"] == "Delivery needs attention"
+assert any(item["label"] == "Blocker" for item in human["sections"])
+assert human["technical_details"]["label"] == "Technical details"
+for document in (catalog, human):
+    for key in ("starts_work", "writes_state", "selects_next_work",
+                "grants_permission"):
+        assert document[key] is False, (key, document[key])
+PY
+
 curl -s "$BASE/api/projects" > "$TMP_ROOT/projects.json"
 python3 - "$TMP_ROOT/projects.json" <<'PY' || fail "overview payload wrong"
 import json, sys

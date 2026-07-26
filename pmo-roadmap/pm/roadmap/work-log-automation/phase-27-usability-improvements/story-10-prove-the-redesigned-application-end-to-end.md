@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 27
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-27-01 through WLA-27-09
 - **Unblocks:** Phase 27 closeout
 - **Owner:** unassigned
@@ -35,25 +35,25 @@ inferring release authority.
 
 ## Acceptance criteria
 
-- [ ] A fresh installed wheel begins in healthy no-program state and performs
+- [x] A fresh installed wheel begins in healthy no-program state and performs
   ordinary roadmap work without creating program state, starting processes, or
   requiring setup.
-- [ ] The same consumer deliberately configures and preflights optional
+- [x] The same consumer deliberately configures and preflights optional
   delivery, understands who does/reviews/decides, sees exact effects and
   limits, and starts only after the existing separate authority checks pass.
-- [ ] The run demonstrates progress, independent reject/repair/pass, a blocked
+- [x] The run demonstrates progress, independent reject/repair/pass, a blocked
   human decision, remaining cost/permission, and a clear next step using the
   ordinary application vocabulary.
-- [ ] Crash/replay or stop/recovery proves that readable state remains honest
+- [x] Crash/replay or stop/recovery proves that readable state remains honest
   at effect/receipt boundaries and exact events, hashes, identities, and
   receipts remain fully inspectable.
-- [ ] A person can complete the everyday exam without needing grant, ledger,
+- [x] A person can complete the everyday exam without needing grant, ledger,
   preview-token, content-boundary, or certification vocabulary; opening the
   technical/audit view exposes those exact facts without translation loss.
-- [ ] Vanilla, bounded-run, program, no-program, schema, adapter parity,
+- [x] Vanilla, bounded-run, program, no-program, schema, adapter parity,
   recovery, UI, docs, package, upgrade, and distribution suites remain green
   from their public entry points.
-- [ ] The final audit traces every phase exit criterion to evidence and records
+- [x] The final audit traces every phase exit criterion to evidence and records
   measured friction or deferrals honestly; closeout does not bump, tag,
   publish, deploy, or infer a landing decision.
 
@@ -73,3 +73,10 @@ inferring release authority.
 Deterministic provider fixtures are the CI oracle, as in Phase 26. An optional
 authenticated live-agent specimen may be recorded separately but cannot
 replace deterministic proof or be presented as broad usability research.
+
+Delivered by the composed installed-wheel entry point in
+`pmo-roadmap/tests/usability-packaged-exam.py`. One consumer completes all
+thirteen canonical journeys; five planted report corruptions refuse; exact
+views/events remain equal across the established adapters; and the retained
+Firefox matrix covers all 88 wide/narrow renders. Full proof and the honest
+Homebrew/Pillow environment limitations are in `evidence-story-10.md`.

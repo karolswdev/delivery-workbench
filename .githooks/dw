@@ -54,6 +54,10 @@ try:
         FixtureProvider,
         build_status,
         build_delivery_setup,
+        build_action_presentation,
+        build_live_presentation,
+        build_start_presentation,
+        build_step_result_presentation,
         build_step,
         build_run_plan,
         build_program_plan,
@@ -97,6 +101,7 @@ try:
         render_status,
         render_delivery_setup,
         render_delivery_setup_pointer,
+        render_presentation,
         render_step,
         replay_run,
         run_adoption,
@@ -133,6 +138,7 @@ try:
         validate_rubric,
         write_agent_docs,
         write_contract,
+        help_text,
     )
 except ImportError as exc:  # pragma: no cover - environment failure path
     print(
@@ -624,13 +630,9 @@ def command_program_plan(args: argparse.Namespace) -> int:
         print(json.dumps(document, sort_keys=True))
     elif document["kind"] == "delivery-workbench-program-start-plan":
         print(
-            f"{document['request']['program']}\t{document['request']['mode']}\t"
-            f"{'applicable' if document['applicable'] else 'refused'}"
+            render_presentation(build_start_presentation(document)),
+            end="",
         )
-        print(f"start-token\t{document['start_token']}")
-        print("starts-work\tfalse")
-        for issue in document["issues"]:
-            print(f"REFUSE\t{issue['code']}\t{issue['message']}")
     else:
         print(_render_program_selection(document), end="")
     return 0 if document.get("applicable", True) else 1
@@ -694,8 +696,12 @@ def command_program_start(args: argparse.Namespace) -> int:
         print(json.dumps(projection, sort_keys=True))
     else:
         print(
-            f"{projection['run_id']}\t{projection['state']}\t"
-            f"{projection['program']['slug']}\t{projection['ledger_head']}"
+            render_presentation(
+                build_live_presentation(
+                    build_program_view(args.root, projection["run_id"])
+                )
+            ),
+            end="",
         )
     return 0
 
@@ -705,17 +711,9 @@ def command_program_show(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(document, sort_keys=True))
     else:
-        current = document["current"]
-        lineage = current["lineage"] or {}
         print(
-            f"{document['run_id']}\t{document['state']}\t"
-            f"{document['operational_state']}\t"
-            f"{lineage.get('story') or '-'}\t{current['stop'] or '-'}"
-        )
-        print(
-            f"organization\t{document['organization']['slug']}\t"
-            f"team={document['organization']['team']}\t"
-            f"roles={len(document['organization']['roles'])}"
+            render_presentation(build_live_presentation(document)),
+            end="",
         )
     return 0
 
@@ -734,15 +732,16 @@ def command_program_preview(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(preview, sort_keys=True))
     else:
+        view = build_program_view(args.root, args.run_id)
         print(
-            f"{preview['run_id']}\t{preview['action']}\t"
-            f"{'applicable' if preview['applicable'] else 'refused'}\t"
-            f"lane={preview['operation'].get('lane') if preview['operation'] else '-'}"
+            render_presentation(
+                build_action_presentation(
+                    preview,
+                    view.get("bounded_actions"),
+                )
+            ),
+            end="",
         )
-        print(f"act-token\t{preview['act_token']}")
-        print(f"starts-work\t{str(preview['starts_work']).lower()}")
-        for issue in preview["issues"]:
-            print(f"REFUSE\t{issue}")
     return 0 if preview["applicable"] else 1
 
 
@@ -764,19 +763,17 @@ def command_program_act(args: argparse.Namespace) -> int:
     result = _apply_program_args(args, args.program_command)
     if args.json:
         print(json.dumps(result, sort_keys=True))
-    elif result.get("kind") == "delivery-workbench-program-surface-tick":
-        action = result.get("action") or {}
-        print(
-            f"{result['run_id']}\t{result['state']}\t"
-            f"lane={result['lane']}\t"
-            f"action={action.get('kind') or '-'}\t"
-            f"progressed={str(result['progressed']).lower()}"
-        )
     else:
         print(
-            f"{result.get('run_id', args.run_id)}\t"
-            f"{result.get('state', result.get('decision', 'complete'))}\t"
-            f"{result.get('ledger_head', result.get('receipt_hash', '-'))}"
+            render_presentation(
+                build_live_presentation(
+                    build_program_view(
+                        args.root,
+                        str(result.get("run_id") or args.run_id),
+                    )
+                )
+            ),
+            end="",
         )
     return 0
 
@@ -787,16 +784,13 @@ def command_program_supervise(args: argparse.Namespace) -> int:
         print(json.dumps(result, sort_keys=True))
     else:
         print(
-            f"{result['run_id']}\t{result['state']}\t"
-            f"ticks={result['tick_count']}\tstop={result['stop']}\t"
-            f"progressed={str(result['progressed']).lower()}"
+            render_presentation(
+                build_live_presentation(
+                    build_program_view(args.root, result["run_id"])
+                )
+            ),
+            end="",
         )
-        for index, tick in enumerate(result["ticks"], start=1):
-            action = tick.get("action") or {}
-            print(
-                f"tick\t{index}\t{tick['lane']}\t"
-                f"{action.get('kind') or '-'}\t{tick.get('stop') or '-'}"
-            )
     return 0
 
 
@@ -847,47 +841,7 @@ def command_program_stream(args: argparse.Namespace) -> int:
 
 
 def _render_run_plan(plan: dict[str, object]) -> str:
-    score = plan["score"]
-    authority = plan["authority"]
-    lines = [
-        f"run plan\t{'applicable' if plan['applicable'] else 'refused'}",
-        f"score\t{score['slug']}\t{score['semantic_hash']}",
-        f"project\t{plan['request']['project']}",
-        f"story\t{plan['story']['id']}\t{plan['story']['status']}",
-        f"branch/head\t{plan['repository']['branch']}\t{plan['repository']['head']}",
-        f"expires\t{plan['request']['expires_at']}",
-        f"capabilities\t{','.join(authority['capabilities']) or '-'}",
-        f"profiles\t{','.join(authority['profiles']) or '-'}",
-        f"workspaces\t{','.join(authority['workspace_modes']) or '-'}",
-    ]
-    for name, value in authority["budgets"].items():
-        lines.append(f"budget\t{name}\t{value}")
-    lines.append(f"start-token\t{plan['start_token']}")
-    for issue in plan["issues"]:
-        lines.append(f"REFUSE\t{issue}")
-    lines.append("starts-work\tfalse")
-    return "\n".join(lines) + "\n"
-
-
-def _render_run(run: dict[str, object]) -> str:
-    lines = [
-        f"{run['run_id']}\t{run['state']}\t{'dispatch-ready' if run['dispatch_allowed'] else 'dispatch-refused'}",
-        f"score\t{run['score']['slug']}\t{run['score']['semantic_hash']}",
-        f"story\t{run['story']['id']}\t{run['story']['status']}",
-        f"expires\t{run['expires_at']}\texpired={str(run['expired']).lower()}",
-        f"generation\t{run['control_generation']}",
-        f"ledger\t{run['ledger_events']}\t{run['ledger_head']}",
-    ]
-    for name, budget in run["budgets"].items():
-        lines.append(f"budget\t{name}\t{budget['used']}/{budget['limit']}")
-    lines.append(f"active-claims\t{len(run['active_claims'])}")
-    for request in run.get("outstanding_requests", []):
-        lines.append(
-            f"outstanding-request\t{request['correlation_id']}\t"
-            f"{request['kind']}\t{request['origin_node']}\t"
-            f"age={request['age_seconds']}s\t{request['schema_summary']}"
-        )
-    return "\n".join(lines) + "\n"
+    return render_presentation(build_start_presentation(plan))
 
 
 def command_run_plan(args: argparse.Namespace) -> int:
@@ -943,7 +897,14 @@ def command_run_start(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(projection, sort_keys=True))
     else:
-        print(_render_run(projection), end="")
+        print(
+            render_presentation(
+                build_live_presentation(
+                    build_run_view(args.root, projection["run_id"])
+                )
+            ),
+            end="",
+        )
     return 0
 
 
@@ -966,7 +927,14 @@ def command_run_show(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(projection, sort_keys=True))
     else:
-        print(_render_run(projection), end="")
+        print(
+            render_presentation(
+                build_live_presentation(
+                    build_run_view(args.root, args.run_id)
+                )
+            ),
+            end="",
+        )
     return 0
 
 
@@ -976,15 +944,9 @@ def command_run_view(args: argparse.Namespace) -> int:
         print(json.dumps(document, sort_keys=True))
     else:
         print(
-            f"{document['run_id']}\t{document['state']}\t"
-            f"nodes={len(document['graph']['nodes'])}\t"
-            f"events={document['ledger_events']}"
+            render_presentation(build_live_presentation(document)),
+            end="",
         )
-        for node in document["graph"]["nodes"]:
-            print(
-                f"node\t{node['id']}\t{node['state']}\t"
-                f"attempt={node['attempt']}\t{node['blocked_reason'] or '-'}"
-            )
     return 0
 
 
@@ -1000,14 +962,16 @@ def command_run_preview(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(preview, sort_keys=True))
     else:
+        view = build_run_view(args.root, args.run_id)
         print(
-            f"{preview['run_id']}\t{preview['action']}\t"
-            f"{'applicable' if preview['applicable'] else 'refused'}"
+            render_presentation(
+                build_action_presentation(
+                    preview,
+                    view.get("bounded_actions"),
+                )
+            ),
+            end="",
         )
-        print(f"act-token\t{preview['act_token']}")
-        print(f"starts-work\t{str(preview['starts_work']).lower()}")
-        for issue in preview["issues"]:
-            print(f"REFUSE\t{issue}")
     return 0 if preview["applicable"] else 1
 
 
@@ -1022,7 +986,14 @@ def command_run_transition(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(projection, sort_keys=True))
     else:
-        print(_render_run(projection), end="")
+        print(
+            render_presentation(
+                build_live_presentation(
+                    build_run_view(args.root, args.run_id)
+                )
+            ),
+            end="",
+        )
     return 0
 
 
@@ -1032,14 +1003,13 @@ def command_run_tick(args: argparse.Namespace) -> int:
         print(json.dumps(result, sort_keys=True))
     else:
         print(
-            f"{result['run_id']}\t{result['state']}\t"
-            f"progressed={str(result['progressed']).lower()}\t"
-            f"active={result['active_claims']}"
+            render_presentation(
+                build_live_presentation(
+                    build_run_view(args.root, args.run_id)
+                )
+            ),
+            end="",
         )
-        for action in result["actions"]:
-            detail = action.get("node_id") or action.get("reason") or "-"
-            outcome = action.get("outcome") or action.get("state") or action.get("route") or "-"
-            print(f"{action['action']}\t{detail}\t{outcome}")
     return 0
 
 
@@ -1054,8 +1024,12 @@ def command_run_supervise(args: argparse.Namespace) -> int:
         print(json.dumps(result, sort_keys=True))
     else:
         print(
-            f"{result['run_id']}\t{result['state']}\t"
-            f"ticks={result['ticks']}\tprogressed={result['progressed_ticks']}"
+            render_presentation(
+                build_live_presentation(
+                    build_run_view(args.root, args.run_id)
+                )
+            ),
+            end="",
         )
     return 0
 
@@ -1072,7 +1046,14 @@ def command_run_checkpoint(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(projection, sort_keys=True))
     else:
-        print(_render_run(projection), end="")
+        print(
+            render_presentation(
+                build_live_presentation(
+                    build_run_view(args.root, args.run_id)
+                )
+            ),
+            end="",
+        )
     return 0
 
 
@@ -1088,7 +1069,14 @@ def command_run_request(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(projection, sort_keys=True))
     else:
-        print(_render_run(projection), end="")
+        print(
+            render_presentation(
+                build_live_presentation(
+                    build_run_view(args.root, args.run_id)
+                )
+            ),
+            end="",
+        )
     return 0
 
 
@@ -1446,24 +1434,19 @@ def command_step(args: argparse.Namespace) -> int:
                 end="" if stderr.endswith("\n") else "\n",
                 file=sys.stderr,
             )
-        action = result["action"]
-        action_id = action["id"] if isinstance(action, dict) else "none"
-        after = result["after"]
-        next_id = after["action_id"] if isinstance(after, dict) else "unknown"
-        if result["outcome"] == "refused":
-            print(f"dw step: refused: {result['reason']}", file=sys.stderr)
-            return exit_code
-        if result["outcome"] == "interrupted":
-            print(f"dw step: interrupted; next={next_id}", file=sys.stderr)
-            return exit_code
-        if exit_code:
-            print(
-                f"dw step: {action_id} exited {exit_code}; next={next_id}",
-                file=sys.stderr,
-            )
-            return exit_code
-        print(f"dw step: applied {action_id}; next={next_id}")
-        return 0
+        rendered = render_presentation(
+            build_step_result_presentation(result)
+        )
+        print(
+            rendered,
+            end="",
+            file=(
+                sys.stderr
+                if result["outcome"] in {"refused", "interrupted", "failed"}
+                else sys.stdout
+            ),
+        )
+        return exit_code
     if args.expect:
         die("--expect is only valid with --apply")
     preview = build_step(args.root, args.project)
@@ -1732,14 +1715,15 @@ def command_rider_install(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="dw", description="Delivery Workbench roadmap maintenance CLI")
+    parser = argparse.ArgumentParser(prog="dw", description=help_text("cli"))
     parser.add_argument("--version", action="version", version=f"dw {DW_VERSION}")
     parser.add_argument("--root", type=Path, default=None, help="repository root containing pm/roadmap")
     sub = parser.add_subparsers(dest="command", required=True)
 
     status = sub.add_parser(
         "status",
-        help="one local briefing: rails, roadmap, workspace, current work, and the next safe action",
+        help=help_text("status"),
+        description=help_text("status"),
     )
     status.add_argument("project", nargs="?")
     status.add_argument("--json", action="store_true", help="emit the versioned status document")
@@ -1747,7 +1731,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     setup = sub.add_parser(
         "setup",
-        help="choose ordinary, bounded, or optional-program delivery without starting work",
+        help=help_text("setup"),
+        description=help_text("setup"),
     )
     setup.add_argument(
         "project",
@@ -1763,7 +1748,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     step = sub.add_parser(
         "step",
-        help="preview or deliberately apply exactly one current allowlisted status action",
+        help=help_text("step"),
+        description=help_text("step"),
     )
     step.add_argument("project", nargs="?")
     step.add_argument("--json", action="store_true", help="emit the pure versioned preview document")
@@ -1773,7 +1759,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     notifications = sub.add_parser(
         "notifications",
-        help="derived operator notifications: pending decisions, terminals, blocked stops (pure reads plus receipted ack)",
+        help=help_text("notifications"),
+        description=help_text("notifications"),
     )
     notifications_sub = notifications.add_subparsers(dest="notifications_command", required=True)
     notifications_list = notifications_sub.add_parser("list", help="list derived notifications with unread/delivery state")
@@ -1792,7 +1779,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     signals = sub.add_parser(
         "signals",
-        help="observe outward SCM facts and derived status (pure; starts no work)",
+        help=help_text("signals"),
+        description=help_text("signals"),
     )
     signals_sub = signals.add_subparsers(dest="signals_command", required=True)
     signals_list = signals_sub.add_parser("list", help="list observed channels and derived status")
@@ -1814,7 +1802,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     orchestration = sub.add_parser(
         "orchestration",
-        help="compile and inspect exact visual orchestration scores (pure; starts no work)",
+        help=help_text("orchestration"),
+        description=help_text("orchestration"),
     )
     orchestration_sub = orchestration.add_subparsers(dest="orchestration_command", required=True)
     orchestration_list = orchestration_sub.add_parser("list", help="list scores under pm/orchestration")
@@ -1835,7 +1824,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     organization = sub.add_parser(
         "organization",
-        help="compile role/team and separation policy (pure; starts no work)",
+        help=help_text("organization"),
+        description=help_text("organization"),
     )
     organization_sub = organization.add_subparsers(
         dest="organization_command", required=True
@@ -1870,7 +1860,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     rubric = sub.add_parser(
         "rubric",
-        help="compile governed judgment criteria (pure; starts no work)",
+        help=help_text("rubric"),
+        description=help_text("rubric"),
     )
     rubric_sub = rubric.add_subparsers(dest="rubric_command", required=True)
     rubric_list = rubric_sub.add_parser(
@@ -1893,7 +1884,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     workflow = sub.add_parser(
         "workflow",
-        help="compile reusable hierarchical workflow policy (pure; starts no work)",
+        help=help_text("workflow"),
+        description=help_text("workflow"),
     )
     workflow_sub = workflow.add_subparsers(dest="workflow_command", required=True)
     workflow_list = workflow_sub.add_parser(
@@ -1916,7 +1908,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     program = sub.add_parser(
         "program",
-        help="plan, authorize, operate, and inspect optional multi-phase programs",
+        help=help_text("program"),
+        description=help_text("program"),
     )
     program_sub = program.add_subparsers(dest="program_command", required=True)
     program_list = program_sub.add_parser(
@@ -1937,7 +1930,9 @@ def build_parser() -> argparse.ArgumentParser:
     program_simulate.add_argument("--json", action="store_true", help="emit the pure simulation")
     program_simulate.set_defaults(func=command_program_simulate)
     program_plan = program_sub.add_parser(
-        "plan", help="bind a pure selection; with --mode, build an exact finite grant preview"
+        "plan",
+        help=help_text("program_plan"),
+        description=help_text("program_plan"),
     )
     program_plan.add_argument("program", help="program slug or filename stem")
     program_plan.add_argument(
@@ -1973,7 +1968,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     program_start = program_sub.add_parser(
         "start",
-        help="atomically issue one grant from an exact fresh start plan",
+        help=help_text("program_start"),
+        description=help_text("program_start"),
     )
     program_start.add_argument(
         "--plan", type=Path, required=True,
@@ -1992,7 +1988,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     program_show = program_sub.add_parser(
         "show",
-        help="show the canonical content-safe program control-room view",
+        help=help_text("program_show"),
+        description=help_text("program_show"),
     )
     program_show.add_argument("run_id")
     program_show.add_argument("--json", action="store_true")
@@ -2000,7 +1997,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     program_preview = program_sub.add_parser(
         "preview",
-        help="pure exact-token preview for one program operation",
+        help=help_text("program_preview"),
+        description=help_text("program_preview"),
     )
     program_preview.add_argument("run_id")
     program_preview.add_argument(
@@ -2046,7 +2044,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     program_tick = program_sub.add_parser(
         "tick",
-        help="perform one exact conductor or delivery lane tick",
+        help=help_text("program_tick"),
+        description=help_text("program_tick"),
     )
     program_tick.add_argument("run_id")
     program_tick.add_argument(
@@ -2058,7 +2057,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     program_supervise = program_sub.add_parser(
         "supervise",
-        help="explicitly repeat the same program tick inside finite ceilings",
+        help=help_text("program_supervise"),
+        description=help_text("program_supervise"),
     )
     program_supervise.add_argument("run_id")
     program_supervise.add_argument("--max-ticks", type=int, default=100)
@@ -2072,7 +2072,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     program_request = program_sub.add_parser(
         "request",
-        help="apply one exact typed response to an outstanding program request",
+        help=help_text("program_request"),
+        description=help_text("program_request"),
     )
     program_request.add_argument("run_id")
     program_request.add_argument("request_id")
@@ -2098,7 +2099,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     program_tail = program_sub.add_parser(
         "tail",
-        help="tail the verified program ledger from a cursor (read-only)",
+        help=help_text("program_tail"),
+        description=help_text("program_tail"),
     )
     program_tail.add_argument("run_id")
     program_tail.add_argument(
@@ -2115,10 +2117,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser(
         "run",
-        help="plan, authorize, and inspect local orchestration runs (a score alone starts nothing)",
+        help=help_text("run"),
+        description=help_text("run"),
     )
     run_sub = run.add_subparsers(dest="run_command", required=True)
-    run_plan = run_sub.add_parser("plan", help="pure preview over an exact score, story, repository state, grant, and expiry")
+    run_plan = run_sub.add_parser(
+        "plan", help=help_text("run_plan"), description=help_text("run_plan")
+    )
     run_plan.add_argument("score", help="score slug or filename stem")
     run_plan.add_argument("--project", help="roadmap project slug (required when ambiguous)")
     run_plan.add_argument("--story", required=True, help="exact in-progress story id")
@@ -2131,7 +2136,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_plan.add_argument("--json", action="store_true", help="emit the exact start plan")
     run_plan.set_defaults(func=command_run_plan, standing_nudge=None, signal_channel=None)
 
-    run_start = run_sub.add_parser("start", help="atomically create one grant from an exact fresh plan and explicit approval")
+    run_start = run_sub.add_parser(
+        "start", help=help_text("run_start"), description=help_text("run_start")
+    )
     run_start.add_argument("--plan", type=Path, required=True, help="plan JSON file, or - for stdin")
     run_start.add_argument("--expect", required=True, help="exact start_token from that plan")
     run_start.add_argument("--approve", action="store_true", help="explicitly approve this exact local grant")
@@ -2139,20 +2146,28 @@ def build_parser() -> argparse.ArgumentParser:
     run_start.add_argument("--json", action="store_true", help="emit the initial run projection")
     run_start.set_defaults(func=command_run_start)
 
-    run_list = run_sub.add_parser("list", help="list projections replayed from local run ledgers")
+    run_list = run_sub.add_parser(
+        "list", help=help_text("run_list"), description=help_text("run_list")
+    )
     run_list.add_argument("--json", action="store_true")
     run_list.set_defaults(func=command_run_list)
-    run_show = run_sub.add_parser("show", help="replay and show one authoritative run projection")
+    run_show = run_sub.add_parser(
+        "show", help=help_text("run_show"), description=help_text("run_show")
+    )
     run_show.add_argument("run_id")
     run_show.add_argument("--json", action="store_true")
     run_show.set_defaults(func=command_run_show)
 
-    run_view = run_sub.add_parser("view", help="show the safe live graph, sessions, checks, artifacts, routes, controls, and ledger")
+    run_view = run_sub.add_parser(
+        "view", help=help_text("run_view"), description=help_text("run_view")
+    )
     run_view.add_argument("run_id")
     run_view.add_argument("--json", action="store_true")
     run_view.set_defaults(func=command_run_view)
 
-    run_preview = run_sub.add_parser("preview", help="pure exact-token preview for one run control act")
+    run_preview = run_sub.add_parser(
+        "preview", help=help_text("run_preview"), description=help_text("run_preview")
+    )
     run_preview.add_argument("run_id")
     run_preview.add_argument("action", choices=("tick", "pause", "resume", "revoke", "cancel", "checkpoint", "request"))
     run_preview.add_argument("--reason", default="", help="required for pause/revoke/cancel; bound into the token")
@@ -2172,7 +2187,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_tick = run_sub.add_parser(
         "tick",
-        help="replay, reconcile, and dispatch one deterministic conductor tick",
+        help=help_text("run_tick"),
+        description=help_text("run_tick"),
     )
     run_tick.add_argument("run_id")
     run_tick.add_argument("--expect", required=True, help="act_token from a fresh matching run preview tick")
@@ -2181,7 +2197,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_supervise = run_sub.add_parser(
         "supervise",
-        help="bounded repetition around the same idempotent conductor tick",
+        help=help_text("run_supervise"),
+        description=help_text("run_supervise"),
     )
     run_supervise.add_argument("run_id")
     run_supervise.add_argument("--max-ticks", type=int, default=100)
@@ -2191,7 +2208,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_checkpoint = run_sub.add_parser(
         "checkpoint",
-        help="apply one exact approve/reject decision to the pending checkpoint",
+        help=help_text("run_checkpoint"),
+        description=help_text("run_checkpoint"),
     )
     run_checkpoint.add_argument("run_id")
     run_checkpoint.add_argument("decision")
@@ -2202,7 +2220,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_request = run_sub.add_parser(
         "request",
-        help="apply one exact typed response to a correlated outstanding request",
+        help=help_text("run_request"),
+        description=help_text("run_request"),
     )
     run_request.add_argument("run_id")
     run_request.add_argument("correlation")
@@ -2219,7 +2238,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_stream.add_argument("--max-bytes", type=int, default=20_000)
     run_stream.add_argument("--json", action="store_true")
     run_stream.set_defaults(func=command_run_stream)
-    run_tail = run_sub.add_parser("tail", help="tail the verified run ledger from a cursor (read-only; one canonical event JSON per line)")
+    run_tail = run_sub.add_parser(
+        "tail", help=help_text("run_tail"), description=help_text("run_tail")
+    )
     run_tail.add_argument("run_id")
     run_tail.add_argument("--after", type=int, default=-1, help="emit events with seq greater than this cursor (default: all)")
     run_tail.add_argument("--follow", action="store_true", help="keep polling the ledger until interrupted")
@@ -2236,24 +2257,32 @@ def build_parser() -> argparse.ArgumentParser:
     tree.add_argument("--done", action="store_true")
     tree.set_defaults(func=command_tree)
 
-    board = sub.add_parser("board", help="the kanban board: swimlane per phase, columns by status, parked work visibly parked")
+    board = sub.add_parser(
+        "board", help=help_text("board"), description=help_text("board")
+    )
     board.add_argument("project", nargs="?")
     board.add_argument("--phase", help="show one phase's lane only")
     board.add_argument("--all", action="store_true", help="expand closed phases into full lanes")
     board.add_argument("--json", action="store_true", help="print the board model instead of drawing it")
     board.set_defaults(func=command_board)
 
-    holds = sub.add_parser("holds", help="the ledger of parked work: blocked/on-hold stories and paused phases, each with its why (exit 0 holds / 2 none / 1 error)")
+    holds = sub.add_parser(
+        "holds", help=help_text("holds"), description=help_text("holds")
+    )
     holds.add_argument("project", nargs="?")
     holds.add_argument("--json", action="store_true")
     holds.set_defaults(func=command_holds)
 
-    next_cmd = sub.add_parser("next", help="show the next active story (exit 0 found / 2 none / 1 error)")
+    next_cmd = sub.add_parser(
+        "next", help=help_text("next"), description=help_text("next")
+    )
     next_cmd.add_argument("project", nargs="?")
     next_cmd.add_argument("--json", action="store_true", help="emit the story as a JSON object")
     next_cmd.set_defaults(func=command_next)
 
-    doctor = sub.add_parser("doctor", help="verify the rails are wired in this clone (hooksPath, hooks, core, agent docs)")
+    doctor = sub.add_parser(
+        "doctor", help=help_text("doctor"), description=help_text("doctor")
+    )
     doctor.set_defaults(func=command_doctor)
 
     adopt = sub.add_parser("adopt", help="scaffold the roadmap from an adoption discovery report (preview by default)")
@@ -2264,17 +2293,23 @@ def build_parser() -> argparse.ArgumentParser:
     adopt.add_argument("--apply", action="store_true", help="write the scaffold (default is a dry-run preview)")
     adopt.set_defaults(func=command_adopt)
 
-    state = sub.add_parser("state", help="the mission-control state feed (versioned; docs/mission-control.md §1)")
+    state = sub.add_parser(
+        "state", help=help_text("state"), description=help_text("state")
+    )
     state.add_argument("--json", action="store_true", help="emit the feed_schema JSON document")
     state.add_argument("--write", type=Path, default=None, help="also write the JSON document to this path")
     state.set_defaults(func=command_state)
 
-    events = sub.add_parser("events", help="the rail event log (append-only; docs/mission-control.md §3)")
+    events = sub.add_parser(
+        "events", help=help_text("events"), description=help_text("events")
+    )
     events.add_argument("--tail", type=int, default=None, help="only the last N events")
     events.add_argument("--json", action="store_true", help="emit events as a JSON array")
     events.set_defaults(func=command_events)
 
-    sessions = sub.add_parser("sessions", help="correlate live agent sessions to stories (docs/mission-control.md §2)")
+    sessions = sub.add_parser(
+        "sessions", help=help_text("sessions"), description=help_text("sessions")
+    )
     sessions.add_argument("--json", action="store_true", help="emit the sessions_schema JSON document")
     sessions.add_argument("--registry", type=Path, default=None, help="registry file to read (default: the HoldSpeak desk registry)")
     sessions.set_defaults(func=command_sessions)
@@ -2308,18 +2343,23 @@ def build_parser() -> argparse.ArgumentParser:
     context.add_argument("--compact", action="store_true")
     context.set_defaults(func=command_context)
 
-    check = sub.add_parser("check", help="validate roadmap links and statuses")
+    check = sub.add_parser(
+        "check", help=help_text("check"), description=help_text("check")
+    )
     check.add_argument("project", nargs="?")
     check.set_defaults(func=command_check)
 
-    gate = sub.add_parser("gate", help="run the commit-gate structural checks (used by the pre-commit shim)")
+    gate = sub.add_parser(
+        "gate", help=help_text("gate"), description=help_text("gate")
+    )
     gate.add_argument("--hook", choices=["pre-commit"], default=None, help="hook context (reserved)")
     gate.add_argument("--porcelain", action="store_true", help="stable key=value output for machine consumers")
     gate.set_defaults(func=command_gate)
 
     verify = sub.add_parser(
         "verify",
-        help="re-derive gate rules over pushed history (exit 0 clean / 1 violations / 2 usage or git error)",
+        help=help_text("verify"),
+        description=help_text("verify"),
     )
     verify.add_argument(
         "range", nargs="?", default=None, metavar="<base>..<head>",

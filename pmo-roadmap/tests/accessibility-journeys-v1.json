@@ -1,0 +1,426 @@
+{
+  "kind": "delivery-workbench-accessibility-journeys",
+  "schema_version": 1,
+  "reviewed_at": "2026-07-25",
+  "browser_matrix": [
+    "Firefox 152 headless through the WebDriver Marionette protocol",
+    "Firefox with keyboard navigation, reduced motion, and forced-colors CSS contracts"
+  ],
+  "viewports": {
+    "wide": {
+      "width": 1440,
+      "height": 900
+    },
+    "narrow": {
+      "width": 390,
+      "height": 844
+    }
+  },
+  "automated_contract": "pmo-roadmap/tests/workbench-accessibility.py",
+  "manual_review_method": "Review the rendered wide and narrow states, keyboard sequence, browser-derived names and regions, focus return, and non-color status text. The recorded result is invalidated if the journey state or capture mapping changes.",
+  "journeys": [
+    {
+      "id": "healthy-first-arrival",
+      "state_id": "everyday-ready",
+      "suite": "core",
+      "keyboard_path": [
+        "Tab to the visible skip control and activate it",
+        "Continue through current-work and readiness links without a pointer",
+        "Use the primary navigation to open delivery setup"
+      ],
+      "focus_contract": [
+        "Skip activation focuses the page heading",
+        "Route navigation focuses the destination heading",
+        "Refreshing repository facts preserves the refresh control"
+      ],
+      "semantics": [
+        "One page heading and a labelled main region",
+        "Primary and breadcrumb navigation have distinct names",
+        "Readiness states include text and symbols, not color alone"
+      ],
+      "layout_review": [
+        "The briefing and current work wrap without page-level horizontal scrolling",
+        "Long project and story identifiers remain inspectable"
+      ],
+      "live_update_contract": "Repeated repository facts do not create repeated live announcements.",
+      "manual_review": {
+        "wide": "pass — hierarchy, next action, and technical disclosure remain distinct",
+        "narrow": "pass — header navigation scrolls locally and the page does not scroll sideways",
+        "assistive": "pass — page, navigation, readiness, and current-work names are available in reading order",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "deliberate-capability-choice",
+      "state_id": "capability-choice",
+      "suite": "core",
+      "keyboard_path": [
+        "Tab to each delivery option",
+        "Use arrow keys to move among option controls",
+        "Activate Review option, then Escape from the review"
+      ],
+      "focus_contract": [
+        "Review receives focus when it appears",
+        "Escape returns focus to the exact option control",
+        "No option is selected by focus alone"
+      ],
+      "semantics": [
+        "Delivery options form a named group",
+        "Each option has a heading-derived name and explanatory description",
+        "The review is a labelled non-modal dialog"
+      ],
+      "layout_review": [
+        "All choices remain keyboard reachable when cards scroll locally",
+        "Review consequences stack without clipping at narrow width"
+      ],
+      "live_update_contract": "Opening a review moves focus instead of announcing interactive controls through a live region.",
+      "manual_review": {
+        "wide": "pass — three operating modes compare as peers",
+        "narrow": "pass — cards scroll locally and review content fits the viewport",
+        "assistive": "pass — choice names, descriptions, selected state, and review boundary are exposed",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "delivery-plan-setup",
+      "state_id": "plan-draft",
+      "suite": "core",
+      "keyboard_path": [
+        "Use arrow keys across authoring view tabs",
+        "Move among plan sections and edit labelled fields",
+        "Open Review draft save and dismiss it with Escape"
+      ],
+      "focus_contract": [
+        "Tab activation keeps focus on the newly selected tab",
+        "Section changes focus the new section heading",
+        "Dismissal returns focus to the exact save-review control without losing draft input"
+      ],
+      "semantics": [
+        "Authoring modes are a tablist with one selected tab and a labelled panel",
+        "Forms and validation results have names",
+        "Save review is a labelled non-modal dialog"
+      ],
+      "layout_review": [
+        "Plan sections become a local horizontal scroller on narrow screens",
+        "Forms collapse to one column and long policy identifiers wrap"
+      ],
+      "live_update_contract": "Compiler refreshes preserve focus and do not announce every keystroke.",
+      "manual_review": {
+        "wide": "pass — section navigation, form, and review summary remain visible together",
+        "narrow": "pass — sections are reachable and fields do not overflow",
+        "assistive": "pass — tabs, panels, forms, validation, and review have stable names",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "team-review-setup",
+      "state_id": "team-review-draft",
+      "suite": "core",
+      "keyboard_path": [
+        "Use plan-section keys to reach responsibilities and review",
+        "Traverse role, independence, and council controls",
+        "Open technical details with Enter"
+      ],
+      "focus_contract": [
+        "Section changes focus the selected section",
+        "Dynamic team refresh restores the edited control",
+        "Native details activation retains focus on its summary"
+      ],
+      "semantics": [
+        "Role and council field groups carry legends or form names",
+        "Independence and decision constraints are written as text",
+        "Technical provenance uses a native disclosure"
+      ],
+      "layout_review": [
+        "Role cards and constraint grids collapse to one column",
+        "Long role IDs and provenance paths wrap without clipping"
+      ],
+      "live_update_contract": "Team-model validation changes do not steal focus or flood announcements.",
+      "manual_review": {
+        "wide": "pass — responsibility, independence, and review boundaries are visually distinct",
+        "narrow": "pass — controls stack and remain reachable",
+        "assistive": "pass — role controls, groups, constraints, and technical disclosure are named",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "preflight",
+      "state_id": "preflight-ready",
+      "suite": "core",
+      "keyboard_path": [
+        "Use the orchestration tabs to select Validate",
+        "Traverse readiness facts and the separate-start review control",
+        "Toggle Technical details with Enter"
+      ],
+      "focus_contract": [
+        "Validate selection remains focused",
+        "Background compiler completion preserves the active control",
+        "Technical disclosure does not redirect focus"
+      ],
+      "semantics": [
+        "Readiness results are a labelled region",
+        "Corrections and limits use headings and lists",
+        "Ready and not-ready states contain explicit text and symbols"
+      ],
+      "layout_review": [
+        "Readiness facts collapse to one column",
+        "Hashes and output lineage use wrapping or local table scrolling"
+      ],
+      "live_update_contract": "Readiness compilation is not a live region around interactive controls.",
+      "manual_review": {
+        "wide": "pass — readiness, limits, and separate start remain distinct",
+        "narrow": "pass — facts and next actions stack without page overflow",
+        "assistive": "pass — readiness region, corrections, limits, and disclosure are navigable",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "live-progress",
+      "state_id": "bounded-active",
+      "suite": "core",
+      "keyboard_path": [
+        "Select the Run tab with arrow keys",
+        "Traverse status, progress, next step, and action controls",
+        "Open an available action preview and dismiss it with Escape"
+      ],
+      "focus_contract": [
+        "Run selection retains focus",
+        "Polling and SSE redraws restore the active control",
+        "Action preview focuses its heading region and returns to its exact trigger"
+      ],
+      "semantics": [
+        "Progress has an accessible name, value, and value text",
+        "Connection status is a named group rather than a chatty live region",
+        "Action preview is a labelled non-modal dialog"
+      ],
+      "layout_review": [
+        "Progress answers and work groups collapse without overlap",
+        "Run graph scrolls inside its work area rather than the page"
+      ],
+      "live_update_contract": "Only a changed ledger head is announced; duplicate SSE and poll versions are suppressed.",
+      "manual_review": {
+        "wide": "pass — status, progress, next step, and permission are scannable",
+        "narrow": "pass — graph and tabs scroll locally while facts stack",
+        "assistive": "pass — progress value, next step, actions, and update state are named",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "failed-review-and-repair",
+      "state_id": "repair-needed",
+      "suite": "core",
+      "keyboard_path": [
+        "Reach the failed check and repair explanation",
+        "Traverse only actions permitted by the saved state",
+        "Open and dismiss the repair action review"
+      ],
+      "focus_contract": [
+        "Refresh preserves the active repair control",
+        "Repair review receives focus",
+        "Escape restores the action that opened the review"
+      ],
+      "semantics": [
+        "Failure and repair state include explicit text and warning symbols",
+        "Blocked or unavailable controls explain why",
+        "Receipts and routes use named sections and tables"
+      ],
+      "layout_review": [
+        "Failure explanation and repair route stack at narrow width",
+        "Receipt hashes and identifiers wrap or scroll locally"
+      ],
+      "live_update_contract": "Repeated failure facts are deduplicated by ledger head.",
+      "manual_review": {
+        "wide": "pass — failure, permitted repair, and unchanged facts remain separate",
+        "narrow": "pass — repair action and evidence remain visible without sideways page scroll",
+        "assistive": "pass — failure, blocker reason, repair action, and review boundary are explicit",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "blocked-human-decision",
+      "state_id": "human-decision-needed",
+      "suite": "core",
+      "keyboard_path": [
+        "Reach the decision and blocker inbox",
+        "Open a decision response review with Enter",
+        "Dismiss the review with Escape"
+      ],
+      "focus_contract": [
+        "Decision review receives focus",
+        "Escape restores the exact decision control",
+        "Refresh does not move focus away from a response field"
+      ],
+      "semantics": [
+        "The decision owner, question, options, and blocker are text-labelled",
+        "Unavailable actions include refusal reasons",
+        "Decision review is a labelled non-modal dialog"
+      ],
+      "layout_review": [
+        "Decision cards and options become one column",
+        "Long prompts and identifiers wrap without clipping"
+      ],
+      "live_update_contract": "A stable outstanding decision is announced once per changed ledger head.",
+      "manual_review": {
+        "wide": "pass — accountable decision and blocked work are adjacent but distinct",
+        "narrow": "pass — options and exact review fit the viewport",
+        "assistive": "pass — decision owner, blocker, choices, and review are available in order",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "remaining-permission-and-cost",
+      "state_id": "program-active",
+      "suite": "program",
+      "keyboard_path": [
+        "Traverse remaining permission and cost facts",
+        "Reach each available program action",
+        "Refresh the saved program view from the keyboard"
+      ],
+      "focus_contract": [
+        "Program redraw preserves the focused fact or control",
+        "Refresh retains focus",
+        "No background update moves focus to new activity"
+      ],
+      "semantics": [
+        "Permission ceilings and remaining budgets use named sections and tables",
+        "Permanently excluded effects are textual",
+        "Progress and authority state have accessible names"
+      ],
+      "layout_review": [
+        "Budget and permission grids collapse to one column",
+        "Authority IDs and usage values remain inspectable"
+      ],
+      "live_update_contract": "Program activity announces only a changed ledger head.",
+      "manual_review": {
+        "wide": "pass — remaining permission, spend, and exclusions are visible together",
+        "narrow": "pass — budget tables scroll locally and controls stack",
+        "assistive": "pass — permission, usage, exclusions, and actions are named",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "stop-and-revoke",
+      "state_id": "program-active",
+      "suite": "program",
+      "keyboard_path": [
+        "Open the stop or pause review from its exact control",
+        "Read what changes and what remains unchanged",
+        "Dismiss with Escape and inspect the revoked receipt"
+      ],
+      "focus_contract": [
+        "Control review receives focus",
+        "Dismissal returns to the exact action control",
+        "Revoked redraw preserves focus and exposes no invalid continuation"
+      ],
+      "semantics": [
+        "Dangerous action review is a labelled non-modal dialog",
+        "Revoked state includes explicit stop text and a receipt",
+        "Disabled continuations include reasons"
+      ],
+      "layout_review": [
+        "Review consequences and receipt stack on narrow screens",
+        "Receipt hashes wrap without page overflow"
+      ],
+      "live_update_contract": "Revocation is announced once when its ledger head changes.",
+      "manual_review": {
+        "wide": "pass — stop consequence, confirmation boundary, and receipt are distinct",
+        "narrow": "pass — review and receipt remain readable without clipping",
+        "assistive": "pass — action severity, consequence, unchanged facts, and terminal state are explicit",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "crash-recovery",
+      "state_id": "bounded-stale",
+      "suite": "core",
+      "keyboard_path": [
+        "Reach the interrupted-update explanation",
+        "Traverse the last verified activity and recovery action",
+        "Use Check for updates without a pointer"
+      ],
+      "focus_contract": [
+        "Stale-state redraw keeps the recovery control focused",
+        "Check for updates does not move focus to the activity feed",
+        "No automatic reconnect focuses a new element"
+      ],
+      "semantics": [
+        "Interrupted connection is written as status text",
+        "Last verified time and recovery next step are labelled",
+        "Unknown effect state is not represented by color alone"
+      ],
+      "layout_review": [
+        "Recovery facts and controls stack on narrow screens",
+        "Last-known activity remains locally scrollable"
+      ],
+      "live_update_contract": "The interruption is announced once; unchanged retries are suppressed.",
+      "manual_review": {
+        "wide": "pass — interruption, last verified state, and recovery are explicit",
+        "narrow": "pass — recovery controls remain visible and reachable",
+        "assistive": "pass — stale status, uncertainty, last verified facts, and next step are named",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "completion",
+      "state_id": "delivery-complete",
+      "suite": "program",
+      "keyboard_path": [
+        "Traverse completed progress and review evidence",
+        "Reach any remaining obligation or next action",
+        "Open Technical details with Enter"
+      ],
+      "focus_contract": [
+        "Completed redraw preserves the active evidence control",
+        "Technical disclosure retains focus on its summary",
+        "No completion update jumps focus to the top"
+      ],
+      "semantics": [
+        "Completion state, passed review, and remaining obligations are text-labelled",
+        "Progress exposes a complete value",
+        "Evidence and decisions use named sections"
+      ],
+      "layout_review": [
+        "Completion evidence and obligations collapse without overlap",
+        "Evidence identifiers wrap or scroll locally"
+      ],
+      "live_update_contract": "Completion is announced only for a new ledger head.",
+      "manual_review": {
+        "wide": "pass — completed scope, passed review, and obligations are distinguishable",
+        "narrow": "pass — evidence and next action fit a single column",
+        "assistive": "pass — completed status, review outcome, evidence, and obligations are named",
+        "result": "pass"
+      }
+    },
+    {
+      "id": "technical-inspection",
+      "state_id": "bounded-active",
+      "suite": "core",
+      "keyboard_path": [
+        "Toggle native Technical details with Enter",
+        "Traverse exact controls, receipts, and configuration",
+        "Return to the summary with Shift+Tab"
+      ],
+      "focus_contract": [
+        "Disclosure activation keeps focus on the summary",
+        "Opening explicit stream content focuses its labelled region",
+        "Escape closes stream content and restores its exact trigger"
+      ],
+      "semantics": [
+        "Technical content is subordinate to an everyday-labelled native disclosure",
+        "Tables, graphs, streams, and configuration have names",
+        "Exact states and hashes remain selectable text"
+      ],
+      "layout_review": [
+        "Graphs, tables, and configuration scroll inside bounded containers",
+        "Long hashes and JSON remain inspectable at both widths"
+      ],
+      "live_update_contract": "Technical inspection is user-initiated and is never inserted into a live region.",
+      "manual_review": {
+        "wide": "pass — exact data remains subordinate and inspectable",
+        "narrow": "pass — technical containers scroll locally without moving the page sideways",
+        "assistive": "pass — disclosure, graph, tables, streams, and exact configuration have names",
+        "result": "pass"
+      }
+    }
+  ]
+}

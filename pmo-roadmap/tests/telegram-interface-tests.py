@@ -2341,9 +2341,14 @@ def _pending_notification(unread=True):
         "delivered": False,
         "delivery_attempts": 0,
         "outbound": (
-            "delivery-workbench: checkpoint-pending\n"
-            "run: run-0123456789abcdef01234567\n"
-            "ack: ntf-abc123abc123abc123abc123"
+            "Decision needed\n"
+            "Current work is waiting for a named decision.\n"
+            "Affected work: human-gate\n"
+            "Next step: Choose one listed response or leave the work waiting.\n"
+            "Technical details:\n"
+            "  Exact notification kind: checkpoint-pending\n"
+            "  Run: run-0123456789abcdef01234567\n"
+            "  Acknowledge: ntf-abc123abc123abc123abc123"
         ),
         "request": {
             "correlation_id": "req-abc123abc123abc123abc123",

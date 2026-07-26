@@ -5,9 +5,10 @@
 # install the wheel into an isolated environment (pipx when it works,
 # plain venv+pip otherwise — same artifact, same entry point), then
 # from OUTSIDE the checkout bootstrap a fixture repo with the packaged
-# payload, reach doctor-green there, complete the packaged guided-status and
-# deliberate-step exit exams, and prove the defer-to-repo rule (a global dw inside an
-# adopted repo runs the vendored copy).
+# payload, reach doctor-green there, complete the packaged guided-status,
+# deliberate-step, bounded/outward, and composed autonomous-usability exit
+# exams, and prove the defer-to-repo rule (a global dw inside an adopted repo
+# runs the vendored copy).
 #
 # Interpreter health is probed first: a broken pyexpat or venv pip
 # (observed on this machine's brew python 3.14) disqualifies a
@@ -134,6 +135,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/dw_pmo/team_review.py" ] || fail "wheel omitted the understandable team-and-review projection"
 [ -f "$FIXTURE/.githooks/dw_pmo/live_progress.py" ] || fail "wheel omitted the understandable live-progress projection"
 [ -f "$FIXTURE/.githooks/dw_pmo/bounded_actions.py" ] || fail "wheel omitted the understandable bounded-action projection"
+[ -f "$FIXTURE/.githooks/dw_pmo/presentation.py" ] || fail "wheel omitted the shared everyday presentation boundary"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_verdict.py" ] || fail "wheel omitted the governed verdict and quality-gate core"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_run.py" ] || fail "wheel omitted the finite program grant and ledger core"
 [ -f "$FIXTURE/.githooks/dw_pmo/program_delivery.py" ] || fail "wheel omitted the exact autonomous program delivery rails"
@@ -142,6 +144,15 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
   || fail "install did not seed the ordinary orchestration preset"
 [ -x "$FIXTURE/.githooks/dw-mcp" ] || fail "install did not vendor .githooks/dw-mcp"
 [ -x "$FIXTURE/.githooks/dw-workbench" ] || fail "install did not vendor .githooks/dw-workbench"
+[ -f "$FIXTURE/.githooks/workbench/index.html" ] || fail "wheel omitted the Workbench shell"
+[ -f "$FIXTURE/.githooks/workbench/app.js" ] || fail "wheel omitted the Workbench application"
+[ -f "$FIXTURE/.githooks/workbench/style.css" ] || fail "wheel omitted the Workbench styles"
+grep -q 'id="skip-link"' "$FIXTURE/.githooks/workbench/index.html" \
+  || fail "packaged Workbench omitted its keyboard skip control"
+grep -q 'wireDismissibleRegion' "$FIXTURE/.githooks/workbench/app.js" \
+  || fail "packaged Workbench omitted focus-return behavior"
+grep -q '@media (prefers-reduced-motion: reduce)' "$FIXTURE/.githooks/workbench/style.css" \
+  || fail "packaged Workbench omitted reduced-motion behavior"
 [ -f "$FIXTURE/.mcp.json" ] || fail "install did not write the .mcp.json seam"
 (cd "$FIXTURE" && ./.githooks/dw doctor) >/dev/null \
   || fail "fixture doctor not green after packaged install"
@@ -157,6 +168,9 @@ PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
   'import sys; from pathlib import Path; from dw_pmo import LIVE_PROGRESS_KIND, LIVE_PROGRESS_QUESTION_ORDER, TEAM_REVIEW_KIND, TEAM_REVIEW_SECTION_ORDER, build_live_team_review, build_program_live_progress, build_run_live_progress, build_studio_mutation_plan, build_team_review, new_studio_document, studio_mutation_preview; root=Path(sys.argv[1]); draft=new_studio_document("organization", "packaged-team"); plan=build_studio_mutation_plan(root, "organization", "save", "packaged-team", draft); preview=studio_mutation_preview(plan); team=preview["studio"]["team_review"]; assert preview["applicable"] and TEAM_REVIEW_KIND == "delivery-workbench-team-review" and [item["id"] for item in team["sections"]] == list(TEAM_REVIEW_SECTION_ORDER) and team["status"] == "ready-to-review" and team["runtime_independence"]["status"] == "not-assigned" and team["technical_details"]["provider_model_do_not_prove_independence"] and not team["starts_work"] and not team["writes_policy"]; assert LIVE_PROGRESS_KIND == "delivery-workbench-live-progress" and len(LIVE_PROGRESS_QUESTION_ORDER) == 7; assert all(callable(item) for item in (build_team_review, build_live_team_review, build_run_live_progress, build_program_live_progress))' "$FIXTURE" \
   || fail "packaged core does not expose understandable team-and-review parity"
+PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
+  'import sys; from pathlib import Path; from dw_pmo import PRESENTATION_KIND, PRODUCT_CONCEPTS, TECHNICAL_DETAILS_LABEL, build_presentation_catalog, build_status_presentation, render_presentation; from dw_pmo.status import build_status; from dw_pmo.workbench import handle_api; root=Path(sys.argv[1]); catalog=build_presentation_catalog(); assert PRESENTATION_KIND == "delivery-workbench-presentation" and len(PRODUCT_CONCEPTS) == 10 and TECHNICAL_DETAILS_LABEL == "Technical details"; assert not catalog["starts_work"] and not catalog["writes_state"] and not catalog["selects_next_work"] and not catalog["grants_permission"]; assert handle_api(root, "/api/presentation", {})[1]["data"] == catalog; exact=build_status(root); human=build_status_presentation(exact); assert human["source"]["kind"] == exact["kind"] and "Technical details:" in render_presentation(human); assert handle_api(root, "/api/status", {})[1]["data"] == exact; assert handle_api(root, "/api/presentation/status", {})[1]["data"] == human' "$FIXTURE" \
+  || fail "packaged core does not expose shared everyday presentation and exact-status parity"
 PYTHONPATH="$FIXTURE/.githooks" "$PY" -c \
   'from dw_pmo import COUNCIL_DECISION_KIND, MECHANICAL_FACT_KIND, QUALITY_PROOF_KIND, RUBRIC_SCHEMA_VERSION, VERDICT_KIND, build_mechanical_fact, build_verdict_assignment, build_verdict_set_subject, compile_rubric, compose_panel_verdict, council_decision_freshness_issues, evaluate_quality_gate, issue_agent_verdict, rubric_inventory, validate_council_decision, validate_mechanical_fact, validate_rubric, validate_verdict_document, verdict_freshness_issues; assert COUNCIL_DECISION_KIND == "delivery-workbench-decision" and MECHANICAL_FACT_KIND == "delivery-workbench-mechanical-fact" and QUALITY_PROOF_KIND == "delivery-workbench-quality-proof" and RUBRIC_SCHEMA_VERSION == 1 and VERDICT_KIND == "delivery-workbench-verdict"; assert all(callable(item) for item in (build_mechanical_fact, build_verdict_assignment, build_verdict_set_subject, compile_rubric, compose_panel_verdict, council_decision_freshness_issues, evaluate_quality_gate, issue_agent_verdict, rubric_inventory, validate_council_decision, validate_mechanical_fact, validate_rubric, validate_verdict_document, verdict_freshness_issues))' \
   || fail "packaged core does not expose governed fact, verdict, and gate parity"
@@ -264,12 +278,13 @@ DW_STEP_CLI="$DW" "$SCRIPT_DIR/deliberate-step-loop.sh" \
 "$PY" "$SCRIPT_DIR/outward-loop-packaged-exam.py" --dw "$DW" \
   || fail "packaged outward-loop orchestration exam failed"
 
-# Phase-26 exit exam: a fourth fresh consumer receives one exact continuous
-# grant, advances a multi-phase roadmap through independent certification and
-# architecture gates, survives conductor and delivery-boundary crashes, pushes
-# each certified story, and proves every autonomous surface and refusal.
-"$PY" "$SCRIPT_DIR/autonomous-program-packaged-exam.py" --dw "$DW" \
-  || fail "packaged autonomous multi-phase program exam failed"
+# Phase-27 exit exam: the composed fresh-wheel entry point runs the Phase-26
+# autonomous program exactly once, then binds its no-program arrival, optional
+# setup, bounded decision/stop, independent reject→repair→pass, crash replay,
+# completion, and exact audit facts to all thirteen canonical usability
+# journeys and a plain-language acceptance transcript.
+"$PY" "$SCRIPT_DIR/usability-packaged-exam.py" --dw "$DW" \
+  || fail "packaged composed usability exam failed"
 
 # ── defer-to-repo rule ─────────────────────────────────────────────
 # Replace the vendored CLI with a marker; the global dw run inside the

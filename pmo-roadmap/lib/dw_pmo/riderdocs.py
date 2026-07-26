@@ -41,6 +41,13 @@ description: Drive Delivery Workbench adoption for this repository (intake → d
 Drive the Delivery Workbench adoption flow for this repository. Ask
 the user for anything you cannot infer; do not fabricate intent.
 
+## Delivery task
+
+Establish the repository's delivery scope, current work, and first safe next
+step. Report what will change before creating roadmap files.
+
+## Technical details
+
 1. Verify the install: `.githooks/dw doctor`. If the framework is not
    installed, run `<framework>/pmo-roadmap/install.sh <this-repo> --skip-bootstrap`
    first (ask the user where the framework checkout lives).
@@ -61,6 +68,13 @@ description: Generate and honestly certify the commit contract for the staged wo
 ---
 
 Author the PMO commit contract for the currently staged work.
+
+## Delivery task
+
+Review the intended files and their proof, then prepare the final commit check.
+Never claim a rule passed without verifying it.
+
+## Technical details
 
 1. Confirm staging is final (`git status`, `git diff --cached --stat`).
    The contract stamps the staged index tree — restaging afterwards
@@ -86,6 +100,13 @@ description: Start from the Delivery Workbench status briefing and pick up the n
 
 Orient yourself in this repository's Delivery Workbench roadmap and
 report what to work on next. Do not change anything yet.
+
+## Delivery task
+
+Report readiness, current work, any blocker, progress, and the source-backed
+next step. Ask for a missing delivery-scope decision instead of guessing.
+
+## Technical details
 
 1. Run `.githooks/dw status --json` and read its JSON even if it exits 1.
    Exit 0 means `ready`; exit 1 means `attention`, which is valid data. If
@@ -114,6 +135,13 @@ description: Prove, flip, and ship the current story through the PMO gate.
 Close out the story the user names (or the current in-progress story
 from `.githooks/dw next`). Evidence first, then the flip, then the
 gated commit.
+
+## Delivery task
+
+Prove the work, complete its roadmap state, review the final files, and commit
+only the delivery that the saved proof supports.
+
+## Technical details
 
 1. Prove the work with real runs — for each documented verification
    command:

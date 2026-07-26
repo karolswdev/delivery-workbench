@@ -1,5 +1,9 @@
 # Deliberate step contract
 
+For the ordinary arrival-to-completion journey, see
+[Everyday delivery](./everyday-delivery.md). This document specifies the exact
+one-step implementation boundary.
+
 **Status:** v1 preview and result contracts implemented across CLI, MCP, and
 HTTP; the three adapters return byte-equal core documents.
 **Scope:** local preview and explicit application of exactly one current,
@@ -28,18 +32,23 @@ Preview first:
 .githooks/dw step [project] --json
 ```
 
-Human output names the underlying command, the state token, whether the
-action is applicable, and the exact tokenized apply argv:
+Human output explains the affected work, permission, consequence, and
+confirmation task first. Exact commands and the state-bound confirmation stay
+copyable under **Technical details**:
 
 ```text
-step=preview action=start-story applicable=yes
-command=.githooks/dw story status myapp 2 APP-2-01 in-progress
-token=sha256:...
-apply=.githooks/dw step myapp --apply --expect sha256:...
-refusal=-
+Review next step — Start current work
+Move the next roadmap work item into active work.
+Affected work: APP-2-01 in myapp
+Permission: This preview may apply only the listed current step.
+Confirm this step: Use the exact confirmation only after reviewing this one step.
+Technical details:
+  Source command: .githooks/dw story status myapp 2 APP-2-01 in-progress
+  Exact confirmation: sha256:...
+  Apply command: .githooks/dw step myapp --apply --expect sha256:...
 ```
 
-After reviewing that preview, invoke its exact `apply=` command. Apply
+After reviewing that preview, invoke its exact **Apply command**. Apply
 rebuilds the complete preview immediately before starting anything. A token
 mismatch refuses with remediation and starts no child process. A successful
 application runs the one already-present argv from the repository root,

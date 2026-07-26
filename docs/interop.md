@@ -25,6 +25,7 @@ is added when an external consumer asks for one.
 
 | Model | Stamp | Declared in |
 |---|---|---|
+| Shared human presentation | `delivery-workbench-presentation` v1 | `presentation.build_*_presentation`; presentation-only and never a replacement for its exact source model |
 | Status briefing | `delivery-workbench-status` v1 | `status.build_status` |
 | Delivery setup | `delivery-workbench-delivery-setup` v1 | `delivery_setup.build_delivery_setup` |
 | Deliberate-step preview | `delivery-workbench-step` v1 | `step.build_step` |
@@ -223,6 +224,8 @@ or provider argv.
 
 | Route | Core function | Returns |
 |---|---|---|
+| `GET /api/presentation` | `presentation.build_presentation_catalog` | shared preferred terms, labels, and the explicit Technical details boundary used by human adapters; pure |
+| `GET /api/presentation/status?project=<slug>` | `presentation.build_status_presentation` over `status.build_status` | task-first status presentation with source paths; the exact status remains available separately |
 | `/api/status?project=<slug>` | `status.build_status` | the stamped briefing in `data`; `attention` remains HTTP 200 data |
 | `GET /api/delivery-setup?project=<slug>` | `delivery_setup.build_delivery_setup` | pure application view over status, delivery-plan inventory, and optional-program inventory: delivery scope, all three choices, effects, remaining permission, corrections, and technical sources |
 | `GET /api/step?project=<slug>` | `step.build_step` | the stamped pure preview in `data` |

@@ -1,0 +1,190 @@
+{
+  "kind": "delivery-workbench-everyday-presentation-snapshots",
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "status-ready",
+      "builder": "status",
+      "input": {
+        "kind": "delivery-workbench-status",
+        "schema_version": 1,
+        "verdict": "ready",
+        "summary": "ready",
+        "roadmap": {
+          "selected_project": "demo",
+          "projects": [
+            {
+              "slug": "demo",
+              "next_story": {"story_id": "DM-2-03", "title": "Improve checkout", "status": "in-progress"},
+              "current_phase": {"number": 2, "stories_done": 2, "stories_total": 4},
+              "status_counts": {"done": 2, "in-progress": 1, "backlog": 1}
+            }
+          ]
+        },
+        "repository": {
+          "branch": "feature/checkout",
+          "changes": {
+            "staged": {"count": 1},
+            "unstaged": {"count": 0},
+            "untracked": {"count": 0}
+          },
+          "contract": {"state": "missing"},
+          "gate": {"state": "not-run"}
+        },
+        "rails": {"healthy": true, "checks": [{"name": "hooks", "ok": true, "detail": "ready"}]},
+        "next_action": {
+          "id": "continue-story",
+          "kind": "command",
+          "blocking": false,
+          "reason": "Current work is active.",
+          "command": [".githooks/dw", "story", "show", "demo", "2", "DM-2-03"]
+        },
+        "actions": []
+      },
+      "auxiliary": null,
+      "expected": "Delivery is ready\nThe selected work is already active and can continue.\nCurrent work: DM-2-03: Improve checkout\nProgress: 2 of 4 work items complete in phase 2.\nContinue current work: The selected work is already active and can continue.\nTechnical details:\n  Exact action: continue-story\n  Exact reason: Current work is active.\n  Command: .githooks/dw story show demo 2 DM-2-03\n  Branch: feature/checkout\n  Workspace: {\"staged\":1,\"unstaged\":0,\"untracked\":0}\n  Commit contract: missing\n  Commit gate: not-run\n  Repository checks: {\"count\":1,\"healthy\":true}\n"
+    },
+    {
+      "id": "roadmap-step-review",
+      "builder": "step",
+      "input": {
+        "kind": "delivery-workbench-step",
+        "schema_version": 1,
+        "project": "demo",
+        "action": {
+          "id": "start-story",
+          "kind": "command",
+          "blocking": false,
+          "reason": "Ready",
+          "command": [".githooks/dw", "story", "status", "demo", "2", "DM-2-03", "in-progress"]
+        },
+        "applicable": true,
+        "token": "sha256:step",
+        "apply_command": [".githooks/dw", "step", "demo", "--apply", "--expect", "sha256:step"],
+        "refusal": null
+      },
+      "auxiliary": null,
+      "expected": "Review next step — Start current work\nMove the next roadmap work item into active work.\nAffected work: DM-2-03 in demo\nPermission: This preview may apply only the listed current step.\nConfirm this step: Use the exact confirmation only after reviewing this one step.\nTechnical details:\n  Exact action: start-story\n  Source command: .githooks/dw story status demo 2 DM-2-03 in-progress\n  Exact confirmation: sha256:step\n  Apply command: .githooks/dw step demo --apply --expect sha256:step\n  Exact refusal: not available\n"
+    },
+    {
+      "id": "roadmap-step-result",
+      "builder": "step-result",
+      "input": {
+        "kind": "delivery-workbench-step-result",
+        "schema_version": 1,
+        "project": "demo",
+        "action": {"id": "continue-story", "command": [".githooks/dw", "story", "show", "demo", "2", "DM-2-03"]},
+        "outcome": "succeeded",
+        "exit_code": 0,
+        "reason": null,
+        "before": {"action_id": "continue-story", "token": "sha256:before"},
+        "after": {"action_id": "continue-story", "token": "sha256:after"},
+        "output": {"stdout": "", "stderr": "", "truncated": {"stdout": false, "stderr": false}},
+        "started": true
+      },
+      "auxiliary": null,
+      "expected": "Delivery step complete\nThe reviewed step finished. Reloaded delivery facts now decide what follows.\nAffected work: demo\nOutcome: succeeded\nContinue current work: The selected work is already active and can continue.\nTechnical details:\n  Exact action: continue-story\n  Exact outcome: succeeded\n  Exit code: 0\n  Exact reason: not available\n  Before: {\"action_id\":\"continue-story\",\"token\":\"sha256:before\"}\n  After: {\"action_id\":\"continue-story\",\"token\":\"sha256:after\"}\n  Output bounds: {\"stderr\":false,\"stdout\":false}\n"
+    },
+    {
+      "id": "live-delivery",
+      "builder": "live",
+      "input": {
+        "kind": "delivery-workbench-run-view",
+        "schema_version": 1,
+        "run_id": "run-abc",
+        "state": "running",
+        "live_progress": {
+          "context": "run",
+          "title": "Improve checkout",
+          "status": {"label": "In progress", "meaning": "Two of four work items passed review."},
+          "answers": [
+            {"id": "delivery", "question": "Delivery", "answer": "Improve checkout safely.", "status": "known", "source": {"model": "delivery-workbench-run-view", "path": "/score"}},
+            {"id": "team", "question": "Team and review", "answer": "Maya works; Rowan reviews independently.", "status": "known", "source": {"model": "delivery-workbench-team-review", "path": "/responsibilities"}},
+            {"id": "passed", "question": "Progress", "answer": "2 of 4 work items passed review.", "status": "known", "source": {"model": "delivery-workbench-live-progress", "path": "/progress"}},
+            {"id": "blocked", "question": "Blocker", "answer": "No blocker.", "status": "clear", "source": {"model": "delivery-workbench-live-progress", "path": "/blockers"}},
+            {"id": "decision", "question": "Decision", "answer": "No decision is waiting.", "status": "clear", "source": {"model": "delivery-workbench-live-progress", "path": "/decisions"}},
+            {"id": "remaining-change-spend", "question": "Permission and cost", "answer": "Two work starts remain; money cost is unknown.", "status": "known", "source": {"model": "delivery-workbench-live-progress", "path": "/limits"}},
+            {"id": "next", "question": "Next step", "answer": "Let the current review finish.", "status": "known", "source": {"model": "delivery-workbench-live-progress", "path": "/next_step"}}
+          ],
+          "next_step": {"label": "Wait for review", "detail": "Let the current review finish.", "action": null, "source": {"model": "delivery-workbench-live-progress", "path": "/next_step"}},
+          "technical_details": {"source_model": "delivery-workbench-run-view", "generation": 3, "ledger_head": "sha256:abc"}
+        }
+      },
+      "auxiliary": null,
+      "expected": "Live delivery — Improve checkout\nIn progress: Two of four work items passed review.\nDelivery: Improve checkout safely.\nTeam and review: Maya works; Rowan reviews independently.\nProgress: 2 of 4 work items passed review.\nBlocker: No blocker.\nDecision: No decision is waiting.\nPermission and cost: Two work starts remain; money cost is unknown.\nNext step: Let the current review finish.\nWait for review: Let the current review finish.\nTechnical details:\n  Exact view: delivery-workbench-run-view\n  Exact identity: run-abc\n  Exact state: running\n  Source facts: {\"generation\":3,\"ledger_head\":\"sha256:abc\",\"source_model\":\"delivery-workbench-run-view\"}\n"
+    },
+    {
+      "id": "bounded-start-review",
+      "builder": "start",
+      "input": {
+        "kind": "delivery-workbench-run-plan",
+        "schema_version": 1,
+        "applicable": true,
+        "story": {"id": "DM-2-03", "title": "Improve checkout"},
+        "score": {"title": "Research, build, review"},
+        "authority": {
+          "capabilities": ["dispatch_agent", "write_roadmap"],
+          "budgets": {"agent_starts": 2, "model_tokens": 12000}
+        },
+        "request": {"expires_at": "2026-07-25T18:00:00Z"},
+        "start_token": "sha256:start",
+        "issues": []
+      },
+      "auxiliary": null,
+      "expected": "Review bounded delivery permission\nThis delivery is ready for a separate start confirmation.\nDelivery plan: Research, build, review\nWork: DM-2-03: Improve checkout\nPermission: May use: dispatch agent, write roadmap.\nCost limits: agent starts: 2; model tokens: 12000\nConfirm this reviewed delivery: Starting remains a separate explicit action.\nTechnical details:\n  Exact plan kind: delivery-workbench-run-plan\n  Exact start confirmation: sha256:start\n  Exact request: {\"expires_at\":\"2026-07-25T18:00:00Z\"}\n  Exact issues: \n"
+    },
+    {
+      "id": "action-review",
+      "builder": "action",
+      "input": {
+        "kind": "delivery-workbench-run-act-preview",
+        "schema_version": 1,
+        "action": "pause",
+        "applicable": true,
+        "act_token": "sha256:act",
+        "state": "running",
+        "issues": []
+      },
+      "auxiliary": {
+        "kind": "delivery-workbench-bounded-actions",
+        "affected_work": "DM-2-03 Improve checkout",
+        "actions": [
+          {
+            "action": "pause",
+            "label": "Pause delivery",
+            "affected_work": "DM-2-03 Improve checkout",
+            "consequences": {
+              "effect": "Stops new work from starting.",
+              "after": "Active work settles and progress remains saved."
+            }
+          }
+        ]
+      },
+      "expected": "Review action — Pause delivery\nStops new work from starting. Active work settles and progress remains saved.\nAffected work: DM-2-03 Improve checkout\nPermission: The current saved delivery permits this reviewed action.\nConfirm this action: Use the exact confirmation only after reviewing the consequence.\nTechnical details:\n  Exact action: pause\n  Exact decision: not available\n  Exact confirmation: sha256:act\n  Exact state: running\n  Exact issues: \n"
+    },
+    {
+      "id": "decision-notification",
+      "builder": "notification",
+      "input": {
+        "kind": "checkpoint-pending",
+        "id": "ntf-01",
+        "run_id": "run-abc",
+        "node": "review",
+        "request": {
+          "correlation_id": "req-01",
+          "response_schema": {"decision": ["approve", "reject"]},
+          "guidance": {
+            "affected_work": "DM-2-03 Improve checkout",
+            "choices": [
+              {"decision": "approve", "after": "Continue the reviewed delivery."},
+              {"decision": "reject", "after": "Stop and preserve current progress."}
+            ],
+            "transport_grants_authority": false
+          }
+        }
+      },
+      "auxiliary": null,
+      "expected": "Decision needed\nCurrent work is waiting for a named decision.\nAffected work: DM-2-03 Improve checkout\nDecision: approve — Continue the reviewed delivery.; reject — Stop and preserve current progress.\nNext step: Choose one listed response or leave the work waiting.\nTechnical details:\n  Exact notification kind: checkpoint-pending\n  Run: run-abc\n  Exact location: review\n  Request identity: req-01\n  Response command: /decision req-01 'approve|reject'\n  Permission boundary: The response carrier supplies no permission. Current local identity, request, response choices, and freshness checks still decide.\n  Acknowledge: ntf-01\n"
+    }
+  ]
+}

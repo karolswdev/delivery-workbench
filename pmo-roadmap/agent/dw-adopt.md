@@ -5,6 +5,13 @@ description: Drive Delivery Workbench adoption for this repository (intake → d
 Drive the Delivery Workbench adoption flow for this repository. Ask
 the user for anything you cannot infer; do not fabricate intent.
 
+## Delivery task
+
+Establish the repository's delivery scope, current work, and first safe next
+step. Report what will change before creating roadmap files.
+
+## Technical details
+
 1. Verify the install: `.githooks/dw doctor`. If the framework is not
    installed, run `<framework>/pmo-roadmap/install.sh <this-repo> --skip-bootstrap`
    first (ask the user where the framework checkout lives).

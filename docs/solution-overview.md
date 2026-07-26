@@ -1,5 +1,9 @@
 # Delivery Workbench — solution overview
 
+For the task-first path through the product, begin with
+[Everyday delivery](./everyday-delivery.md). This document is the broader
+technical map.
+
 **Assessment date:** 2026-07-23. **Product version assessed:** v1.14.0.
 This is the map of the whole solution. Exact subsystem protocols remain
 owned by the linked specialist documents.
@@ -582,6 +586,7 @@ verdict taxonomy, grant, state, refusal, and threat model are in the
 ## Where to go deeper
 
 - [Architecture and executable claims](./architecture.md)
+- [Workbench keyboard, focus, semantic, and viewport contract](./accessibility.md)
 - [Status briefing contract](./status-briefing.md)
 - [Deliberate step contract](./deliberate-step.md)
 - [Visual orchestration contract](./orchestration.md)

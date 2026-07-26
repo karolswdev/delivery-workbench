@@ -7,26 +7,31 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <button class="skip-link" id="skip-link" type="button">Skip to main content</button>
   <header class="topbar">
     <a class="brand" href="#/">Delivery&nbsp;Workbench</a>
-    <a class="navlink" href="#/mc" id="mc-link">mission control</a>
-    <a class="navlink" href="#/board" id="board-link">board</a>
-    <a class="navlink" href="#/orchestration" id="orchestration-link">orchestration</a>
-    <a class="navlink" href="#/programs" id="programs-link">program control</a>
-    <a class="navlink" href="#/program-studio" id="program-studio-link">delivery setup</a>
-    <a class="navlink" href="#/health" id="health-link">health</a>
-    <a class="navlink" href="#/edit" id="edit-link">edit</a>
-    <nav class="crumbs" id="crumbs"></nav>
+    <nav class="primary-nav" aria-label="Primary">
+      <a class="navlink" href="#/mc" id="mc-link" data-presentation-copy="activity">Activity</a>
+      <a class="navlink" href="#/board" id="board-link" data-presentation-copy="progress">Progress</a>
+      <a class="navlink" href="#/orchestration" id="orchestration-link" data-presentation-copy="bounded_delivery">Bounded delivery</a>
+      <a class="navlink" href="#/programs" id="programs-link" data-presentation-copy="live_delivery">Live delivery</a>
+      <a class="navlink" href="#/program-studio" id="program-studio-link" data-presentation-copy="delivery_setup">Delivery setup</a>
+      <a class="navlink" href="#/health" id="health-link" data-presentation-copy="readiness">Readiness</a>
+      <a class="navlink" href="#/edit" id="edit-link" data-presentation-copy="roadmap_changes">Roadmap changes</a>
+    </nav>
+    <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
     <div class="refresh">
-      <span id="refresh-time" title="last refresh">—</span>
-      <button id="refresh-btn" type="button" title="re-read from Markdown">↻ refresh</button>
+      <span id="refresh-time" title="last refresh" aria-hidden="true">—</span>
+      <button id="refresh-btn" type="button" title="Re-read saved repository facts">↻ refresh</button>
     </div>
   </header>
-  <main id="app" class="app">
+  <main id="app" class="app" tabindex="-1" aria-busy="true">
     <div class="state">Loading…</div>
   </main>
+  <div id="route-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="live-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
   <footer class="footbar">
-    live explorer · guarded policy/score/roadmap edits never stage or run · served from
+    Read-only delivery views · every change keeps its separate review and confirmation · served from
     <code id="foot-root">this repository</code>
   </footer>
   <script src="app.js"></script>

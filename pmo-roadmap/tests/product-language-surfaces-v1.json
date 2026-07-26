@@ -1,0 +1,202 @@
+{
+  "kind": "delivery-workbench-product-language-surface-dispositions",
+  "schema_version": 1,
+  "contract_schema_version": 1,
+  "surfaces": [
+    {
+      "id": "workbench-orientation-roadmap",
+      "classification": "everyday",
+      "disposition": "migrated",
+      "reason": "Arrival now consumes the shared status presentation and leads with readiness, current work, progress, and next step.",
+      "presentation_sources": ["pmo-roadmap/lib/dw_pmo/presentation.py", "pmo-roadmap/workbench/app.js"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/workbench-ui-smoke.sh"]
+    },
+    {
+      "id": "workbench-health-and-edit",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "Readiness blockers and safe correction lead; exact paths, check output, and repository setup facts are labelled Technical details.",
+      "presentation_sources": ["pmo-roadmap/workbench/app.js"],
+      "proofs": ["pmo-roadmap/tests/workbench-explorer.sh", "pmo-roadmap/tests/workbench-ui-smoke.sh"]
+    },
+    {
+      "id": "workbench-mission-control-and-history",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "Current work and team activity lead; exact session identities and saved events are labelled Technical details.",
+      "presentation_sources": ["pmo-roadmap/workbench/app.js"],
+      "proofs": ["pmo-roadmap/tests/workbench-ui-smoke.sh"]
+    },
+    {
+      "id": "workbench-bounded-delivery",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "The existing shared live-progress and bounded-action views now feed the common human presentation boundary.",
+      "presentation_sources": ["pmo-roadmap/lib/dw_pmo/presentation.py", "pmo-roadmap/workbench/app.js"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/everyday-presentation-snapshots-v1.json"]
+    },
+    {
+      "id": "workbench-delivery-studio",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "Delivery-plan and team decisions remain task-shaped while exact JSON, fingerprints, and compiler facts stay under Technical details.",
+      "presentation_sources": ["pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/plan_authoring.py", "pmo-roadmap/lib/dw_pmo/team_review.py"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/workbench-ui-smoke.sh"]
+    },
+    {
+      "id": "workbench-live-delivery",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "Optional-delivery inventory and start review now use delivery plan, work, team, permission, progress, blocker, decision, and next step before exact records.",
+      "presentation_sources": ["pmo-roadmap/lib/dw_pmo/presentation.py", "pmo-roadmap/workbench/app.js"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/workbench-ui-smoke.sh"]
+    },
+    {
+      "id": "cli-orientation-and-roadmap",
+      "classification": "everyday",
+      "disposition": "migrated",
+      "reason": "Human status output and top-level help use the shared presentation catalog while exact JSON remains unchanged.",
+      "presentation_sources": ["pmo-roadmap/lib/dw_pmo/presentation.py", "pmo-roadmap/lib/dw_pmo/status.py", "pmo-roadmap/bin/dw"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/everyday-presentation-snapshots-v1.json"]
+    },
+    {
+      "id": "cli-setup-health-help-and-errors",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "CLI help and setup lead with the delivery task and keep exact commands and source models in a Technical details section.",
+      "presentation_sources": ["pmo-roadmap/lib/dw_pmo/presentation.py", "pmo-roadmap/lib/dw_pmo/delivery_setup.py", "pmo-roadmap/bin/dw"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/package-smoke.sh"]
+    },
+    {
+      "id": "cli-bounded-delivery",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "Human plan, live view, and action output share start, progress, and consequence presenters; --json retains exact run documents.",
+      "presentation_sources": ["pmo-roadmap/lib/dw_pmo/presentation.py", "pmo-roadmap/bin/dw"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/everyday-presentation-snapshots-v1.json"]
+    },
+    {
+      "id": "cli-program-delivery",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "Human optional-delivery plan, live view, action output, notifications, and help use the same task-first presenters.",
+      "presentation_sources": ["pmo-roadmap/lib/dw_pmo/presentation.py", "pmo-roadmap/bin/dw"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/everyday-presentation-snapshots-v1.json"]
+    },
+    {
+      "id": "machine-json-adapters",
+      "classification": "technical_audit",
+      "disposition": "technical_audit",
+      "reason": "Machine keys, kinds, schemas, exact identifiers, and adapter envelopes intentionally remain unchanged.",
+      "presentation_sources": [],
+      "proofs": ["docs/interop.md", "pmo-roadmap/tests/dw-core-tests.py"]
+    },
+    {
+      "id": "operator-notifications-and-telegram",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "Outbound summaries share the notification presenter and lead with affected work, blocker or decision, and next step; response identity stays technical.",
+      "presentation_sources": ["pmo-roadmap/lib/dw_pmo/presentation.py", "pmo-roadmap/lib/dw_pmo/notifications.py"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/everyday-presentation-snapshots-v1.json", "pmo-roadmap/tests/telegram-interface-tests.py"]
+    },
+    {
+      "id": "agent-riders-and-holdspeak",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "Canonical agent guidance now states the delivery task first and labels exact commands and machine fields Technical details.",
+      "presentation_sources": ["pmo-roadmap/agent", "pmo-roadmap/lib/dw_pmo/riderdocs.py"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py"]
+    },
+    {
+      "id": "readme-and-first-use",
+      "classification": "everyday",
+      "disposition": "migrated",
+      "reason": "Both READMEs now begin with current work, blocker, progress, permission, next step, and a task-first first-use route.",
+      "presentation_sources": ["README.md", "pmo-roadmap/README.md", "docs/everyday-delivery.md"],
+      "proofs": ["pmo-roadmap/tests/product-language-contract.py", "pmo-roadmap/tests/docs-lint.sh"]
+    },
+    {
+      "id": "everyday-product-guides",
+      "classification": "everyday",
+      "disposition": "migrated",
+      "reason": "The everyday guide covers arrival, setup, plan and team review, progress, decisions, recovery, proof, and completion; specialist guides link from that task.",
+      "presentation_sources": ["docs/everyday-delivery.md", "docs/solution-overview.md", "docs/distribution.md", "docs/deliberate-step.md"],
+      "proofs": ["pmo-roadmap/tests/product-language-contract.py", "pmo-roadmap/tests/docs-lint.sh"]
+    },
+    {
+      "id": "architecture-and-protocol-contracts",
+      "classification": "technical_audit",
+      "disposition": "technical_audit",
+      "reason": "Architecture and protocol documentation is intentionally exact and is reached through labelled Technical details links.",
+      "presentation_sources": [],
+      "proofs": ["docs/architecture.md", "docs/interop.md", "docs/mcp.md", "docs/orchestration.md", "docs/programs.md", "docs/signals.md"]
+    },
+    {
+      "id": "exact-events-streams-and-files",
+      "classification": "technical_audit",
+      "disposition": "technical_audit",
+      "reason": "Exact event order, paths, identifiers, hashes, and bounded content are deliberate audit records and remain unchanged.",
+      "presentation_sources": [],
+      "proofs": ["docs/mission-control.md", "docs/interop.md", "pmo-roadmap/tests/dw-core-tests.py"]
+    },
+    {
+      "id": "cross-surface-errors-and-refusals",
+      "classification": "mixed",
+      "disposition": "migrated",
+      "reason": "Shared status, action, and notification presenters state the effect, unchanged state, affected work, and safe next step before exact error facts.",
+      "presentation_sources": ["pmo-roadmap/lib/dw_pmo/presentation.py", "pmo-roadmap/workbench/app.js", "pmo-roadmap/lib/dw_pmo/notifications.py"],
+      "proofs": ["pmo-roadmap/tests/dw-core-tests.py", "pmo-roadmap/tests/everyday-presentation-snapshots-v1.json"]
+    }
+  ],
+  "executable_regions": [
+    {
+      "id": "shared-presentation-copy",
+      "path": "pmo-roadmap/lib/dw_pmo/presentation.py",
+      "start": "# BEGIN EVERYDAY PRESENTATION COPY",
+      "end": "# END EVERYDAY PRESENTATION COPY"
+    },
+    {
+      "id": "root-first-use",
+      "path": "README.md",
+      "start": "<!-- BEGIN EVERYDAY PRODUCT GUIDE -->",
+      "end": "<!-- END EVERYDAY PRODUCT GUIDE -->"
+    },
+    {
+      "id": "package-first-use",
+      "path": "pmo-roadmap/README.md",
+      "start": "<!-- BEGIN EVERYDAY PRODUCT GUIDE -->",
+      "end": "<!-- END EVERYDAY PRODUCT GUIDE -->"
+    },
+    {
+      "id": "everyday-delivery-journey",
+      "path": "docs/everyday-delivery.md",
+      "start": "<!-- BEGIN EVERYDAY DELIVERY JOURNEY -->",
+      "end": "<!-- END EVERYDAY DELIVERY JOURNEY -->"
+    },
+    {
+      "id": "agent-adopt-task",
+      "path": "pmo-roadmap/agent/dw-adopt.md",
+      "start": "## Delivery task",
+      "end": "## Technical details"
+    },
+    {
+      "id": "agent-contract-task",
+      "path": "pmo-roadmap/agent/dw-contract.md",
+      "start": "## Delivery task",
+      "end": "## Technical details"
+    },
+    {
+      "id": "agent-next-task",
+      "path": "pmo-roadmap/agent/dw-next.md",
+      "start": "## Delivery task",
+      "end": "## Technical details"
+    },
+    {
+      "id": "agent-done-task",
+      "path": "pmo-roadmap/agent/dw-story-done.md",
+      "start": "## Delivery task",
+      "end": "## Technical details"
+    }
+  ],
+  "snapshots": "pmo-roadmap/tests/everyday-presentation-snapshots-v1.json"
+}

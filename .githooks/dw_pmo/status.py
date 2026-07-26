@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
 import subprocess
 from pathlib import Path
 
@@ -525,32 +524,10 @@ def build_status(root: Path, project: str | None = None) -> dict[str, object]:
 
 
 def render_status(status: dict[str, object]) -> str:
-    action = status["next_action"]
-    command = action["command"]  # type: ignore[index]
-    shown = shlex.join(command) if command is not None else "(manual)"
-    repository = status["repository"]
-    changes = repository["changes"]  # type: ignore[index]
-    roadmap = status["roadmap"]
-    lines = [
-        f"status={status['verdict']} summary={status['summary']}",
-        f"next={action['id']} command={shown}",  # type: ignore[index]
-        (
-            f"repo branch={repository['branch']} operation={repository['operation']} "  # type: ignore[index]
-            f"clean={'yes' if repository['clean'] else 'no'} "  # type: ignore[index]
-            f"staged={changes['staged']['count']} unstaged={changes['unstaged']['count']} "  # type: ignore[index]
-            f"untracked={changes['untracked']['count']} contract={repository['contract']['state']} "  # type: ignore[index]
-            f"gate={repository['gate']['state']}"  # type: ignore[index]
-        ),
-        (
-            f"rails healthy={'yes' if status['rails']['healthy'] else 'no'} "  # type: ignore[index]
-            f"checks={len(status['rails']['checks'])}"  # type: ignore[index]
-        ),
-        (
-            f"roadmap healthy={'yes' if roadmap['healthy'] else 'no'} "  # type: ignore[index]
-            f"project={roadmap['selected_project'] or '-'} "  # type: ignore[index]
-            f"issues={len(roadmap['issues'])} warnings={len(roadmap['warnings'])}"  # type: ignore[index]
-        ),
-    ]
-    for warning in roadmap["warnings"]:  # type: ignore[union-attr]
-        lines.append(f"warning={warning}")
-    return "\n".join(lines) + "\n"
+    """Render the exact status document through the shared human projection."""
+    from .presentation import (
+        build_status_presentation,
+        render_presentation,
+    )
+
+    return render_presentation(build_status_presentation(status))

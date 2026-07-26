@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 27
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-27-01, WLA-27-03, WLA-27-04, WLA-27-05, WLA-27-06, WLA-27-07
 - **Unblocks:** WLA-27-10
 - **Owner:** unassigned
@@ -31,23 +31,23 @@ coverage, while deliberately leaving machine contracts exact and stable.
 
 ## Acceptance criteria
 
-- [ ] Every surface in the WLA-27-01 inventory is migrated, explicitly marked
+- [x] Every surface in the WLA-27-01 inventory is migrated, explicitly marked
   technical/audit, or documented as out of scope with a reason; there are no
   silent leftovers.
-- [ ] Human CLI, Workbench, notifications, help, errors, onboarding, and
+- [x] Human CLI, Workbench, notifications, help, errors, onboarding, and
   everyday docs use the same preferred term and definition for each product
   concept.
-- [ ] Shared application-view/render helpers receive canonical facts and
+- [x] Shared application-view/render helpers receive canonical facts and
   produce presentation content; individual adapters do not copy policy or
   independently translate state.
-- [ ] Exact command names and machine payloads remain copyable and stable where
+- [x] Exact command names and machine payloads remain copyable and stable where
   users or agents need them, but surrounding explanations state the ordinary
   task and outcome first.
-- [ ] Technical/audit and architecture material remains discoverable,
+- [x] Technical/audit and architecture material remains discoverable,
   internally precise, and clearly distinguished from the everyday path.
-- [ ] Terminology, human-output snapshots, adapter parity, mirrored-tree
+- [x] Terminology, human-output snapshots, adapter parity, mirrored-tree
   checks, link checks, and package tests fail on drift.
-- [ ] Product docs teach complete tasks from the WLA-27-02 journeys rather
+- [x] Product docs teach complete tasks from the WLA-27-02 journeys rather
   than listing internal objects as the primary mental model.
 
 ## Test plan
@@ -65,3 +65,11 @@ coverage, while deliberately leaving machine contracts exact and stable.
 Parity does not require prose to be byte-identical across channels. It requires
 the same canonical facts, product concepts, action identity, and trust boundary
 with channel-appropriate rendering.
+
+Implemented `delivery-workbench-presentation@1` as the pure shared human
+presentation boundary. The executable surface census accounts for all eighteen
+WLA-27-01 surfaces: fifteen are migrated and three remain explicitly
+technical/audit. Seven real-presenter snapshots, marked everyday source
+regions, adapter wiring checks, exact JSON parity tests, source/vendor mirror
+checks, link checks, browser renders, notifications, and fresh-package exams
+now reject drift.

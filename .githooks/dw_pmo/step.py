@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import shlex
 import signal
 import subprocess
 from dataclasses import dataclass
@@ -454,20 +453,6 @@ def apply_step(
 
 
 def render_step(preview: dict[str, object]) -> str:
-    action = preview["action"]
-    command = action.get("command") if isinstance(action, dict) else None
-    shown = shlex.join(command) if isinstance(command, list) else "(manual)"
-    apply_command = preview["apply_command"]
-    apply_shown = shlex.join(apply_command) if isinstance(apply_command, list) else "(not applicable)"
-    return "\n".join(
-        [
-            (
-                f"step=preview action={action.get('id') if isinstance(action, dict) else 'none'} "
-                f"applicable={'yes' if preview['applicable'] else 'no'}"
-            ),
-            f"command={shown}",
-            f"token={preview['token']}",
-            f"apply={apply_shown}",
-            f"refusal={preview['refusal'] or '-'}",
-        ]
-    ) + "\n"
+    from .presentation import build_step_presentation, render_presentation
+
+    return render_presentation(build_step_presentation(preview))

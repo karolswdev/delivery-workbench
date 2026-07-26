@@ -2,6 +2,34 @@
 
 ![Delivery Workbench icon](./assets/delivery-workbench-icon.png)
 
+<!-- BEGIN EVERYDAY PRODUCT GUIDE -->
+Delivery Workbench keeps repository delivery understandable from first arrival
+to completion. After installation, begin with:
+
+```bash
+.githooks/dw status
+.githooks/dw setup
+```
+
+The first command names readiness, current work, progress, any blocker, and the
+next step. The second compares ordinary work, one bounded delivery, and an
+optional multi-phase delivery without starting anything. Do the selected work,
+run its declared checks, save their proof, complete the work item, and review
+the final commit facts. If a step is refused, read what stayed unchanged and
+follow the named recovery step.
+
+The [everyday delivery guide](../docs/everyday-delivery.md) walks through
+arrival, team review, live progress, decisions, recovery, and completion.
+The [Workbench accessibility contract](../docs/accessibility.md) records the
+keyboard, focus, semantic, live-update, and narrow/wide behavior for every
+whole-task journey.
+The [whole-task journey contract](../docs/usability-journeys.md#fresh-wheel-exit-proof)
+also records the composed fresh-wheel acceptance transcript and its exact
+audit escape hatch.
+<!-- END EVERYDAY PRODUCT GUIDE -->
+
+## Technical details
+
 A drop-in PMO framework for any git project. Provides:
 
 1. **Methodology** — phase-based, evidence-rich roadmap structure under
@@ -342,7 +370,7 @@ selection instead of guessing. The model contract is
 [`docs/status-briefing.md`](../docs/status-briefing.md).
 
 Use `step` only after reviewing its pure preview. It binds the complete
-current status to a `sha256:` token and prints an exact `apply=` argv;
+current status to a `sha256:` token and prints an exact **Apply command**;
 `--apply --expect <token>` re-reads that state, refuses stale or prohibited
 intent before spawn, executes at most one closed-table recommendation, and
 stops. `--json --apply` returns the bounded versioned result; consumed leases
@@ -444,11 +472,13 @@ canonical control-room view, preview-bound tick/supervision/request/control
 acts, verified ledger tail, and explicit bounded session streams. MCP and HTTP
 accept the same ids, bounded reasons, closed decisions, finite ceilings, and
 fresh tokens; Workbench starts live SSE only while an exact run route is open.
-The wheel-installed Phase 26 exam composes this path through three stories and
-two phases after one continuous grant, with independent repair, bounded
-council/meta/architect judgment, exact delivery and crash recovery. Its
-separate fresh no-program consumer proves the ordinary front door remains
-dormant and behavior-compatible.
+The wheel-installed composed usability exam begins with ordinary no-program
+work, then deliberately enters bounded and optional delivery. Its Phase 26
+engine crosses three stories and two phases after one continuous grant, with
+independent repair, bounded council/meta/architect judgment, exact delivery
+and crash recovery. The Phase 27 wrapper binds those production facts to all
+thirteen canonical journeys, a plain-language transcript, and explicit
+technical inspection.
 
 `run plan` is the separate orchestration consent preview: it binds the
 compiled score to current local Git/status/story facts, exact requested

@@ -1,5 +1,9 @@
 # Delivery Workbench — Distribution Contract
 
+To install and complete a first task, start with
+[Everyday delivery](./everyday-delivery.md). This document defines the
+technical distribution boundary.
+
 How Delivery Workbench reaches a machine that never cloned this
 repository, without weakening the architecture that makes it
 trustworthy. This is the design contract for WLA-9-02 (packaging),
@@ -180,6 +184,16 @@ roadmap carries it; see WLA-11-04 for the worked example):
   token while `continue-story` stays the action; all three adapters report
   `started: false` with zero new events. Certification and commit refuse on
   every step surface before the fixture operator performs them manually.
+- `tests/usability-packaged-exam.py` — use one fresh installed-wheel consumer
+  for ordinary no-program work, deliberate optional setup, a bounded human
+  decision and permanent stop, independent reject/repair/pass, remaining
+  permission and cost, crash replay, completion, and exact CLI/MCP/HTTP/
+  Workbench/SSE inspection. It binds all thirteen canonical journeys to a
+  human-readable transcript and is the Phase 27 package exit entry point.
+- `tests/autonomous-program-packaged-exam.py` — the deterministic Phase 26
+  engine underneath the composed usability exam; it still owns continuous
+  multi-phase authority, independent certification, governed councils,
+  delivery receipts, crash recovery, push, and the complete refusal matrix.
 - `tests/upgrade-path.sh` — adopt from the real `v1.5.0` tag,
   upgrade, byte-compare protected content, `dw verify` over the
   mixed-version history, gated commit after refresh (WLA-9-03).

@@ -210,6 +210,20 @@ def mission_control_live_layer(sessions_doc: dict) -> tuple[dict, list]:
 def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
     parts = [part for part in path.strip("/").split("/") if part]
     try:
+        if parts == ["api", "presentation"]:
+            from .presentation import build_presentation_catalog
+
+            return 200, envelope(build_presentation_catalog())
+
+        if parts == ["api", "presentation", "status"]:
+            from .presentation import build_status_presentation
+            from .status import build_status
+
+            project = query.get("project", [""])[0].strip() or None
+            return 200, envelope(
+                build_status_presentation(build_status(root, project))
+            )
+
         if parts == ["api", "status"]:
             from .status import build_status
 

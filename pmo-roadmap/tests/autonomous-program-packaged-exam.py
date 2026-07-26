@@ -274,6 +274,35 @@ def workflow_document(slug, title, nodes):
     }
 
 
+def usability_decision_score():
+    """One real bounded decision used by the Phase-27 composed exit exam."""
+    return {
+        "kind": "delivery-workbench-orchestration",
+        "schema_version": 1,
+        "slug": "usability-decision",
+        "title": "Review one delivery decision",
+        "project": "autonomous",
+        "defaults": {
+            "max_concurrency": 1,
+            "max_wall_seconds": 3_600,
+            "max_agent_starts": 1,
+            "max_check_starts": 1,
+            "default_timeout_seconds": 60,
+            "max_artifact_bytes": 100_000,
+        },
+        "nodes": [{
+            "id": "review",
+            "type": "approval",
+            "prompt": "Approve or reject the reviewed delivery decision.",
+            "options": ["approve", "reject"],
+        }],
+        "layout": {
+            "nodes": {"review": {"x": 180, "y": 100}},
+            "viewport": {"x": 0, "y": 0, "zoom": 1},
+        },
+    }
+
+
 def rubric_document(slug, subject_type, architect=False):
     if architect:
         vocabulary = ["pass", "fail", "approve", "veto", "escalate"]
@@ -441,6 +470,10 @@ def fixture_role(role_id, duty, pool, independent=(), required=True):
 
 
 def author_policy(root):
+    write_json(
+        root / "pm/orchestration/usability-decision.json",
+        usability_decision_score(),
+    )
     a_implement = agent_node(
         "implement",
         "Implement Story A under the exact selected contract.",
@@ -922,8 +955,108 @@ def main():
         for executable in (dw, mcp, root / ".githooks/dw-workbench"):
             assert executable.is_file(), executable
         author_roadmap(root)
-        authored = author_policy(root)
         git(root, "remote", "add", "origin", remote)
+        git(root, "add", "pm/roadmap")
+        git(
+            root,
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "-qm",
+            "Bootstrap ordinary roadmap consumer",
+        )
+
+        # Phase 27 begins on this exact consumer before optional policy exists.
+        # Status, next-work inspection, and setup are all read-only; none may
+        # manufacture a run/program store, process, or optional configuration.
+        before_initial_use = file_snapshot(root)
+        initial_program_result = run(
+            [dw, "--root", root, "program", "list", "--json"],
+            cwd=root,
+        )
+        initial_programs = json.loads(initial_program_result.stdout)
+        assert initial_programs["healthy"]
+        assert initial_programs["programs"] == []
+        for key in (
+            "starts_work",
+            "writes_events",
+            "creates_grant",
+            "creates_program_store",
+            "starts_process",
+            "starts_stream",
+            "starts_poller",
+            "sends_notifications",
+        ):
+            assert initial_programs[key] is False, (
+                key,
+                initial_programs,
+            )
+        initial_status_result = run(
+            [dw, "--root", root, "status", "autonomous", "--json"],
+            cwd=root,
+            check=False,
+        )
+        assert initial_status_result.returncode in (0, 1)
+        initial_status = json.loads(initial_status_result.stdout)
+        initial_step_result = run(
+            [dw, "--root", root, "step", "autonomous", "--json"],
+            cwd=root,
+            check=False,
+        )
+        assert initial_step_result.returncode in (0, 1)
+        initial_step = json.loads(initial_step_result.stdout)
+        initial_next_result = run(
+            [dw, "--root", root, "next", "autonomous", "--json"],
+            cwd=root,
+            check=False,
+        )
+        assert initial_next_result.returncode in (0, 2)
+        initial_next = json.loads(initial_next_result.stdout)
+        assert "AX-1-01" in initial_next_result.stdout
+        initial_setup = run(
+            [
+                dw, "--root", root,
+                "setup", "autonomous", "--technical",
+            ],
+            cwd=root,
+            check=False,
+        )
+        assert initial_setup.returncode in (0, 1)
+        for label in (
+            "Continue with the roadmap",
+            "Review one bounded delivery",
+            "Set up an optional delivery program",
+            "Technical details:",
+        ):
+            assert label in initial_setup.stdout, initial_setup.stdout
+        assert before_initial_use == file_snapshot(root)
+        for optional_path in (
+            root / "pm/workflows",
+            root / "pm/organizations",
+            root / "pm/programs",
+            root / "pm/rubrics",
+            root / ".git/pmo-runs",
+            root / ".git/pmo-programs",
+        ):
+            assert not optional_path.exists(), optional_path
+        same_consumer_initial = {
+            "status_kind": initial_status["kind"],
+            "step_kind": initial_step["kind"],
+            "next_available": True,
+            "current_story": "AX-1-01",
+            "programs": 0,
+            "program_store": False,
+            "run_store": False,
+            "process_starts": initial_programs["starts_process"],
+            "setup_writes": False,
+            "setup_starts_work": False,
+            "ordinary_work_requires_setup": False,
+            "optional_policy_present": False,
+        }
+
+        # The next commit is the deliberate optional configuration act. It is
+        # separate from the read-only setup comparison and from runtime start.
+        authored = author_policy(root)
         git(root, "add", "-A")
         git(
             root,
@@ -931,7 +1064,7 @@ def main():
             "core.hooksPath=/dev/null",
             "commit",
             "-qm",
-            "Bootstrap autonomous program exit exam",
+            "Configure reviewed optional delivery",
         )
         git(root, "push", "-qu", "-u", "origin", "main")
         assert not git(root, "status", "--porcelain").stdout
@@ -941,6 +1074,9 @@ def main():
         sys.path.insert(0, str(root / ".githooks"))
         from dw_pmo import DwError  # noqa: E402
         import dw_pmo.mcpserver as mcpserver  # noqa: E402
+        import dw_pmo.orchestration_conductor as run_conductor  # noqa: E402
+        import dw_pmo.orchestration_run as run_authority  # noqa: E402
+        import dw_pmo.orchestration_surface as run_surface  # noqa: E402
         import dw_pmo.program_conductor as conductor  # noqa: E402
         import dw_pmo.program_delivery as delivery  # noqa: E402
         import dw_pmo.program_run as authority  # noqa: E402
@@ -1065,6 +1201,18 @@ def main():
             root, "program", authored["program"]
         )
         assert program_round_trip["lossless"], program_round_trip
+        phase27_authoring = {
+            "configured_after_initial_use": True,
+            "workflow_count": len(authored["workflows"]),
+            "organization": authored["organization"]["slug"],
+            "program": authored["program"]["slug"],
+            "rubrics": sorted(authored["rubrics"]),
+            "workflow_round_trips_lossless": True,
+            "organization_round_trip_lossless": True,
+            "program_round_trip_lossless": True,
+            "starts_work": False,
+            "creates_permission": False,
+        }
 
         # Compiler/assignment red matrix: all are pure documents or pure
         # assignment simulations and create no grant or child process.
@@ -1196,6 +1344,173 @@ def main():
             "remote_ref": "refs/remotes/origin/main",
         }
 
+        # The same installed consumer crosses one real bounded decision and
+        # one permanent-stop boundary. These are ordinary Phase-27 journeys,
+        # but their previews and receipts are the existing exact run models.
+        decision_plan = run_authority.build_run_plan(
+            root,
+            "usability-decision",
+            "autonomous",
+            "AX-1-01",
+            issued_at=now,
+            expires_at=now + timedelta(hours=1),
+        )
+        assert decision_plan["applicable"], decision_plan["issues"]
+        assert not decision_plan["starts_work"]
+        assert not decision_plan["writes_run_state"]
+        decision_started = run_authority.start_run(
+            root,
+            decision_plan,
+            decision_plan["start_token"],
+            approved=True,
+            approved_by="Phase 27 fresh-wheel exam",
+            now=now,
+        )
+        run_conductor.tick_run(
+            root,
+            decision_started["run_id"],
+            now=now,
+        )
+        decision_waiting = run_authority.replay_run(
+            root, decision_started["run_id"], now=now
+        )
+        assert decision_waiting["state"] == "awaiting-approval"
+        assert len(decision_waiting["outstanding_requests"]) == 1
+        decision_view = run_surface.build_run_view(
+            root, decision_started["run_id"], now=now
+        )
+        decision_request = decision_waiting["outstanding_requests"][0]
+        decision_inbox = next(
+            item
+            for item in decision_view["bounded_actions"]["inbox"]
+            if item["id"].endswith(decision_request["correlation_id"])
+        )
+        before_decision_preview = file_snapshot(root)
+        decision_preview = run_surface.build_run_act_preview(
+            root,
+            decision_started["run_id"],
+            "checkpoint",
+            decision="approve",
+            correlation_id=decision_request["correlation_id"],
+            now=now,
+        )
+        assert decision_preview["applicable"], decision_preview["issues"]
+        assert not decision_preview["starts_work"]
+        assert before_decision_preview == file_snapshot(root)
+        decision_after = run_surface.apply_run_act(
+            root,
+            decision_started["run_id"],
+            "checkpoint",
+            decision_preview["act_token"],
+            decision="approve",
+            correlation_id=decision_request["correlation_id"],
+            now=now,
+        )
+        assert not decision_after["outstanding_requests"]
+        assert (
+            decision_after["ledger_head"]
+            != decision_waiting["ledger_head"]
+        )
+        bounded_decision_observation = {
+            "run_id": decision_started["run_id"],
+            "start_preview_pure": True,
+            "state_before": decision_waiting["state"],
+            "question": decision_inbox["why"],
+            "resolver": decision_inbox["resolver"],
+            "choices": [
+                item["decision"]
+                for item in decision_inbox["valid_choices"]
+            ],
+            "visible_next_step": decision_view[
+                "live_progress"
+            ]["next_step"]["label"],
+            "response_preview_pure": True,
+            "decision": "approve",
+            "state_after": decision_after["state"],
+            "exact": {
+                "correlation_id": decision_request["correlation_id"],
+                "ledger_before": decision_waiting["ledger_head"],
+                "ledger_after": decision_after["ledger_head"],
+                "act_token": decision_preview["act_token"],
+            },
+        }
+
+        stop_time = now + timedelta(seconds=1)
+        stop_plan = run_authority.build_run_plan(
+            root,
+            "usability-decision",
+            "autonomous",
+            "AX-1-01",
+            issued_at=stop_time,
+            expires_at=stop_time + timedelta(hours=1),
+        )
+        assert stop_plan["applicable"], stop_plan["issues"]
+        stop_started = run_authority.start_run(
+            root,
+            stop_plan,
+            stop_plan["start_token"],
+            approved=True,
+            approved_by="Phase 27 fresh-wheel exam",
+            now=stop_time,
+        )
+        run_conductor.tick_run(
+            root,
+            stop_started["run_id"],
+            now=stop_time,
+        )
+        stop_waiting = run_authority.replay_run(
+            root, stop_started["run_id"], now=stop_time
+        )
+        assert stop_waiting["state"] == "awaiting-approval"
+        stop_view = run_surface.build_run_view(
+            root, stop_started["run_id"], now=stop_time
+        )
+        revoke_action = next(
+            item
+            for item in stop_view["bounded_actions"]["actions"]
+            if item.get("action") == "revoke"
+        )
+        before_revoke_preview = file_snapshot(root)
+        revoke_preview = run_surface.build_run_act_preview(
+            root,
+            stop_started["run_id"],
+            "revoke",
+            reason="Permanently stop the reviewed bounded delivery.",
+            now=stop_time,
+        )
+        assert revoke_preview["applicable"], revoke_preview["issues"]
+        assert not revoke_preview["starts_work"]
+        assert before_revoke_preview == file_snapshot(root)
+        revoked = run_surface.apply_run_act(
+            root,
+            stop_started["run_id"],
+            "revoke",
+            revoke_preview["act_token"],
+            reason="Permanently stop the reviewed bounded delivery.",
+            now=stop_time,
+        )
+        assert revoked["state"] == "revoked"
+        assert revoked["control_generation"] == (
+            stop_waiting["control_generation"] + 1
+        )
+        bounded_stop_observation = {
+            "run_id": stop_started["run_id"],
+            "state_before": stop_waiting["state"],
+            "label": revoke_action["label"],
+            "effect": revoke_action["consequences"]["effect"],
+            "unchanged": revoke_action["consequences"]["unchanged"],
+            "preview_pure": True,
+            "state_after": revoked["state"],
+            "exact": {
+                "generation_before": stop_waiting[
+                    "control_generation"
+                ],
+                "generation_after": revoked["control_generation"],
+                "ledger_head": revoked["ledger_head"],
+                "act_token": revoke_preview["act_token"],
+            },
+        }
+
         missing_model = copy.deepcopy(config)
         profile = missing_model["profiles"]["pi-verifier"]
         profile.pop("model")
@@ -1230,6 +1545,58 @@ def main():
         } >= {"anthropic", "openrouter"}
         assert before_preview == file_snapshot(root)
         assert not (root / ".git/pmo-programs").exists()
+        phase27_preflight = {
+            "program": plan["program"]["slug"],
+            "scope": {
+                "project": plan["scope"]["project"],
+                "stories": list(plan["scope"]["story_ids"]),
+                "phases": plan["scope"]["phases"],
+            },
+            "team": [
+                {
+                    "role": seat["role"],
+                    "duty": seat["duty"],
+                    "agent": seat["agent"],
+                    "provider": seat["execution"]["provider"],
+                    "model": seat["execution"]["model"],
+                    "workspace_domain": seat["workspace_domain"],
+                }
+                for seat in plan["roster"]["seats"]
+            ],
+            "independent_review": bool(
+                plan["roster"]["separation"].get("passed")
+            ),
+            "decision_councils": [
+                {
+                    "id": item["id"],
+                    "quorum": item["quorum"],
+                    "primary_authority": item["primary_authority"],
+                    "tie_authority": item["tie_authority"],
+                }
+                for item in plan["roster"]["councils"]
+            ],
+            "allowed_effects": plan["authority"]["capabilities"],
+            "limits": plan["authority"]["budgets"],
+            "stops": plan["authority"]["stop_conditions"],
+            "permanently_excluded": plan[
+                "authority"
+            ]["permanent_exclusions"],
+            "cost_accounting": plan["authority"]["cost_accounting"],
+            "failure_branches_included": plan[
+                "worst_case"
+            ]["includes_failure_branches"],
+            "preview_effects": {
+                key: plan[key]
+                for key in (
+                    "starts_work",
+                    "writes_policy",
+                    "writes_roadmap",
+                    "writes_run_state",
+                    "creates_grant",
+                )
+            },
+            "separate_start_required": True,
+        }
 
         cli_plan = json.loads(
             run(
@@ -2616,9 +2983,100 @@ def main():
             "additionalProperties"
         ] is False
 
+        phase27_delivery = {
+            "review_results": [
+                item["result"] for item in story_a_verdicts
+            ],
+            "repair_rounds": len([
+                item
+                for item in first_conductor["receipts"]
+                if item["action_kind"] == "repair"
+                and item["story"] == "AX-1-01"
+            ]),
+            "governed_decision": {
+                "result": council_receipt["result"],
+                "dissent_preserved": bool(decision["dissent"]),
+                "authority": decision["authority"]["kind"],
+                "obligations": [
+                    item["id"] for item in decision["obligations"]
+                ],
+            },
+            "answers": expected_view["live_progress"]["answers"],
+            "progress": expected_view["live_progress"]["progress"],
+            "team": expected_view["live_progress"]["team"],
+            "review": expected_view["live_progress"]["review"],
+            "limits": expected_view["live_progress"]["limits"],
+            "permission": expected_view[
+                "bounded_actions"
+            ]["permission"],
+            "usage": expected_view["bounded_actions"]["usage"],
+        }
+        phase27_recovery = {
+            "conductor_crashes": crash_counts["conductor"],
+            "delivery_crashes": crash_counts["delivery"],
+            "saved_state": expected_view["live_progress"]["recovery"],
+            "ledger_events": final_authority["event_count"],
+            "unique_claim_ids": len(claim_ids) == len(set(claim_ids)),
+            "unique_dispatch_ids": (
+                len(dispatch_ids) == len(set(dispatch_ids))
+            ),
+            "unique_receipt_hashes": (
+                len(receipt_hashes) == len(set(receipt_hashes))
+            ),
+            "no_duplicate_delivery_actions": True,
+        }
+        phase27_completion = {
+            "state": final_authority["state"],
+            "status": expected_view["live_progress"]["status"],
+            "progress": expected_view["live_progress"]["progress"],
+            "next_step": expected_view["live_progress"]["next_step"],
+            "completed_stories": final_authority["selected_stories"],
+            "completed_phases": final_authority["selected_phases"],
+        }
+        phase27_technical = {
+            "label": "Technical details",
+            "run_id": run_id,
+            "grant_hash": expected_view["grant_hash"],
+            "plan_hash": expected_view["plan_hash"],
+            "ledger_head": expected_view["ledger_head"],
+            "event_count": expected_view["event_count"],
+            "generation": expected_view["generation"],
+            "receipt_hashes": receipt_hashes,
+            "principal_fingerprints": sorted({
+                seat["principal_fingerprint"]
+                for seat in plan["roster"]["seats"]
+            }),
+            "exact_view_parity": [
+                "CLI", "MCP", "HTTP", "Workbench",
+            ],
+            "exact_event_parity": [
+                "CLI", "MCP", "HTTP", "SSE",
+            ],
+            "stream_events": len(expected_tail["events"]),
+        }
         output = {
             "kind": "delivery-workbench-autonomous-program-exam",
             "schema_version": 1,
+            "phase27_observations": {
+                "same_consumer": {
+                    "installed_from_wheel": True,
+                    "initial": same_consumer_initial,
+                    "optional_configuration": phase27_authoring,
+                },
+                "bounded_decision": bounded_decision_observation,
+                "stop_and_revoke": bounded_stop_observation,
+                "preflight": phase27_preflight,
+                "start": {
+                    "separate_confirmation": True,
+                    "preview_started_work": False,
+                    "start_state": started["state"],
+                    "run_id": run_id,
+                },
+                "delivery": phase27_delivery,
+                "recovery": phase27_recovery,
+                "completion": phase27_completion,
+                "technical_details": phase27_technical,
+            },
             "green": {
                 "run_id": run_id,
                 "state": final_authority["state"],

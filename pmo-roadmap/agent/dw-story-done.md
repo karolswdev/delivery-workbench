@@ -6,6 +6,13 @@ Close out the story the user names (or the current in-progress story
 from `.githooks/dw next`). Evidence first, then the flip, then the
 gated commit.
 
+## Delivery task
+
+Prove the work, complete its roadmap state, review the final files, and commit
+only the delivery that the saved proof supports.
+
+## Technical details
+
 1. Prove the work with real runs — for each documented verification
    command:
    `.githooks/dw evidence capture <project> <phase> <story> -- <command>`
