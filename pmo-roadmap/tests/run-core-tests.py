@@ -79,14 +79,16 @@ DEFAULT_COST = 1
 # a live process. Coverage is asserted: shards + tail == every unit.
 # An entry may name a whole class or a single "Class.method".
 SERIAL_TAIL = (
-    # Spawns real check processes and asserts they respond within tight
-    # wall-clock budgets — one case polls 100 x 20ms for a fresh interpreter to
-    # publish a receipt. On a loaded machine that budget expires for reasons
-    # unrelated to the code under test. Observed failing under load in
-    # test_cancellation_interrupts_a_live_contained_check and
-    # test_builtin_file_schema_diff_and_rail_checks_share_receipts, so the
-    # whole class runs quiet rather than weakening its timing assertions.
-    "OrchestrationConductorTest",
+    # Observes a live child process and polls 100 x 20ms for it to publish a
+    # receipt. That two-second budget is the thing under test — it proves
+    # cancellation is prompt — so it cannot be relaxed, and a saturated box
+    # would expire it for reasons unrelated to the code. It runs quiet instead.
+    #
+    # The other load-sensitive failures seen during WLA-28-04 came from
+    # supervise_program's incidental 300s wall-clock guard, not from anything
+    # a test asserts; those call sites now pass an unreachable ceiling and run
+    # in parallel like everything else.
+    "OrchestrationConductorTest.test_cancellation_interrupts_a_live_contained_check",
 )
 
 

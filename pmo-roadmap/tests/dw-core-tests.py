@@ -12126,6 +12126,11 @@ class ProgramConductorTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             max_ticks=12,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -12197,6 +12202,11 @@ class ProgramConductorTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             max_ticks=15,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -12314,6 +12324,11 @@ class ProgramConductorTest(unittest.TestCase):
         fixture = self.core.ProgramFixtureDriver()
         supervised = self.core.supervise_program(
             self.root, projection["run_id"], max_ticks=10,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config, adapters={"fixture": fixture},
             now=self.now,
         )
@@ -12386,6 +12401,11 @@ class ProgramConductorTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             max_ticks=10,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -12401,6 +12421,11 @@ class ProgramConductorTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             max_ticks=10,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -12557,6 +12582,11 @@ class ProgramConductorTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             max_ticks=10,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -12600,6 +12630,11 @@ class ProgramConductorTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             max_ticks=10,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -12665,6 +12700,11 @@ class ProgramConductorTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             max_ticks=10,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -12751,6 +12791,11 @@ class ProgramConductorTest(unittest.TestCase):
         fixture = self.core.ProgramFixtureDriver()
         result = self.core.supervise_program(
             self.root, projection["run_id"], max_ticks=12,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config, adapters={"fixture": fixture},
             now=self.now,
         )
@@ -12791,6 +12836,11 @@ class ProgramConductorTest(unittest.TestCase):
         })
         result = self.core.supervise_program(
             self.root, projection["run_id"], max_ticks=10,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config, adapters={"fixture": fixture},
             now=self.now,
         )
@@ -13033,6 +13083,11 @@ class ProgramConductorTest(unittest.TestCase):
         })
         result = self.core.supervise_program(
             self.root, projection["run_id"], max_ticks=30,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config, adapters={"fixture": fixture},
             now=self.now,
         )
@@ -13090,6 +13145,11 @@ class ProgramConductorTest(unittest.TestCase):
         fixture = self.core.ProgramFixtureDriver()
         result = self.core.supervise_program(
             self.root, projection["run_id"], max_ticks=30,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config, adapters={"fixture": fixture},
             now=self.now,
         )
@@ -13202,6 +13262,11 @@ class ProgramConductorTest(unittest.TestCase):
         fixture = self.core.ProgramFixtureDriver()
         result = self.core.supervise_program(
             self.root, projection["run_id"], max_ticks=20,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config, adapters={"fixture": fixture},
             now=self.now,
         )
@@ -13274,6 +13339,11 @@ class ProgramConductorTest(unittest.TestCase):
         })
         result = self.core.supervise_program(
             self.root, projection["run_id"], max_ticks=20,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config, adapters={"fixture": fixture},
             now=self.now,
         )
@@ -13445,6 +13515,11 @@ class ProgramConductorTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             max_ticks=5,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -13607,6 +13682,11 @@ class ProgramDeliveryTest(unittest.TestCase):
             self.root,
             projection["run_id"],
             max_ticks=12,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -13741,6 +13821,11 @@ class ProgramDeliveryTest(unittest.TestCase):
             self.root,
             second["run_id"],
             max_ticks=12,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,
@@ -13911,6 +13996,11 @@ class ProgramDeliveryTest(unittest.TestCase):
             self.root,
             run_id,
             max_ticks=12,
+            # WLA-28-04: the wall-clock guard defaults to 300s and is not what
+            # this case proves — max_ticks is the real bound and no test
+            # asserts a time-ceiling stop. A loaded machine must not decide
+            # the outcome, so the incidental ceiling is made unreachable.
+            max_seconds=86_400,
             driver_config=self.config,
             adapters={"fixture": fixture},
             now=self.now,

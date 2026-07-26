@@ -258,8 +258,12 @@ jobs:
           python3 -m py_compile pmo-roadmap/tests/workbench-accessibility-contract.py
           python3 -m compileall -q pmo-roadmap/lib/dw_pmo
 
-      - name: dw core unit tests
-        run: python3 pmo-roadmap/tests/dw-core-tests.py
+      - name: dw core unit tests (sharded)
+        # WLA-28-04: the same tests, spread across processes. Every test owns
+        # its own temp repository, so there is nothing to contend over. Use
+        # `--serial` (or run dw-core-tests.py directly) when debugging; the
+        # python-floor job below deliberately stays serial as a control.
+        run: python3 pmo-roadmap/tests/run-core-tests.py
 
       - name: Canon lint
         run: pmo-roadmap/tests/canon-lint.sh

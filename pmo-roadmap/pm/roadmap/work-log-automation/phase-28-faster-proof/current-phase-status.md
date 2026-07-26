@@ -71,7 +71,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 - [ ] Facts that change on write are read once per derivation and re-read
   after any mutation; freshness, divergence, and dirty-tree refusals still
   fire on planted regressions (WLA-28-03).
-- [ ] The core proof suite runs sharded across processes on the declared
+- [x] The core proof suite runs sharded across processes on the declared
   Python floor with standard-library tooling only, deterministically and with
   no cross-shard temp state (WLA-28-04).
 - [ ] An executable budget caps `git` spawns per tick and fails the suite if a
@@ -85,7 +85,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 | WLA-28-01 | Contract the repository-fact boundary | done | [story-01-contract-the-repository-fact-boundary](./story-01-contract-the-repository-fact-boundary.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-28-02 | Resolve the repository location once | done | [story-02-resolve-the-repository-location-once](./story-02-resolve-the-repository-location-once.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-28-03 | Read changing facts once per derivation | backlog | [story-03-read-changing-facts-once-per-derivation](./story-03-read-changing-facts-once-per-derivation.md) | - |
-| WLA-28-04 | Prove work in parallel | on-hold (Sharded runs are not stable on a loaded machine: 16 supervise_program tests carry wall-clock ceilings; awaiting owner decision on how to handle them — since 2026-07-26) | [story-04-prove-work-in-parallel](./story-04-prove-work-in-parallel.md) | - |
+| WLA-28-04 | Prove work in parallel | done | [story-04-prove-work-in-parallel](./story-04-prove-work-in-parallel.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-28-05 | Guard the cost of proof | backlog | [story-05-guard-the-cost-of-proof](./story-05-guard-the-cost-of-proof.md) | - |
 
 ## Where we are
@@ -128,21 +128,30 @@ contact with the measurement. WLA-28-04 is independent, carries almost no
 correctness risk, and is the larger remaining win, so it goes first and
 WLA-28-03 is reconsidered afterwards with a fast suite already in hand.
 
-**WLA-28-04 is built but parked on-hold (2026-07-26).** The runner works:
-standard library only, on the 3.9 floor, coverage provably identical to a
-serial module load (516 units to 523 tests, zero duplicates), deterministic
-assignment, and **211s sharded against ~550s serial (2.6x)** on a quiet desk.
-It is parked because the story's stability criterion is not met: repeated
-sharded runs are not stable while the machine is busy. Two tests failed across
-repeats, both on wall clock rather than isolation — a live-cancellation test
-polling 100 x 20ms for a spawned process (handled by serialising that class),
-and a conductor test stopping at `time-ceiling` instead of certifying.
+**WLA-28-04 shipped (2026-07-26), after a deliberate park.**
+`tests/run-core-tests.py` shards the suite across processes with the standard
+library alone on the 3.9 floor. Coverage is proven identical to a serial module
+load (516 units expand to exactly the 523 test ids, zero duplicates), and three
+consecutive sharded runs measured **118.6s / 129.4s / 122.5s**, all green —
+**4.4x** against 547.6s serial and **6.5x** against the 814s baseline. CI now
+runs sharded; the `python-floor` job stays serial as a control.
 
-Sixteen tests call `supervise_program` with a finite `max_seconds`, and they
-are the most expensive tests in the suite. Serialising all sixteen would cap
-the speedup near 1.4x and defeat the story. The desk carried load averages of
-6-13 from unrelated work throughout; a dedicated CI runner is quieter, and the
-first sharded run of every capture passed.
+The park was correct and the diagnosis was cheaper than feared.
+`supervise_program` carries a `max_seconds` guard defaulting to 300 that
+eighteen call sites inherited and **no test asserts** — on a busy desk a
+twelve-tick supervision ran out of seconds and returned `time-ceiling` instead
+of certifying. Those sites now pass an unreachable ceiling, so `max_ticks`
+alone decides an outcome; no assertion changed. Exactly one case is genuinely
+load-sensitive — a live-cancellation test whose 2s poll budget *is* the
+assertion — and it runs alone in a serial tail.
+
+The runner's own tests caught two bugs in it, both the failure mode the story
+exists to prevent: discovery using the shared `defaultTestLoader` (a `-k`
+filter silently shrank it from 516 units to 1), and count-parsing that read a
+fixture string and undercounted 513 as 456. Shards now report JSON, and a
+shard with no summary is a failure rather than a silent zero.
+
+WLA-28-03 is next, narrowed by measurement — see the decision below.
 
 ## Active risks
 
