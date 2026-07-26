@@ -24,8 +24,11 @@ Profiling the core suite on the desk produced the facts this phase acts on:
   **53 spawns per conductor tick**.
 - `program_delivery.py` calls `rev-parse --git-dir` **three times in one
   expression** where two are always redundant.
-- Four private git-directory resolutions exist (`program_run`,
-  `orchestration_run`, `signals`, plus an inline resolution in `contract.py`).
+- Four private git-directory resolutions were counted at phase open
+  (`program_run`, `orchestration_run`, `signals`, plus an inline resolution in
+  `contract.py`). WLA-28-01's fitness guard corrected this to **five** spawning
+  sites — `gitio.in_rewrite_state` was missed — plus `signals.py`, which
+  resolves privately without spawning.
 - A scratch experiment memoizing one resolver cut the slowest test
   **80.6s to 40.6s (2.0x)** and the whole suite **814s to 619s**, with all 499
   tests still passing.
@@ -59,7 +62,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 
 ## Exit criteria (evidence required)
 
-- [ ] One documented, executable contract owns repository-derived facts and
+- [x] One documented, executable contract owns repository-derived facts and
   states, per fact, whether it is process-immutable or derivation-scoped; no
   module resolves the git directory privately (WLA-28-01).
 - [ ] The git directory is resolved at most once per repository per process;
@@ -79,7 +82,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-28-01 | Contract the repository-fact boundary | ready | [story-01-contract-the-repository-fact-boundary](./story-01-contract-the-repository-fact-boundary.md) | - |
+| WLA-28-01 | Contract the repository-fact boundary | done | [story-01-contract-the-repository-fact-boundary](./story-01-contract-the-repository-fact-boundary.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-28-02 | Resolve the repository location once | backlog | [story-02-resolve-the-repository-location-once](./story-02-resolve-the-repository-location-once.md) | - |
 | WLA-28-03 | Read changing facts once per derivation | backlog | [story-03-read-changing-facts-once-per-derivation](./story-03-read-changing-facts-once-per-derivation.md) | - |
 | WLA-28-04 | Prove work in parallel | backlog | [story-04-prove-work-in-parallel](./story-04-prove-work-in-parallel.md) | - |
@@ -87,9 +90,21 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 
 ## Where we are
 
-Phase opened 2026-07-26 with profiling evidence in hand. WLA-28-01 is ready:
-it contracts the boundary the other four stories depend on. Implementation is
-story-scoped; no behavior change ships in the opening commit.
+Phase opened 2026-07-26 with profiling evidence in hand. WLA-28-01 shipped the
+boundary the other four stories depend on: `delivery-workbench-repository-facts@1`
+in `dw_pmo/repofacts.py`, eight facts classified, the invalidation rule
+expressed as `repofacts.Derivation`, and a fitness guard that fails on any new
+private git-directory resolution. No caching and no caller changes shipped with
+it, deliberately — the rule lands before anything reuses a fact.
+
+The guard immediately corrected two of the phase's own assumptions: there are
+five spawning sites rather than four (`gitio.in_rewrite_state` was missed), and
+`signals.py` resolves the git directory privately without spawning, in a way
+that is wrong for linked worktrees. Both are recorded and pinned by tests for
+WLA-28-02 to resolve.
+
+WLA-28-02 is next: route every site through the boundary, memoize the
+process-immutable resolution, and collapse the triple-call expression.
 
 ## Active risks
 
@@ -107,6 +122,12 @@ story-scoped; no behavior change ships in the opening commit.
   this status.
 - 2026-07-26 - Speed may not weaken freshness; the hard constraint above binds
   every story - a stale gate is worse than a slow one - owner direction.
+- 2026-07-26 - The fitness guard ships before the migration, with a declared
+  shrinking ledger of remaining sites rather than a silent exemption - it
+  caught a missed site on its first run - WLA-28-01.
+- 2026-07-26 - `signals.py`'s worktree defect is pinned by a test and left for
+  WLA-28-02 rather than repaired inside the contract story - keeps the
+  boundary commit free of behavior change - WLA-28-01.
 
 ## Decisions deferred
 

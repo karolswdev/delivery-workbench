@@ -2,16 +2,16 @@
 
 - **Project:** work-log-automation
 - **Phase:** 28
-- **Status:** ready
+- **Status:** done
 - **Depends on:** -
 - **Unblocks:** WLA-28-02, WLA-28-03, WLA-28-05
 - **Owner:** unassigned
 
 ## Problem
 
-Repository-derived facts are read ad hoc. Four places resolve the git
-directory privately (`program_run`, `orchestration_run`, `signals`, and an
-inline resolution in `contract.py`), and callers re-derive `HEAD`, the index
+Repository-derived facts are read ad hoc. Several places resolve the git
+directory privately — five spawning sites plus `signals.py`, as the fitness
+guard established once it existed — and callers re-derive `HEAD`, the index
 tree, the current branch, and remote refs wherever they happen to need them.
 Nothing states which of these facts can change while a process runs, so no
 caller can safely reuse one, and the only safe habit is to spawn `git` again.
@@ -37,20 +37,21 @@ a guess and a future staleness bug.
 
 ## Acceptance criteria
 
-- [ ] One module owns repository-derived facts and is the only place that
+- [x] One module owns repository-derived facts and is the only place that
   resolves the git directory; the four private resolutions are named in the
-  contract as the sites to be replaced.
-- [ ] Every fact the boundary serves is classified explicitly as
+  contract as the sites to be replaced (the guard corrected this to five
+  spawning sites plus one non-spawning resolver).
+- [x] Every fact the boundary serves is classified explicitly as
   process-immutable (git directory, repository identity) or
   derivation-scoped (`HEAD`, index tree, current branch, remote refs,
   working-tree status), with the reason recorded.
-- [ ] The invalidation rule for derivation-scoped facts is stated in the
+- [x] The invalidation rule for derivation-scoped facts is stated in the
   contract and expressed in code, not only in prose.
-- [ ] A fitness test fails if any module outside the boundary resolves the git
+- [x] A fitness test fails if any module outside the boundary resolves the git
   directory itself, in the style of the existing architecture fitness tests.
-- [ ] The boundary changes no observable behavior: the full core suite passes
+- [x] The boundary changes no observable behavior: the full core suite passes
   unchanged, with no test edited to assert less.
-- [ ] The classification is documented where the architecture material lives
+- [x] The classification is documented where the architecture material lives
   and is discoverable from the phase status.
 
 ## Test plan
@@ -59,8 +60,8 @@ a guess and a future staleness bug.
   class); the immutable/derivation-scoped split is asserted directly.
 - **Integration:** full core suite green with the boundary in place and no
   caller changes; planted private resolver is rejected by the fitness test.
-- **Manual:** read the contract and confirm each of the four named private
-  resolution sites appears with its replacement target.
+- **Manual:** read the contract and confirm each named private resolution
+  site appears with its replacement target.
 
 ## Notes / open questions
 
@@ -70,3 +71,31 @@ mechanical once the classification exists; without it they are unsafe.
 Deliberately no caching ships in this story — only the boundary and its rules.
 That keeps the first commit's risk near zero and makes the later speed commits
 easy to review against a stated rule.
+
+Implemented `delivery-workbench-repository-facts@1` in `dw_pmo/repofacts.py`.
+Eight facts are classified: two process-immutable (`git_dir`,
+`repository_id`) and six derivation-scoped (`head_sha`, `index_tree`,
+`current_branch`, `remote_url`, `remote_ref`, `worktree_status`). The
+invalidation rule is expressed as `repofacts.Derivation`, which computes each
+scoped fact at most once, refuses to hold a process-immutable fact, and drops
+everything on `invalidate()`.
+
+Two corrections the fitness test forced on the phase's own assumptions:
+
+1. The phase status counted four private git-directory resolutions. There are
+   **five** spawning sites — `gitio.py` (`in_rewrite_state`) was missed. The
+   guard caught it immediately, which is the argument for writing the guard
+   before the migration rather than after.
+2. `signals.py` resolves the git directory privately **without** a subprocess:
+   it assumes `root/.git` is a directory. That is cheap, so it never showed up
+   in the profile, but it is wrong wherever `.git` is a file — a linked
+   worktree or a submodule. A test pins the defect (the boundary resolves a
+   linked worktree correctly; `signals._git_dir` raises) so WLA-28-02 fixes it
+   rather than preserving it by accident. This is a latent correctness bug
+   found by performance work, recorded rather than silently repaired here.
+
+The ledger is therefore two tuples: `PENDING_PRIVATE_RESOLVERS` (five spawning
+sites, must reach empty in WLA-28-02) and `PRIVATE_NON_SPAWNING_RESOLVERS`
+(`signals.py`). Both are asserted in both directions — the guard fails on a new
+undeclared resolver, and it also fails if the ledger names a site that no
+longer offends, so it cannot rot into a permanent exemption.

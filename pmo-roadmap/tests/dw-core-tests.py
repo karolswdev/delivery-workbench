@@ -19230,5 +19230,183 @@ class SignalsTest(unittest.TestCase):
         self.assertEqual(snapshot["refusal"], "network-error")
 
 
+class RepositoryFactsContractTest(unittest.TestCase):
+    """WLA-28-01: the boundary that owns repository-derived facts.
+
+    The boundary exists so that later stories can reuse a fact against a
+    stated rule instead of a guess.  These cases pin the rule itself: the
+    census is total, the classes are the declared two, the invalidation rule
+    is expressed in code, and no NEW module resolves the git directory
+    privately.
+    """
+
+    def setUp(self):
+        import dw_pmo.repofacts as repofacts
+
+        self.repofacts = repofacts
+        self.lib_dir = TESTS_DIR.parent / "lib" / "dw_pmo"
+
+    # -- the census ------------------------------------------------------
+
+    def test_every_served_fact_declares_a_valid_class_and_reason(self):
+        rf = self.repofacts
+        self.assertTrue(rf.REPOSITORY_FACTS, "the census may not be empty")
+        for name, entry in rf.REPOSITORY_FACTS.items():
+            with self.subTest(fact=name):
+                self.assertIn(
+                    entry["class"], rf.FACT_CLASSES,
+                    f"{name} must be one of the declared classes",
+                )
+                self.assertTrue(entry["command"], f"{name} must name its git command")
+                self.assertTrue(
+                    str(entry["reason"]).strip(),
+                    f"{name} must record why it holds its class",
+                )
+
+    def test_the_split_is_exactly_where_the_phase_says_it_is(self):
+        rf = self.repofacts
+        immutable = {n for n in rf.REPOSITORY_FACTS if rf.is_process_immutable(n)}
+        scoped = set(rf.REPOSITORY_FACTS) - immutable
+        # Where the repository IS may be cached for the process.
+        self.assertEqual(immutable, {"git_dir", "repository_id"})
+        # What the repository CONTAINS may not.
+        self.assertEqual(
+            scoped,
+            {
+                "head_sha", "index_tree", "current_branch",
+                "remote_url", "remote_ref", "worktree_status",
+            },
+        )
+
+    def test_unknown_facts_are_refused_rather_than_defaulted(self):
+        with self.assertRaises(DwError):
+            self.repofacts.fact_class("whatever_seems_handy")
+
+    def test_contract_document_is_versioned_and_total(self):
+        doc = self.repofacts.contract_document()
+        self.assertEqual(doc["kind"], "delivery-workbench-repository-facts")
+        self.assertEqual(doc["schema_version"], 1)
+        self.assertEqual(
+            set(doc["facts"]), set(self.repofacts.REPOSITORY_FACTS),
+            "the document must serve the whole census",
+        )
+        json.dumps(doc)  # must stay machine-readable
+
+    # -- the invalidation rule, expressed in code ------------------------
+
+    def test_derivation_computes_once_and_a_mutation_invalidates(self):
+        d = self.repofacts.Derivation(Path("/nonexistent"))
+        calls = []
+
+        def produce():
+            calls.append(1)
+            return f"value-{len(calls)}"
+
+        self.assertEqual(d.fact("head_sha", produce), "value-1")
+        self.assertEqual(d.fact("head_sha", produce), "value-1")
+        self.assertEqual(len(calls), 1, "reuse inside one derivation")
+
+        d.invalidate()
+        self.assertEqual(d.fact("head_sha", produce), "value-2",
+                         "a mutation must force a re-read")
+        self.assertEqual(d.invalidations, 1)
+
+    def test_derivation_keys_facts_so_distinct_targets_do_not_collide(self):
+        d = self.repofacts.Derivation(Path("/nonexistent"))
+        self.assertEqual(d.fact("remote_ref", lambda: "a", "origin/main"), "a")
+        self.assertEqual(d.fact("remote_ref", lambda: "b", "origin/other"), "b")
+
+    def test_a_derivation_refuses_to_hold_a_process_immutable_fact(self):
+        d = self.repofacts.Derivation(Path("/nonexistent"))
+        with self.assertRaises(DwError):
+            d.fact("git_dir", lambda: "anything")
+
+    # -- resolution ------------------------------------------------------
+
+    def test_git_dir_resolves_and_refuses_a_non_repository(self):
+        tmp = Path(tempfile.mkdtemp(prefix="dw-repofacts-test.")).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        repo = tmp / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        self.assertEqual(
+            self.repofacts.git_dir(repo), (repo / ".git").resolve()
+        )
+
+        outside = tmp / "not-a-repo"
+        outside.mkdir()
+        with mock.patch.object(self.repofacts, "run_git", return_value=None):
+            with self.assertRaises(DwError):
+                self.repofacts.git_dir(outside)
+
+    # -- the fitness guard -----------------------------------------------
+
+    def _modules_resolving_git_dir_privately(self):
+        offenders = []
+        for path in sorted(self.lib_dir.glob("*.py")):
+            if path.name == "repofacts.py":
+                continue  # the boundary is allowed to ask
+            text = path.read_text(encoding="utf-8")
+            if '"--git-dir"' in text or "'--git-dir'" in text:
+                offenders.append(path.name)
+        return offenders
+
+    def test_no_new_module_resolves_the_git_directory_privately(self):
+        offenders = set(self._modules_resolving_git_dir_privately())
+        declared = set(self.repofacts.PENDING_PRIVATE_RESOLVERS)
+        new = offenders - declared
+        self.assertEqual(
+            new, set(),
+            "these modules resolve the git directory privately without being "
+            f"declared in PENDING_PRIVATE_RESOLVERS: {sorted(new)}. Route them "
+            "through dw_pmo.repofacts instead.",
+        )
+
+    def test_the_boundary_resolves_a_linked_worktree_where_git_is_a_file(self):
+        # WLA-28-01 finding: signals.py derives the git directory by assuming
+        # root/.git is a directory, which is false in a linked worktree.  The
+        # boundary asks git, so it gets this right.  Pinned here so WLA-28-02
+        # folds signals.py in rather than preserving the defect.
+        tmp = Path(tempfile.mkdtemp(prefix="dw-repofacts-worktree.")).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        main = tmp / "main"
+        main.mkdir()
+
+        def git(*args, cwd=main):
+            subprocess.run(["git", "-C", str(cwd), *args], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        git("init", "-q")
+        git("config", "user.name", "Repo Facts Test")
+        git("config", "user.email", "repofacts@example.test")
+        (main / "seed.txt").write_text("seed\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-qm", "seed", "--no-verify")
+
+        linked = tmp / "linked"
+        git("worktree", "add", "-q", "--detach", str(linked))
+        self.assertTrue((linked / ".git").is_file(),
+                        "a linked worktree stores .git as a file")
+
+        resolved = self.repofacts.git_dir(linked)
+        self.assertTrue(resolved.is_dir(), "the boundary must find the real dir")
+        self.assertIn("worktrees", resolved.parts)
+
+        import dw_pmo.signals as signals
+        with self.assertRaises(DwError):
+            # The defect, pinned: the private resolver cannot see this repo.
+            signals._git_dir(linked)
+
+    def test_the_pending_ledger_names_only_real_remaining_sites(self):
+        offenders = set(self._modules_resolving_git_dir_privately())
+        stale = set(self.repofacts.PENDING_PRIVATE_RESOLVERS) - offenders
+        self.assertEqual(
+            stale, set(),
+            f"PENDING_PRIVATE_RESOLVERS still lists {sorted(stale)}, which no "
+            "longer resolve the git directory privately. The ledger must "
+            "shrink as WLA-28-02 replaces each site.",
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

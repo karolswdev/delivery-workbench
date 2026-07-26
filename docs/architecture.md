@@ -45,6 +45,32 @@ separation), `program_deliberation`/`program_verdict` (governed judgments),
 and sole authority ledger), and `program_conductor` (replay-first hierarchical
 scheduling and recovery).
 
+Phase 28 adds `repofacts`, the boundary that owns repository-derived facts.
+Every fact it serves is classified in one versioned census
+(`delivery-workbench-repository-facts@1`) as either **process-immutable** or
+**derivation-scoped**, and the class decides what may be reused:
+
+| Class | Facts | Reuse rule |
+|---|---|---|
+| process-immutable | `git_dir`, `repository_id` | Resolve once per repository root, reuse for the life of the process. Where the repository *is* cannot change under a running process. |
+| derivation-scoped | `head_sha`, `index_tree`, `current_branch`, `remote_url`, `remote_ref`, `worktree_status` | Reuse only inside one derivation — one frontier computation, one freshness check, one plan build. Any mutation invalidates them. |
+
+The distinction exists because it was previously unstated. With no rule about
+which answers survive, no caller could safely reuse one, and the only safe
+habit was to ask `git` again — roughly fifty-three `rev-parse --git-dir`
+spawns per program conductor tick for a value fixed for the process. The
+invalidation rule is expressed in code as `repofacts.Derivation`, which
+computes each scoped fact at most once, refuses to hold a process-immutable
+fact, and drops everything on `invalidate()`.
+
+The governing constraint is that speed may never buy itself with staleness. A
+derivation-scoped fact that outlived a write would silently defeat the
+freshness, divergence, and dirty-tree refusals that exist to fail closed, so
+those refusals are proven by planted regressions rather than assumed. A
+fitness test (`RepositoryFactsContractTest`) fails if any module outside the
+boundary resolves the git directory privately; sites awaiting migration are
+declared in a shrinking ledger rather than exempted silently.
+
 `status` is the read-only composition root for an agent's first question. It
 joins doctor, roadmap validation, git/contract/gate state, current progress,
 holds, and the next story into the versioned
