@@ -24,7 +24,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .model import DONE_STATUSES, STORY_ID_RE, die
+from . import repofacts
+from .model import DONE_STATUSES, STORY_ID_RE, DwError, die
 from .gitio import (
     config_value,
     current_branch,
@@ -521,14 +522,13 @@ def archive_contract(
     """Idempotently archive the consumed contract for an exact commit."""
     if not re.fullmatch(r"[0-9a-f]{40,64}", commit_sha):
         die("contract archive commit id is invalid")
-    git_dir_raw = subprocess.check_output(
-        ["git", "-C", str(root), "rev-parse", "--git-dir"],
-        text=True,
-        stderr=subprocess.DEVNULL,
-    ).strip()
-    git_dir = Path(git_dir_raw)
-    if not git_dir.is_absolute():
-        git_dir = (root / git_dir).resolve()
+    # WLA-28-02: routed through the repository-fact boundary rather than
+    # spawning git here. The archive must land in the real git directory, so a
+    # failure to resolve it stays fatal.
+    try:
+        git_dir = repofacts.git_dir(root)
+    except DwError:
+        die("cannot resolve the repository Git directory for the archive")
     archive_dir = git_dir / "pmo-contract-archive" / commit_sha
     archive = archive_dir / "CONTRACT.md"
     contract_path = root / CONTRACT_REL

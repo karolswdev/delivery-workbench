@@ -23,6 +23,7 @@ import subprocess
 import tempfile
 from typing import Iterator
 
+from . import repofacts
 from .gitio import current_branch, head_sha, in_rewrite_state, run_git, write_tree
 from .model import DwError
 from .orchestration import canonical_json
@@ -413,12 +414,13 @@ def _format_time(value: datetime) -> str:
 
 
 def _git_dir(root: Path) -> Path:
-    raw = (run_git(root, "rev-parse", "--git-dir") or "").strip()
-    _require(bool(raw), "program authority requires a Git repository")
-    path = Path(raw)
-    if not path.is_absolute():
-        path = root.resolve() / path
-    return path.resolve()
+    # WLA-28-02: the repository-fact boundary owns this resolution and
+    # memoizes it per root. Program authority still refuses a non-repository,
+    # so the boundary's error is translated to this module's refusal.
+    try:
+        return repofacts.git_dir(root)
+    except DwError as exc:
+        raise DwError("program authority requires a Git repository") from exc
 
 
 def program_store_dir(root: Path) -> Path:

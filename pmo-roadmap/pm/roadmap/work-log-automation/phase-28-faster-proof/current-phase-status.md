@@ -65,7 +65,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 - [x] One documented, executable contract owns repository-derived facts and
   states, per fact, whether it is process-immutable or derivation-scoped; no
   module resolves the git directory privately (WLA-28-01).
-- [ ] The git directory is resolved at most once per repository per process;
+- [x] The git directory is resolved at most once per repository per process;
   `rev-parse --git-dir` spawns per conductor tick drop from ~53 to at most 1,
   and the triple-call expression is gone (WLA-28-02).
 - [ ] Facts that change on write are read once per derivation and re-read
@@ -83,7 +83,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-28-01 | Contract the repository-fact boundary | done | [story-01-contract-the-repository-fact-boundary](./story-01-contract-the-repository-fact-boundary.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-28-02 | Resolve the repository location once | backlog | [story-02-resolve-the-repository-location-once](./story-02-resolve-the-repository-location-once.md) | - |
+| WLA-28-02 | Resolve the repository location once | done | [story-02-resolve-the-repository-location-once](./story-02-resolve-the-repository-location-once.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-28-03 | Read changing facts once per derivation | backlog | [story-03-read-changing-facts-once-per-derivation](./story-03-read-changing-facts-once-per-derivation.md) | - |
 | WLA-28-04 | Prove work in parallel | backlog | [story-04-prove-work-in-parallel](./story-04-prove-work-in-parallel.md) | - |
 | WLA-28-05 | Guard the cost of proof | backlog | [story-05-guard-the-cost-of-proof](./story-05-guard-the-cost-of-proof.md) | - |
@@ -103,8 +103,17 @@ five spawning sites rather than four (`gitio.in_rewrite_state` was missed), and
 that is wrong for linked worktrees. Both are recorded and pinned by tests for
 WLA-28-02 to resolve.
 
-WLA-28-02 is next: route every site through the boundary, memoize the
-process-immutable resolution, and collapse the triple-call expression.
+WLA-28-02 then routed all six sites through the boundary and memoized the
+resolution per root. `rev-parse --git-dir` is gone from the tick path
+entirely: 2,435 spawns to **0** in the slowest test, total git subprocesses
+4,633 to 2,198, git time 63.3s to 25.0s, and the full suite **814s to 547.6s**
+while running 14 more tests than the baseline. Two latent worktree defects were
+fixed on the way (`signals.py` and `orchestration_run`'s `root/.git` fast
+path), and both ledgers are empty and asserted empty in both directions.
+
+WLA-28-03 is next: the remaining ~1,774 spawns per slow test are facts that do
+change — `HEAD`, index tree, branch, remote refs — which need a
+derivation-scoped snapshot with proven invalidation, not a process cache.
 
 ## Active risks
 

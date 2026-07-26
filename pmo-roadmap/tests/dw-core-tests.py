@@ -19392,10 +19392,96 @@ class RepositoryFactsContractTest(unittest.TestCase):
         self.assertTrue(resolved.is_dir(), "the boundary must find the real dir")
         self.assertIn("worktrees", resolved.parts)
 
+        # WLA-28-02 fixed the defect WLA-28-01 pinned here: signals.py now
+        # routes through the boundary, so it resolves a linked worktree
+        # instead of refusing to work in one.
         import dw_pmo.signals as signals
-        with self.assertRaises(DwError):
-            # The defect, pinned: the private resolver cannot see this repo.
-            signals._git_dir(linked)
+        self.assertEqual(signals._git_dir(linked), resolved)
+
+    def test_git_dir_is_resolved_once_per_root_and_keyed_not_global(self):
+        # WLA-28-02: the whole point of the phase. One spawn per root, and
+        # never one repository's answer handed to another.
+        rf = self.repofacts
+        tmp = Path(tempfile.mkdtemp(prefix="dw-repofacts-cache.")).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        roots = []
+        for name in ("alpha", "beta"):
+            repo = tmp / name
+            repo.mkdir()
+            subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+            roots.append(repo)
+
+        rf.reset_cache()
+        self.addCleanup(rf.reset_cache)
+        spawns = []
+        real_run_git = rf.run_git
+
+        def counting(root, *args):
+            spawns.append(args)
+            return real_run_git(root, *args)
+
+        with mock.patch.object(rf, "run_git", counting):
+            first = [rf.git_dir(r) for r in roots]
+            for _ in range(25):
+                for r in roots:
+                    rf.git_dir(r)
+
+        self.assertEqual(
+            len(spawns), 2,
+            "two roots must cost exactly two resolutions, not one per call",
+        )
+        self.assertEqual(first[0], (roots[0] / ".git").resolve())
+        self.assertEqual(first[1], (roots[1] / ".git").resolve())
+        self.assertNotEqual(first[0], first[1],
+                            "the cache must be keyed by root, never global")
+
+    def test_a_failed_resolution_is_not_cached_as_success(self):
+        rf = self.repofacts
+        rf.reset_cache()
+        self.addCleanup(rf.reset_cache)
+        tmp = Path(tempfile.mkdtemp(prefix="dw-repofacts-fail.")).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        repo = tmp / "repo"
+        repo.mkdir()
+        with mock.patch.object(rf, "run_git", return_value=None):
+            with self.assertRaises(DwError):
+                rf.git_dir(repo)
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+        self.assertEqual(rf.git_dir(repo), (repo / ".git").resolve())
+
+    def test_one_conductor_tick_stays_under_the_git_dir_spawn_ceiling(self):
+        # The phase's headline number: ~53 rev-parse --git-dir spawns per tick
+        # before WLA-28-02. The boundary caches per root, so a tick may cost
+        # at most one — and zero once the root is already resolved.
+        import dw_pmo.gitio as gitio
+        import dw_pmo.repofacts as rf
+
+        conductor = ProgramConductorTest(
+            "test_tick_conducts_implementer_then_independent_verifier"
+        )
+        conductor.setUp()
+        self.addCleanup(conductor.doCleanups)
+
+        rf.reset_cache()
+        self.addCleanup(rf.reset_cache)
+        git_dir_spawns = []
+        real_run_git = gitio.run_git
+
+        def counting(root, *args):
+            if args[:2] == ("rev-parse", "--git-dir"):
+                git_dir_spawns.append(str(root))
+            return real_run_git(root, *args)
+
+        projection = conductor.start()
+        with mock.patch.object(gitio, "run_git", counting), \
+                mock.patch.object(rf, "run_git", counting):
+            conductor.advance_to_agent(projection)
+
+        self.assertLessEqual(
+            len(git_dir_spawns), 1,
+            "a conductor tick must resolve the git directory at most once; "
+            f"saw {len(git_dir_spawns)} spawns",
+        )
 
     def test_the_pending_ledger_names_only_real_remaining_sites(self):
         offenders = set(self._modules_resolving_git_dir_privately())

@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
+from . import repofacts
 from .gitio import current_branch, head_sha, in_rewrite_state, run_git, write_tree
 from .model import DwError, normalize_status
 from .orchestration import (
@@ -211,17 +212,14 @@ def _file_sha(path: Path | None) -> str | None:
 
 
 def _git_dir(root: Path) -> Path:
-    root = root.resolve()
-    direct = root / ".git"
-    if direct.is_dir():
-        return direct.resolve()
-    raw = run_git(root, "rev-parse", "--git-dir")
-    if not raw:
-        raise DwError("orchestration runs require a Git repository")
-    path = Path(raw.strip())
-    if not path.is_absolute():
-        path = root / path
-    path = path.resolve()
+    # WLA-28-02: routed through the repository-fact boundary, which memoizes
+    # the resolution per root. The previous fast path returned root/.git
+    # without asking git; that is wrong for a linked worktree, where .git is a
+    # file. The boundary asks git and gets it right.
+    try:
+        path = repofacts.git_dir(root)
+    except DwError as exc:
+        raise DwError("orchestration runs require a Git repository") from exc
     if not path.is_dir():
         raise DwError("cannot resolve the repository Git directory")
     return path

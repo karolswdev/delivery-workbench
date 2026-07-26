@@ -93,12 +93,15 @@ def staged_entries(root: Path) -> list[tuple[str, str, str | None]]:
 
 
 def in_rewrite_state(root: Path) -> bool:
-    git_dir = (run_git(root, "rev-parse", "--git-dir") or "").strip()
-    if not git_dir:
+    # WLA-28-02: routed through the repository-fact boundary, which memoizes
+    # the resolution. Imported inside the function because repofacts builds on
+    # this module — a module-level import would be circular.
+    from . import repofacts
+
+    try:
+        gd = repofacts.git_dir(root)
+    except DwError:
         return False
-    gd = Path(git_dir)
-    if not gd.is_absolute():
-        gd = root / gd
     return (
         (gd / "rebase-merge").is_dir()
         or (gd / "rebase-apply").is_dir()

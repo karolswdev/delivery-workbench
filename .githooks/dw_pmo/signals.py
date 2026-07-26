@@ -123,11 +123,16 @@ def _parse_time(value, field):
 
 
 def _git_dir(root):
-    root = Path(root)
-    candidate = root / ".git"
-    if candidate.is_dir():
-        return candidate
-    raise DwError("signals need a repository with a .git directory")
+    # WLA-28-02: routed through the repository-fact boundary. This previously
+    # assumed root/.git was a directory, which is false in a linked worktree
+    # or a submodule, where .git is a file pointing at the real directory —
+    # signals simply refused to work there. The boundary asks git.
+    from . import repofacts
+
+    try:
+        return repofacts.git_dir(root)
+    except DwError as exc:
+        raise DwError("signals need a repository with a .git directory") from exc
 
 
 def signal_store_dir(root):

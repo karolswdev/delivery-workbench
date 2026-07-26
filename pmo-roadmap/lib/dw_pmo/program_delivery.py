@@ -36,6 +36,7 @@ from .contract import (
     contract_digest,
     write_contract,
 )
+from . import repofacts
 from .gate import run_gate
 from .gitio import head_sha, write_tree
 from .model import DwError
@@ -1956,11 +1957,10 @@ def _execute_commit(
         "tree": expected_tree,
         "message_hash": _sha({"message": expected_message}),
         "contract_digest": detail["contract_digest"],
-        "archive": str(archive.relative_to(
-            Path(_git_text(root, "rev-parse", "--git-dir")).resolve()
-            if Path(_git_text(root, "rev-parse", "--git-dir")).is_absolute()
-            else (root / _git_text(root, "rev-parse", "--git-dir")).resolve()
-        )),
+        # WLA-28-02: one resolution through the repository-fact boundary. This
+        # expression previously spawned rev-parse --git-dir three times, twice
+        # redundantly, to answer the same question.
+        "archive": str(archive.relative_to(repofacts.git_dir(root))),
         "gate": "pass",
         "verify": "pass",
         "reconciled": reconciled,

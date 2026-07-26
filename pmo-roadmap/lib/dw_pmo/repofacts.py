@@ -97,25 +97,13 @@ REPOSITORY_FACTS = {
     },
 }
 
-# Modules that still spawn ``rev-parse --git-dir`` privately, declared here so
-# the fitness test can fail on anything NEW while WLA-28-02 replaces these.
-# This tuple must reach empty in WLA-28-02; it is a shrinking ledger, not a
-# permanent exemption.
-PENDING_PRIVATE_RESOLVERS = (
-    "contract.py",
-    "gitio.py",
-    "orchestration_run.py",
-    "program_delivery.py",
-    "program_run.py",
-)
-
-# ``signals.py`` resolves the git directory privately too, but without a
-# subprocess: it assumes ``root/.git`` is a directory.  That is cheap, so it is
-# not a performance offender, but it is *wrong* where ``.git`` is a file — a
-# linked worktree or a submodule — and the spawn-based census above cannot see
-# it.  Recorded here so WLA-28-02 folds it into the boundary and fixes the
-# worktree case rather than preserving it by accident.
-PRIVATE_NON_SPAWNING_RESOLVERS = ("signals.py",)
+# Modules that still resolve the git directory privately.  WLA-28-01 opened
+# this ledger with five spawning sites plus one non-spawning one; WLA-28-02
+# emptied both.  They stay here, asserted empty in both directions, so a future
+# private resolver has to be added deliberately and visibly rather than
+# appearing by habit.
+PENDING_PRIVATE_RESOLVERS: "tuple[str, ...]" = ()
+PRIVATE_NON_SPAWNING_RESOLVERS: "tuple[str, ...]" = ()
 
 
 def fact_class(name: str) -> str:
@@ -130,21 +118,45 @@ def is_process_immutable(name: str) -> bool:
     return fact_class(name) == PROCESS_IMMUTABLE
 
 
-def git_dir(root: Path) -> Path:
-    """Resolve the repository's git directory.
+# Resolved git directories, keyed by resolved repository root.  Keyed rather
+# than global because one process routinely serves several repositories — the
+# test suite builds a fresh fixture repository per test — so a single slot
+# would hand one repository another's store.  Only successful resolutions are
+# cached; a failure must stay a failure.
+_GIT_DIR_CACHE: "dict[str, Path]" = {}
 
-    This is the one place that answers the question.  It is deliberately
-    uncached in WLA-28-01: the boundary and its rules ship first so the
-    caching in WLA-28-02 can be reviewed against a stated rule rather than a
-    guess.
+
+def reset_cache() -> None:
+    """Drop memoized process-immutable facts.
+
+    Correctness never depends on this: the cached facts cannot change while
+    the process runs. It exists so tests can prove the cache is doing the work
+    rather than being shadowed by something else.
     """
+    _GIT_DIR_CACHE.clear()
+
+
+def git_dir(root: Path) -> Path:
+    """Resolve the repository's git directory, at most once per root.
+
+    ``git_dir`` is ``PROCESS_IMMUTABLE``: where a repository lives cannot
+    change under a running process, so the first answer stands. This is the
+    one place that asks; every other module routes through here.
+    """
+    root = Path(root)
+    key = str(root.resolve())
+    cached = _GIT_DIR_CACHE.get(key)
+    if cached is not None:
+        return cached
     raw = (run_git(root, "rev-parse", "--git-dir") or "").strip()
     if not raw:
         raise DwError("repository facts require a Git repository")
     path = Path(raw)
     if not path.is_absolute():
         path = root.resolve() / path
-    return path.resolve()
+    resolved = path.resolve()
+    _GIT_DIR_CACHE[key] = resolved
+    return resolved
 
 
 class Derivation:
