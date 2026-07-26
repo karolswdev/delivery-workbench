@@ -439,7 +439,17 @@ def _repository_id(root: Path) -> str:
     return _sha({"root": str(root.resolve()), "git_dir": str(_git_dir(root))})
 
 
-def _remote_observation(root: Path, remote: str | None, remote_ref: str | None) -> dict[str, object]:
+def _remote_observation(
+    root: Path,
+    remote: str | None,
+    remote_ref: str | None,
+    *,
+    head: str | None = None,
+) -> dict[str, object]:
+    # WLA-28-03: ``head`` is the HEAD already observed by this derivation. It
+    # is passed in rather than re-read so one observation asks git for HEAD
+    # once. This is not a cache: nothing is retained between observations, and
+    # a caller that does not supply it still gets a fresh read.
     if remote is None and remote_ref is None:
         return {
             "remote": None, "remote_ref": None, "remote_url_hash": None,
@@ -451,7 +461,8 @@ def _remote_observation(root: Path, remote: str | None, remote_ref: str | None) 
     url = (run_git(root, "remote", "get-url", remote) or "").strip()
     _require(bool(url), f"Git remote {remote!r} is not configured")
     remote_head = (run_git(root, "rev-parse", "--verify", remote_ref) or "").strip() or None
-    head = head_sha(root)
+    if head is None:
+        head = head_sha(root)
     fast_forward: bool | None = None
     if remote_head and head:
         try:
@@ -496,16 +507,20 @@ def _repository_facts(root: Path, remote: str | None = None, remote_ref: str | N
     porcelain = run_git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
     _require(porcelain is not None, "cannot observe repository status")
     changes = len([item for item in porcelain.split("\x00") if item])
+    # WLA-28-03: one observation reads HEAD once. The remote leg used to
+    # re-read it independently, so a repository with a remote configured spawned
+    # `rev-parse --verify HEAD` twice to answer a single question.
+    head = head_sha(root)
     return {
         "id": _repository_id(root),
         "branch": current_branch(root),
-        "head": head_sha(root) or "none",
+        "head": head or "none",
         "index_tree": write_tree(root) or "unknown",
         "operation": "rewrite" if in_rewrite_state(root) else "normal",
         "clean": changes == 0,
         "change_count": changes,
         "worktree_hash": _sha({"porcelain": porcelain}),
-        **_remote_observation(root, remote, remote_ref),
+        **_remote_observation(root, remote, remote_ref, head=head),
     }
 
 

@@ -9,6 +9,7 @@ fallback behavior. Stdlib only.
 
 from __future__ import annotations
 
+import collections
 import importlib.util
 from importlib.machinery import SourceFileLoader
 import hashlib
@@ -19582,6 +19583,88 @@ class RepositoryFactsContractTest(unittest.TestCase):
             "longer resolve the git directory privately. The ledger must "
             "shrink as WLA-28-02 replaces each site.",
         )
+
+
+class DerivationReadsTest(unittest.TestCase):
+    """WLA-28-03: one derivation asks git each question at most once.
+
+    This is deliberately *not* a cache. Nothing is retained between
+    observations — `program_freshness_issues` and the divergence checks exist
+    to re-observe, and reusing a fact across them is the staleness bug this
+    phase forbids. What is removed is asking the same question twice inside a
+    single observation.
+    """
+
+    def setUp(self):
+        self.authority = ProgramRunAuthorityTest(
+            "test_start_is_exact_immutable_idempotent_and_creates_only_local_authority"
+        )
+        self.authority.setUp()
+        self.addCleanup(self.authority.doCleanups)
+        self.root = self.authority.root
+
+    def _count_within_one_observation(self, remote, remote_ref):
+        import dw_pmo.gitio as gitio
+        import dw_pmo.program_run as pr
+
+        counts = collections.Counter()
+        real = gitio.run_git
+
+        def counting(root, *args):
+            counts[" ".join(args[:2])] += 1
+            return real(root, *args)
+
+        with mock.patch.object(gitio, "run_git", counting), \
+                mock.patch.object(pr, "run_git", counting):
+            facts = pr._repository_facts(self.root, remote, remote_ref)
+        return facts, counts
+
+    def test_one_observation_reads_head_once_even_with_a_remote(self):
+        # The remote leg used to re-read HEAD independently, so a repository
+        # with a remote configured spawned rev-parse --verify HEAD twice to
+        # answer a single question.
+        subprocess.run(
+            ["git", "-C", str(self.root), "remote", "add", "origin",
+             "https://example.test/repo.git"],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        facts, counts = self._count_within_one_observation(
+            "origin", "refs/remotes/origin/main"
+        )
+        head_reads = sum(
+            n for cmd, n in counts.items() if cmd == "rev-parse --verify"
+        )
+        # One for HEAD, one for the remote ref — never two for HEAD.
+        self.assertLessEqual(
+            head_reads, 2,
+            f"one observation spawned rev-parse --verify {head_reads} times; "
+            "HEAD and the remote ref are one read each",
+        )
+        self.assertTrue(facts["head"])
+
+    def test_no_fact_is_read_twice_inside_one_observation(self):
+        _facts, counts = self._count_within_one_observation(None, None)
+        repeated = {cmd: n for cmd, n in counts.items() if n > 1}
+        self.assertEqual(
+            repeated, {},
+            f"these commands ran more than once for a single observation: "
+            f"{repeated}. One derivation asks each question once.",
+        )
+
+    def test_separate_observations_still_re_read_everything(self):
+        # The guarantee that matters: nothing is retained between
+        # observations. A commit between two observations must be seen.
+        first = self.authority.core._repository_facts(self.root, None, None)
+        (self.root / "drift.txt").write_text("drift\n", encoding="utf-8")
+        for args in (("add", "-A"), ("commit", "-qm", "drift", "--no-verify")):
+            subprocess.run(["git", "-C", str(self.root), *args], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        second = self.authority.core._repository_facts(self.root, None, None)
+        self.assertNotEqual(
+            first["head"], second["head"],
+            "a second observation must see the new commit, not a retained one",
+        )
+        self.assertNotEqual(first["index_tree"], second["index_tree"])
 
 
 class ShardRunnerTest(unittest.TestCase):

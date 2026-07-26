@@ -68,9 +68,11 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 - [x] The git directory is resolved at most once per repository per process;
   `rev-parse --git-dir` spawns per conductor tick drop from ~53 to at most 1,
   and the triple-call expression is gone (WLA-28-02).
-- [ ] Facts that change on write are read once per derivation and re-read
-  after any mutation; freshness, divergence, and dirty-tree refusals still
-  fire on planted regressions (WLA-28-03).
+- [x] Facts that change on write are read once per **observation** — the
+  derivation boundary this codebase actually has — and nothing is retained
+  between observations, so freshness, divergence, and dirty-tree refusals all
+  still fire. The originally planned cross-derivation snapshot was rejected on
+  measurement and the reason recorded (WLA-28-03).
 - [x] The core proof suite runs sharded across processes on the declared
   Python floor with standard-library tooling only, deterministically and with
   no cross-shard temp state (WLA-28-04).
@@ -84,7 +86,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 |---|---|---|---|---|
 | WLA-28-01 | Contract the repository-fact boundary | done | [story-01-contract-the-repository-fact-boundary](./story-01-contract-the-repository-fact-boundary.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-28-02 | Resolve the repository location once | done | [story-02-resolve-the-repository-location-once](./story-02-resolve-the-repository-location-once.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-28-03 | Read changing facts once per derivation | backlog | [story-03-read-changing-facts-once-per-derivation](./story-03-read-changing-facts-once-per-derivation.md) | - |
+| WLA-28-03 | Read changing facts once per derivation | done | [story-03-read-changing-facts-once-per-derivation](./story-03-read-changing-facts-once-per-derivation.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-28-04 | Prove work in parallel | done | [story-04-prove-work-in-parallel](./story-04-prove-work-in-parallel.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-28-05 | Guard the cost of proof | backlog | [story-05-guard-the-cost-of-proof](./story-05-guard-the-cost-of-proof.md) | - |
 
@@ -151,7 +153,20 @@ filter silently shrank it from 516 units to 1), and count-parsing that read a
 fixture string and undercounted 513 as 456. Shards now report JSON, and a
 shard with no summary is a failure rather than a silent zero.
 
-WLA-28-03 is next, narrowed by measurement — see the decision below.
+WLA-28-03 then shipped, narrowed by measurement. Its planned cross-derivation
+snapshot was **rejected**: the spawns it targeted sit behind
+`program_freshness_issues` and the divergence checks, whose purpose is to
+re-observe, so a snapshot spanning them would have disarmed the fail-closed
+refusals. Implemented literally instead — one observation asks git each
+question once. `_repository_facts` had been computing HEAD and then letting
+`_remote_observation` compute it again, so any repository with a remote spawned
+`rev-parse --verify HEAD` twice per observation. HEAD reads fell 638 to 448 and
+total spawns in the slow test 2,198 to 2,008 — **4,633 to 2,008 (-57%)** against
+the phase baseline. The durable deliverable is the guard: no command runs twice
+for one observation, and separate observations still re-read everything.
+
+WLA-28-05 is next: pin these numbers as an executable budget and close the
+phase.
 
 ## Active risks
 
