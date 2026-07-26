@@ -85,7 +85,7 @@ existing fail-closed refusal must still fire, proven by planted regressions.
 | WLA-28-01 | Contract the repository-fact boundary | done | [story-01-contract-the-repository-fact-boundary](./story-01-contract-the-repository-fact-boundary.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-28-02 | Resolve the repository location once | done | [story-02-resolve-the-repository-location-once](./story-02-resolve-the-repository-location-once.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-28-03 | Read changing facts once per derivation | backlog | [story-03-read-changing-facts-once-per-derivation](./story-03-read-changing-facts-once-per-derivation.md) | - |
-| WLA-28-04 | Prove work in parallel | backlog | [story-04-prove-work-in-parallel](./story-04-prove-work-in-parallel.md) | - |
+| WLA-28-04 | Prove work in parallel | on-hold (Sharded runs are not stable on a loaded machine: 16 supervise_program tests carry wall-clock ceilings; awaiting owner decision on how to handle them — since 2026-07-26) | [story-04-prove-work-in-parallel](./story-04-prove-work-in-parallel.md) | - |
 | WLA-28-05 | Guard the cost of proof | backlog | [story-05-guard-the-cost-of-proof](./story-05-guard-the-cost-of-proof.md) | - |
 
 ## Where we are
@@ -111,9 +111,38 @@ while running 14 more tests than the baseline. Two latent worktree defects were
 fixed on the way (`signals.py` and `orchestration_run`'s `root/.git` fast
 path), and both ledgers are empty and asserted empty in both directions.
 
-WLA-28-03 is next: the remaining ~1,774 spawns per slow test are facts that do
-change — `HEAD`, index tree, branch, remote refs — which need a
-derivation-scoped snapshot with proven invalidation, not a process cache.
+**WLA-28-04 is next; WLA-28-03 is deferred behind it by owner decision.**
+Attributing the remaining spawns changed the picture WLA-28-03 was written
+against:
+
+| Spawns | Caller |
+|---:|---|
+| 687 | `programs.py:build_program_plan` (branch + HEAD + tree, once per build, 229 builds) |
+| 588 | `program_run:_remote_observation` |
+| 760 | `program_run:_repository_facts` |
+
+The largest block sits behind `program_freshness_issues`, whose entire purpose
+is to re-observe and detect change. Caching that is exactly the staleness bug
+the hard constraint forbids, so the story's original design does not survive
+contact with the measurement. WLA-28-04 is independent, carries almost no
+correctness risk, and is the larger remaining win, so it goes first and
+WLA-28-03 is reconsidered afterwards with a fast suite already in hand.
+
+**WLA-28-04 is built but parked on-hold (2026-07-26).** The runner works:
+standard library only, on the 3.9 floor, coverage provably identical to a
+serial module load (516 units to 523 tests, zero duplicates), deterministic
+assignment, and **211s sharded against ~550s serial (2.6x)** on a quiet desk.
+It is parked because the story's stability criterion is not met: repeated
+sharded runs are not stable while the machine is busy. Two tests failed across
+repeats, both on wall clock rather than isolation — a live-cancellation test
+polling 100 x 20ms for a spawned process (handled by serialising that class),
+and a conductor test stopping at `time-ceiling` instead of certifying.
+
+Sixteen tests call `supervise_program` with a finite `max_seconds`, and they
+are the most expensive tests in the suite. Serialising all sixteen would cap
+the speedup near 1.4x and defeat the story. The desk carried load averages of
+6-13 from unrelated work throughout; a dedicated CI runner is quieter, and the
+first sharded run of every capture passed.
 
 ## Active risks
 
@@ -137,11 +166,27 @@ derivation-scoped snapshot with proven invalidation, not a process cache.
 - 2026-07-26 - `signals.py`'s worktree defect is pinned by a test and left for
   WLA-28-02 rather than repaired inside the contract story - keeps the
   boundary commit free of behavior change - WLA-28-01.
+- 2026-07-26 - WLA-28-04 runs before WLA-28-03 - spawn attribution showed
+  WLA-28-03's target sits behind `program_freshness_issues`, whose job is to
+  re-observe, so its original design conflicts with the hard constraint;
+  WLA-28-04 is independent, lower risk, and the larger win - owner decision.
 
 ## Decisions deferred
 
 - Whether to extend sharding to the shell and integration suites - trigger once
   WLA-28-04 proves core suite sharding is stable - default is core suite only.
+- How to reduce the ~2,035 remaining derivation spawns without weakening
+  re-observation - trigger after WLA-28-04 lands - options on record: explicit
+  fact injection into `build_program_plan`, a scoped snapshot with proven
+  invalidation, or closing WLA-28-03 as deliberately not done.
 - Whether the cost budget becomes a CI-enforced threshold or a local advisory -
   trigger at WLA-28-05 - default is fail the suite, matching existing fitness
   tests.
+- **How to make the sixteen `supervise_program` tests survive parallel
+  execution** - trigger: WLA-28-04 cannot leave on-hold until this is decided -
+  options: (a) raise `max_seconds` in those fixtures, which does not weaken
+  what they assert but does edit tests this phase's scope protects; (b) run
+  them in the serial tail and accept ~1.4x instead of 2.6x; (c) shard only in
+  CI, where the machine is dedicated, and keep the desk default serial;
+  (d) make the ceilings configurable so tests can scale them by observed load.
+  No default - this is an owner decision.

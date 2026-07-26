@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 28
-- **Status:** backlog
+- **Status:** on-hold (Sharded runs are not stable on a loaded machine: 16 supervise_program tests carry wall-clock ceilings; awaiting owner decision on how to handle them — since 2026-07-26)
 - **Depends on:** -
 - **Unblocks:** WLA-28-05
 - **Owner:** unassigned
@@ -59,6 +59,50 @@ dependency and a floor change for the speedup, which the phase scope forbids.
   executions.
 - **Manual:** run the suite serially and sharded on the desk, compare timings,
   and record both in evidence.
+
+## Status: parked, not done (2026-07-26)
+
+The runner is built, correct, and fast, but the story's stability criterion is
+**not** met, so it is parked rather than claimed.
+
+What works and is proven:
+
+- `tests/run-core-tests.py`, standard library only, runs on the 3.9 floor.
+- Coverage is provably identical to a serial module load: 516 units expand to
+  523 tests, asserted equal to `loadTestsFromModule` with zero duplicates.
+- Assignment is deterministic (same inputs, same distribution, independent of
+  input order) and balanced (~133 cost per shard across 8).
+- A failing shard fails the run; a shard that reports **no** machine-readable
+  summary is a failure, never a silent zero.
+- Measured wall clock on a quiet desk: **211s sharded vs ~550s serial (2.6x)**;
+  best observed 193.8s. Serial agrees at 523 tests.
+
+Why it is parked — repeated sharded runs are **not** stable on a loaded
+machine. Two different tests failed across repeats, both for wall-clock
+reasons rather than isolation:
+
+1. `OrchestrationConductorTest.test_cancellation_interrupts_a_live_contained_check`
+   polls 100 x 20ms for a spawned check process to publish a receipt. A fresh
+   interpreter on a saturated box can miss that two-second budget. Handled by
+   moving the whole class to the serial tail.
+2. `ProgramConductorTest.test_rule_council_meta_audits_and_ingests_durable_obligation`
+   failed with `('ready', 'time-ceiling')` instead of
+   `('story-certified', 'checkpoint')` — the run exhausted `supervise_program`'s
+   wall-clock ceiling before certifying.
+
+The second is the blocking one. **Sixteen tests call `supervise_program` with a
+finite `max_seconds`**, and they are precisely the most expensive tests in the
+suite. Moving all sixteen to the serial tail would serialize roughly 380s of a
+~550s suite and cap the speedup near 1.4x, which defeats the story.
+
+The desk was carrying load averages of 6–13 from unrelated work throughout
+these runs, which is the condition that triggers this. A dedicated CI runner is
+quieter, and the first sharded run of every capture passed.
+
+The open decision is recorded in the phase status. It needs an owner call
+because the obvious fix — raising `max_seconds` in those fixtures — edits
+tests, and this phase's scope forbids rewriting tests to accommodate the
+runner, even though raising a ceiling would not weaken what those tests assert.
 
 ## Notes / open questions
 

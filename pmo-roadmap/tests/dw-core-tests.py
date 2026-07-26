@@ -23,7 +23,7 @@ import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -19492,6 +19492,157 @@ class RepositoryFactsContractTest(unittest.TestCase):
             "longer resolve the git directory privately. The ledger must "
             "shrink as WLA-28-02 replaces each site.",
         )
+
+
+class ShardRunnerTest(unittest.TestCase):
+    """WLA-28-04: the sharded runner must never change what is proven.
+
+    Speed is worthless if the runner can silently drop a test, so these cases
+    pin coverage and determinism rather than timing.
+    """
+
+    def setUp(self):
+        loader = SourceFileLoader(
+            "dw_run_core_tests", str(TESTS_DIR / "run-core-tests.py")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        self.runner = module
+
+    def test_assignment_covers_every_unit_exactly_once(self):
+        units = [f"Class{i}.test_{j}" for i in range(5) for j in range(7)]
+        for shard_count in (1, 2, 3, 8, 17):
+            with self.subTest(shards=shard_count):
+                shards = self.runner.assign_shards(units, shard_count)
+                flat = [u for shard in shards for u in shard]
+                self.assertEqual(
+                    sorted(flat), sorted(units),
+                    "every unit must run exactly once — none dropped, none "
+                    "duplicated",
+                )
+                self.assertEqual(len(shards), shard_count)
+
+    def test_assignment_is_deterministic(self):
+        units = [f"Class{i}.test_{j}" for i in range(6) for j in range(5)]
+        first = self.runner.assign_shards(units, 4)
+        for _ in range(5):
+            self.assertEqual(
+                self.runner.assign_shards(list(reversed(units)), 4), first,
+                "the same inputs must always produce the same distribution, "
+                "regardless of input order",
+            )
+
+    def test_costly_units_are_spread_rather_than_stacked(self):
+        # Balance is a hint, not correctness — but a runner that puts every
+        # slow test on one shard would not be worth having.
+        units = list(self.runner.COST_HINTS)
+        shards = self.runner.assign_shards(units, 4)
+        loads = [sum(self.runner.unit_cost(u) for u in s) for s in shards]
+        self.assertLessEqual(
+            max(loads) - min(loads), max(self.runner.COST_HINTS.values()),
+            f"shard loads are badly skewed: {loads}",
+        )
+
+    def test_an_unknown_unit_costs_the_default_and_still_schedules(self):
+        self.assertEqual(self.runner.unit_cost("Nobody.test_nothing"),
+                         self.runner.DEFAULT_COST)
+        shards = self.runner.assign_shards(["A.test_x", "B.test_y"], 2)
+        self.assertEqual(sorted(u for s in shards for u in s),
+                         ["A.test_x", "B.test_y"])
+
+    def test_classes_with_setupclass_stay_atomic(self):
+        # Splitting a setUpClass fixture across shards would pay its cost in
+        # every shard that touched it.
+        units = self.runner.discover_units()
+        atomic = [u for u in units if "." not in u]
+        self.assertIn(
+            "UsabilityPackagedExamContractTest", atomic,
+            "a class defining setUpClass must be scheduled whole",
+        )
+        for name in atomic:
+            cls = getattr(sys.modules["dw_core_tests_shard"], name)
+            self.assertTrue(
+                "setUpClass" in cls.__dict__ or "setUpModule" in cls.__dict__,
+                f"{name} is atomic without a class-level fixture to justify it",
+            )
+
+    def test_discovery_finds_every_test_the_serial_loader_finds(self):
+        units = self.runner.discover_units()
+        module = sys.modules["dw_core_tests_shard"]
+        loader = unittest.TestLoader()  # never the shared default: -k filters it
+        expected = set()
+        for name in dir(module):
+            obj = getattr(module, name)
+            if (isinstance(obj, type) and issubclass(obj, unittest.TestCase)
+                    and obj is not unittest.TestCase):
+                for method in loader.getTestCaseNames(obj):
+                    expected.add(f"{name}.{method}")
+        covered = set()
+        for unit in units:
+            if "." in unit:
+                covered.add(unit)
+            else:
+                cls = getattr(module, unit)
+                for method in loader.getTestCaseNames(cls):
+                    covered.add(f"{unit}.{method}")
+        self.assertEqual(
+            covered, expected,
+            "sharded discovery must cover exactly what a serial run covers",
+        )
+
+    def test_a_shard_that_reports_nothing_is_a_failure_not_a_zero(self):
+        # A crashed shard produces no machine-readable summary. Counting it as
+        # zero tests and passing would be the worst possible outcome.
+        with mock.patch.object(
+            self.runner, "_run_shard",
+            side_effect=[(0, "segfault, no summary", 0.1, {})],
+        ):
+            with mock.patch.object(self.runner, "discover_units",
+                                   return_value=["A.test_x"]):
+                with io.StringIO() as out, io.StringIO() as err, \
+                        redirect_stdout(out), redirect_stderr(err):
+                    code = self.runner.main(["--shards", "1"])
+        self.assertEqual(code, 1)
+
+    def test_the_serial_tail_is_covered_and_never_also_sharded(self):
+        # The timing-sensitive units run quiet after the shards. They must
+        # still run exactly once — excluded from shards, present in the tail.
+        units = self.runner.discover_units()
+        tail = [u for u in units if self.runner.is_serial(u)]
+        self.assertTrue(tail, "the declared serial tail must exist in the suite")
+        parallel = [u for u in units if not self.runner.is_serial(u)]
+        shards = self.runner.assign_shards(parallel, 8)
+        flat = [u for s in shards for u in s]
+        for unit in tail:
+            self.assertNotIn(unit, flat, "a serial-tail unit must not be sharded")
+        self.assertEqual(
+            sorted(flat + tail), sorted(units),
+            "shards plus the serial tail must cover every unit exactly once",
+        )
+
+    def test_every_declared_serial_tail_unit_still_exists(self):
+        # A renamed test would silently drop out of the tail and start racing.
+        units = self.runner.discover_units()
+        for declared in self.runner.SERIAL_TAIL:
+            self.assertTrue(
+                any(u == declared or u.split(".", 1)[0] == declared
+                    for u in units),
+                f"{declared} is declared serial but no longer exists",
+            )
+
+    def test_a_failing_shard_fails_the_whole_run(self):
+        with mock.patch.object(
+            self.runner, "_run_shard",
+            side_effect=[(0, "out", 0.1, {"ran": 1, "failures": 0, "errors": 0}),
+                         (1, "out", 0.1, {"ran": 1, "failures": 1, "errors": 0})],
+        ):
+            with mock.patch.object(self.runner, "discover_units",
+                                   return_value=["A.test_x", "B.test_y"]):
+                with io.StringIO() as out, io.StringIO() as err, \
+                        redirect_stdout(out), redirect_stderr(err):
+                    code = self.runner.main(["--shards", "2"])
+        self.assertEqual(code, 1, "one failing shard must fail the run")
 
 
 if __name__ == "__main__":

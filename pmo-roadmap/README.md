@@ -931,6 +931,7 @@ pmo-roadmap/
 │                                    doctor, status, step, adopt, workbench
 ├── tests/
 │   ├── dw-core-tests.py          ← core unit suite
+│   ├── run-core-tests.py         ← shards the core suite across processes
 │   ├── adoption-discovery.sh     ← three-command adoption coverage
 │   ├── agent-surface.sh          ← managed block + headless lifecycle
 │   ├── canon-lint.sh             ← forbidden-drift patterns in canon
