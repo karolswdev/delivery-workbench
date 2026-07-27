@@ -8,8 +8,9 @@ checked and named here. Exit 0 means the rails are live.
 
 from __future__ import annotations
 
+import re
 import shutil
-import sys
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +25,40 @@ class DoctorCheck:
     ok: bool
     name: str
     detail: str
+
+
+_PYTHON3_VERSION_CACHE: dict[str, str] = {}
+
+
+def _python3_version(python_path: str) -> str:
+    """Version of the python3 binary the check names, probed once per process.
+
+    The check reports the PATH ``python3`` — so its version must come from
+    that binary, not from ``sys.version_info`` of whichever interpreter is
+    running this code. Mixing the two made the in-process status object
+    disagree with the CLI whenever the test or MCP runner used a different
+    interpreter than PATH (found by the WLA-27-03 parity test on a desk
+    where the suite runs under /usr/bin/python3 with Homebrew python3 on
+    PATH).
+    """
+    if python_path not in _PYTHON3_VERSION_CACHE:
+        version = "unknown"
+        try:
+            probe = subprocess.run(
+                [python_path, "--version"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=10,
+                text=True,
+            )
+            match = re.search(r"(\d+\.\d+\.\d+)", probe.stdout or "")
+            if probe.returncode == 0 and match:
+                version = match.group(1)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        _PYTHON3_VERSION_CACHE[python_path] = version
+    return _PYTHON3_VERSION_CACHE[python_path]
 
 
 def _hooks_path_check(root: Path, hooks_path: str) -> DoctorCheck:
@@ -78,8 +113,9 @@ def run_doctor(root: Path) -> list[DoctorCheck]:
 
     python_path = shutil.which("python3")
     if python_path:
-        version = ".".join(str(part) for part in sys.version_info[:3])
-        checks.append(DoctorCheck(True, "python3", f"{python_path} ({version})"))
+        checks.append(
+            DoctorCheck(True, "python3", f"{python_path} ({_python3_version(python_path)})")
+        )
     else:
         checks.append(
             DoctorCheck(
