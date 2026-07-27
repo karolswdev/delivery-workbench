@@ -676,7 +676,7 @@ def _safe_receipt(value: dict[str, object]) -> dict[str, object]:
             "separation", "repair_round", "round", "stage", "council_id",
             "protocol_id", "loop_address", "loop_lineage", "max_rounds",
             "result", "route", "request_id", "port", "decision",
-            "generation", "ledger_head", "child_grant_hash",
+            "generation", "ledger_head", "child_grant_hash", "test_failures",
         ):
             if key in payload:
                 safe_payload[key] = payload[key]

@@ -18,6 +18,7 @@ import re
 from typing import Any, Optional
 
 from .presentation import DIFFERENT_MODEL_FAMILY_COPY
+from .test_baseline import build_failure_projection
 
 
 TEAM_REVIEW_KIND = "delivery-workbench-team-review"
@@ -832,6 +833,7 @@ def build_team_review(
     authority: object = None,
     round_trip: object = None,
     assignment: object = None,
+    test_failures: object = None,
 ) -> dict[str, object]:
     """Build the task-shaped organization design view.
 
@@ -846,6 +848,11 @@ def build_team_review(
     authority_doc = authority if isinstance(authority, dict) else None
     round_trip_doc = round_trip if isinstance(round_trip, dict) else {}
     assignment_doc = assignment if isinstance(assignment, dict) else None
+    failure_doc = test_failures if isinstance(test_failures, dict) else None
+    failure_review = (
+        build_failure_projection(failure_doc)
+        if failure_doc is not None else None
+    )
 
     roles, by_id = _design_roles(raw, compiled_doc)
     constraints = _policy_independence(roles, by_id)
@@ -1123,6 +1130,7 @@ def build_team_review(
         "context": "design",
         "applicable": True,
         "name": raw.get("slug"),
+        **({"test_failures": failure_review} if failure_review is not None else {}),
         "title": raw.get("title") or raw.get("slug") or "Team and review",
         "status": "ready-to-review" if policy_ready else "needs-attention",
         "summary": (

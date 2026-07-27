@@ -11654,6 +11654,134 @@ class ProgramRunAuthorityTest(unittest.TestCase):
         self.assertEqual(final["budgets"]["max_check_starts"]["used"], 1)
 
 
+class ProgramTestBaselineTest(unittest.TestCase):
+    """WLA-29-05: bounded facts and fail-closed failure subtraction."""
+
+    def test_parser_subtracts_only_exact_reconciled_identifiers(self):
+        from dw_pmo.test_baseline import (
+            build_baseline_fact,
+            classify_test_failures,
+            extract_test_failures,
+        )
+
+        baseline_output = (
+            "FAIL: test_existing (suite.Case.test_existing)\n"
+            "FAILED (failures=1)\n"
+        )
+        current_output = (
+            "FAIL: test_existing (suite.Case.test_existing)\n"
+            "ERROR: test_regression (suite.Case.test_regression)\n"
+            "FAILED (failures=1, errors=1)\n"
+        )
+        command_hash = "sha256:" + "a" * 64
+        baseline = build_baseline_fact(
+            head_sha="b" * 40, command_hash=command_hash,
+            exit_code=1, output=baseline_output,
+        )
+        current = extract_test_failures(current_output, 1)
+        classified = classify_test_failures(
+            current, baseline, expected_head_sha="b" * 40,
+            command_hash=command_hash,
+        )
+        self.assertEqual(
+            classified["pre_existing"],
+            ["test_existing (suite.Case.test_existing)"],
+        )
+        self.assertEqual(
+            classified["introduced"],
+            ["test_regression (suite.Case.test_regression)"],
+        )
+        self.assertFalse(classified["green"])
+
+    def test_missing_foreign_stale_and_unparseable_baselines_fail_closed(self):
+        from dw_pmo.test_baseline import (
+            build_baseline_fact,
+            classify_test_failures,
+            extract_test_failures,
+        )
+
+        command_hash = "sha256:" + "c" * 64
+        current = extract_test_failures(
+            "FAILED pkg/test_mod.py::test_new - assertion\n"
+            "===== 1 failed in 0.01s =====\n",
+            1,
+        )
+        valid = build_baseline_fact(
+            head_sha="d" * 40, command_hash=command_hash,
+            exit_code=0, output="1 passed\n",
+        )
+        cases = [
+            (None, "d" * 40, command_hash, "baseline-missing-or-invalid"),
+            (valid, "e" * 40, command_hash, "baseline-foreign-head"),
+            (valid, "d" * 40, "sha256:" + "f" * 64, "baseline-stale-command"),
+        ]
+        for baseline, head, command, reason in cases:
+            with self.subTest(reason=reason):
+                classified = classify_test_failures(
+                    current, baseline, expected_head_sha=head,
+                    command_hash=command,
+                )
+                self.assertEqual(classified["introduced"], ["pkg/test_mod.py::test_new"])
+                self.assertEqual(classified["pre_existing"], [])
+                self.assertEqual(classified["refusal_reason"], reason)
+        unparseable = extract_test_failures("opaque crash\n", 1)
+        classified = classify_test_failures(
+            unparseable, valid, expected_head_sha="d" * 40,
+            command_hash=command_hash,
+        )
+        self.assertEqual(classified["introduced"], ["<unparseable-test-failure>"])
+        self.assertEqual(classified["refusal_reason"], "current-failures-unparseable")
+
+    def test_test_debt_obligations_are_closed_bounded_and_deterministic(self):
+        from dw_pmo.test_baseline import (
+            build_test_debt_obligations,
+            validate_test_debt_obligation,
+        )
+
+        obligations = build_test_debt_obligations({
+            "introduced": [],
+            "pre_existing": [
+                "pkg/test_mod.py::test_existing",
+                "pkg/test_mod.py::test_other",
+            ],
+            "subtraction_available": True,
+            "refusal_reason": None,
+        }, target="DM-1-02")
+        self.assertEqual(len(obligations), 2)
+        self.assertTrue(all(
+            item["kind"] == "technical-debt" and not item["blocking"]
+            for item in obligations
+        ))
+        forged = dict(obligations[0])
+        forged["agent_note"] = "not allowed"
+        with self.assertRaisesRegex(ValueError, "non-exact"):
+            validate_test_debt_obligation(forged)
+
+    def test_baseline_fact_is_bounded_and_contains_no_output_prose(self):
+        from dw_pmo.test_baseline import build_baseline_fact
+
+        fact = build_baseline_fact(
+            head_sha="a" * 40,
+            command_hash="sha256:" + "b" * 64,
+            exit_code=1,
+            output=(
+                "FAIL: test_one (suite.Case.test_one)\n"
+                "secret output prose that must not be retained\n"
+                "FAILED (failures=1)\n"
+            ),
+        )
+        self.assertEqual(
+            set(fact),
+            {
+                "head_sha", "command_hash", "status", "parser", "exit_code",
+                "failure_count", "failure_ids", "subtraction_available",
+                "truncated",
+            },
+        )
+        self.assertNotIn("secret", json.dumps(fact))
+        self.assertEqual(fact["failure_count"], 1)
+
+
 class ProgramConductorTest(unittest.TestCase):
     """WLA-26-09: deterministic program conduction and crash recovery."""
 
@@ -12910,6 +13038,167 @@ class ProgramConductorTest(unittest.TestCase):
         self.assertEqual(
             replayed["authority"]["selected_stories"], ["DM-1-02"]
         )
+
+    def test_program_without_command_records_subtraction_unavailable(self):
+        projection = self.start()
+        self.core.tick_program(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": self.core.ProgramFixtureDriver()}, now=self.now,
+        )
+        replayed = self.core.replay_program(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(
+            replayed["test_baseline"],
+            {
+                "head_sha": replayed["expected_repository"]["head"],
+                "command_hash": None,
+                "status": "unavailable",
+                "parser": "unittest-pytest-failures-v1",
+                "exit_code": None,
+                "failure_count": 0,
+                "failure_ids": [],
+                "subtraction_available": False,
+                "truncated": False,
+            },
+        )
+        self.assertEqual(replayed["dispatches"], [])
+
+    def test_preexisting_failure_becomes_debt_and_planted_regression_blocks(self):
+        baseline_script = (
+            "import sys\n"
+            "print('FAIL: test_existing (suite.Case.test_existing)')\n"
+            "print('FAILED (failures=1)')\n"
+            "sys.exit(1)\n"
+        )
+        regression_script = (
+            "import sys\n"
+            "print('FAIL: test_existing (suite.Case.test_existing)')\n"
+            "print('ERROR: test_regression (suite.Case.test_regression)')\n"
+            "print('FAILED (failures=1, errors=1)')\n"
+            "sys.exit(1)\n"
+        )
+        (self.root / "fixture_tests.py").write_text(
+            baseline_script, encoding="utf-8"
+        )
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        workflow["nodes"][0].pop("on_success", None)
+        workflow["nodes"].append({
+            "id": "declared-tests", "type": "check", "needs": ["implement"],
+            "inputs": {},
+            "runner": {
+                "kind": "command", "argv": [sys.executable, "fixture_tests.py"],
+                "cwd": "workspace", "writes": [], "output_bytes": 50_000,
+            },
+            "expect": {"exit_code": 0}, "timeout_seconds": 60,
+            "max_attempts": 1,
+            "outputs": [{
+                "id": "test-fact", "kind": "mechanical-fact",
+                "max_bytes": 50_000,
+            }],
+            "on_success": {"kind": "terminal", "target": "complete"},
+            "on_failure": {"kind": "action", "target": "block"},
+        })
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture._git("add", "pm", "fixture_tests.py")
+        self.authority.fixture._git("commit", "-qm", "baseline subtraction fixture")
+
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver({
+            "implementer": {
+                "workspace_files": {"fixture_tests.py": regression_script},
+            },
+        })
+        result = self.core.supervise_program(
+            self.root, projection["run_id"], max_ticks=12,
+            max_seconds=86_400, driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        self.assertEqual(
+            result["stop"], "route-block-introduced-test-failure"
+        )
+        self.assertEqual(result["state"], "stopped")
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        baseline = replayed["authority"]["test_baseline"]
+        self.assertEqual(baseline["status"], "failures")
+        self.assertEqual(baseline["failure_count"], 1)
+        amended = dict(baseline)
+        amended["command_hash"] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(DwError, "cannot be amended"):
+            self.core._record_program_test_baseline(
+                self.root, projection["run_id"], amended, now=self.now
+            )
+        events = self.core._events(
+            self.core._run_dir(self.root, projection["run_id"]),
+            projection["run_id"],
+        )
+        kinds = [item["event"] for item in events]
+        self.assertLess(
+            kinds.index("test_baseline_captured"),
+            kinds.index("claim_dispatched"),
+        )
+        checks = [
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "check"
+        ]
+        self.assertEqual(len(checks), 1)
+        check = checks[0]
+        failures = check["payload"]["test_failures"]
+        self.assertEqual(
+            failures["pre_existing"],
+            ["test_existing (suite.Case.test_existing)"],
+        )
+        self.assertEqual(
+            failures["introduced"],
+            ["test_regression (suite.Case.test_regression)"],
+        )
+        self.assertEqual(check["result"], "fail")
+        debts = [
+            item for item in replayed["authority"]["open_obligations"]
+            if item["kind"] == "technical-debt"
+        ]
+        self.assertEqual(len(debts), 1)
+        self.assertFalse(debts[0]["blocking"])
+        self.assertIn("test_existing", debts[0]["statement"])
+        self.assertEqual(
+            replayed["authority"]["budgets"]["max_obligations"]["used"], 1
+        )
+        from dw_pmo.program_surface import build_program_view
+        view = build_program_view(
+            self.root, projection["run_id"], now=self.now
+        )
+        passed_answer = next(
+            item for item in view["live_progress"]["answers"]
+            if item["id"] == "passed"
+        )
+        self.assertIn("1 introduced test failure", passed_answer["answer"])
+        self.assertIn("1 pre-existing", passed_answer["answer"])
+        self.assertEqual(
+            view["live_progress"]["review"]["test_failures"]["introduced"],
+            ["test_regression (suite.Case.test_regression)"],
+        )
+        before_count = replayed["authority"]["event_count"]
+        import dw_pmo.program_run as program_run
+        with mock.patch.object(
+            program_run, "replay_program", wraps=program_run.replay_program
+        ) as replayed_once:
+            self.core._emit_preexisting_test_debt(
+                self.root, projection["run_id"],
+                {"story": "DM-1-02"}, failures,
+                now=self.core._time(self.now, "now"),
+            )
+        self.assertEqual(replayed_once.call_count, 1)
+        deduped = self.core.replay_program(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(deduped["event_count"], before_count)
+        self.assertEqual(len(deduped["open_obligations"]), 1)
 
     def test_fanout_fanin_collect_and_closed_check_replay_stably(self):
         workflow_path = self.root / "pm/workflows/story-work.json"
@@ -16573,6 +16862,34 @@ class ProgramStudioTest(unittest.TestCase):
         )
         self.assertEqual(team["corrections"], [])
 
+    def test_team_review_distinguishes_introduced_and_preexisting_failures(self):
+        from dw_pmo.team_review import build_team_review
+
+        detail = self.core.build_studio_document(
+            self.root, "organization", "autonomous-story-cell"
+        )
+        reviewed = build_team_review(
+            detail["raw"], detail["validation"], detail["compiled"],
+            detail["simulation"], detail["authority"], detail["round_trip"],
+            test_failures={
+                "introduced": [],
+                "pre_existing": ["pkg/test_mod.py::test_existing"],
+            },
+        )
+        self.assertEqual(
+            reviewed["test_failures"]["status"],
+            "no-introduced-failures-with-pre-existing",
+        )
+        self.assertEqual(reviewed["test_failures"]["introduced"], [])
+        self.assertEqual(
+            reviewed["test_failures"]["pre_existing"],
+            ["pkg/test_mod.py::test_existing"],
+        )
+        self.assertIn(
+            "No introduced failures; 1 pre-existing",
+            reviewed["test_failures"]["summary"],
+        )
+
     def test_team_review_upgrades_only_the_runtime_pair_and_compares_exact_ids(self):
         from dw_pmo.team_review import build_team_review
 
@@ -18446,6 +18763,47 @@ class ProgramVerdictTest(unittest.TestCase):
             "writes_roadmap", "materializes_evidence", "creates_grant",
         ):
             self.assertFalse(proof[flag])
+
+    def test_introduced_failures_force_block_and_preexisting_render_honestly(self):
+        fact = self.fact()
+        verdict = self.verdict(fact=fact)
+        introduced = self.core.evaluate_quality_gate(
+            self.root, self.gate(), self.subject,
+            {"story-quality": self.story_rubric}, [fact], [verdict],
+            now="2026-07-22T12:20:00Z", repair_round=99,
+            test_failures={
+                "introduced": ["pkg/test_mod.py::test_regression"],
+                "pre_existing": ["pkg/test_mod.py::test_existing"],
+                "subtraction_available": True,
+                "refusal_reason": None,
+            },
+        )
+        self.assertEqual((introduced["result"], introduced["route"]), ("fail", "block"))
+        self.assertEqual(
+            introduced["test_failures"]["state"], "introduced-failures"
+        )
+        self.assertIn(
+            "introduced-test-failure",
+            {item["code"] for item in introduced["issues"]},
+        )
+
+        preexisting = self.core.evaluate_quality_gate(
+            self.root, self.gate(), self.subject,
+            {"story-quality": self.story_rubric}, [fact], [verdict],
+            now="2026-07-22T12:20:00Z",
+            test_failures={
+                "introduced": [],
+                "pre_existing": ["pkg/test_mod.py::test_existing"],
+                "subtraction_available": True,
+                "refusal_reason": None,
+            },
+        )
+        self.assertEqual((preexisting["result"], preexisting["route"]), ("pass", "advance"))
+        self.assertEqual(
+            preexisting["test_failures"]["state"],
+            "no-introduced-failures-with-pre-existing",
+        )
+        self.assertEqual(preexisting["test_failures"]["pre_existing_count"], 1)
 
     def test_forged_fact_and_agent_prose_as_mechanical_evidence_refuse(self):
         fact = self.fact()

@@ -26,6 +26,7 @@ from typing import Any
 
 from .model import DwError
 from .orchestration import canonical_json
+from .test_baseline import build_failure_projection
 from .program_deliberation import (
     DeliberationError,
     validate_council_decision,
@@ -72,6 +73,10 @@ MECHANICAL_PREDICATES = (
     "contract-health", "signal-state", "history-condition",
     "verification-command",
 )
+PREDICATE_VALIDATES_EXIT_CODE = {
+    predicate: predicate in {"check-receipt", "verification-command"}
+    for predicate in MECHANICAL_PREDICATES
+}
 FRESHNESS_BINDINGS = (
     "subject", "repository", "program", "assignment", "rubric", "ledger",
 )
@@ -134,7 +139,8 @@ _RECEIPT_KEYS = {
 _COMMAND_KEYS = {"argv", "cwd", "exit_code"}
 _FACT_KEYS = {
     "kind", "schema_version", "id", "predicate", "subject", "issuer",
-    "result", "observation", "issued_at", "payload_hash", "fact_hash",
+    "result", "validates_exit_code", "observation", "issued_at",
+    "payload_hash", "fact_hash",
 }
 _FACT_ISSUER_KEYS = {
     "kind", "id", "fingerprint", "capability", "receipt_hash",
@@ -928,7 +934,8 @@ def build_mechanical_fact(
     passed = raw.get("passed")
     _refuse(isinstance(passed, bool), "wrong-type", "mechanical passed value must be boolean", "receipt/passed")
     command = _normalize_command(raw.get("command"), "receipt/command")
-    if predicate in {"check-receipt", "verification-command"}:
+    validates_exit_code = PREDICATE_VALIDATES_EXIT_CODE[str(predicate)]
+    if validates_exit_code:
         _refuse(command is not None, "receipt-insufficient", "command predicate requires exact argv and exit code", "receipt/command")
         _refuse(passed == (command["exit_code"] == 0), "receipt-conflict", "passed conflicts with command exit code", "receipt/passed")
     else:
@@ -949,6 +956,7 @@ def build_mechanical_fact(
             "receipt_hash": _hash(raw.get("receipt_hash"), "receipt/receipt_hash"),
         },
         "result": "pass" if passed else "fail",
+        "validates_exit_code": validates_exit_code,
         "observation": {
             "ref": _reference(raw.get("observation_ref"), "receipt/observation_ref"),
             "hash": _hash(raw.get("observation_hash"), "receipt/observation_hash"),
@@ -982,12 +990,20 @@ def validate_mechanical_fact(value: object) -> dict[str, object]:
         _refuse(issuer.get("capability") == "certification:objective", "capability-denied", "rail fact lost certification:objective", "fact/issuer/capability")
         _refuse(fact.get("predicate") in set(MECHANICAL_PREDICATES[5:9]), "issuer-invalid", "rail adapter issued a check predicate", "fact/predicate")
     _refuse(fact.get("result") in {"pass", "fail"}, "invalid-result", "mechanical result must be pass or fail", "fact/result")
+    validates_exit_code = fact.get("validates_exit_code")
+    _refuse(
+        isinstance(validates_exit_code, bool)
+        and validates_exit_code
+        == PREDICATE_VALIDATES_EXIT_CODE[str(fact.get("predicate"))],
+        "receipt-conflict", "fact exit-code policy conflicts with its predicate",
+        "fact/validates_exit_code",
+    )
     observation = _exact(fact.get("observation"), _OBSERVATION_KEYS, "fact/observation")
     _reference(observation.get("ref"), "fact/observation/ref")
     _hash(observation.get("hash"), "fact/observation/hash")
     _nonnegative_int(observation.get("bytes"), "fact/observation/bytes", 100_000_000)
     command = _normalize_command(observation.get("command"), "fact/observation/command")
-    if fact.get("predicate") in {"check-receipt", "verification-command"}:
+    if validates_exit_code:
         _refuse(command is not None, "receipt-insufficient", "command fact lost argv", "fact/observation/command")
         _refuse((command["exit_code"] == 0) == (fact.get("result") == "pass"), "receipt-conflict", "fact result conflicts with exit code", "fact/result")
     else:
@@ -2136,6 +2152,7 @@ def evaluate_quality_gate(
     council_decisions: list[dict[str, object]] | None = None,
     now: str,
     repair_round: int = 0,
+    test_failures: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Return a closed authority-neutral quality proof, including refusals."""
     starts = {
@@ -2146,6 +2163,12 @@ def evaluate_quality_gate(
         "materializes_evidence": False,
         "creates_grant": False,
     }
+    failure_projection: dict[str, object] | None = None
+    if test_failures is not None:
+        try:
+            failure_projection = build_failure_projection(test_failures)
+        except ValueError as exc:
+            raise VerdictError("wrong-type", str(exc), "test_failures") from exc
     policy: dict[str, object] | None = None
     current: dict[str, object] | None = None
     try:
@@ -2226,6 +2249,7 @@ def evaluate_quality_gate(
                 "may_repair": False,
                 "may_materialize_evidence": False,
             },
+            **({"test_failures": failure_projection} if failure_projection is not None else {}),
             **starts,
         }
         refused["proof_hash"] = _sha(refused)
@@ -2664,10 +2688,20 @@ def evaluate_quality_gate(
     else:
         result = "pending"
     route = policy["routes"][result]
+    if failure_projection is not None and failure_projection["introduced_count"]:
+        result = "fail"
+        route = "block"
+        issues.append({
+            "code": "introduced-test-failure",
+            "message": "introduced test failures block without a revision or exhaustion route",
+        })
     if any(
         bool(item.get("dissent_escalated"))
         for item in requirement_projection
-    ) and result != "refused":
+    ) and result != "refused" and not (
+        failure_projection is not None
+        and failure_projection["introduced_count"]
+    ):
         route = "escalate"
     if result == "fail" and route == "repair" and repair_round >= int(policy["repair"]["max_rounds"]):
         route = policy["repair"]["on_exhausted"]
@@ -2768,6 +2802,7 @@ def evaluate_quality_gate(
             "may_materialize_evidence": False,
             "explanation": "the proof selects a declared route but grants and performs no act",
         },
+        **({"test_failures": failure_projection} if failure_projection is not None else {}),
         **starts,
     }
     proof["proof_hash"] = _sha(proof)

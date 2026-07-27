@@ -859,10 +859,49 @@ The mechanical predicate vocabulary is closed: check receipt, artifact/schema/
 citation conformance, diff scope, roadmap/contract health, signal state,
 history condition, and exact verification command. A fact binds trusted adapter
 kind, capability/fingerprint, receipt hash, bounded observation reference,
-subject, exact argv/exit where applicable, issue time, payload hash, and fact
-hash. It contains no agent rationale. A mechanical criterion is computed from
+subject, an explicit `validates_exit_code` policy plus exact argv/exit where
+applicable, issue time, payload hash, and fact hash. It contains no agent rationale. A mechanical criterion is computed from
 that matching current fact; the verdict author cannot select a conflicting
 result or replace it with prose.
+
+### Test baseline and introduced-failure verdicts
+
+A program has a declared test command when its compiled workflows contain one
+unique exact `check` runner of kind `command`. Repeated use of the same runner
+is one declaration; multiple distinct command runners are ambiguous, so
+baseline subtraction is unavailable. Programs with no command runner keep the
+existing verdict behavior. Their first conductor tick still records an honest
+`unavailable` baseline fact before any dispatch.
+
+Before first dispatch, the conductor runs the declared command in a clean,
+detached worktree at the program grant's head SHA. It appends one immutable
+`test_baseline_captured` ledger event. The bounded fact contains only the head
+SHA, command hash, parser/status, exit code, failure count, sorted test
+identifiers, truncation flag, and subtraction-availability flag. It never
+contains stdout, stderr, traceback text, or other output prose. No CLI, MCP,
+driver packet, claim, verdict, or agent output can create or amend this event.
+
+The parser contract is `unittest-pytest-failures-v1`. It accepts unittest
+`FAIL: test-id` / `ERROR: test-id` headers with a matching `FAILED (...)`
+count, and pytest `FAILED node-id` / `ERROR node-id` summary lines with a
+matching failed/error count. Identifiers are capped at 200 and 500 UTF-8 bytes
+each. A non-zero result without a recognized, exactly reconciled summary is
+unparseable. Truncation, unparseable output, a missing baseline, a different
+head SHA, or a changed command hash refuses subtraction and judges every
+current failure as introduced.
+
+For a fresh baseline, the check adapter classifies current identifiers as
+`introduced = current - baseline` and `pre-existing = current ∩ baseline`.
+Any introduced identifier makes the mechanical result fail and selects
+`block` directly; repair rounds, budget exhaustion, dissent escalation, and
+supervision ceilings cannot turn that result into advance. Pre-existing
+identifiers do not fail the change, but each becomes one deduplicated,
+non-blocking `technical-debt` obligation against the grant's obligation budget. The trusted
+adapter records the command result in its bounded observation, then issues an
+`artifact-conformance` fact over the classified failure sets. That fact passes
+only when the introduced set is empty. Gate proof, live progress,
+and team review surfaces render both sets separately. They call this state
+"no introduced failures, N pre-existing", never green.
 
 Verdict issuance projects one preassigned read-only organization member into a
 hash-bound packet. Every program-agent packet also carries the same bounded,

@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 29
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-29-01
 - **Unblocks:** WLA-29-08
 - **Owner:** unassigned
@@ -78,3 +78,19 @@ baseline would let a regression hide behind an old failure list.
 Flakiness is recorded as an open question, not solved: the honest default
 (flakes block) will surface real flaky tests as friction in WLA-29-08, which
 is where the evidence for any future flake policy should come from.
+
+Implemented as `dw_pmo/test_baseline.py` (parsing, bounded fact shapes,
+classification, shared failure projection) with capture and enforcement in
+the conductor/verdict layers. Delivery details worth keeping: the declared
+test command is the unique exact command runner across a program's
+workflows (repeated identical declarations collapse; multiple distinct
+commands make subtraction unavailable and fail closed); the parser accepts
+only exactly reconciled unittest/pytest markers, so opaque output is
+introduced failure, not debt; baseline worktrees persist per repository
+and recreate only on head change; mechanical facts now carry an explicit
+`validates_exit_code` field instead of predicate-name branching. Bounded
+score runs keep existing whole-result semantics untouched. Review absorbed
+before landing: batched obligation recording (one event, one replay),
+cached replay on baseline write, strict `technical-debt` obligation shape
+validation, one shared projection helper. Suite 581 → 589 green; packaged
+exam complete on the merged tree.

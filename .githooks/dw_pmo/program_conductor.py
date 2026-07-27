@@ -55,6 +55,8 @@ from .program_run import (
     _events,
     _load_documents,
     _program_signal_branch,
+    _record_program_test_baseline,
+    _record_program_test_debts,
     _run_dir,
     _sha,
     _time,
@@ -94,6 +96,13 @@ from .program_verdict import (
 )
 from .program_workflow import find_workflow_path, load_workflow
 from .programs import build_program_plan, compile_program_path, find_program_path
+from .test_baseline import (
+    build_baseline_fact,
+    build_failure_projection,
+    build_test_debt_obligations,
+    classify_test_failures,
+    extract_test_failures,
+)
 from .signals import (
     build_signals_inventory,
     latest_nudge_fact,
@@ -1383,14 +1392,255 @@ def _contained_policy_path(root: Path, relative: object, label: str) -> Path:
     return candidate
 
 
+def _normalized_command_runner(
+    runner: object, *, timeout_seconds: int = 900,
+) -> dict[str, object] | None:
+    if not isinstance(runner, dict) or runner.get("kind") != "command":
+        return None
+    argv = runner.get("argv")
+    if not isinstance(argv, list) or not argv or any(not isinstance(item, str) for item in argv):
+        return None
+    return {
+        "kind": "command",
+        "argv": list(argv),
+        "cwd": str(runner.get("cwd", ".")),
+        "writes": list(runner.get("writes", [])),
+        "output_bytes": int(runner.get("output_bytes", 100_000)),
+        "timeout_seconds": int(timeout_seconds),
+    }
+
+
+def _declared_test_runner(root: Path, run_id: str) -> dict[str, object] | None:
+    """Return the program's one distinct exact command check, if any.
+
+    Programs may contain any number of built-in checks.  Baseline subtraction
+    is enabled only when all command-check declarations resolve to one exact
+    runner; multiple distinct commands are intentionally ambiguous.
+    """
+    _path, grant, _starting_plan = _load_documents(root, run_id)
+    compiled = compile_program_path(
+        root, find_program_path(root, str(grant["program_selector"]))
+    )
+    runners: dict[str, dict[str, object]] = {}
+    instances = compiled.get("references", {}).get("workflow_instances", {})
+    if not isinstance(instances, dict):
+        return None
+    for instance in instances.values():
+        if not isinstance(instance, dict):
+            continue
+        for expanded in instance.get("expanded_nodes", []):
+            if not isinstance(expanded, dict) or expanded.get("type") != "check":
+                continue
+            node = _node_policy(root, expanded)
+            runner = _normalized_command_runner(
+                node.get("runner"),
+                timeout_seconds=int(node.get("timeout_seconds", 900)),
+            )
+            if runner is not None:
+                runners[_sha(runner)] = runner
+    return next(iter(runners.values())) if len(runners) == 1 else None
+
+
+def _run_test_command(
+    base: Path,
+    runner: dict[str, object],
+    *,
+    timeout_seconds: int,
+    staging: Path,
+) -> dict[str, object]:
+    from .orchestration_conductor import _changed_paths, _snapshot
+
+    staging.mkdir(parents=True, exist_ok=True, mode=0o700)
+    stdout_path = staging / "stdout.log"
+    stderr_path = staging / "stderr.log"
+    cwd = base
+    declared_cwd = str(runner.get("cwd", "."))
+    if declared_cwd not in {".", "workspace"}:
+        cwd = (base / declared_cwd).resolve()
+        _require(cwd == base or base.resolve() in cwd.parents, "test command cwd escaped its workspace")
+    before = _snapshot(base)
+    exit_code = 127
+    with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+        try:
+            completed = subprocess.run(
+                list(runner["argv"]), cwd=str(cwd), stdin=subprocess.DEVNULL,
+                stdout=stdout, stderr=stderr, timeout=timeout_seconds,
+                shell=False, check=False,
+            )
+            exit_code = int(completed.returncode)
+        except subprocess.TimeoutExpired:
+            exit_code = 124
+        except OSError:
+            exit_code = 127
+    changed_paths = _changed_paths(before, _snapshot(base))
+    writes = [str(item) for item in runner.get("writes", [])]
+    outside = [
+        path for path in changed_paths
+        if not any(Path(path).match(pattern) for pattern in writes)
+    ]
+    _require(not outside, "test command wrote outside its declared paths: " + ", ".join(outside[:20]))
+    limit = min(max(1, int(runner.get("output_bytes", 100_000))), 10_000_000)
+    stdout_bytes = stdout_path.stat().st_size
+    stderr_bytes = stderr_path.stat().st_size
+    with stdout_path.open("rb") as handle:
+        stdout_data = handle.read(limit + 1)
+    remaining = max(0, limit - min(len(stdout_data), limit) - 1)
+    with stderr_path.open("rb") as handle:
+        stderr_data = handle.read(remaining + 1)
+    combined = (stdout_data[:limit] + b"\n" + stderr_data)[:limit]
+    return {
+        "exit_code": max(0, min(exit_code, 255)),
+        "output": combined.decode("utf-8", errors="replace"),
+        "stdout_bytes": stdout_bytes,
+        "stderr_bytes": stderr_bytes,
+        "output_truncated": stdout_bytes + stderr_bytes + 1 > limit,
+        "changed_paths": changed_paths,
+    }
+
+
+def _git_process(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(root), *args],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+    )
+
+
+def _baseline_workspace(root: Path, head: str) -> Path:
+    tag = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:16]
+    workspace = root.parent / ".delivery-workbench-program-baselines" / tag / "baseline"
+    workspace.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if workspace.exists():
+        observed = _git_process(workspace, "rev-parse", "HEAD")
+        if observed.returncode != 0 or observed.stdout.strip() != head:
+            removed = _git_process(root, "worktree", "remove", "--force", str(workspace))
+            _require(removed.returncode == 0, "cannot remove stale baseline workspace")
+    if not workspace.exists():
+        created = _git_process(
+            root, "worktree", "add", "--detach", str(workspace), head
+        )
+        _require(created.returncode == 0, "cannot create clean baseline workspace")
+    reset = _git_process(workspace, "reset", "--hard", head)
+    cleaned = _git_process(workspace, "clean", "-fdx")
+    status = _git_process(workspace, "status", "--porcelain=v1")
+    _require(
+        reset.returncode == 0 and cleaned.returncode == 0
+        and status.returncode == 0 and not status.stdout,
+        "baseline workspace cannot be restored cleanly",
+    )
+    return workspace
+
+
+def _capture_program_test_baseline(
+    root: Path,
+    run_id: str,
+    projection: dict[str, object],
+    *,
+    now: datetime,
+) -> dict[str, object]:
+    head = str(projection["expected_repository"]["head"])  # type: ignore[index]
+    runner = _declared_test_runner(root, run_id)
+    if runner is None:
+        fact = build_baseline_fact(head_sha=head, command_hash=None)
+    else:
+        runner_hash = _sha(runner)
+        workspace = _baseline_workspace(root, head)
+        observed = _run_test_command(
+            workspace, runner,
+            timeout_seconds=int(runner["timeout_seconds"]),
+            staging=_conductor_dir(root, run_id) / "baseline-command",
+        )
+        fact = build_baseline_fact(
+            head_sha=head, command_hash=runner_hash,
+            exit_code=int(observed["exit_code"]), output=str(observed["output"]),
+            output_truncated=bool(observed["output_truncated"]),
+        )
+    return _record_program_test_baseline(root, run_id, fact, now=now)
+
+
+def _latest_program_workspace(
+    root: Path,
+    run_id: str,
+    projection: dict[str, object],
+    action: dict[str, object],
+) -> Path:
+    for claim in reversed(projection.get("claims", [])):
+        if (
+            not isinstance(claim, dict) or claim.get("category") != "agent"
+            or claim.get("status") != "succeeded"
+            or claim.get("subject", {}).get("story") != action.get("story")
+            or not isinstance(claim.get("dispatch"), dict)
+        ):
+            continue
+        operation_id = str(claim["dispatch"]["operation_id"])
+        record = _load_json(
+            _conductor_dir(root, run_id) / "driver-sessions" / f"{operation_id}.json",
+            "program driver operation",
+        )
+        packet = validate_work_packet(
+            _load_json(Path(str(record["packet_path"])), "program work packet")
+        )
+        workspace = packet["workspace"]
+        _require(isinstance(workspace, dict) and workspace.get("mode") == "isolated-worktree", "test command has no isolated predecessor workspace")
+        path = Path(str(workspace["path"])).resolve()
+        _require(path.is_dir(), "test command predecessor workspace disappeared")
+        return path
+    raise DwError("test command has no successful isolated predecessor workspace")
+
+
 def _run_closed_check(
     root: Path,
     runner: object,
     receipts: list[dict[str, object]],
+    *,
+    run_id: str | None = None,
+    action: dict[str, object] | None = None,
+    projection: dict[str, object] | None = None,
 ) -> dict[str, object]:
     _require(isinstance(runner, dict), "check node has no closed runner")
     kind = runner.get("kind")
-    _require(kind == "builtin", "program conductor refuses tracked command argv; use a registered built-in check")
+    if kind == "command":
+        _require(run_id is not None and action is not None and projection is not None, "program command check lacks run context")
+        normalized = _normalized_command_runner(
+            runner, timeout_seconds=int(action.get("timeout_seconds", 900))
+        )
+        _require(normalized is not None, "program command check declaration is invalid")
+        workspace = _latest_program_workspace(root, run_id, projection, action)
+        observed = _run_test_command(
+            workspace,
+            normalized,
+            timeout_seconds=int(action.get("timeout_seconds", 900)),
+            staging=_conductor_dir(root, run_id) / "check-command" / str(action["action_id"]),
+        )
+        parsed = extract_test_failures(
+            str(observed["output"]), int(observed["exit_code"]),
+            output_truncated=bool(observed["output_truncated"]),
+        )
+        analysis = classify_test_failures(
+            parsed,
+            projection.get("test_baseline"),
+            expected_head_sha=str(projection["expected_repository"]["head"]),  # type: ignore[index]
+            command_hash=_sha(normalized),
+        )
+        failure_projection = build_failure_projection(analysis)
+        passed = not failure_projection["introduced"]
+        detail = {
+            "runner": "command",
+            "command_hash": _sha(normalized),
+            "exit_code": observed["exit_code"],
+            "stdout_bytes": observed["stdout_bytes"],
+            "stderr_bytes": observed["stderr_bytes"],
+            "output_truncated": observed["output_truncated"],
+            "changed_paths": observed["changed_paths"],
+            "test_failures": failure_projection,
+        }
+        return {
+            "passed": passed,
+            "predicate": "artifact-conformance",
+            "detail": detail,
+            "test_failures": failure_projection,
+            "command": None,
+        }
+    _require(kind == "builtin", "program conductor check runner is unsupported")
     name = str(runner.get("name"))
     detail: dict[str, object] = {"runner": name}
     if name == "file-exists":
@@ -1440,6 +1690,23 @@ def _run_closed_check(
     return {"passed": passed, "predicate": predicate, "detail": detail}
 
 
+def _emit_preexisting_test_debt(
+    root: Path,
+    run_id: str,
+    action: dict[str, object],
+    analysis: object,
+    *,
+    now: datetime,
+) -> dict[str, object]:
+    obligations = build_test_debt_obligations(
+        analysis,
+        target=str(action["story"]) if action.get("story") is not None else None,
+    )
+    return _record_program_test_debts(
+        root, run_id, obligations, now=now
+    )
+
+
 def _execute_check_action(
     root: Path,
     run_id: str,
@@ -1482,13 +1749,14 @@ def _execute_check_action(
             "action_id": action["action_id"], "claim_id": claim["claim_id"],
             "operation_id": operation_id,
         })
+        replayed = replay_program_conductor(root, run_id, now=now)
         observed = _run_closed_check(
             root,
             action["runner"],
-            _receipts_for_plan(
-                replay_program_conductor(root, run_id, now=now)["receipts"],
-                context["plan"],
-            ),
+            _receipts_for_plan(replayed["receipts"], context["plan"]),
+            run_id=run_id,
+            action=action,
+            projection=replayed["authority"],
         )
         session = {**session, "status": "observed", "result": observed}
         _write_json_atomic(session_path, session)
@@ -1525,7 +1793,7 @@ def _execute_check_action(
         "observation_ref": observation["ref"],
         "observation_hash": observation["sha256"],
         "observation_bytes": observation["bytes"],
-        "command": None,
+        "command": observed.get("command"),
         "issued_at": claim["reserved_at"],
     }
     mechanical_receipt = {
@@ -1559,7 +1827,13 @@ def _execute_check_action(
         "operation": {"runner_hash": runner_hash, "predicate": observed["predicate"]},
         "artifacts": [observation, fact_artifact], "verdict": None,
         "decision": None, "obligation_ids": [],
-        "payload": {"fact_hash": fact["fact_hash"]},
+        "payload": {
+            "fact_hash": fact["fact_hash"],
+            **(
+                {"test_failures": observed["test_failures"]}
+                if "test_failures" in observed else {}
+            ),
+        },
         "issued_at": claim["reserved_at"],
     })
     _boundary(boundary_hook, "after-receipt", {
@@ -1568,8 +1842,12 @@ def _execute_check_action(
     })
     projection = _complete_claim(
         root, run_id, claim, str(receipt["receipt_hash"]), result=outcome,
-        reason=f"Closed built-in check returned {result}.", now=now,
+        reason=f"Closed check returned {result}.", now=now,
     )
+    if "test_failures" in observed:
+        projection = _emit_preexisting_test_debt(
+            root, run_id, action, observed["test_failures"], now=now
+        )
     return {"status": "complete", "projection": projection, "receipt": receipt}
 
 
@@ -2304,6 +2582,7 @@ def _local_workflow_action(
         "node_address": node_base,
         "outputs": list(node.get("outputs", [])),
         "runner": node.get("runner"),
+        "timeout_seconds": int(node.get("timeout_seconds", 900)),
         "prompt_document": {"task": f"Execute deterministic {node_type} node."},
     })
     return action
@@ -4821,6 +5100,19 @@ def derive_program_frontier(
                 else:
                     continue
             if failed or red:
+                failure_payload = prior.get("payload")
+                failure_analysis = (
+                    failure_payload.get("test_failures")
+                    if isinstance(failure_payload, dict) else None
+                )
+                if (
+                    isinstance(failure_analysis, dict)
+                    and int(failure_analysis.get("introduced_count", 0)) > 0
+                ):
+                    return _frontier_result(
+                        run_id, plan, "stopped", [],
+                        stop="route-block-introduced-test-failure",
+                    )
                 controlling_loop = contexts[-1] if contexts else None
                 controlled_node: str | None = None
                 if isinstance(controlling_loop, dict):
@@ -6507,6 +6799,15 @@ def tick_program(
                 ),
                 "program act token is stale at the conductor lock",
             )
+        if (
+            before_projection["state"] == "running"
+            and before_projection.get("test_baseline") is None
+        ):
+            _capture_program_test_baseline(
+                root, run_id, before_projection, now=observed
+            )
+            before = replay_program_conductor(root, run_id, now=observed)
+            before_projection = before["authority"]
         before_head = str(before_projection["ledger_head"])
         before_receipts = len(before["receipts"])
         if before_projection["state"] != "running":

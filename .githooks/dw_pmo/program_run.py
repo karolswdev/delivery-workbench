@@ -32,6 +32,10 @@ from .orchestration_driver import (
     driver_inventory,
     load_driver_config,
 )
+from .test_baseline import (
+    validate_baseline_fact,
+    validate_test_debt_obligation,
+)
 from .programs import (
     BUDGET_DEFAULTS,
     MODE_CEILINGS,
@@ -163,6 +167,8 @@ _EVENT_DETAIL_KEYS = {
         "idempotency_key", "profile", "adapter", "adapter_version",
         "execution", "child_grant_hash",
     },
+    "test_baseline_captured": {"baseline"},
+    "test_debt_recorded": {"baseline_hash", "obligations", "obligation_hashes"},
     "program_obligation_recorded": {
         "claim_id", "request_hash", "decision_hash", "obligation",
         "obligation_hash",
@@ -1374,6 +1380,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
     expected_repository = dict(grant["repository"])
     expected_roadmap = dict(grant["roadmap"])
     exhaustion: dict[str, object] | None = None
+    test_baseline: dict[str, object] | None = None
     expires = _time(str(grant["expires_at"]), "expires_at")
 
     for event in events[1:]:
@@ -1384,7 +1391,20 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
             state = "expired"
         event_generation = event["generation"]
         _require(isinstance(event_generation, int) and not isinstance(event_generation, bool), "program event generation is invalid")
-        if event_name == "claim_reserved":
+        if event_name == "test_baseline_captured":
+            _require(event_generation == generation, "test baseline uses the wrong revocation generation")
+            _require(state == "running", "test baseline was captured while program was not running")
+            _require(test_baseline is None, "program test baseline was amended")
+            _require(not dispatches, "program test baseline was captured after dispatch")
+            try:
+                test_baseline = validate_baseline_fact(detail["baseline"])
+            except ValueError as exc:
+                raise DwError(str(exc)) from exc
+            _require(
+                test_baseline["head_sha"] == grant["repository"]["head"],  # type: ignore[index]
+                "program test baseline head differs from the granted head",
+            )
+        elif event_name == "claim_reserved":
             _require(event_generation == generation, "claim uses the wrong revocation generation")
             _require(state == "running", "claim was reserved while program was not running")
             category = str(detail["category"])
@@ -1554,6 +1574,54 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
                 expected_roadmap = dict(fact_binding["roadmap"])
             if claim["category"] == "checkpoint-request" and state == "checkpoint":
                 state = "running"
+        elif event_name == "test_debt_recorded":
+            _require(event_generation == generation, "test debt uses the wrong revocation generation")
+            _require(test_baseline is not None, "test debt has no baseline fact")
+            _require(detail["baseline_hash"] == _sha(test_baseline), "test debt baseline binding is stale")
+            raw_obligations = detail["obligations"]
+            raw_hashes = detail["obligation_hashes"]
+            _require(
+                isinstance(raw_obligations, list) and raw_obligations
+                and len(raw_obligations) <= 200
+                and isinstance(raw_hashes, list)
+                and len(raw_hashes) == len(raw_obligations),
+                "test debt batch is invalid",
+            )
+            normalized_batch: list[dict[str, object]] = []
+            for raw_obligation in raw_obligations:
+                try:
+                    strict = validate_test_debt_obligation(raw_obligation)
+                except ValueError as exc:
+                    raise DwError(str(exc)) from exc
+                obligation = _normalize_obligation(strict)
+                _require(obligation == strict, "test debt obligation normalization changed its shape")
+                normalized_batch.append(obligation)
+            expected_hashes = [_sha(item) for item in normalized_batch]
+            _require(raw_hashes == expected_hashes, "test debt obligation hashes are invalid")
+            batch_ids = [str(item["id"]) for item in normalized_batch]
+            _require(len(batch_ids) == len(set(batch_ids)), "test debt batch repeats an obligation id")
+            _require(not (set(batch_ids) & set(obligations)), "test debt obligation id was reused")
+            counters["max_obligations"] += len(normalized_batch)
+            _require(
+                counters["max_obligations"]
+                <= int(grant["authority"]["budgets"]["max_obligations"]),  # type: ignore[index]
+                "test debt exceeds the granted obligation budget",
+            )
+            for obligation, obligation_hash in zip(normalized_batch, expected_hashes):
+                obligation_id = str(obligation["id"])
+                obligations[obligation_id] = {
+                    **obligation,
+                    "source_decision_hash": detail["baseline_hash"],
+                    "obligation_hash": obligation_hash,
+                    "recorded_at": event["at"],
+                    "record_claim_id": None,
+                    "history": [],
+                }
+                obligation_history.append({
+                    "event": event_name, "at": event["at"],
+                    "obligation_id": obligation_id, "claim_id": None,
+                    "to_state": "open",
+                })
         elif event_name == "program_obligation_recorded":
             _require(event_generation == generation, "obligation record uses the wrong revocation generation")
             claim_id = _safe(detail["claim_id"], "obligation claim id")
@@ -1806,6 +1874,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
         "obligation_history": obligation_history,
         "scope_completion": scope_completion,
         "exhaustion": exhaustion,
+        "test_baseline": test_baseline,
         "issued_at": grant["issued_at"],
         "expires_at": grant["expires_at"],
         "expired": expired,
@@ -1828,6 +1897,123 @@ def _append_event(path: Path, event: dict[str, object]) -> None:
         handle.write((canonical_json(event) + "\n").encode("utf-8"))
         handle.flush()
         os.fsync(handle.fileno())
+
+
+def _record_program_test_baseline(
+    root: Path,
+    run_id: str,
+    baseline: object,
+    *,
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    """Append one conductor-observed baseline fact; no transport exposes this."""
+    root = root.resolve()
+    observed = _time(now, "now")
+    try:
+        fact = validate_baseline_fact(baseline)
+    except ValueError as exc:
+        raise DwError(str(exc)) from exc
+    path, grant, _plan = _load_documents(root, run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        prior = projection.get("test_baseline")
+        if prior is not None:
+            _require(prior == fact, "program test baseline cannot be amended")
+            return {**projection, "idempotent": True}
+        _require(projection["state"] == "running", "program is not running")
+        _require(not projection["dispatches"], "test baseline must precede first dispatch")
+        _require(
+            fact["head_sha"] == grant["repository"]["head"],  # type: ignore[index]
+            "test baseline head differs from the granted head",
+        )
+        current_head = head_sha(root) or "none"
+        _require(current_head == fact["head_sha"], "test baseline head is stale")
+        event = _event_document(
+            run_id,
+            int(projection["event_count"]) + 1,
+            "test_baseline_captured",
+            int(projection["generation"]),
+            observed,
+            {"baseline": fact},
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+        return {
+            **projection,
+            "test_baseline": fact,
+            "event_count": int(projection["event_count"]) + 1,
+            "ledger_head": event["event_hash"],
+            "idempotent": False,
+        }
+
+
+def _record_program_test_debts(
+    root: Path,
+    run_id: str,
+    obligations: object,
+    *,
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    """Append one bounded batch of deterministic baseline debt."""
+    root = root.resolve()
+    observed = _time(now, "now")
+    _require(
+        isinstance(obligations, list) and len(obligations) <= 200,
+        "test debt obligations must be a bounded list",
+    )
+    strict_batch: list[dict[str, object]] = []
+    for raw in obligations:
+        try:
+            strict = validate_test_debt_obligation(raw)
+        except ValueError as exc:
+            raise DwError(str(exc)) from exc
+        normalized = _normalize_obligation(strict)
+        _require(normalized == strict, "test debt obligation normalization changed its shape")
+        strict_batch.append(normalized)
+    path, _grant, _plan = _load_documents(root, run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        baseline = projection.get("test_baseline")
+        _require(baseline is not None, "test debt cannot be recorded without a baseline")
+        existing = {
+            str(item["id"]): item for item in projection["obligations"]
+        }
+        pending: list[dict[str, object]] = []
+        for obligation in strict_batch:
+            prior = existing.get(str(obligation["id"]))
+            if prior is not None:
+                _require(prior["obligation_hash"] == _sha(obligation), "test debt obligation id conflicts")
+            else:
+                pending.append(obligation)
+        if not pending:
+            return {**projection, "recorded_obligations": [], "idempotent": True}
+        _require(
+            len(pending)
+            <= projection["budgets"]["max_obligations"]["remaining"],
+            "test debt exceeds the granted obligation budget",
+        )
+        hashes = [_sha(item) for item in pending]
+        event = _event_document(
+            run_id,
+            int(projection["event_count"]) + 1,
+            "test_debt_recorded",
+            int(projection["generation"]),
+            observed,
+            {
+                "baseline_hash": _sha(baseline),
+                "obligations": pending,
+                "obligation_hashes": hashes,
+            },
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+        return {
+            **projection,
+            "event_count": int(projection["event_count"]) + 1,
+            "ledger_head": event["event_hash"],
+            "recorded_obligations": pending,
+            "idempotent": False,
+        }
 
 
 def _current_roster_hash(root: Path, driver_config: dict[str, object] | None = None) -> str:

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import re
 
+from .test_baseline import build_failure_projection
+
 
 LIVE_PROGRESS_KIND = "delivery-workbench-live-progress"
 LIVE_PROGRESS_SCHEMA_VERSION = 1
@@ -1210,11 +1212,41 @@ def build_program_live_progress(
         f"Work: {', '.join(str(item['name']) for item in owners) or 'not assigned'}. "
         f"Independent review: {', '.join(str(item['name']) for item in reviewers) or 'not assigned'}."
     )
-    passed_answer = (
-        f"Passed: {', '.join(passed_names)}."
-        if passed_names
-        else "No mechanical or judgment review outcome has passed yet."
+    raw_failure_sets = next(
+        (
+            item["payload"]["test_failures"]
+            for item in reversed(receipts)
+            if isinstance(item.get("payload"), dict)
+            and isinstance(item["payload"].get("test_failures"), dict)
+        ),
+        None,
     )
+    failure_sets = (
+        build_failure_projection(raw_failure_sets)
+        if isinstance(raw_failure_sets, dict) else None
+    )
+    if isinstance(failure_sets, dict):
+        introduced_count = int(failure_sets.get("introduced_count", 0))
+        pre_existing_count = int(failure_sets.get("pre_existing_count", 0))
+        if introduced_count:
+            passed_answer = (
+                f"{introduced_count} introduced test failure"
+                f"{'s' if introduced_count != 1 else ''}; "
+                f"{pre_existing_count} pre-existing."
+            )
+        elif pre_existing_count:
+            passed_answer = (
+                f"No introduced failures; {pre_existing_count} pre-existing "
+                f"test failure{'s' if pre_existing_count != 1 else ''}."
+            )
+        else:
+            passed_answer = "The declared test command has no failures."
+    else:
+        passed_answer = (
+            f"Passed: {', '.join(passed_names)}."
+            if passed_names
+            else "No mechanical or judgment review outcome has passed yet."
+        )
     budgets = _budget_rows(_usage_budget_overlay(
         authority.get("budgets"), receipts
     ))
@@ -1447,6 +1479,7 @@ def build_program_live_progress(
             "summary": team_answer,
         },
         "review": {
+            **({"test_failures": failure_sets} if isinstance(failure_sets, dict) else {}),
             "mechanical": [
                 {
                     "title": _title(item.get("action_kind")),

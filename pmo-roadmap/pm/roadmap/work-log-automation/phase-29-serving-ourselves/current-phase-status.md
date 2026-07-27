@@ -113,7 +113,7 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 | WLA-29-02 | Build the symbol and structure map | done | [story-02-build-the-symbol-and-structure-map](./story-02-build-the-symbol-and-structure-map.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-29-03 | Ground the work before it starts | done | [story-03-ground-the-work-before-it-starts](./story-03-ground-the-work-before-it-starts.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-29-04 | Serve knowledge packets to agents | done | [story-04-serve-knowledge-packets-to-agents](./story-04-serve-knowledge-packets-to-agents.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-29-05 | Judge only the failures we introduced | backlog | [story-05-judge-only-the-failures-we-introduced](./story-05-judge-only-the-failures-we-introduced.md) | — |
+| WLA-29-05 | Judge only the failures we introduced | done | [story-05-judge-only-the-failures-we-introduced](./story-05-judge-only-the-failures-we-introduced.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-29-06 | Decorrelate the author and the reviewer | done | [story-06-decorrelate-the-author-and-the-reviewer](./story-06-decorrelate-the-author-and-the-reviewer.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-29-07 | Write the delivery back | backlog | [story-07-write-the-delivery-back](./story-07-write-the-delivery-back.md) | — |
 | WLA-29-08 | Serve ourselves for real | backlog | [story-08-serve-ourselves-for-real](./story-08-serve-ourselves-for-real.md) | — |
@@ -212,6 +212,28 @@ compatibility proven. The honest-telemetry pass landed with it: usage a
 backend does not report stays unknown through receipts, ledgers, live
 progress, bounded actions, and workbench projections, while an explicitly
 reported zero stays numeric zero. Core suite 573 → 581, all green.
+
+WLA-29-05 made verdicts judge only what a change introduced. Before first
+dispatch the declared test command runs in a persistent, head-bound
+baseline worktree and the failing set is recorded as a bounded, immutable
+ledger fact (identifiers and counts, head-SHA provenance, never output
+prose) that no agent-facing surface can write or amend. Post-change
+failures classify as introduced — routed straight to
+`route-block-introduced-test-failure`, bypassing retry, repair, loop,
+exhaustion, and escalation — or pre-existing, which emit strictly
+validated non-blocking `technical-debt` obligations, batched into one
+ledger event with one replay and deduplicated per run. Missing, foreign-
+head, stale-command, truncated, or unparseable baselines fail closed: all
+failures judged introduced. One shared failure projection renders both
+sets across gate proof, live progress, and team review, so "green with
+pre-existing debt" is never reported as plain green. Programs without a
+declared command keep today's whole-result semantics, recorded honestly
+as subtraction-unavailable. The diff absorbed a three-lens review
+(altitude, simplification, efficiency) plus a matching peer-session
+review before landing; two structural suggestions were declined on
+architecture (baseline capture stays tick-driven for crash-recovery
+replay; event-schema centralization deferred as follow-up). Core suite
+581 → 589, all green; packaged exam complete.
 
 ## Active risks
 
