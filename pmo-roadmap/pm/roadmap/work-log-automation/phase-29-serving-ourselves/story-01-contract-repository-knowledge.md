@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 29
-- **Status:** ready
+- **Status:** done
 - **Depends on:** -
 - **Unblocks:** WLA-29-02, WLA-29-03, WLA-29-04, WLA-29-05, WLA-29-07
 - **Owner:** unassigned
@@ -85,3 +85,15 @@ adding a lock protocol.
 Whether `.git/pmo-knowledge/` should ever become repository-tracked is
 deliberately deferred; the contract only promises that moving it later cannot
 change any authoritative answer, because knowledge never authorizes anything.
+
+Implemented as `delivery-workbench-repository-knowledge@1` in
+`dw_pmo/knowledge.py` (566 lines) with `docs/repository-knowledge.md` as the
+prose register. Derived facts refuse via typed `StaleDerivedFact` /
+`MissingDerivedFact` and recompute explicitly; earned records are hash-chained
+JSONL with closed field sets, caps, and mandatory provenance, re-validated on
+read so tampering, truncation, and rewrite all refuse. Every document stamps
+an explicit false authority marker. Both fitness directions are enforced by
+`repository_knowledge_tests.py` (17 tests), including a planted knowledge
+read inside an authority path being rejected and a byte-parity check on the
+vendored hook copy. The core suite grew 530 to 547, all green, with no
+existing test edited.

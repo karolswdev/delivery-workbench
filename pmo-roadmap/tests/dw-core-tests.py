@@ -28,11 +28,16 @@ from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 TESTS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(TESTS_DIR))
 sys.path.insert(0, str(TESTS_DIR.parent / "lib"))
 
 import dw_pmo as core
 import dw_pmo.step as step_core
 from dw_pmo import DwError
+from repository_knowledge_tests import (
+    RepositoryKnowledgeFitnessTest,
+    RepositoryKnowledgeTest,
+)
 
 
 README = """# Demo - Roadmap

@@ -109,7 +109,7 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-29-01 | Contract repository knowledge | ready | [story-01-contract-repository-knowledge](./story-01-contract-repository-knowledge.md) | — |
+| WLA-29-01 | Contract repository knowledge | done | [story-01-contract-repository-knowledge](./story-01-contract-repository-knowledge.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-29-02 | Build the symbol and structure map | backlog | [story-02-build-the-symbol-and-structure-map](./story-02-build-the-symbol-and-structure-map.md) | — |
 | WLA-29-03 | Ground the work before it starts | backlog | [story-03-ground-the-work-before-it-starts](./story-03-ground-the-work-before-it-starts.md) | — |
 | WLA-29-04 | Serve knowledge packets to agents | backlog | [story-04-serve-knowledge-packets-to-agents](./story-04-serve-knowledge-packets-to-agents.md) | — |
@@ -125,6 +125,23 @@ operational audit that found the program engine architecturally complete,
 fixture-proven, and never once run for real. WLA-29-01 is ready: the contract
 lands before any extraction, retrieval, or caching exists, in the pattern
 phase 28 proved (the rule ships before anything reuses a fact).
+
+WLA-29-01 shipped the contract:
+`delivery-workbench-repository-knowledge@1` in `dw_pmo/knowledge.py`, with
+`docs/repository-knowledge.md` as its prose register. The split is structural:
+derived facts live under `.git/pmo-knowledge/derived/`, carry the repofacts
+index tree they were computed from, and refuse on any other current tree
+(`StaleDerivedFact`), with an explicit recompute path; earned records
+(`delivery-record`, `lesson`) live under `.git/pmo-knowledge/earned/` as
+hash-chained append-only JSONL with closed scalar-only field sets, per-field
+caps, and mandatory provenance (origin, UTC timestamp, head SHA), validated on
+append and re-validated on read. Every stored document stamps an explicit
+false authority marker. The fitness guards hold both directions: gate,
+contract, grant, and verdict paths cannot read knowledge stores (a planted
+read is rejected), and the knowledge core imports nothing networked,
+non-stdlib, or spawning, with no clock or randomness in derived-fact
+computation. Nothing calls the module yet — 17 new tests, the core suite grew
+to 547, all green, vendored copy byte-identical.
 
 ## Active risks
 
