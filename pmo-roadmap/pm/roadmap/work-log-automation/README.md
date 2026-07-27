@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-26 (Phase 28 closed 5/5: the suite proves the same work 8.8x faster).
-**Current phase:** [Phase 28 - Faster Proof](./phase-28-faster-proof/) (closed, 5/5). Next phase not yet chosen.
+**Last updated:** 2026-07-26 (Phase 29 opened: serving ourselves — repository knowledge, grounded work, honest verdicts, and the first real program run).
+**Current phase:** [Phase 29 - Serving ourselves](./phase-29-serving-ourselves/) (open, 0/8).
 **Status:** Phase 28 closed the cost of proof. Repository-derived facts now live behind one versioned boundary that says, per fact, what may be reused: where the repository *is* resolves once per process, what it *contains* is read once per observation and never retained. `rev-parse --git-dir` went from 2,435 spawns in the slowest test to zero, the suite runs sharded across processes, and an executable budget fails the build if a tick starts spending again. The core suite went **814s to ~93-147s while growing from 499 to 530 tests** — 8.8x at best, 5.5x on a loaded desk — with nothing weakened, skipped, or removed. Two latent worktree defects were found and fixed on the way. Landing and release remain separate decisions; phases 25-28 are all unreleased.
 
 ## Vision
@@ -99,6 +99,16 @@ summarization can improve those entries after the lifecycle is proven.
   operation, setup, help, errors, onboarding, and product docs must instead use
   consistent plain terms for the plan, team, work, review, decision, blocker,
   permission, progress, cost, and next delivery step.
+- Comparative study, 2026-07-26: krishagarwal314/autodev-studio — a
+  three-day-old autonomous-SDLC prototype whose missing maturity tier
+  (durable orchestration, typed verdicts, provenance, checkpoints,
+  notifications) is what phases 24-27 built, and whose genuinely missing-here
+  ideas — persistent repository knowledge with delivery write-back,
+  deterministic grounding of generated localization hints, baseline test
+  failure subtraction, cross-provider author/reviewer separation, honest
+  unknown telemetry — seed Phase 29. Its proceed-on-failed-quality behavior
+  is explicitly rejected. Paired operational finding: this repository's own
+  program engine had zero real runs, so Phase 29 ends with one.
 - Comparative study (sidequest), 2026-07-19: ogulcancelik/herdr and its
   plugin ecosystem — declarative screen-state manifests with auditable
   `agent explain` derivation (strict blocked-detection, detection firewalled
@@ -180,6 +190,7 @@ Phase 28 adds no new autonomy, hosted authority, release, or publication scope.
 | 26 | Delivery Workbench optionally adds governed autonomous delivery programs across an explicit roadmap scope—without changing vanilla or bounded-run usage—with hierarchical workflows, independent verification, advanced bounded loops, and only the quality, integration, and roadmap acts named by a finite revocable program grant. | done | [phase-26-autonomous-delivery-programs](./phase-26-autonomous-delivery-programs/) |
 | 27 | Make Delivery Workbench's everyday application layer speak and behave like a practical delivery tool, with one plain-language vocabulary and coherent task flows across setup, Program Studio, live operation, help, errors, onboarding, and product documentation, while keeping exact protocol terms available in machine contracts, architecture, and explicit audit views. | done | [phase-27-usability-improvements](./phase-27-usability-improvements/) |
 | 28 | Cut the cost of proving work — repository facts resolved once, no redundant git spawns, a parallel proof suite — without weakening any freshness, authority, or fail-closed guarantee. | done | [phase-28-faster-proof](./phase-28-faster-proof/) |
+| 29 | The engine learns the repository it works in and delivers real work in it: deterministic repository knowledge with delivery write-back, grounded stories, knowledge packets, introduced-failure verdicts, provider-diverse review, and one real checkpointed program run ending at the human certification seam. | in-progress | [phase-29-serving-ourselves](./phase-29-serving-ourselves/) |
 
 ## Operating cadence
 
