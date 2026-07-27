@@ -13504,6 +13504,162 @@ class ProgramConductorTest(unittest.TestCase):
         )
         self.assertEqual(collected["payload"]["input_count"], 2)
 
+    def test_user_check_fact_is_rebound_to_later_verdict_subject(self):
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        implement = workflow["nodes"][0]
+        implement.pop("on_success", None)
+        check = {
+            "id": "check-candidate", "type": "check",
+            "needs": ["implement"],
+            "inputs": {
+                "candidate": {
+                    "kind": "artifact", "name": "implement.candidate",
+                },
+            },
+            "runner": {
+                "kind": "builtin", "name": "file-exists",
+                "path": "pm/programs/demo-program.json",
+                "output_bytes": 50_000,
+            },
+            "expect": {"exit_code": 0},
+            "timeout_seconds": 60, "max_attempts": 1,
+            "outputs": [{
+                "id": "fact", "kind": "mechanical-fact",
+                "max_bytes": 20_000,
+            }],
+            "on_failure": {"kind": "action", "target": "block"},
+        }
+        verdict = {
+            "id": "verify", "type": "verdict",
+            "needs": ["check-candidate"], "role": "verifier",
+            "rubric": "story-quality",
+            "subject": {
+                "kind": "artifact", "name": "implement.candidate",
+            },
+            "freshness_seconds": 60,
+            "max_rationale_bytes": 20_000, "max_attempts": 1,
+            "results": ["pass", "fail"],
+            "routes": {
+                "pass": {"kind": "terminal", "target": "complete"},
+                "fail": {"kind": "action", "target": "block"},
+            },
+            "on_failure": {"kind": "action", "target": "block"},
+        }
+        workflow["nodes"] = [implement, check, verdict]
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        rubric_path = self.root / "pm/rubrics/story-quality.json"
+        rubric = json.loads(rubric_path.read_text(encoding="utf-8"))
+        criterion = rubric["criteria"][0]
+        criterion.update({
+            "evaluation": {
+                "kind": "mechanical-fact", "fact": "check-candidate",
+            },
+            "required_evidence_kinds": [],
+            "min_citations": 0,
+        })
+        rubric_path.write_text(
+            json.dumps(rubric, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture._git("add", "pm")
+        self.authority.fixture._git(
+            "commit", "-qm", "check then verdict conductor fixture"
+        )
+
+        projection = self.start()
+        fixture = self.advance_to_agent(projection)
+        implemented = self.core.tick_program(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        checked = self.core.tick_program(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        self.assertEqual(implemented["action"]["kind"], "agent")
+        self.assertEqual(checked["action"]["kind"], "check")
+        before_verdict = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertFalse(any(
+            item["action_kind"] == "verdict"
+            for item in before_verdict["receipts"]
+        ))
+
+        verified = self.core.tick_program(
+            self.root, projection["run_id"], driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        self.assertEqual(verified["action"]["kind"], "verdict")
+        frontier = self.core.derive_program_frontier(
+            self.root, projection["run_id"], driver_config=self.config,
+            now=self.now,
+        )
+        self.assertEqual(
+            (frontier["state"], frontier["stop"]),
+            ("story-certified", "integration-required"),
+        )
+
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        check_receipt = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "check"
+        )
+        verdict_receipt = next(
+            item for item in replayed["receipts"]
+            if item["action_kind"] == "verdict"
+        )
+        self.assertEqual(verdict_receipt["result"], "pass")
+        self.assertEqual(verdict_receipt["route"], "pass")
+        claim_order = {
+            item["claim_id"]: index
+            for index, item in enumerate(replayed["authority"]["claims"])
+        }
+        self.assertLess(
+            claim_order[check_receipt["claim_id"]],
+            claim_order[verdict_receipt["claim_id"]],
+        )
+        stored_artifact = next(
+            item for item in check_receipt["artifacts"]
+            if item["artifact_kind"] == "mechanical-fact"
+        )
+        stored_fact = json.loads(self.core._artifact_content(
+            self.root, projection["run_id"], stored_artifact
+        ))
+        operation_id = verdict_receipt["operation"]["operation_id"]
+        operation = self.core._load_json(
+            self.root / ".git/pmo-programs/runs" / projection["run_id"]
+            / "conductor/driver-sessions" / f"{operation_id}.json",
+            "verdict driver operation",
+        )
+        packet = self.core._load_json(
+            Path(operation["packet_path"]), "verdict work packet"
+        )
+        prompt = json.loads(packet["prompt"])
+        rebuilt_fact = prompt["mechanical_facts"][0]
+        issued_artifact = next(
+            item for item in verdict_receipt["artifacts"]
+            if item["name"] == "issued-verdict"
+        )
+        issued = json.loads(self.core._artifact_content(
+            self.root, projection["run_id"], issued_artifact
+        ))
+        self.assertNotEqual(stored_fact["subject"], rebuilt_fact["subject"])
+        self.assertEqual(rebuilt_fact["subject"], issued["subject"])
+        self.assertEqual(
+            issued["criteria"][0]["mechanical_fact_hash"],
+            rebuilt_fact["fact_hash"],
+        )
+        for field in ("predicate", "result", "observation", "issued_at"):
+            self.assertEqual(rebuilt_fact[field], stored_fact[field])
+        self.assertEqual(rebuilt_fact["issuer"], stored_fact["issuer"])
+
     def test_failed_verdict_takes_one_claimed_repair_then_reverifies(self):
         projection = self.start()
         first_verifier = (

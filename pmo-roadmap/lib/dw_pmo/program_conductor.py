@@ -1024,6 +1024,7 @@ def _build_packet(
     selection: dict[str, object],
     *,
     now: datetime,
+    prompt_document: dict[str, object] | None = None,
 ) -> dict[str, object]:
     validate_child_grant(child_grant)
     profile = str(member["profile"])
@@ -1060,8 +1061,11 @@ def _build_packet(
         "truncated": False,
         "content": child_data,
     }]
-    prompt_document = dict(action["prompt_document"])
-    prompt_document.update({
+    packet_prompt = dict(
+        action["prompt_document"]
+        if prompt_document is None else prompt_document
+    )
+    packet_prompt.update({
         "address": action["address"],
         "action_kind": action["kind"],
         "child_grant_hash": child_grant["grant_hash"],
@@ -1087,7 +1091,7 @@ def _build_packet(
         "idempotency_key": claim["idempotency_key"],
         "role": role["role"],
         "profile": profile,
-        "prompt": canonical_json(prompt_document),
+        "prompt": canonical_json(packet_prompt),
         "capabilities": driver_capabilities,
         "workspace": workspace,
         "resource_groups": groups,
@@ -2494,6 +2498,47 @@ def _mechanical_facts_from_receipts(
             fact = validate_mechanical_fact(raw)
             facts[str(fact["fact_hash"])] = fact
     return [facts[key] for key in sorted(facts)]
+
+
+def _mechanical_receipt_from_fact(
+    value: object,
+) -> tuple[str, dict[str, object]]:
+    """Recover the exact trusted receipt fields embedded in one stored fact."""
+    fact = validate_mechanical_fact(value)
+    issuer = fact["issuer"]
+    observation = fact["observation"]
+    assert isinstance(issuer, dict) and isinstance(observation, dict)
+    receipt = {
+        "kind": "delivery-workbench-mechanical-receipt",
+        "schema_version": 1,
+        "adapter_kind": issuer["kind"],
+        "adapter_id": issuer["id"],
+        "adapter_fingerprint": issuer["fingerprint"],
+        "capability": issuer["capability"],
+        "predicate": fact["predicate"],
+        "passed": fact["result"] == "pass",
+        "observation_ref": observation["ref"],
+        "observation_hash": observation["hash"],
+        "observation_bytes": observation["bytes"],
+        "command": observation["command"],
+        "issued_at": fact["issued_at"],
+        "receipt_hash": issuer["receipt_hash"],
+    }
+    return str(fact["id"]), receipt
+
+
+def _rebuild_mechanical_facts(
+    facts: object,
+    subject: dict[str, object],
+) -> list[dict[str, object]]:
+    _require(isinstance(facts, list), "verdict mechanical facts are malformed")
+    rebuilt: list[dict[str, object]] = []
+    for value in facts:
+        fact_id, receipt = _mechanical_receipt_from_fact(value)
+        rebuilt.append(validate_mechanical_fact(
+            build_mechanical_fact(fact_id, receipt, subject)
+        ))
+    return rebuilt
 
 
 def _candidate_subject_from_receipts(
@@ -5854,11 +5899,68 @@ def _verdict_subject(
     }
 
 
+def _bound_verdict_prompt(
+    root: Path,
+    run_id: str,
+    action: dict[str, object],
+    context: dict[str, object],
+    projection: dict[str, object],
+) -> dict[str, object]:
+    """Bind stored check receipts to the exact subject shown to the verifier."""
+    prompt = dict(action["prompt_document"])
+    stored_facts = prompt.get("mechanical_facts", [])
+    _require(
+        isinstance(stored_facts, list),
+        "verdict packet mechanical facts are malformed",
+    )
+    if not stored_facts:
+        return prompt
+    evidence = prompt.get("evidence", [])
+    _require(
+        isinstance(evidence, list) and evidence
+        and all(isinstance(item, dict) for item in evidence),
+        "verdict packet has no exact candidate evidence",
+    )
+    assignment = context["assignment"]
+    assert isinstance(assignment, dict)
+    verdict_assignment = build_verdict_assignment(
+        assignment,
+        str(action["role"]),
+        member_address=str(action["role_address"]),
+    )
+    subject_story = action.get(
+        "subject_story",
+        context["plan"]["selection"]["story"],  # type: ignore[index]
+    )
+    _require(
+        subject_story is None or isinstance(subject_story, str),
+        "verdict subject story is invalid",
+    )
+    if subject_story is None:
+        verdict_assignment = {**verdict_assignment, "story": None}
+    rubric = compile_rubric(root, str(action["rubric"]))
+    subject = _verdict_subject(
+        run_id,
+        context,
+        projection,
+        evidence,  # type: ignore[arg-type]
+        rubric,
+        verdict_assignment,
+        story=subject_story,
+    )
+    prompt["verdict_subject"] = subject
+    prompt["mechanical_facts"] = _rebuild_mechanical_facts(
+        stored_facts, subject
+    )
+    return prompt
+
+
 def _issue_bound_verdict(
     root: Path,
     run_id: str,
     action: dict[str, object],
     artifacts: list[dict[str, object]],
+    packet: dict[str, object],
     driver_record: dict[str, object],
     context: dict[str, object],
     config: dict[str, object],
@@ -5925,7 +6027,15 @@ def _issue_bound_verdict(
         replay_program_conductor(root, run_id, now=now)["receipts"],
         context["plan"],
     ))
-    packet_evidence = action["prompt_document"].get("evidence", [])  # type: ignore[union-attr]
+    try:
+        packet_prompt = json.loads(str(packet["prompt"]))
+    except json.JSONDecodeError as exc:
+        raise DwError("verdict packet prompt is malformed") from exc
+    _require(
+        isinstance(packet_prompt, dict),
+        "verdict packet prompt is malformed",
+    )
+    packet_evidence = packet_prompt.get("evidence", [])
     _require(
         isinstance(packet_evidence, list) and packet_evidence,
         "verdict packet has no exact durable evidence",
@@ -5979,28 +6089,74 @@ def _issue_bound_verdict(
     driver_receipt = driver_record["receipt"]
     _require(isinstance(driver_receipt, dict), "terminal driver operation has no receipt")
     issued_at = str(driver_receipt["updated_at"])
-    prompt_facts = action["prompt_document"].get(  # type: ignore[union-attr]
+    current_subject = _verdict_subject(
+        run_id,
+        context,
+        projection,
+        evidence,
+        rubric,
+        verdict_assignment,
+        story=subject_story,
+    )
+    packet_facts = packet_prompt.get("mechanical_facts", [])
+    _require(
+        isinstance(packet_facts, list),
+        "verdict packet mechanical facts are malformed",
+    )
+    stored_facts = action["prompt_document"].get(  # type: ignore[union-attr]
         "mechanical_facts", []
     )
     _require(
-        isinstance(prompt_facts, list),
-        "verdict packet mechanical facts are malformed",
+        isinstance(stored_facts, list),
+        "stored verdict mechanical facts are malformed",
     )
-    mechanical_facts = [validate_mechanical_fact(item) for item in prompt_facts]
+    verdict_subject = current_subject
+    if stored_facts:
+        # Freeze the subject at packet assembly. Dispatch records the packet
+        # hash in the ledger, so rebinding to the later issuance head would
+        # make the fact hash shown to the verifier impossible to cite without
+        # a packet/ledger circularity. All non-ledger bindings must still match
+        # the current subject, and the frozen head must belong to this run.
+        candidate_subject = packet_prompt.get("verdict_subject")
+        _require(
+            isinstance(candidate_subject, dict),
+            "verdict packet lost its mechanical fact subject",
+        )
+        for key, value in current_subject.items():
+            if key != "ledger_head":
+                _require(
+                    candidate_subject.get(key) == value,
+                    f"verdict packet subject {key} is stale",
+                )
+        event_heads = {
+            item.get("event_hash") for item in _events(
+                _run_dir(root, run_id), run_id
+            )
+        }
+        _require(
+            candidate_subject.get("ledger_head") in event_heads,
+            "verdict packet subject ledger head is not in this run",
+        )
+        verdict_subject = candidate_subject
+        mechanical_facts = _rebuild_mechanical_facts(
+            stored_facts, verdict_subject
+        )
+        _require(
+            packet_facts == mechanical_facts,
+            "verdict packet mechanical facts changed after assembly",
+        )
+    else:
+        _require(
+            not packet_facts,
+            "verdict packet invented mechanical facts",
+        )
+        mechanical_facts = []
     try:
         verdict = issue_agent_verdict(
             root,
             str(action["rubric"]),
             verdict_assignment,
-            _verdict_subject(
-                run_id,
-                context,
-                projection,
-                evidence,
-                rubric,
-                verdict_assignment,
-                story=subject_story,
-            ),
+            verdict_subject,
             judgment["criteria"],
             issued_at=issued_at,
             idempotency_key=verdict_key,
@@ -6834,6 +6990,7 @@ def _finish_agent_action(
                     run_id,
                     action,
                     artifacts,
+                    packet,
                     record,
                     context,
                     config,
@@ -6994,6 +7151,17 @@ def _execute_agent_action(
         _require(isinstance(plan, dict), "program packet assembly has no current plan")
         selection = plan.get("selection")
         _require(isinstance(selection, dict), "program packet assembly has no selected story")
+        packet_projection = replay_program(root, run_id, now=now)
+        prompt_document = (
+            _bound_verdict_prompt(
+                root, run_id, action, context, packet_projection
+            )
+            if action["kind"] in {
+                "verdict", "story-verification", "meta-verdict",
+                "architect-verdict",
+            }
+            else None
+        )
         packet = _build_packet(
             root,
             run_id,
@@ -7003,9 +7171,10 @@ def _execute_agent_action(
             role,
             member,
             config,
-            replay_program(root, run_id, now=now),
+            packet_projection,
             selection,
             now=now,
+            prompt_document=prompt_document,
         )
         record = manager.prepare(
             claim,
