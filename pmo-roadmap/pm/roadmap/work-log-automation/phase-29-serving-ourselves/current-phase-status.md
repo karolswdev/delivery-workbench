@@ -110,7 +110,7 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-29-01 | Contract repository knowledge | done | [story-01-contract-repository-knowledge](./story-01-contract-repository-knowledge.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-29-02 | Build the symbol and structure map | backlog | [story-02-build-the-symbol-and-structure-map](./story-02-build-the-symbol-and-structure-map.md) | — |
+| WLA-29-02 | Build the symbol and structure map | done | [story-02-build-the-symbol-and-structure-map](./story-02-build-the-symbol-and-structure-map.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-29-03 | Ground the work before it starts | backlog | [story-03-ground-the-work-before-it-starts](./story-03-ground-the-work-before-it-starts.md) | — |
 | WLA-29-04 | Serve knowledge packets to agents | backlog | [story-04-serve-knowledge-packets-to-agents](./story-04-serve-knowledge-packets-to-agents.md) | — |
 | WLA-29-05 | Judge only the failures we introduced | backlog | [story-05-judge-only-the-failures-we-introduced](./story-05-judge-only-the-failures-we-introduced.md) | — |
@@ -142,6 +142,21 @@ read is rejected), and the knowledge core imports nothing networked,
 non-stdlib, or spawning, with no clock or randomness in derived-fact
 computation. Nothing calls the module yet — 17 new tests, the core suite grew
 to 547, all green, vendored copy byte-identical.
+
+WLA-29-02 built the map on that contract. `symbol_map.py` extracts symbols
+(module/class/function/method with qualified names and line spans), the
+module inventory, and a static test-to-symbol map with a documented
+resolution rule, all through stdlib `ast`; `repository_map.py` stores the
+result as a derived fact through `DerivedFactStore`. Two repository facts
+were added to the repofacts contract with their classification recorded
+(`tracked_files`, `blob_content`, both derivation-scoped), which is how
+extraction enumerates blobs without private git access. Over this repository:
+147 Python files, 4,388 symbols, and 624 named gaps — every non-Python file
+says "out of structural coverage; use git grep" rather than disappearing.
+Incremental refresh re-parses only changed blobs (proven one-file-edit →
+one parse), extraction is byte-deterministic, stale reads refuse, and
+`dw knowledge map` / `dw knowledge refresh` / MCP `dw_knowledge_map` return
+one canonical model with parity tested. Core suite 547 → 559, all green.
 
 ## Active risks
 

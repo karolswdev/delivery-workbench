@@ -281,9 +281,7 @@ class DerivedFactStore:
         _atomic_write(self._path(fact_kind, create=True), document)
         return document
 
-    def read(self, fact_kind: str, current_index_tree: str) -> dict:
-        """Read only if the current repofacts index tree still matches."""
-        _validate_git_object(current_index_tree, "current_index_tree")
+    def _read_document(self, fact_kind: str) -> dict:
         path = self._path(fact_kind)
         try:
             raw = path.read_text(encoding="utf-8")
@@ -298,11 +296,32 @@ class DerivedFactStore:
         document = _validate_derived(document)
         if document["fact_kind"] != fact_kind:
             raise MalformedKnowledge("derived fact path and identity disagree")
+        return document
+
+    def read(self, fact_kind: str, current_index_tree: str) -> dict:
+        """Read only if the current repofacts index tree still matches."""
+        _validate_git_object(current_index_tree, "current_index_tree")
+        document = self._read_document(fact_kind)
         if document["index_tree"] != current_index_tree:
             raise StaleDerivedFact(
                 fact_kind, document["index_tree"], current_index_tree
             )
         return document
+
+    def refresh(self, fact_kind: str, current_index_tree: str, compute) -> dict:
+        """Recompute a fact, exposing an old value only to the refresh callback.
+
+        The callback receives the validated previous document, or ``None`` when
+        no cache exists.  A stale document is never returned as an answer; it is
+        available only inside this explicit recomputation path so incremental
+        derivations can reuse unchanged blob-bound work.
+        """
+        _validate_git_object(current_index_tree, "current_index_tree")
+        try:
+            previous = self._read_document(fact_kind)
+        except MissingDerivedFact:
+            previous = None
+        return self.write(fact_kind, current_index_tree, compute(previous))
 
     def read_or_recompute(self, fact_kind: str, current_index_tree: str,
                           compute) -> dict:

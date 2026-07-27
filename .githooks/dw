@@ -53,6 +53,8 @@ try:
         resolve_signal_channel,
         FixtureProvider,
         build_status,
+        read_symbol_map,
+        refresh_symbol_map,
         build_delivery_setup,
         build_action_presentation,
         build_live_presentation,
@@ -1407,6 +1409,18 @@ def command_status(args: argparse.Namespace) -> int:
     return 0 if briefing["verdict"] == "ready" else 1
 
 
+def command_knowledge_map(args: argparse.Namespace) -> int:
+    document = read_symbol_map(args.root)
+    print(json.dumps(document, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
+def command_knowledge_refresh(args: argparse.Namespace) -> int:
+    document = refresh_symbol_map(args.root)
+    print(json.dumps(document, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
 def command_setup(args: argparse.Namespace) -> int:
     setup = build_delivery_setup(args.root, args.project)
     print(render_delivery_setup(setup, technical=args.technical), end="")
@@ -1728,6 +1742,29 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("project", nargs="?")
     status.add_argument("--json", action="store_true", help="emit the versioned status document")
     status.set_defaults(func=command_status)
+
+    knowledge = sub.add_parser(
+        "knowledge",
+        help=help_text("knowledge"),
+        description=help_text("knowledge"),
+    )
+    knowledge_sub = knowledge.add_subparsers(
+        dest="knowledge_command", required=True
+    )
+    knowledge_map = knowledge_sub.add_parser(
+        "map", help="read the fresh index-tree-bound symbol and structure map"
+    )
+    knowledge_map.add_argument(
+        "--json", action="store_true", help="emit the versioned derived fact"
+    )
+    knowledge_map.set_defaults(func=command_knowledge_map)
+    knowledge_refresh = knowledge_sub.add_parser(
+        "refresh", help="incrementally refresh the derived map from tracked blobs"
+    )
+    knowledge_refresh.add_argument(
+        "--json", action="store_true", help="emit the versioned derived fact"
+    )
+    knowledge_refresh.set_defaults(func=command_knowledge_refresh)
 
     setup = sub.add_parser(
         "setup",

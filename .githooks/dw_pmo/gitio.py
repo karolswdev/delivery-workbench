@@ -25,6 +25,18 @@ def run_git(root: Path, *args: str) -> str | None:
         return None
 
 
+def run_git_bytes(root: Path, *args: str) -> bytes | None:
+    """Run plumbing that must preserve blob bytes and unusual path encodings."""
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(root), *args],
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def head_sha(root: Path) -> str | None:
     out = run_git(root, "rev-parse", "--verify", "HEAD")
     return out.strip() if out else None

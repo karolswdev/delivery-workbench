@@ -61,6 +61,13 @@ def _tool_status(root: Path, args: dict) -> tuple[str, dict]:
     return render_status(payload).rstrip("\n"), payload
 
 
+def _tool_knowledge_map(root: Path, args: dict) -> tuple[str, dict]:
+    from .repository_map import read_symbol_map
+
+    payload = read_symbol_map(root)
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")), payload
+
+
 def _tool_step(root: Path, args: dict) -> tuple[str, dict]:
     from .step import build_step, render_step
 
@@ -691,6 +698,20 @@ TOOLS: dict[str, dict] = {
             "additionalProperties": False,
         },
         "handler": _tool_status,
+    },
+    "dw_knowledge_map": {
+        "description": (
+            "Read the advisory symbol and structure map only when it matches "
+            "the current index tree. Returns named Python and non-Python "
+            "coverage gaps and never starts or authorizes work. Adapter over "
+            "dw_pmo.repository_map.read_symbol_map."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        "handler": _tool_knowledge_map,
     },
     "dw_step": {
         "description": (

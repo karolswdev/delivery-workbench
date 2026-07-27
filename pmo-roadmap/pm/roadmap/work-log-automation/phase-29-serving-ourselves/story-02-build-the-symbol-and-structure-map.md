@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 29
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-29-01
 - **Unblocks:** WLA-29-03, WLA-29-04
 - **Owner:** unassigned
@@ -78,3 +78,16 @@ where the map ends.
 Line spans move on every edit; that is why freshness is index-tree-keyed
 rather than time-based, and why nothing may cache a location across a
 derivation boundary.
+
+Implemented as `dw_pmo/symbol_map.py` (pure `ast` extraction) plus
+`dw_pmo/repository_map.py` (derived-fact assembly through
+`DerivedFactStore`). Blob enumeration goes through two new
+derivation-scoped repofacts (`tracked_files`, `blob_content`) rather than
+any private git access, keeping the WLA-28 boundary intact. Measured over
+this repository at delivery: 771 tracked files, 147 Python files, 4,388
+symbols, 624 named gaps; extraction determinism proven at 2,680,222
+identical bytes across double runs; incremental refresh re-parsed exactly
+one file for a one-file edit. CLI (`dw knowledge map|refresh`) and MCP
+(`dw_knowledge_map`) emit identical canonical JSON, parity-tested. Ten new
+tests in `repository_map_tests.py`; suite 547 → 559 green on both the
+desk interpreter and the 3.9 floor.

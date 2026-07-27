@@ -130,6 +130,10 @@ CLI_HELP = {
         "show delivery readiness, current work, blockers, progress, and the "
         "next step"
     ),
+    "knowledge": (
+        "read or refresh advisory repository symbols, structure, tests, and "
+        "named coverage gaps; starts and authorizes no work"
+    ),
     "setup": (
         "compare ordinary work, one bounded delivery, and an optional "
         "delivery program without starting work"

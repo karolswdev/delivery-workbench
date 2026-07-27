@@ -42,6 +42,45 @@ integers, booleans, and null; floats and arbitrary Python objects are refused).
 Deleting `.git/pmo-knowledge/derived/` therefore changes only whether the next
 read has to recompute.
 
+`DerivedFactStore.refresh` is the incremental variant of that explicit path. It
+may expose a validated previous document only to the recomputation callback; it
+never returns that document as an answer. The replacement is written under the
+current tree after computation succeeds.
+
+## Symbol and structure map
+
+The `symbol-structure-map` derived fact is produced in two layers. The pure
+`dw_pmo.symbol_map` extractor uses only `ast` and supplied blob bytes. The
+Git-facing `dw_pmo.repository_map` layer obtains the index tree, tracked
+path/blob/size inventory, and changed blob bytes through `dw_pmo.repofacts`,
+then stores the model through `DerivedFactStore`. It never reads Python source
+from the working tree.
+
+Every tracked `.py` path has a module record. Parsed modules inventory imports
+and module, class, function, and method symbols with qualified names and line
+spans. An unparseable Python path remains a named `unparseable-python` gap.
+Every other tracked path remains a named `non-python` gap. Both gap kinds state
+`out of structural coverage; use git grep` rather than implying coverage the
+extractor does not provide.
+
+Refresh reuses a module extraction only when both its tracked path and blob id
+match the previous map. Added or changed Python blobs are parsed; deleted paths
+disappear; unchanged Python blobs are not read or parsed. The complete test map
+is then resolved again from the cached lexical references, so a changed symbol
+inventory cannot leave unchanged tests linked to an old answer.
+
+The static test-resolution rule is deliberately conservative: a test file is
+linked to every symbol whose exact terminal name appears there as an `ast.Name`,
+`ast.Attribute`, or imported name. If several qualified symbols share that
+terminal name, all matches remain. Symbols defined in that same test file are
+excluded. Import-alias targets and runtime/data-flow behavior are not inferred;
+use `git grep` or real test evidence when that distinction matters.
+
+`dw knowledge map` and MCP `dw_knowledge_map` only read a fresh stored map and
+refuse missing or stale facts. `dw knowledge refresh` is the explicit disposable
+cache refresh. These surfaces start no work, mint no authority, and change no
+tracked or authoritative repository state.
+
 ## Earned-record boundary
 
 Earned records are scalar-only typed shapes with exact field sets:

@@ -38,6 +38,11 @@ from repository_knowledge_tests import (
     RepositoryKnowledgeFitnessTest,
     RepositoryKnowledgeTest,
 )
+from repository_map_tests import (
+    RealRepositoryMapTest,
+    RepositoryMapIntegrationTest,
+    SymbolMapUnitTest,
+)
 
 
 README = """# Demo - Roadmap
@@ -2823,7 +2828,7 @@ class MCPServerTest(unittest.TestCase):
         tools = self.rpc("tools/list")["result"]["tools"]
         names = [t["name"] for t in tools]
         self.assertEqual(names, [
-            "dw_status", "dw_step", "dw_step_apply", "dw_context", "dw_next",
+            "dw_status", "dw_knowledge_map", "dw_step", "dw_step_apply", "dw_context", "dw_next",
             "dw_check", "dw_doctor",
             "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",
@@ -19371,6 +19376,7 @@ class RepositoryFactsContractTest(unittest.TestCase):
             {
                 "head_sha", "index_tree", "current_branch",
                 "remote_url", "remote_ref", "worktree_status",
+                "tracked_files", "blob_content",
             },
         )
 

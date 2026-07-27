@@ -132,6 +132,8 @@ is added when an external consumer asks for one.
 | Verb | Core function | Returns |
 |---|---|---|
 | `dw status [project] --json` | `status.build_status` | the stamped briefing; exit 0 `ready`, 1 `attention` |
+| `dw knowledge map [--json]` | `repository_map.read_symbol_map` | the cached symbol, module, test, and named-gap map only when its index tree is current; otherwise refuses |
+| `dw knowledge refresh [--json]` | `repository_map.refresh_symbol_map` | an explicit incremental refresh of the disposable derived map; reads tracked blobs and changes no authoritative state |
 | `dw setup [project] [--technical]` | `delivery_setup.build_delivery_setup` | human guidance over the same three delivery choices and readiness used by Workbench; intentionally no JSON mode, write, grant, or start |
 | `dw step [project] --json` | `step.build_step` | pure state-bound preview; add `--apply --expect <token>` for exactly one closed-table action and the stamped result |
 | `dw orchestration list --json` | `orchestration.score_inventory` | contained `pm/orchestration/*.json` inventory with validation and stable hashes |
@@ -287,7 +289,7 @@ or provider argv.
 ## MCP tools (`dw-mcp`, stdio)
 
 The full tool table with input schemas lives in [mcp.md](./mcp.md);
-this is the inventory. Read-only: `dw_status`, `dw_step`, `dw_context`,
+this is the inventory. Read-only: `dw_status`, `dw_knowledge_map`, `dw_step`, `dw_context`,
 `dw_next`, `dw_check`, `dw_doctor`, `dw_board`, `dw_holds`,
 `dw_story_show`, `dw_verify`, `dw_gate`, `dw_orchestration_list`,
 `dw_signals`, `dw_notifications`, `dw_orchestration_show`,

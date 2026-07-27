@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .gitio import run_git
+from .gitio import run_git, run_git_bytes
 from .model import DwError
 
 
@@ -94,6 +94,22 @@ REPOSITORY_FACTS = {
         "class": DERIVATION_SCOPED,
         "command": ("status", "--porcelain=v1", "-z"),
         "reason": "Any edit changes it; the dirty-tree refusal depends on it.",
+    },
+    "tracked_files": {
+        "class": DERIVATION_SCOPED,
+        "command": ("ls-tree", "-r", "-z", "-l", "--full-tree"),
+        "reason": (
+            "The tracked path, blob, and size inventory is the content of one "
+            "index tree and must be rebound after any index write."
+        ),
+    },
+    "blob_content": {
+        "class": DERIVATION_SCOPED,
+        "command": ("cat-file", "blob"),
+        "reason": (
+            "Blob bytes are immutable by object id but may only be reused inside "
+            "the derivation whose tracked-file inventory selected that object."
+        ),
     },
 }
 
@@ -199,6 +215,55 @@ class Derivation:
 
     def __len__(self) -> int:
         return len(self._facts)
+
+
+def index_tree(root: Path, derivation: Derivation) -> str:
+    """Return one derivation's index tree, refusing a plumbing failure."""
+    value = derivation.fact(
+        "index_tree", lambda: (run_git(root, "write-tree") or "").strip()
+    )
+    if not value:
+        raise DwError("repository facts could not derive the index tree")
+    return str(value)
+
+
+def tracked_files(root: Path, tree: str, derivation: Derivation) -> list:
+    """Enumerate every blob in ``tree`` as deterministic path/blob/size facts."""
+    raw = derivation.fact(
+        "tracked_files",
+        lambda: run_git_bytes(
+            root, "ls-tree", "-r", "-z", "-l", "--full-tree", tree
+        ),
+        tree,
+    )
+    if raw is None:
+        raise DwError("repository facts could not enumerate tracked files")
+    files = []
+    for record in raw.split(b"\0"):
+        if not record:
+            continue
+        metadata, separator, path_bytes = record.partition(b"\t")
+        fields = metadata.split()
+        if not separator or len(fields) != 4 or fields[1] != b"blob":
+            raise DwError("repository facts received malformed ls-tree output")
+        try:
+            size = int(fields[3])
+            blob = fields[2].decode("ascii")
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise DwError("repository facts received malformed blob metadata") from exc
+        path = path_bytes.decode("utf-8", "backslashreplace")
+        files.append({"path": path, "blob": blob, "size": size})
+    return sorted(files, key=lambda item: item["path"])
+
+
+def blob_content(root: Path, blob: str, derivation: Derivation) -> bytes:
+    """Read immutable blob bytes through the repository-facts boundary."""
+    raw = derivation.fact(
+        "blob_content", lambda: run_git_bytes(root, "cat-file", "blob", blob), blob
+    )
+    if raw is None:
+        raise DwError("repository facts could not read blob %s" % blob)
+    return bytes(raw)
 
 
 def contract_document() -> dict:

@@ -159,6 +159,7 @@ from .status import (
     build_status,
     render_status,
 )
+from .repository_map import read_symbol_map, refresh_symbol_map
 from .delivery_setup import (
     DELIVERY_SETUP_KIND,
     DELIVERY_SETUP_SCHEMA_VERSION,

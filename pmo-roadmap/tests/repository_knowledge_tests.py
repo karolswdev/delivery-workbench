@@ -162,6 +162,21 @@ class RepositoryKnowledgeTest(unittest.TestCase):
         self.assertEqual(again, fresh)
         self.assertEqual(len(calls), 1)
 
+    def test_incremental_refresh_exposes_old_value_only_to_compute(self):
+        old = self.derived.write("symbol-map", INDEX_A, {"files": ["old.py"]})
+        seen = []
+
+        def compute(previous):
+            seen.append(previous)
+            return {"files": ["new.py"]}
+
+        fresh = self.derived.refresh("symbol-map", INDEX_B, compute)
+        self.assertEqual(seen, [old])
+        self.assertEqual(fresh["value"], {"files": ["new.py"]})
+        self.assertEqual(self.derived.read("symbol-map", INDEX_B), fresh)
+        with self.assertRaises(knowledge.StaleDerivedFact):
+            self.derived.read("symbol-map", INDEX_A)
+
     def test_deleting_derived_cache_changes_only_recompute_latency(self):
         first = self.derived.read_or_recompute(
             "structure", INDEX_A, lambda: {"paths": ["dw_pmo"]}
@@ -379,6 +394,32 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
         self.assertNotIn("os.popen", source)
         self.assertNotIn("os.spawn", source)
 
+    def test_symbol_map_extractor_is_stdlib_offline_and_non_spawning(self):
+        path = LIB_DIR / "symbol_map.py"
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        allowed = {"__future__", "ast", "pathlib", "typing"}
+        unexpected = []
+        forbidden = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                modules = [node.module or ""] if not node.level else ["relative"]
+            else:
+                continue
+            for module in modules:
+                root = module.split(".", 1)[0]
+                if root in self.FORBIDDEN_IMPORT_ROOTS:
+                    forbidden.append(module)
+                if root not in allowed:
+                    unexpected.append(module)
+        self.assertEqual(forbidden, [])
+        self.assertEqual(unexpected, [])
+        for token in ("subprocess", "run_git", "socket", "datetime", "random"):
+            with self.subTest(token=token):
+                self.assertNotIn(token, source)
+
     def test_derived_fact_computation_has_no_clock_or_random_input(self):
         sources = "\n".join((
             inspect.getsource(knowledge._derived_document),
@@ -406,11 +447,15 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
             with self.subTest(required=required):
                 self.assertIn(required.lower(), text.lower())
 
-    def test_hook_payload_keeps_the_contract_module_byte_identical(self):
-        canonical = LIB_DIR / "knowledge.py"
-        vendored = REPOSITORY_ROOT / ".githooks" / "dw_pmo" / "knowledge.py"
-        self.assertTrue(vendored.is_file(), "the hook payload must include knowledge.py")
-        self.assertEqual(vendored.read_bytes(), canonical.read_bytes())
+    def test_hook_payload_keeps_knowledge_modules_byte_identical(self):
+        for name in ("knowledge.py", "repository_map.py", "symbol_map.py"):
+            with self.subTest(module=name):
+                canonical = LIB_DIR / name
+                vendored = REPOSITORY_ROOT / ".githooks" / "dw_pmo" / name
+                self.assertTrue(
+                    vendored.is_file(), "the hook payload must include %s" % name
+                )
+                self.assertEqual(vendored.read_bytes(), canonical.read_bytes())
 
 
 if __name__ == "__main__":
