@@ -110,6 +110,7 @@ try:
         render_step,
         replay_run,
         run_adoption,
+        fix_hooks_path,
         render_doctor,
         render_gate_failure,
         render_gate_porcelain,
@@ -1392,6 +1393,11 @@ def command_adopt(args: argparse.Namespace) -> int:
 
 
 def command_doctor(args: argparse.Namespace) -> int:
+    if args.fix_hooks:
+        check = fix_hooks_path(args.root)
+        mark = "ok " if check.ok else "FAIL"
+        print(f"{mark}  {check.name}: {check.detail}")
+        return 0 if check.ok else 1
     checks = run_doctor(args.root)
     print(render_doctor(checks), end="")
     return 0 if all(check.ok for check in checks) else 1
@@ -2354,6 +2360,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = sub.add_parser(
         "doctor", help=help_text("doctor"), description=help_text("doctor")
+    )
+    doctor.add_argument(
+        "--fix-hooks",
+        action="store_true",
+        help="normalize a same-clone absolute core.hooksPath back to the relative .githooks form",
     )
     doctor.set_defaults(func=command_doctor)
 

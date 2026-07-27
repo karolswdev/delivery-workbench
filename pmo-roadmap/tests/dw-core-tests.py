@@ -2225,6 +2225,15 @@ class GateTest(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
+    def git_output(self, *args: str) -> str:
+        import subprocess
+
+        return subprocess.check_output(
+            ["git", "-C", str(self.root), *args],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+
     def story(self, rel_path: str, status: str, story_id: str | None = None) -> None:
         heading = f"# {story_id} - Fixture story" if story_id else "# Story"
         self.write(rel_path, f"{heading}\n\n- **Status:** {status}\n")
@@ -2558,6 +2567,41 @@ class GateTest(unittest.TestCase):
         core.write_agent_docs(self.root)
         checks = core.run_doctor(self.root)
         self.assertTrue(all(c.ok for c in checks), [c.name for c in checks if not c.ok])
+
+    def test_hooks_path_same_clone_absolute_is_healthy_with_hint(self) -> None:
+        self.git("config", "core.hooksPath", str(self.root / ".githooks"))
+        check = next(c for c in core.run_doctor(self.root) if c.name == "core.hooksPath")
+        self.assertTrue(check.ok)
+        self.assertIn(str(self.root / ".githooks"), check.detail)
+        self.assertIn("--fix-hooks", check.detail)
+
+    def test_hooks_path_foreign_absolute_still_fails(self) -> None:
+        self.git("config", "core.hooksPath", "/tmp/some-other-hooks")
+        check = next(c for c in core.run_doctor(self.root) if c.name == "core.hooksPath")
+        self.assertFalse(check.ok)
+        self.assertIn("/tmp/some-other-hooks", check.detail)
+
+    def test_fix_hooks_path_normalizes_same_clone_absolute(self) -> None:
+        self.git("config", "core.hooksPath", str(self.root / ".githooks"))
+        check = core.fix_hooks_path(self.root)
+        self.assertTrue(check.ok)
+        self.assertEqual(check.detail, ".githooks")
+        self.assertEqual(
+            self.git_output("config", "core.hooksPath").strip(), ".githooks"
+        )
+
+    def test_fix_hooks_path_is_noop_on_relative_and_refuses_foreign(self) -> None:
+        self.git("config", "core.hooksPath", ".githooks")
+        check = core.fix_hooks_path(self.root)
+        self.assertTrue(check.ok)
+        self.assertEqual(check.detail, ".githooks")
+
+        self.git("config", "core.hooksPath", "/tmp/some-other-hooks")
+        check = core.fix_hooks_path(self.root)
+        self.assertFalse(check.ok)
+        self.assertEqual(
+            self.git_output("config", "core.hooksPath").strip(), "/tmp/some-other-hooks"
+        )
 
     # -- durable trail ---------------------------------------------------------
 
@@ -3905,6 +3949,29 @@ class StatusBriefingTest(unittest.TestCase):
         status = self.status()
         self.assertEqual(status["verdict"], "attention")
         self.assertEqual(status["next_action"]["id"], "resolve-rewrite")
+
+    def test_same_clone_absolute_hooks_path_does_not_block(self) -> None:
+        subprocess.run(
+            [
+                "git", "-C", str(self.root), "config", "core.hooksPath",
+                str(self.root / ".githooks"),
+            ],
+            check=True,
+        )
+        status = self.status()
+        self.assertTrue(status["rails"]["healthy"])
+        self.assertNotEqual(status["next_action"]["id"], "repair-rails")
+
+        subprocess.run(
+            [
+                "git", "-C", str(self.root), "config", "core.hooksPath",
+                "/tmp/some-other-hooks",
+            ],
+            check=True,
+        )
+        status = self.status()
+        self.assertFalse(status["rails"]["healthy"])
+        self.assertEqual(status["next_action"]["id"], "repair-rails")
 
     def test_multiple_projects_are_never_guessed(self) -> None:
         source = self.root / "pm" / "roadmap" / "demo"

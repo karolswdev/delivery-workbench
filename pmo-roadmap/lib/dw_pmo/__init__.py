@@ -151,7 +151,7 @@ from .agentdocs import (
     render_block,
     write_agent_docs,
 )
-from .doctor import DoctorCheck, render_doctor, run_doctor
+from .doctor import DoctorCheck, fix_hooks_path, render_doctor, run_doctor
 from .adopt import AdoptionReport, parse_adoption_report, run_adoption
 from .status import (
     STATUS_KIND,

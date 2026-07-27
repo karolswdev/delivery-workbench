@@ -141,7 +141,15 @@ The installer:
 
 Verify any clone's wiring with `.githooks/dw doctor` — it names unset
 `core.hooksPath`, missing hooks, a missing dw/core install, a missing or
-stale agent-docs block, and a missing python3.
+stale agent-docs block, and a missing python3. An absolute
+`core.hooksPath` that resolves to this clone's own `.githooks` — the
+form agent tooling leaves behind after creating a worktree — reports
+healthy with a normalization hint rather than FAIL, since the hooks
+still run; only a path that resolves somewhere else is a real problem.
+`.githooks/dw doctor --fix-hooks` explicitly rewrites the same-clone
+absolute form back to the relative `.githooks`; it is a no-op on the
+relative form and refuses on a foreign path. Nothing normalizes this
+implicitly.
 
 Re-running is safe (idempotent) but will refuse to overwrite existing
 methodology/contract without `--force`.

@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 29
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** -
 - **Unblocks:** -
 - **Owner:** unassigned
@@ -69,3 +69,15 @@ deliberately maintenance-scale: real code, real tests, bounded blast
 radius. The exact file/symbol hints above were grounded against the symbol
 map at authoring time; the implementing agent must re-verify (the hints are
 advisory by contract).
+
+Delivered by the autonomous program run `program-a8b7131ba635a59ac3162dec`
+(attempt 13 of WLA-29-08's exam): implemented by a live claude agent in an
+isolated worktree from a knowledge packet carrying this story's verified
+hints, mechanically checked by the focused doctor/status/step regression
+(pass), and independently certified by a live codex verdict — pass on all
+four rubric criteria under the cross-provider diversity rule. The operator
+applied the certified candidate, re-ran the full suite (604 tests green),
+and verified the behavior live: a same-clone absolute `core.hooksPath` now
+reads healthy with a normalization hint, `--fix-hooks` restores the
+relative form, and a foreign path still fails. The evidence file captures
+the regression run plus the live doctor demonstration.

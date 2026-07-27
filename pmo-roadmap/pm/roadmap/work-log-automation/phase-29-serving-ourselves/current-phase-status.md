@@ -117,7 +117,7 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 | WLA-29-06 | Decorrelate the author and the reviewer | done | [story-06-decorrelate-the-author-and-the-reviewer](./story-06-decorrelate-the-author-and-the-reviewer.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-29-07 | Write the delivery back | done | [story-07-write-the-delivery-back](./story-07-write-the-delivery-back.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-29-08 | Serve ourselves for real | in-progress | [story-08-serve-ourselves-for-real](./story-08-serve-ourselves-for-real.md) | — |
-| WLA-29-09 | Keep the hook path healthy under worktrees | backlog | [story-09-keep-the-hook-path-healthy-under-worktrees](./story-09-keep-the-hook-path-healthy-under-worktrees.md) | — |
+| WLA-29-09 | Keep the hook path healthy under worktrees | done | [story-09-keep-the-hook-path-healthy-under-worktrees](./story-09-keep-the-hook-path-healthy-under-worktrees.md) | [evidence-story-09](./evidence-story-09.md) |
 
 ## Where we are
 

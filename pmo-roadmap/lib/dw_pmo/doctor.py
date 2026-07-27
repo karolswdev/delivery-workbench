@@ -26,6 +26,53 @@ class DoctorCheck:
     detail: str
 
 
+def _hooks_path_check(root: Path, hooks_path: str) -> DoctorCheck:
+    """Classify core.hooksPath: relative canonical, same-clone absolute, or foreign.
+
+    Agent tooling that creates worktrees keeps rewriting the relative
+    ``.githooks`` to an absolute path. The gate still works — the absolute
+    path points at the same hooks — so that form is healthy with a
+    normalization hint rather than a FAIL; only a path that resolves
+    somewhere else is a real problem.
+    """
+    if hooks_path == ".githooks":
+        return DoctorCheck(True, "core.hooksPath", ".githooks")
+    if hooks_path and Path(hooks_path).is_absolute():
+        try:
+            resolved = Path(hooks_path).resolve()
+        except OSError:
+            resolved = None
+        if resolved is not None and resolved == (root / ".githooks").resolve():
+            return DoctorCheck(
+                True,
+                "core.hooksPath",
+                f"{hooks_path} — resolves to this clone's .githooks; "
+                "run `.githooks/dw doctor --fix-hooks` to normalize to the relative form",
+            )
+    found = hooks_path or "(unset)"
+    return DoctorCheck(
+        False,
+        "core.hooksPath",
+        f"{found} — run `git config core.hooksPath .githooks` in this clone",
+    )
+
+
+def fix_hooks_path(root: Path) -> DoctorCheck:
+    """Explicitly normalize a same-clone absolute core.hooksPath back to relative.
+
+    Never called implicitly by ``run_doctor`` — normalization is an
+    operator-invoked repair, not a side effect of a health check.
+    """
+    hooks_path = (run_git(root, "config", "core.hooksPath") or "").strip()
+    check = _hooks_path_check(root, hooks_path)
+    if hooks_path == ".githooks":
+        return check
+    if not check.ok:
+        return check
+    run_git(root, "config", "core.hooksPath", ".githooks")
+    return DoctorCheck(True, "core.hooksPath", ".githooks")
+
+
 def run_doctor(root: Path) -> list[DoctorCheck]:
     checks: list[DoctorCheck] = []
 
@@ -43,17 +90,7 @@ def run_doctor(root: Path) -> list[DoctorCheck]:
         )
 
     hooks_path = (run_git(root, "config", "core.hooksPath") or "").strip()
-    if hooks_path == ".githooks":
-        checks.append(DoctorCheck(True, "core.hooksPath", ".githooks"))
-    else:
-        found = hooks_path or "(unset)"
-        checks.append(
-            DoctorCheck(
-                False,
-                "core.hooksPath",
-                f"{found} — run `git config core.hooksPath .githooks` in this clone",
-            )
-        )
+    checks.append(_hooks_path_check(root, hooks_path))
 
     for hook in ("pre-commit", "commit-msg", "post-commit"):
         path = root / ".githooks" / hook
