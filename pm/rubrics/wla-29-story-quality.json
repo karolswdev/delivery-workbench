@@ -6,10 +6,22 @@
   "description": "A required-checks veto plus independent, diff-cited judgment of WLA-29-09 intent, safety, tests, and maintainability.",
   "version": "1.0.0",
   "subject_type": "diff",
-  "result_vocabulary": ["pass", "fail", "needs-repair", "escalate"],
+  "result_vocabulary": [
+    "pass",
+    "fail",
+    "needs-repair",
+    "escalate"
+  ],
   "freshness": {
     "max_age_seconds": 3600,
-    "bind": ["subject", "repository", "program", "assignment", "rubric", "ledger"]
+    "bind": [
+      "subject",
+      "repository",
+      "program",
+      "assignment",
+      "rubric",
+      "ledger"
+    ]
   },
   "criteria": [
     {
@@ -17,11 +29,16 @@
       "question": "Did the exact declared doctor/status regression command pass, with no introduced test failures relative to the captured baseline?",
       "evaluation": {
         "kind": "mechanical-fact",
-        "fact": "required-checks"
+        "fact": "focused-doctor-status-regression"
       },
       "required_evidence_kinds": [],
       "min_citations": 0,
-      "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+      "allowed_results": [
+        "pass",
+        "fail",
+        "abstain",
+        "inconclusive"
+      ],
       "veto": true,
       "rationale_max_bytes": 512
     },
@@ -32,9 +49,16 @@
         "kind": "agent-judgment",
         "fact": null
       },
-      "required_evidence_kinds": ["git-diff"],
+      "required_evidence_kinds": [
+        "git-diff"
+      ],
       "min_citations": 2,
-      "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+      "allowed_results": [
+        "pass",
+        "fail",
+        "abstain",
+        "inconclusive"
+      ],
       "veto": true,
       "rationale_max_bytes": 3000
     },
@@ -45,9 +69,16 @@
         "kind": "agent-judgment",
         "fact": null
       },
-      "required_evidence_kinds": ["git-diff"],
+      "required_evidence_kinds": [
+        "git-diff"
+      ],
       "min_citations": 2,
-      "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+      "allowed_results": [
+        "pass",
+        "fail",
+        "abstain",
+        "inconclusive"
+      ],
       "veto": true,
       "rationale_max_bytes": 3000
     },
@@ -58,9 +89,16 @@
         "kind": "agent-judgment",
         "fact": null
       },
-      "required_evidence_kinds": ["git-diff"],
+      "required_evidence_kinds": [
+        "git-diff"
+      ],
       "min_citations": 2,
-      "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+      "allowed_results": [
+        "pass",
+        "fail",
+        "abstain",
+        "inconclusive"
+      ],
       "veto": false,
       "rationale_max_bytes": 3000
     }

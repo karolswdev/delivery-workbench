@@ -80,7 +80,7 @@
     "max_artifact_bytes": 20000000,
     "max_tokens": 1000000,
     "max_observed_cost_microunits": 50000000,
-    "max_wall_seconds": 14400
+    "max_wall_seconds": 18000
   },
   "stop_conditions": [
     "scope-complete",

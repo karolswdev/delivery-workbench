@@ -4,7 +4,7 @@
   "slug": "wla-29-hook-health-delivery",
   "title": "Implement and independently verify hook-path health",
   "description": "Build the one scoped maintenance story, run one declared doctor/status regression command, obtain an independent cross-provider verdict, then stop for operator approval before integration.",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "parameters": [
     {
       "id": "story-id",
@@ -131,7 +131,8 @@
           "kind": "verdict",
           "max_bytes": 50000
         }
-      ]
+      ],
+      "max_attempts": 2
     },
     {
       "id": "approve-before-integration",
