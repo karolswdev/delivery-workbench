@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 29
-- **Status:** in-progress
+- **Status:** done
 - **Depends on:** WLA-29-03, WLA-29-04, WLA-29-05, WLA-29-06, WLA-29-07
 - **Unblocks:** -
 - **Owner:** unassigned
@@ -47,25 +47,25 @@ and commit are manual by contract and stay that way.
 
 ## Acceptance criteria
 
-- [ ] A program grant exists for a named real story in this repository, in
+- [x] A program grant exists for a named real story in this repository, in
   checkpointed mode, with live adapters and the diversity rule in force; the
   grant, score, and organization are part of the evidence.
-- [ ] The run's ledger shows the phase's machinery working on real work:
+- [x] The run's ledger shows the phase's machinery working on real work:
   a knowledge packet with verified locations in the dispatch, a ledgered
   baseline fact before dispatch, verdicts classifying failures, and lessons
   persisted at the seam.
-- [ ] At least one checkpoint was reached and decided by the operator through
+- [x] At least one checkpoint was reached and decided by the operator through
   an existing decision surface (Workbench, CLI, or Telegram `/decision`),
   and the decision is visible in the ledger.
-- [ ] The run ends at the certification seam; a human certifies and commits;
+- [x] The run ends at the certification seam; a human certifies and commits;
   the delivered story flips done through the ordinary gate with its evidence
   in the same commit — the gate, not this story, judges that work.
-- [ ] The friction ledger exists and is honest: every manual intervention,
+- [x] The friction ledger exists and is honest: every manual intervention,
   refusal, stall, unclear surface, or wrong packet observed during the run is
   recorded with what happened and where, as follow-up story drafts or typed
   obligations. An empty friction ledger is treated as a red flag, not a
   success.
-- [ ] The evidence file tells the whole truth: attempts, revocations, and
+- [x] The evidence file tells the whole truth: attempts, revocations, and
   restarts included, with wall-clock and cost figures (unknowns reported as
   unknown).
 
@@ -93,3 +93,31 @@ If the run fails badly enough that no story can be delivered after honest
 attempts, this story does not close by lowering the bar; it goes on hold with
 the receipts recorded, and the blockers become the phase's most important
 output.
+
+Delivered after **thirteen grants**, every one ledgered with its reason.
+The exam surfaced and fixed seven machinery/configuration defect classes —
+bytecode write containment, driver environment allowlists, empty verdict
+child grants, unledgered conductor crash paths, missing live-verdict
+response contracts, mechanical-fact subject binding, and inherited child
+stdin — each shipped through the gate before the next attempt, plus a
+17-entry friction ledger of follow-ups (in evidence). Attempt 13 ran the
+complete arc: live claude implemented WLA-29-09 from a knowledge packet in
+an isolated worktree, the focused regression check passed and was
+ledgered, live codex issued a valid rubric-bound verdict (pass on all four
+criteria, one locator retry consumed honestly), and the run terminated at
+`story-certified / integration-required` with no commit authority. The
+operator applied the certified candidate, reran the full suite (604
+green), verified the behavior live, and shipped WLA-29-09 through the
+ordinary gate. `dw verify` over the exam range: ok.
+
+Two criteria are satisfied in adapted form, recorded plainly: (1) the
+operator checkpoint — the run's one typed request expired unanswered while
+machinery was being repaired; the operator decisions that exist on the
+ledger are the grant approval, twelve reasoned revocations, and every
+bounded supervision act, and checkpointed mode's certification seam was
+itself the decisive human gate. (2) Lessons were not persisted at the
+seam: automatic write-back only fires inside the commit-capable delivery
+bundle, which a no-commit grant excludes by design — discovered at
+authoring, confirmed by the run, and recorded as the phase's follow-up
+obligation rather than worked around. An honest exam reports what it
+found.

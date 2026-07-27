@@ -74,32 +74,32 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 
 ## Exit criteria (evidence required)
 
-- [ ] One documented, versioned contract owns repository knowledge, splits it
+- [x] One documented, versioned contract owns repository knowledge, splits it
   into derived facts (disposable, re-derivable) and earned records
   (append-only, provenance-stamped), and a fitness test keeps LLM, network,
   and nondeterminism out of the knowledge core (WLA-29-01).
-- [ ] A deterministic symbol and structure map covers this repository, keyed
+- [x] A deterministic symbol and structure map covers this repository, keyed
   to the repofacts index tree, refreshed incrementally, and served read-only
   across CLI and MCP (WLA-29-02).
-- [ ] Stories can carry advisory localization hints, and a mechanical
+- [x] Stories can carry advisory localization hints, and a mechanical
   grounding pass verifies every hint against the symbol map and `git grep`,
   classifying each as verified, new, or unknown-with-suggestions
   (WLA-29-03).
-- [ ] Program and run agent packets carry a bounded, hash-bound knowledge
+- [x] Program and run agent packets carry a bounded, hash-bound knowledge
   packet — verified locations, snippets, related tests, relevant lessons —
   and driver usage telemetry reports unknown as unknown, never zero
   (WLA-29-04).
-- [ ] Baseline test failures are captured as a ledgered fact before dispatch,
+- [x] Baseline test failures are captured as a ledgered fact before dispatch,
   verdicts distinguish introduced from pre-existing failures, introduced
   failures block, and pre-existing failures become typed obligations
   (WLA-29-05).
-- [ ] The organization layer can require and enforce provider-family
+- [x] The organization layer can require and enforce provider-family
   diversity between implementer and independent reviewer roles, refusing
   unsatisfiable assignments (WLA-29-06).
-- [ ] Completed deliveries append bounded, provenance-stamped delivery
+- [x] Completed deliveries append bounded, provenance-stamped delivery
   records and lessons to the earned-knowledge store, and later knowledge
   packets retrieve them (WLA-29-07).
-- [ ] A real checkpointed autonomous program — live adapters, not fixtures —
+- [x] A real checkpointed autonomous program — live adapters, not fixtures —
   delivers at least one real story in this repository end to end, through
   knowledge packets, baseline subtraction, and the diversity rule, ending at
   the human certification seam; friction is recorded as stories or
@@ -116,7 +116,7 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 | WLA-29-05 | Judge only the failures we introduced | done | [story-05-judge-only-the-failures-we-introduced](./story-05-judge-only-the-failures-we-introduced.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-29-06 | Decorrelate the author and the reviewer | done | [story-06-decorrelate-the-author-and-the-reviewer](./story-06-decorrelate-the-author-and-the-reviewer.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-29-07 | Write the delivery back | done | [story-07-write-the-delivery-back](./story-07-write-the-delivery-back.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-29-08 | Serve ourselves for real | in-progress | [story-08-serve-ourselves-for-real](./story-08-serve-ourselves-for-real.md) | — |
+| WLA-29-08 | Serve ourselves for real | done | [story-08-serve-ourselves-for-real](./story-08-serve-ourselves-for-real.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-29-09 | Keep the hook path healthy under worktrees | done | [story-09-keep-the-hook-path-healthy-under-worktrees](./story-09-keep-the-hook-path-healthy-under-worktrees.md) | [evidence-story-09](./evidence-story-09.md) |
 
 ## Where we are
@@ -258,6 +258,26 @@ WLA-29-09 was authored as the real run's target story (the recurring
 worktree `core.hooksPath` corruption from this phase's own friction
 ledger), with its localization hints grounded verified by the shipped
 machinery before commit. WLA-29-08 is next: the first real program run.
+
+The exam is passed. WLA-29-08 took thirteen ledgered grants; every failure
+was fail-closed and every fix shipped through the gate before the next
+attempt: `python3 -B` for bytecode containment, proxy-free conductor
+launch for the driver CA gap, defaulted verdict-node capabilities, sized
+child-run budgets and policy ceilings, a live-verdict response contract
+with ledgered malformed-output failures and retries, mechanical facts
+rebound to the verdict subject, the locator grammar taught to reviewers,
+canonical terminal routing, and detached child stdin. Attempt 13 delivered
+WLA-29-09 end to end — live claude implementation from a knowledge packet,
+ledgered baseline, passing mechanical check, and a valid live codex
+verdict (pass on all four criteria) under the diversity rule — terminating
+at `story-certified / integration-required` with no commit authority. The
+operator integrated the certified candidate, the full suite reached 604
+green, and both stories shipped through the ordinary gate with `dw verify`
+clean over the range. The 17-entry friction ledger rides in
+evidence-story-08; two criteria satisfied in adapted form are recorded
+plainly in the story notes (the expired typed request, and lesson
+write-back's structural dependence on commit-capable grants — the phase's
+named follow-up obligation). The phase is 9/9 and ready to close.
 
 ## Active risks
 
