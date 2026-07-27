@@ -28,6 +28,10 @@ import tempfile
 import time
 from typing import Callable, Iterator
 
+from .knowledge_packet import (
+    build_hint_free_knowledge_packet,
+    build_repository_knowledge_packet,
+)
 from .model import DwError
 from .orchestration import canonical_json
 from .orchestration_driver import (
@@ -43,6 +47,7 @@ from .orchestration_driver import (
     _workspace_base,
     driver_capability,
     load_driver_config,
+    normalize_driver_usage,
     validate_work_packet,
 )
 from .program_run import (
@@ -540,6 +545,7 @@ class ProgramFixtureDriver:
             "stdout_bytes": 0,
             "stderr_bytes": 0,
             "activity_plan": list(response.get("activities", [])) if isinstance(response.get("activities", []), list) else [],
+            "usage": response.get("usage"),
         }
         _write_json_atomic(external, result, immutable=True)
         return result
@@ -674,6 +680,7 @@ class ProgramDriverManager:
             "stdout_bytes": int(result["stdout_bytes"]),
             "stderr_bytes": int(result["stderr_bytes"]),
             "activity": "active" if state == "running" else ("unknown" if state == "lost" else "exited"),
+            "usage": normalize_driver_usage(result.get("usage")),
         }
 
     def _accept_result(
@@ -683,11 +690,13 @@ class ProgramDriverManager:
         now: datetime,
     ) -> dict[str, object]:
         _require(isinstance(result, dict), "driver adapter result must be an object")
+        accepted = dict(result)
+        accepted["usage"] = normalize_driver_usage(accepted.get("usage"))
         expected = {
             "state", "exit_code", "reason", "polls_remaining", "final_state",
-            "stdout_bytes", "stderr_bytes", "activity_plan",
+            "stdout_bytes", "stderr_bytes", "activity_plan", "usage",
         }
-        _require(set(result) == expected, "driver adapter result has non-exact keys")
+        _require(set(accepted) == expected, "driver adapter result has non-exact keys")
         _require(result["state"] in TERMINAL_DRIVER_STATES | {"running"}, "driver adapter state is unsupported")
         _require(result["final_state"] in TERMINAL_DRIVER_STATES - {"refused"}, "driver final state is unsupported")
         _require(
@@ -696,7 +705,6 @@ class ProgramDriverManager:
             and int(result["polls_remaining"]) >= 0,
             "driver poll count is invalid",
         )
-        accepted = dict(result)
         receipt = self._driver_receipt(record, accepted, now)
         record["status"] = "running" if accepted["state"] == "running" else "terminal"
         record["result"] = accepted
@@ -986,6 +994,7 @@ def _build_packet(
     member: dict[str, object],
     config: dict[str, object],
     projection: dict[str, object],
+    selection: dict[str, object],
     *,
     now: datetime,
 ) -> dict[str, object]:
@@ -1030,6 +1039,17 @@ def _build_packet(
         "action_kind": action["kind"],
         "child_grant_hash": child_grant["grant_hash"],
     })
+    grounding = selection.get("grounding")
+    if isinstance(grounding, dict):
+        story_path = grounding.get("story")
+        _require(bool(story_path), "grounded program selection has no story path")
+        knowledge = build_repository_knowledge_packet(
+            root, root / str(story_path), grounding=grounding
+        )
+    else:
+        knowledge = build_hint_free_knowledge_packet(
+            root, str(selection.get("story") or action.get("story") or "")
+        )
     unsigned = {
         "kind": WORK_PACKET_KIND,
         "schema_version": DRIVER_SCHEMA_VERSION,
@@ -1051,6 +1071,7 @@ def _build_packet(
         "deadline": _format_time(deadline),
         "max_stream_bytes": int(capability["max_stream_bytes"]),
         "permanent_exclusions": list(child_grant["permanent_exclusions"]),
+        "knowledge": knowledge,
     }
     _require(len(canonical_json(unsigned).encode("utf-8")) <= MAX_PACKET_BYTES, "program work packet exceeds its byte ceiling")
     return validate_work_packet({**unsigned, "packet_hash": _sha(unsigned)})
@@ -6145,6 +6166,10 @@ def _driver_operation_summary(record: dict[str, object]) -> dict[str, object]:
         "adapter_version": record["adapter_version"],
         "state": receipt.get("state") if isinstance(receipt, dict) else record["status"],
         "receipt_hash": _sha(receipt) if isinstance(receipt, dict) else None,
+        "usage": (
+            normalize_driver_usage(receipt.get("usage"))
+            if isinstance(receipt, dict) else normalize_driver_usage()
+        ),
     }
 
 
@@ -6345,6 +6370,10 @@ def _execute_agent_action(
     role = _role_document(assignment, role_id=str(action["role"]))
     member = _role_member(role)
     if claim.get("dispatch") is None:
+        plan = context.get("plan")
+        _require(isinstance(plan, dict), "program packet assembly has no current plan")
+        selection = plan.get("selection")
+        _require(isinstance(selection, dict), "program packet assembly has no selected story")
         packet = _build_packet(
             root,
             run_id,
@@ -6355,6 +6384,7 @@ def _execute_agent_action(
             member,
             config,
             replay_program(root, run_id, now=now),
+            selection,
             now=now,
         )
         record = manager.prepare(

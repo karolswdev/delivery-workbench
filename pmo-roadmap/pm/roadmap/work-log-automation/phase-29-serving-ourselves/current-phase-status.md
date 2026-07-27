@@ -112,7 +112,7 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 | WLA-29-01 | Contract repository knowledge | done | [story-01-contract-repository-knowledge](./story-01-contract-repository-knowledge.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-29-02 | Build the symbol and structure map | done | [story-02-build-the-symbol-and-structure-map](./story-02-build-the-symbol-and-structure-map.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-29-03 | Ground the work before it starts | done | [story-03-ground-the-work-before-it-starts](./story-03-ground-the-work-before-it-starts.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-29-04 | Serve knowledge packets to agents | backlog | [story-04-serve-knowledge-packets-to-agents](./story-04-serve-knowledge-packets-to-agents.md) | — |
+| WLA-29-04 | Serve knowledge packets to agents | done | [story-04-serve-knowledge-packets-to-agents](./story-04-serve-knowledge-packets-to-agents.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-29-05 | Judge only the failures we introduced | backlog | [story-05-judge-only-the-failures-we-introduced](./story-05-judge-only-the-failures-we-introduced.md) | — |
 | WLA-29-06 | Decorrelate the author and the reviewer | done | [story-06-decorrelate-the-author-and-the-reviewer](./story-06-decorrelate-the-author-and-the-reviewer.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-29-07 | Write the delivery back | backlog | [story-07-write-the-delivery-back](./story-07-write-the-delivery-back.md) | — |
@@ -196,6 +196,22 @@ a different model family" in product language with snapshots re-pinned.
 The packaged autonomous exam gained both legs (satisfying assignment and
 refused variant) and runs complete against the merged tree. Core suite
 571 → 573 green; product-language contract ok.
+
+WLA-29-04 gave dispatched agents the repository. `knowledge_packet.py`
+builds a pure, deterministic, stdlib-only packet from a story's verified
+grounding: whole-symbol snippets at verified locations, mapped tests, and
+relevant earned lessons, under a declared byte budget (default 32,768 —
+to be validated by the real run in WLA-29-08) with deterministic lexical
+scoring, stable tie-breaking, and whole-item degradation that names every
+exclusion with its score. Hint-free and ungrounded stories yield packets
+that say so; unverified hints appear only labeled unverified; stale maps
+or grounding refuse through the existing packet-assembly failure path
+(`StaleKnowledgePacket`), never as an empty packet. The section rides both
+bounded-run and program packets hash-bound, with legacy replay
+compatibility proven. The honest-telemetry pass landed with it: usage a
+backend does not report stays unknown through receipts, ledgers, live
+progress, bounded actions, and workbench projections, while an explicitly
+reported zero stays numeric zero. Core suite 573 → 581, all green.
 
 ## Active risks
 

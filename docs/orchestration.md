@@ -465,8 +465,12 @@ retry/visit/start budgets turn exhaustion into a recorded `blocked` stop.
 The delivered driver protocol is provider-neutral: capability discovery,
 `start`, `poll`, `interrupt`, and `collect`. A hash-bound structured work packet carries run/node ids,
 role, bounded prompt/context, declared inputs/outputs, workspace identity,
-capability request, and deadlines. It carries no provider executable or shell
-argv.
+capability request, deadlines, and a bounded repository-knowledge section.
+The knowledge section contains verified locations, whole-symbol snippets,
+mapped tests, relevant earned lessons when present, labeled unverified hints,
+and named budget exclusions. Hint-free stories say so; stale map or grounding
+refuses packet assembly. It carries no provider executable or shell argv, and
+knowledge informs without authorizing any action.
 
 Operator-local `.git/pmo-orchestration/drivers.json` configuration maps logical
 profiles such as `research-readonly` or `worker-write` to installed adapters,

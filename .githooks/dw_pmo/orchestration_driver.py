@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .gitio import head_sha
+from .knowledge_packet import build_repository_knowledge_packet
 from .model import DwError
 from .orchestration import CAPABILITIES, WORKSPACE_MODES, canonical_json
 from .orchestration_run import (
@@ -82,13 +83,13 @@ _PACKET_KEYS = {
     "claim_id", "idempotency_key", "role", "profile", "prompt",
     "capabilities", "workspace", "resource_groups", "context", "inputs",
     "outputs", "timeout_seconds", "deadline", "max_stream_bytes",
-    "permanent_exclusions",
+    "permanent_exclusions", "knowledge",
 }
 _RECEIPT_KEYS = {
     "kind", "schema_version", "run_id", "node_id", "attempt", "claim_id",
     "profile", "adapter", "session_id", "idempotency_key", "packet_hash",
     "state", "started", "exit_code", "reason", "started_at", "updated_at",
-    "stdout_bytes", "stderr_bytes", "activity",
+    "stdout_bytes", "stderr_bytes", "activity", "usage",
 }
 _ARTIFACT_KEYS = {
     "kind", "schema_version", "run_id", "node_id", "attempt", "name",
@@ -96,7 +97,11 @@ _ARTIFACT_KEYS = {
 }
 _ADAPTER_RESULT_KEYS = {
     "state", "exit_code", "reason", "polls_remaining", "final_state",
-    "stdout_bytes", "stderr_bytes", "activity_plan",
+    "stdout_bytes", "stderr_bytes", "activity_plan", "usage",
+}
+_USAGE_KEYS = {
+    "status", "input_tokens", "output_tokens", "total_tokens",
+    "cost_microunits",
 }
 _MAX_ACTIVITY_PLAN = 64
 _DRIVER_STATES = {"running", "succeeded", "failed", "cancelled", "lost", "refused"}
@@ -121,6 +126,45 @@ def _exact_keys(value: object, expected: set[str], label: str) -> dict[str, obje
             + (f"; missing: {', '.join(missing)}" if missing else "")
         )
     return value
+
+
+def normalize_driver_usage(value: object = None) -> dict[str, object]:
+    """Keep an absent backend measurement unknown; explicit zero stays zero."""
+    if value is None:
+        return {
+            "status": "unknown", "input_tokens": None,
+            "output_tokens": None, "total_tokens": None,
+            "cost_microunits": None,
+        }
+    raw = _exact_keys(value, _USAGE_KEYS, "driver usage")
+    fields = ("input_tokens", "output_tokens", "total_tokens", "cost_microunits")
+    for field in fields:
+        item = raw[field]
+        if item is not None and (
+            isinstance(item, bool) or not isinstance(item, int) or item < 0
+        ):
+            raise DwError("driver usage %s must be a nonnegative integer or null" % field)
+    measured = [raw[field] is not None for field in fields]
+    expected_status = "reported" if all(measured) else "partial" if any(measured) else "unknown"
+    if raw["status"] != expected_status:
+        raise DwError("driver usage status does not match its measurements")
+    if raw["total_tokens"] is not None and raw["input_tokens"] is not None and raw["output_tokens"] is not None:
+        if raw["total_tokens"] != raw["input_tokens"] + raw["output_tokens"]:
+            raise DwError("driver usage total_tokens does not equal input plus output")
+    return dict(raw)
+
+
+def _validate_driver_receipt(value: object) -> dict[str, object]:
+    """Accept replay of pre-usage receipts while validating new receipts closed."""
+    if not isinstance(value, dict):
+        raise DwError("driver receipt must be a JSON object")
+    keys = set(value)
+    legacy = _RECEIPT_KEYS - {"usage"}
+    if keys == legacy:
+        return value
+    receipt = _exact_keys(value, _RECEIPT_KEYS, "driver receipt")
+    normalize_driver_usage(receipt["usage"])
+    return receipt
 
 
 def _contains_secret_key(value: object) -> bool:
@@ -769,6 +813,12 @@ def build_work_packet(
         created + timedelta(seconds=timeout),
         _parse_time(grant["expires_at"], "expires_at"),
     )
+    story = grant.get("story")
+    if not isinstance(story, dict) or not story.get("story_path"):
+        raise DwError("work packet has no bound story path for knowledge assembly")
+    knowledge = build_repository_knowledge_packet(
+        root, root / str(story["story_path"])
+    )
     unsigned: dict[str, object] = {
         "kind": WORK_PACKET_KIND,
         "schema_version": DRIVER_SCHEMA_VERSION,
@@ -790,6 +840,7 @@ def build_work_packet(
         "deadline": _format_time(deadline),
         "max_stream_bytes": capability["max_stream_bytes"],
         "permanent_exclusions": projection["permanent_exclusions"],
+        "knowledge": knowledge,
     }
     if len(canonical_json(unsigned).encode("utf-8")) > MAX_PACKET_BYTES:
         raise DwError("work packet exceeds the absolute byte ceiling")
@@ -797,7 +848,15 @@ def build_work_packet(
 
 
 def validate_work_packet(packet: object) -> dict[str, object]:
-    value = _exact_keys(packet, _PACKET_KEYS, "work packet")
+    if not isinstance(packet, dict):
+        raise DwError("work packet must be a JSON object")
+    keys = set(packet)
+    legacy_keys = _PACKET_KEYS - {"knowledge"}
+    if keys != _PACKET_KEYS and keys != legacy_keys:
+        expected = _PACKET_KEYS if "knowledge" in keys else legacy_keys
+        value = _exact_keys(packet, expected, "work packet")
+    else:
+        value = packet
     if value["kind"] != WORK_PACKET_KIND or value["schema_version"] != DRIVER_SCHEMA_VERSION:
         raise DwError("unsupported work packet kind or schema version")
     unsigned = {key: item for key, item in value.items() if key != "packet_hash"}
@@ -820,7 +879,7 @@ def _receipt(
     idempotency_key: str, state: str, started: bool, exit_code: int | None,
     reason: str, started_at: str | None, updated_at: str,
     stdout_bytes: int = 0, stderr_bytes: int = 0,
-    activity: str | None = None,
+    activity: str | None = None, usage: object = None,
 ) -> dict[str, object]:
     if state not in _DRIVER_STATES or reason not in _DRIVER_REASONS:
         raise DwError("driver receipt has an unsupported state or reason")
@@ -842,6 +901,7 @@ def _receipt(
         "started": started, "exit_code": exit_code, "reason": reason,
         "started_at": started_at, "updated_at": updated_at,
         "stdout_bytes": stdout_bytes, "stderr_bytes": stderr_bytes,
+        "usage": normalize_driver_usage(usage),
     }
 
 
@@ -921,6 +981,7 @@ class FixtureDriver:
             "stdout_bytes": int(script.get("stdout_bytes", 0)),
             "stderr_bytes": int(script.get("stderr_bytes", 0)),
             "activity_plan": [str(item) for item in activities],
+            "usage": script.get("usage"),
         }
 
     def interrupt(self, _session: dict[str, object]) -> bool:
@@ -1648,7 +1709,7 @@ class DriverManager:
                 if record["idempotency_key"] == idempotency_key:
                     if record["packet_hash"] != packet["packet_hash"]:
                         raise DwError("driver idempotency key is bound to a different packet")
-                    return _exact_keys(record["receipt"], _RECEIPT_KEYS, "driver receipt")
+                    return _validate_driver_receipt(record["receipt"])
             profile = self.config["profiles"].get(packet["profile"])  # type: ignore[union-attr]
             if profile is None:
                 return self._refusal(packet, None, idempotency_key, "profile-unconfigured")
@@ -1683,7 +1744,8 @@ class DriverManager:
             packet_path = staging / "packet.json"
             packet_path.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             os.chmod(packet_path, 0o600)
-            result = adapter.start(packet, profile, staging)
+            result = dict(adapter.start(packet, profile, staging))
+            result["usage"] = normalize_driver_usage(result.get("usage"))
             _exact_keys(result, _ADAPTER_RESULT_KEYS, "adapter result")
             if (
                 result["state"] not in _DRIVER_STATES - {"refused"}
@@ -1722,6 +1784,7 @@ class DriverManager:
                 str(result["state"]), True, result["exit_code"], str(result["reason"]),
                 now, now, int(result["stdout_bytes"]), int(result["stderr_bytes"]),
                 activity=str(plan[0]) if plan else None,
+                usage=result["usage"],
             )
             record = {
                 "session_id": session_id, "idempotency_key": idempotency_key,
@@ -1757,12 +1820,12 @@ class DriverManager:
                 raise DwError("multiple driver sessions are bound to one node claim")
             if not matches:
                 return None
-            return _exact_keys(matches[0], _RECEIPT_KEYS, "driver receipt")
+            return _validate_driver_receipt(matches[0])
 
     def poll(self, run_id: str, session_id: str) -> dict[str, object]:
         with self._lock(run_id):
             path, record = self._find(run_id, session_id)
-            receipt = _exact_keys(record["receipt"], _RECEIPT_KEYS, "driver receipt")
+            receipt = _validate_driver_receipt(record["receipt"])
             if receipt["state"] == "running":
                 remaining = max(0, int(record["polls_remaining"]) - 1)
                 record["polls_remaining"] = remaining
@@ -1806,7 +1869,7 @@ class DriverManager:
         """Deliver one structured nudge packet into a live session."""
         with self._lock(run_id):
             path, record = self._find(run_id, session_id)
-            receipt = _exact_keys(record["receipt"], _RECEIPT_KEYS, "driver receipt")
+            receipt = _validate_driver_receipt(record["receipt"])
             if receipt["state"] != "running":
                 return False
             adapter = self.adapters.get(str(record["adapter"]))
@@ -1826,7 +1889,7 @@ class DriverManager:
     def interrupt(self, run_id: str, session_id: str) -> dict[str, object]:
         with self._lock(run_id):
             path, record = self._find(run_id, session_id)
-            receipt = _exact_keys(record["receipt"], _RECEIPT_KEYS, "driver receipt")
+            receipt = _validate_driver_receipt(record["receipt"])
             if receipt["state"] == "running":
                 adapter = self.adapters.get(str(record["adapter"]))
                 if adapter is None or not adapter.interrupt(record):
@@ -1845,7 +1908,7 @@ class DriverManager:
     def collect(self, run_id: str, session_id: str) -> list[dict[str, object]]:
         with self._lock(run_id):
             _path, record = self._find(run_id, session_id)
-            receipt = _exact_keys(record["receipt"], _RECEIPT_KEYS, "driver receipt")
+            receipt = _validate_driver_receipt(record["receipt"])
             if receipt["state"] != "succeeded":
                 raise DwError(f"driver session is not collectable: {receipt['state']}")
             packet = validate_work_packet(json.loads(Path(str(record["packet_path"])).read_text()))

@@ -44,6 +44,7 @@ from repository_map_tests import (
     SymbolMapUnitTest,
 )
 from grounding_tests import GroundingIntegrationTest, GroundingUnitTest
+from knowledge_packet_tests import HonestUsageTest, KnowledgePacketTest
 
 
 README = """# Demo - Roadmap
@@ -5929,6 +5930,70 @@ class OrchestrationDriverTest(unittest.TestCase):
         tampered["prompt"] = "changed"
         with self.assertRaisesRegex(DwError, "hash check"):
             drivers.validate_work_packet(tampered)
+        self.assertEqual(packet["knowledge"]["grounding_status"], "hint-free")
+        knowledge_tamper = json.loads(json.dumps(packet))
+        knowledge_tamper["knowledge"]["grounding_status"] = "guessed"
+        with self.assertRaisesRegex(DwError, "hash check"):
+            drivers.validate_work_packet(knowledge_tamper)
+
+    def test_stale_knowledge_uses_existing_packet_assembly_failure_receipt(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+        import dw_pmo.orchestration_run as runs
+        from dw_pmo.knowledge_packet import StaleKnowledgePacket
+
+        claimed = runs.claim_node(
+            self.root, self.projection["run_id"], "research-api", 1,
+            "stale-knowledge", self.projection["ledger_head"], now=self.now,
+        )
+        claim = next(item for item in claimed["active_claims"]
+                     if item["idempotency_key"] == "stale-knowledge")
+        with mock.patch.object(
+            drivers,
+            "build_repository_knowledge_packet",
+            side_effect=StaleKnowledgePacket("fixture stale grounding"),
+        ):
+            updated = conductor._reconcile_claim(
+                self.root, self.projection["run_id"], claim["claim_id"],
+                self.config, {"fixture": drivers.FixtureDriver()},
+                conductor.CheckManager(self.root),
+                conductor.RailManager(self.root), [], now=self.now,
+                boundary_hook=None,
+            )
+        receipt = updated["node_receipts"][-1]
+        self.assertEqual(receipt["executor"], "driver")
+        self.assertEqual(receipt["state"], "failed")
+        self.assertEqual(receipt["reason"], "driver-refused")
+        self.assertEqual(receipt["usage_status"], "unknown")
+
+    def test_fixture_absent_usage_is_unknown_in_receipt_and_ledger(self):
+        import dw_pmo.orchestration_conductor as conductor
+        import dw_pmo.orchestration_driver as drivers
+
+        claimed, packet = self.claim_packet("research-api", "unknown-usage")
+        claim = next(item for item in claimed["active_claims"]
+                     if item["idempotency_key"] == "unknown-usage")
+        manager = drivers.DriverManager(
+            self.root,
+            drivers.load_driver_config(self.root, self.config),
+            adapters={"fixture": drivers.FixtureDriver({
+                "research-api": {"polls": 0, "outputs": {
+                    "api-findings": "# Findings\nSafe.\n\n# Sources\nFixture.\n\n# Risks\nNone.\n"
+                }}
+            })},
+        )
+        receipt = manager.start(packet, "unknown-usage-dispatch")
+        self.assertEqual(receipt["usage"]["status"], "unknown")
+        self.assertIsNone(receipt["usage"]["cost_microunits"])
+        updated, appended = conductor._append_receipt(
+            self.root, claimed, claim, "driver", receipt,
+            receipt["session_id"], now=self.now,
+        )
+        self.assertTrue(appended)
+        ledgered = updated["node_receipts"][-1]
+        self.assertEqual(ledgered["usage_status"], "unknown")
+        self.assertEqual(ledgered["total_tokens"], "unknown")
+        self.assertEqual(ledgered["cost_microunits"], "unknown")
 
     def test_pi_adapter_pins_version_and_renders_closed_credential_free_argv(self):
         import dw_pmo.orchestration_driver as drivers

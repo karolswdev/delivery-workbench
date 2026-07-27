@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 29
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-29-02, WLA-29-03
 - **Unblocks:** WLA-29-08
 - **Owner:** unassigned
@@ -92,3 +92,17 @@ as unknown may appear only labeled as unverified.
 
 The right default budget is unknown until WLA-29-08 runs for real; ship a
 conservative default and record the observed fit in the run's friction notes.
+
+Implemented as `dw_pmo/knowledge_packet.py` (`build_knowledge_packet`),
+wired hash-bound into bounded-run and program packet assembly with legacy
+replay compatibility. Default budget 32,768 bytes — far under the 262,144
+context and 1,500,000 packet ceilings; WLA-29-08 validates the fit.
+Refusals are typed (`KnowledgePacketRefusal`, `StaleKnowledgePacket`) and
+surface through the existing assembly failure path. Honest telemetry:
+absent usage renders unknown (never zero) across driver receipts, run and
+program ledgers, live progress, bounded actions, and workbench
+projections; explicit zeros stay numeric. One live observation recorded:
+the repository's stored symbol map was stale at delivery time and the
+packet path refused until an explicit `dw knowledge refresh` — the
+freshness rule working as contracted. Suite 573 → 581 green on both
+interpreters; all prior phase-29 test modules unchanged and green.

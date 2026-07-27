@@ -122,6 +122,49 @@ identifiers as greppable `WARNING` lines. Such findings never change its exit
 code. A program plan adds grounding only for a selected story that actually has
 hints; a story without hints retains the previous plan shape byte for byte.
 
+## Agent knowledge packets
+
+`dw_pmo.knowledge_packet.build_knowledge_packet` turns one already-read story,
+fresh symbol map, grounding result, indexed blob snapshot, and earned-record
+snapshot into `delivery-workbench-knowledge-packet@1`. The pure builder performs
+no Git, filesystem, clock, network, or authority read. Repository-facing packet
+assembly reads those inputs first, then calls the pure boundary.
+
+A packet contains only WLA-29-03-verified locations as fact. Source snippets use
+the symbol map's complete line spans, so a budget decision keeps or drops a
+whole symbol; it never cuts a symbol in half. Static test-map references and
+lexically relevant lesson records ride as separate items. Unknown hints may be
+shown only under `unverified_hints`, with the explicit `unverified` label. A
+story with no localization hints receives an explicit `hint-free` packet and no
+guessed location.
+
+Selection uses deterministic lexical overlap with lexical-name tie-breaking.
+The default byte budget is 32,768 bytes and callers may declare a different
+budget. If the canonical packet would exceed that budget, assembly drops the
+lowest-scored whole item and records its stable name, kind, score, and
+`byte-budget` reason under `exclusions`. If even the empty packet and complete
+exclusion audit cannot fit, assembly refuses rather than silently omitting the
+audit.
+
+Grounding and the symbol map must name the same current repofacts index tree.
+A mismatch raises the typed `StaleKnowledgePacket` refusal; a refused grounding
+raises `KnowledgePacketRefusal`. Driver packet assembly surfaces either through
+its existing packet-assembly failure path. It never substitutes an empty
+knowledge section. Both bounded-run and program work packets carry the
+knowledge document as a top-level, hash-bound section. Legacy packets without
+the section remain replayable.
+
+## Honest usage telemetry
+
+Every new driver receipt carries a closed `usage` object. A backend that reports
+nothing records `status: unknown` and null token and money measurements. A
+backend that explicitly reports zero records `status: reported` and numeric
+zero. Program receipts bind that usage through the action receipt referenced by
+the ledger; bounded-run ledger receipt events carry scalar usage status, total
+tokens, and cost, spelling an absent measurement as `unknown` rather than `0`.
+Live progress, bounded-action projections, and workbench API responses preserve
+null as unknown and render an honest unknown label.
+
 ## Earned-record boundary
 
 Earned records are scalar-only typed shapes with exact field sets:

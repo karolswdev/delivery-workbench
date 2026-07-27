@@ -119,9 +119,16 @@ def _budget_rows(budgets: object) -> list[dict[str, object]]:
     for name, raw in budgets.items():
         if not isinstance(raw, dict):
             continue
-        used = int(raw.get("used", 0))
-        limit = int(raw.get("limit", 0))
-        remaining = int(raw.get("remaining", max(0, limit - used)))
+        used_raw = raw.get("used")
+        limit_raw = raw.get("limit")
+        remaining_raw = raw.get("remaining")
+        used = int(used_raw) if used_raw is not None else None
+        limit = int(limit_raw) if limit_raw is not None else None
+        remaining = (
+            int(remaining_raw) if remaining_raw is not None
+            else max(0, limit - used)
+            if limit is not None and used is not None else None
+        )
         label, unit = _BUDGET_LABELS.get(
             str(name), (_words(str(name).removeprefix("max_")), "units")
         )
@@ -132,7 +139,10 @@ def _budget_rows(budgets: object) -> list[dict[str, object]]:
             "limit": limit,
             "remaining": remaining,
             "unit": unit,
-            "status": "none-left" if remaining <= 0 else "available",
+            "status": (
+                "unknown" if used is None or remaining is None
+                else "none-left" if remaining <= 0 else "available"
+            ),
             "primary": str(name) in _PRIMARY_BUDGETS,
         })
     return rows
@@ -521,7 +531,9 @@ def build_run_live_progress(
         for item in nodes
         if str(item.get("type")) in {"check", "approval"}
     ))
-    budgets = _budget_rows(projection.get("budgets"))
+    budgets = _budget_rows(_usage_budget_overlay(
+        projection.get("budgets"), _objects(projection.get("node_receipts"))
+    ))
     capabilities = [_words(item) for item in _strings(projection.get("capabilities"))]
     exclusions = [_words(item) for item in _strings(
         projection.get("permanent_exclusions")
@@ -1015,6 +1027,56 @@ def _program_next_step(
     }
 
 
+def _usage_budget_overlay(
+    budgets: object, receipts: list[dict[str, object]]
+) -> object:
+    if not isinstance(budgets, dict):
+        return budgets
+    usages = []
+    latest_driver_receipts: dict[str, dict[str, object]] = {}
+    for receipt in receipts:
+        operation = receipt.get("operation")
+        usage = operation.get("usage") if isinstance(operation, dict) else None
+        if isinstance(usage, dict):
+            usages.append(usage)
+        elif receipt.get("executor") == "driver":
+            latest_driver_receipts[str(receipt.get("claim_id") or "")] = receipt
+    for receipt in latest_driver_receipts.values():
+        total = receipt.get("total_tokens")
+        cost = receipt.get("cost_microunits")
+        usages.append({
+            "total_tokens": total if isinstance(total, int) else None,
+            "cost_microunits": cost if isinstance(cost, int) else None,
+        })
+    if not usages:
+        return budgets
+    result = {
+        str(name): dict(raw) if isinstance(raw, dict) else raw
+        for name, raw in budgets.items()
+    }
+    for counter, field in (
+        ("max_tokens", "total_tokens"),
+        ("max_observed_cost_microunits", "cost_microunits"),
+    ):
+        row = result.get(counter)
+        if not isinstance(row, dict):
+            continue
+        values = [usage.get(field) for usage in usages]
+        if any(value is None for value in values):
+            row["used"] = None
+            row["remaining"] = None
+            row["measurement"] = "unknown"
+        else:
+            used = sum(int(value) for value in values)
+            row["used"] = used
+            limit = row.get("limit")
+            row["remaining"] = (
+                max(0, int(limit) - used) if limit is not None else None
+            )
+            row["measurement"] = "reported"
+    return result
+
+
 def build_program_live_progress(
     authority: dict[str, object],
     frontier: dict[str, object],
@@ -1153,7 +1215,9 @@ def build_program_live_progress(
         if passed_names
         else "No mechanical or judgment review outcome has passed yet."
     )
-    budgets = _budget_rows(authority.get("budgets"))
+    budgets = _budget_rows(_usage_budget_overlay(
+        authority.get("budgets"), receipts
+    ))
     capabilities = [_words(item) for item in _strings(
         authority.get("capabilities")
     )]
@@ -1166,7 +1230,11 @@ def build_program_live_progress(
         "max_wall_seconds",
     }
     remaining_summary = "; ".join(
-        f"{item['remaining']} {item['label']}"
+        (
+            f"unknown remaining {item['label']}"
+            if item["remaining"] is None
+            else f"{item['remaining']} {item['label']}"
+        )
         for item in budgets
         if item["id"] in answer_budget_ids
     ) or "no counted execution limit"
@@ -1181,14 +1249,22 @@ def build_program_live_progress(
     token_cost = budget_by_id.get("max_tokens")
     if token_cost is not None:
         cost_parts.append(
-            f"{token_cost['used']} of {token_cost['limit']} model tokens used; "
-            f"{token_cost['remaining']} remain"
+            "Model token usage is unknown"
+            if token_cost["used"] is None
+            else (
+                f"{token_cost['used']} of {token_cost['limit']} model tokens used; "
+                f"{token_cost['remaining']} remain"
+            )
         )
     observed_cost = budget_by_id.get("max_observed_cost_microunits")
     if observed_cost is not None:
         cost_parts.append(
-            f"{observed_cost['used']} of {observed_cost['limit']} observed cost "
-            f"micro-units used; {observed_cost['remaining']} remain"
+            "Observed money cost is unknown"
+            if observed_cost["used"] is None
+            else (
+                f"{observed_cost['used']} of {observed_cost['limit']} observed cost "
+                f"micro-units used; {observed_cost['remaining']} remain"
+            )
         )
     cost_summary = (
         ". ".join(cost_parts) + "."

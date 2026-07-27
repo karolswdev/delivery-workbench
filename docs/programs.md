@@ -865,7 +865,13 @@ that matching current fact; the verdict author cannot select a conflicting
 result or replace it with prose.
 
 Verdict issuance projects one preassigned read-only organization member into a
-hash-bound packet. Principal, workspace domain, and session binding must all be
+hash-bound packet. Every program-agent packet also carries the same bounded,
+hash-bound repository-knowledge section as a standalone bounded run: verified
+locations, whole-symbol snippets, mapped tests, relevant lessons, labeled
+unverified hints, and named byte-budget exclusions. Hint-free stories remain
+explicitly empty; stale map or grounding fails packet assembly rather than
+silently degrading. Knowledge remains advisory and grants no authority.
+Principal, workspace domain, and session binding must all be
 independent from the implementer (and a meta-verifier from every audited
 author). Criterion evidence and citations are references with hashes—not
 embedded third-party bodies or private reasoning. The overall result is

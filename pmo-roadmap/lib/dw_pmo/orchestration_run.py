@@ -92,6 +92,10 @@ _EVENT_KEYS = {
     "kind", "schema_version", "run_id", "seq", "event", "ts", "detail",
     "prev_hash", "event_hash",
 }
+_NODE_RECEIPT_LEGACY_KEYS = {
+    "node_id", "attempt", "claim_id", "executor", "execution_id",
+    "state", "reason", "receipt_hash",
+}
 _EVENT_DETAIL_KEYS = {
     "run_started": {"semantic_hash", "status_hash", "expires_at"},
     "run_paused": {"reason", "generation"},
@@ -107,7 +111,8 @@ _EVENT_DETAIL_KEYS = {
     },
     "node_receipt": {
         "node_id", "attempt", "claim_id", "executor", "execution_id",
-        "state", "reason", "receipt_hash",
+        "state", "reason", "receipt_hash", "usage_status", "total_tokens",
+        "cost_microunits",
     },
     "activity_observed": {
         "node_id", "attempt", "claim_id", "activity", "session_id",
@@ -569,7 +574,13 @@ def _event_document(
         event == "external_commit_observed"
         and detail_keys == _EXTERNAL_COMMIT_LEGACY_KEYS
     )
-    if allowed is None or (detail_keys != allowed and not legacy_external):
+    legacy_node_receipt = (
+        event == "node_receipt"
+        and detail_keys == _NODE_RECEIPT_LEGACY_KEYS
+    )
+    if allowed is None or (
+        detail_keys != allowed and not legacy_external and not legacy_node_receipt
+    ):
         raise DwError(f"event {event!r} has non-exact detail keys")
     for key, value in detail.items():
         if isinstance(value, (dict, list)) or value is None:

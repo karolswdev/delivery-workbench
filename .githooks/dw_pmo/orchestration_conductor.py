@@ -870,6 +870,14 @@ def _append_receipt(
     ]
     if previous and previous[-1]["receipt_hash"] == receipt_hash:
         return projection, False
+    usage = receipt.get("usage") if executor == "driver" else None
+    usage_doc = usage if isinstance(usage, dict) else {}
+    usage_status = (
+        str(usage_doc.get("status") or "unknown")
+        if executor == "driver" else "not-applicable"
+    )
+    total_tokens = usage_doc.get("total_tokens")
+    cost_microunits = usage_doc.get("cost_microunits")
     updated = record_runtime_event(
         root,
         str(projection["run_id"]),
@@ -883,6 +891,13 @@ def _append_receipt(
             "state": str(receipt["state"]),
             "reason": _bounded_reason(receipt.get("reason"), str(receipt["state"])),
             "receipt_hash": receipt_hash,
+            "usage_status": usage_status,
+            "total_tokens": (
+                int(total_tokens) if total_tokens is not None else "unknown"
+            ),
+            "cost_microunits": (
+                int(cost_microunits) if cost_microunits is not None else "unknown"
+            ),
         },
         str(projection["ledger_head"]),
         now=now,
