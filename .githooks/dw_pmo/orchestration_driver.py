@@ -1078,7 +1078,7 @@ class CodexExecDriver:
         try:
             with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
                 result = subprocess.run(
-                    argv + [prompt], stdout=stdout, stderr=stderr,
+                    argv + [prompt], stdout=stdout, stderr=stderr, stdin=subprocess.DEVNULL,
                     env=self._safe_env(), timeout=int(packet["timeout_seconds"]),
                 )
                 exit_code = result.returncode
@@ -1210,6 +1210,7 @@ class ClaudeCodeExecDriver:
             with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
                 result = subprocess.run(
                     argv + [prompt], stdout=stdout, stderr=stderr,
+                    stdin=subprocess.DEVNULL,
                     env=self._safe_env(), timeout=int(packet["timeout_seconds"]),
                     cwd=str(packet["workspace"]["path"]),
                 )
@@ -1353,6 +1354,7 @@ class PiExecDriver:
                     argv + [prompt],
                     stdout=stdout,
                     stderr=stderr,
+                    stdin=subprocess.DEVNULL,
                     env=self._safe_env(),
                     timeout=int(packet["timeout_seconds"]),
                     cwd=str(packet["workspace"]["path"]),
