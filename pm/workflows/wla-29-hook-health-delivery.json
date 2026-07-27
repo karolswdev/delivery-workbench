@@ -4,7 +4,7 @@
   "slug": "wla-29-hook-health-delivery",
   "title": "Implement and independently verify hook-path health",
   "description": "Build the one scoped maintenance story, run one declared doctor/status regression command, obtain an independent cross-provider verdict, then stop for operator approval before integration.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "parameters": [
     {
       "id": "story-id",
@@ -21,7 +21,10 @@
       "role": "implementer",
       "task": "Implement only WLA-29-09. Use the supplied knowledge packet and re-verify its hints. Make dw doctor accept a same-clone absolute core.hooksPath with a normalization hint, keep foreign paths unhealthy, add an explicit normalization repair, cover doctor/status/step behavior with focused regression tests, and update the existing doctor documentation. Do not edit roadmap status or evidence, certify a contract, commit, push, or publish.",
       "workspace": "isolated-worktree",
-      "capability_ceiling": ["agent:dispatch", "workspace:write"],
+      "capability_ceiling": [
+        "agent:dispatch",
+        "workspace:write"
+      ],
       "timeout_seconds": 3600,
       "max_attempts": 1,
       "inputs": {
@@ -45,7 +48,9 @@
     {
       "id": "focused-doctor-status-regression",
       "type": "check",
-      "needs": ["implement-hook-health"],
+      "needs": [
+        "implement-hook-health"
+      ],
       "inputs": {
         "candidate": {
           "kind": "artifact",
@@ -56,6 +61,7 @@
         "kind": "command",
         "argv": [
           "python3",
+          "-B",
           "pmo-roadmap/tests/dw-core-tests.py",
           "GateTest.test_doctor_detections_and_health",
           "StatusBriefingTest"
@@ -84,7 +90,9 @@
     {
       "id": "verify-hook-health",
       "type": "verdict",
-      "needs": ["focused-doctor-status-regression"],
+      "needs": [
+        "focused-doctor-status-regression"
+      ],
       "role": "verifier",
       "rubric": "wla-29-story-quality",
       "subject": {
@@ -93,7 +101,12 @@
       },
       "freshness_seconds": 3600,
       "max_rationale_bytes": 30000,
-      "results": ["pass", "fail", "abstain", "inconclusive"],
+      "results": [
+        "pass",
+        "fail",
+        "abstain",
+        "inconclusive"
+      ],
       "routes": {
         "pass": {
           "kind": "node",
@@ -124,7 +137,9 @@
       "id": "approve-before-integration",
       "type": "checkpoint",
       "activation": "route",
-      "needs": ["verify-hook-health"],
+      "needs": [
+        "verify-hook-health"
+      ],
       "inputs": {
         "verdict": {
           "kind": "artifact",
@@ -163,11 +178,27 @@
   ],
   "layout": {
     "nodes": {
-      "implement-hook-health": {"x": 80, "y": 120},
-      "focused-doctor-status-regression": {"x": 380, "y": 120},
-      "verify-hook-health": {"x": 700, "y": 120},
-      "approve-before-integration": {"x": 1020, "y": 120}
+      "implement-hook-health": {
+        "x": 80,
+        "y": 120
+      },
+      "focused-doctor-status-regression": {
+        "x": 380,
+        "y": 120
+      },
+      "verify-hook-health": {
+        "x": 700,
+        "y": 120
+      },
+      "approve-before-integration": {
+        "x": 1020,
+        "y": 120
+      }
     },
-    "viewport": {"x": 0, "y": 0, "zoom": 1}
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
   }
 }
