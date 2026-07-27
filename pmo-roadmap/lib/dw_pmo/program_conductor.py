@@ -92,6 +92,7 @@ from .program_deliberation import (
 )
 from .program_verdict import (
     GREEN_RESULTS,
+    VerdictError,
     build_mechanical_fact,
     build_verdict_assignment,
     compile_rubric,
@@ -141,6 +142,15 @@ _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,511}$")
 _HASH_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 BoundaryHook = Callable[[str, dict[str, object]], None]
+
+
+class _VerdictContentError(DwError):
+    """A bounded refusal caused only by a verdict adapter's reply content."""
+
+
+def _verdict_content_require(condition: bool, message: str) -> None:
+    if not condition:
+        raise _VerdictContentError(message)
 
 
 def _require(condition: bool, message: str) -> None:
@@ -2461,6 +2471,139 @@ def _evidence_from_receipts(
     return evidence
 
 
+def _mechanical_facts_from_receipts(
+    root: Path,
+    receipts: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    facts: dict[str, dict[str, object]] = {}
+    for receipt in receipts:
+        run_id = str(receipt.get("run_id") or "")
+        for artifact in receipt.get("artifacts", []):
+            if not (
+                isinstance(artifact, dict)
+                and artifact.get("valid")
+                and artifact.get("artifact_kind") == "mechanical-fact"
+            ):
+                continue
+            try:
+                raw = json.loads(
+                    _artifact_content(root, run_id, artifact).decode("utf-8")
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise DwError("durable mechanical fact artifact is malformed") from exc
+            fact = validate_mechanical_fact(raw)
+            facts[str(fact["fact_hash"])] = fact
+    return [facts[key] for key in sorted(facts)]
+
+
+def _candidate_subject_from_receipts(
+    receipts: list[dict[str, object]],
+) -> dict[str, object] | None:
+    for receipt in reversed(receipts):
+        for artifact in reversed(receipt.get("artifacts", [])):
+            if (
+                isinstance(artifact, dict)
+                and artifact.get("valid")
+                and artifact.get("artifact_kind") == "git-diff"
+            ):
+                return {
+                    "kind": artifact["artifact_kind"],
+                    "hash": artifact["sha256"],
+                    "ref": artifact["ref"],
+                }
+    return None
+
+
+def _verdict_response_contract(
+    rubric: dict[str, object],
+) -> dict[str, object]:
+    criteria = [
+        item for item in rubric.get("criteria", []) if isinstance(item, dict)
+    ]
+    return {
+        "format": "single-json-document",
+        "top_level_keys": ["criteria"],
+        "criterion_keys": [
+            "id", "result", "evidence", "citations", "rationale",
+            "mechanical_fact_hash",
+        ],
+        "evidence_keys": ["id", "kind", "hash", "ref"],
+        "citation_keys": ["id", "evidence_id", "locator", "hash"],
+        "criteria": [
+            {
+                "id": item["id"],
+                "allowed_results": list(item.get("allowed_results", [])),
+                "required_evidence_kinds": list(
+                    item.get("required_evidence_kinds", [])
+                ),
+                "min_citations": int(item.get("min_citations", 0)),
+                "evaluation": item.get("evaluation"),
+            }
+            for item in criteria
+        ],
+        "template": {
+            "criteria": [
+                {
+                    "id": item["id"],
+                    "result": "<one allowed result for this criterion>",
+                    "evidence": [{
+                        "id": "<reply-local evidence id>",
+                        "kind": "<copied evidence kind>",
+                        "hash": "<copied evidence hash>",
+                        "ref": "<copied evidence ref>",
+                    }],
+                    "citations": [{
+                        "id": "<reply-local citation id>",
+                        "evidence_id": "<id from this criterion evidence>",
+                        "locator": "<precise locator within the evidence>",
+                        "hash": "<same hash as the cited evidence>",
+                    }],
+                    "rationale": (
+                        None
+                        if isinstance(item.get("evaluation"), dict)
+                        and item["evaluation"].get("kind")
+                        == "mechanical-fact"
+                        else "<bounded rationale>"
+                    ),
+                    "mechanical_fact_hash": (
+                        "<fact_hash copied from mechanical_facts>"
+                        if isinstance(item.get("evaluation"), dict)
+                        and item["evaluation"].get("kind")
+                        == "mechanical-fact"
+                        else None
+                    ),
+                }
+                for item in criteria
+            ],
+        },
+        "instructions": [
+            "Return only this single JSON document, with no prose or fences.",
+            "Return exactly one criteria entry for every rubric criterion, using its exact id and one of its allowed_results.",
+            "Every criteria[i].evidence item must copy kind, hash, and ref verbatim from the supplied evidence list; add only a reply-local id.",
+            "For each criterion include every required_evidence_kinds value and at least min_citations citations; each citation must name an evidence_id and repeat that evidence hash.",
+            "For mechanical-fact criteria copy the matching fact_hash and result from mechanical_facts, set rationale to null, and do not substitute prose judgment.",
+        ],
+    }
+
+
+def _verdict_prompt_fields(
+    root: Path,
+    receipts: list[dict[str, object]],
+    rubric: dict[str, object],
+) -> dict[str, object]:
+    candidate = _candidate_subject_from_receipts(receipts)
+    instructions = [
+        "Judge the supplied candidate diff referenced by candidate_subject; do not judge the checked-out working tree."
+    ] if candidate is not None else []
+    return {
+        "evidence": _evidence_from_receipts(receipts),
+        "mechanical_facts": _mechanical_facts_from_receipts(root, receipts),
+        "candidate_subject": candidate,
+        "instructions": instructions,
+        "response_contract": _verdict_response_contract(rubric),
+    }
+
+
 def _receipts_for_plan(
     receipts: list[dict[str, object]],
     plan: dict[str, object],
@@ -2647,6 +2790,9 @@ def _workflow_node_action(
         action["prompt_document"].update({  # type: ignore[union-attr]
             "action_kind": "verdict",
             "rubric": rubric["rubric"],
+            **_verdict_prompt_fields(
+                root, receipts, rubric["rubric"]  # type: ignore[arg-type]
+            ),
         })
     return action
 
@@ -3126,7 +3272,9 @@ def _synthetic_verifier_action(
             "action_kind": "story-verification",
             "task": "Independently verify the exact candidate artifacts against the bound rubric.",
             "rubric": rubric["rubric"],
-            "evidence": _evidence_from_receipts(receipts),
+            **_verdict_prompt_fields(
+                root, receipts, rubric["rubric"]  # type: ignore[arg-type]
+            ),
         },
     })
     return action
@@ -3380,6 +3528,12 @@ def _architect_gate_action(
             "gate": dict(gate),
             "rubric": rubric["rubric"],
             "evidence": evidence,
+            "mechanical_facts": [],
+            "candidate_subject": None,
+            "instructions": [],
+            "response_contract": _verdict_response_contract(
+                rubric["rubric"]  # type: ignore[arg-type]
+            ),
             "boundary_receipt_hash": boundary_receipt["receipt_hash"],
             "boundary_document": boundary_document,
         },
@@ -5232,37 +5386,44 @@ def derive_program_frontier(
                     # observation. The loop policy, not the child's ordinary
                     # failure route, decides whether to continue or exhaust.
                     continue
-                route = (
-                    node.get(
-                        "on_failure",
-                        {"kind": "action", "target": "block"},
-                    )
-                    if failed
-                    else node.get("routes", {}).get(  # type: ignore[union-attr]
-                        str(prior.get("result")),
-                        {"kind": "action", "target": "block"},
-                    )
-                )
                 maximum = int(node.get("max_attempts", 1))
                 if (
-                    isinstance(route, dict)
-                    and route.get("kind") == "action"
-                    and route.get("target") in {"retry", "repair"}
+                    failed
+                    and expected_kind == "verdict"
                     and int(prior.get("attempt", 0)) < maximum
                 ):
                     attempt = int(prior["attempt"]) + 1
                 else:
-                    return _frontier_result(
-                        run_id, plan, "stopped", [],
-                        stop=(
-                            "route-"
-                            + str(
-                                route.get("target", "block")
-                                if isinstance(route, dict)
-                                else "block"
-                            )
-                        ),
+                    route = (
+                        node.get(
+                            "on_failure",
+                            {"kind": "action", "target": "block"},
+                        )
+                        if failed
+                        else node.get("routes", {}).get(  # type: ignore[union-attr]
+                            str(prior.get("result")),
+                            {"kind": "action", "target": "block"},
+                        )
                     )
+                    if (
+                        isinstance(route, dict)
+                        and route.get("kind") == "action"
+                        and route.get("target") in {"retry", "repair"}
+                        and int(prior.get("attempt", 0)) < maximum
+                    ):
+                        attempt = int(prior["attempt"]) + 1
+                    else:
+                        return _frontier_result(
+                            run_id, plan, "stopped", [],
+                            stop=(
+                                "route-"
+                                + str(
+                                    route.get("target", "block")
+                                    if isinstance(route, dict)
+                                    else "block"
+                                )
+                            ),
+                        )
         action = (
             _local_workflow_action(
                 root,
@@ -5709,12 +5870,26 @@ def _issue_bound_verdict(
         (item for item in artifacts if item.get("name") == "judgment"),
         None,
     )
-    _require(isinstance(judgment_artifact, dict), "verdict action produced no judgment artifact")
+    _verdict_content_require(
+        isinstance(judgment_artifact, dict),
+        "verdict action produced no judgment artifact",
+    )
+    assert isinstance(judgment_artifact, dict)
     try:
-        judgment = json.loads(_artifact_content(root, run_id, judgment_artifact).decode("utf-8"))
+        judgment = json.loads(
+            _artifact_content(root, run_id, judgment_artifact).decode("utf-8")
+        )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise DwError("verdict judgment artifact is malformed") from exc
-    _require(isinstance(judgment, dict) and isinstance(judgment.get("criteria"), list), "verdict judgment has no criterion results")
+        raise _VerdictContentError(
+            "verdict judgment artifact is malformed"
+        ) from exc
+    _verdict_content_require(
+        isinstance(judgment, dict)
+        and set(judgment) == {"criteria"}
+        and isinstance(judgment.get("criteria"), list),
+        "verdict judgment has no exact criterion results",
+    )
+    assert isinstance(judgment, dict)
     assignment = context["assignment"]
     assert isinstance(assignment, dict)
     verdict_assignment = build_verdict_assignment(
@@ -5743,33 +5918,7 @@ def _issue_bound_verdict(
         verdict_type,
         int(action["attempt"]),
     )
-    verdict_claim = _reserve_claim(
-        root,
-        run_id,
-        action=action,
-        category="verdict",
-        subject_kind="program-judgment",
-        subject_hash=str(judgment_artifact["sha256"]),
-        suffix="verdict",
-        now=now,
-        driver_config=config,
-    )
-    if verdict_claim["status"] != "active":
-        prior_receipt = _load_receipt(root, run_id, str(verdict_claim["receipt_hash"]))
-        verdict_ref = prior_receipt.get("verdict")
-        _require(isinstance(verdict_ref, dict), "completed verdict claim lost its verdict reference")
-        verdict_artifact = next(
-            (item for item in prior_receipt.get("artifacts", []) if isinstance(item, dict) and item.get("name") == "issued-verdict"),
-            None,
-        )
-        _require(isinstance(verdict_artifact, dict), "completed verdict claim lost its artifact")
-        verdict = json.loads(_artifact_content(root, run_id, verdict_artifact).decode("utf-8"))
-        return validate_verdict_document(verdict), prior_receipt, artifacts + [verdict_artifact]
-    _boundary(boundary_hook, "after-claim", {
-        "action_id": verdict_action["action_id"],
-        "claim_id": verdict_claim["claim_id"],
-        "category": "verdict",
-    })
+    verdict_key = f"program-conductor/{action['action_id']}/verdict"
     projection = replay_program(root, run_id, now=now)
     rubric = compile_rubric(root, str(action["rubric"]))
     durable_evidence = _evidence_from_receipts(_receipts_for_plan(
@@ -5811,13 +5960,14 @@ def _issue_bound_verdict(
         for item in evidence
     }
     for criterion in judgment["criteria"]:
-        _require(
+        _verdict_content_require(
             isinstance(criterion, dict)
             and isinstance(criterion.get("evidence"), list),
             "verdict criterion evidence is malformed",
         )
+        assert isinstance(criterion, dict)
         for item in criterion["evidence"]:
-            _require(
+            _verdict_content_require(
                 isinstance(item, dict)
                 and (
                     str(item.get("kind")),
@@ -5829,26 +5979,85 @@ def _issue_bound_verdict(
     driver_receipt = driver_record["receipt"]
     _require(isinstance(driver_receipt, dict), "terminal driver operation has no receipt")
     issued_at = str(driver_receipt["updated_at"])
-    verdict = issue_agent_verdict(
-        root,
-        str(action["rubric"]),
-        verdict_assignment,
-        _verdict_subject(
-            run_id,
-            context,
-            projection,
-            evidence,
-            rubric,
-            verdict_assignment,
-            story=subject_story,
-        ),
-        judgment["criteria"],
-        issued_at=issued_at,
-        idempotency_key=str(verdict_claim["idempotency_key"]),
-        attestation_receipt_hash=_sha(driver_receipt),
-        verdict_type=verdict_type,
+    prompt_facts = action["prompt_document"].get(  # type: ignore[union-attr]
+        "mechanical_facts", []
     )
+    _require(
+        isinstance(prompt_facts, list),
+        "verdict packet mechanical facts are malformed",
+    )
+    mechanical_facts = [validate_mechanical_fact(item) for item in prompt_facts]
+    try:
+        verdict = issue_agent_verdict(
+            root,
+            str(action["rubric"]),
+            verdict_assignment,
+            _verdict_subject(
+                run_id,
+                context,
+                projection,
+                evidence,
+                rubric,
+                verdict_assignment,
+                story=subject_story,
+            ),
+            judgment["criteria"],
+            issued_at=issued_at,
+            idempotency_key=verdict_key,
+            attestation_receipt_hash=_sha(driver_receipt),
+            verdict_type=verdict_type,
+            mechanical_facts=mechanical_facts,
+        )
+    except VerdictError as exc:
+        if str(exc.pointer).lstrip("/").startswith("criteria"):
+            raise _VerdictContentError(str(exc)) from exc
+        raise
     verdict = validate_verdict_document(verdict)
+    verdict_claim = _reserve_claim(
+        root,
+        run_id,
+        action=action,
+        category="verdict",
+        subject_kind="program-judgment",
+        subject_hash=str(judgment_artifact["sha256"]),
+        suffix="verdict",
+        now=now,
+        driver_config=config,
+    )
+    if verdict_claim["status"] != "active":
+        prior_receipt = _load_receipt(
+            root, run_id, str(verdict_claim["receipt_hash"])
+        )
+        verdict_ref = prior_receipt.get("verdict")
+        _require(
+            isinstance(verdict_ref, dict),
+            "completed verdict claim lost its verdict reference",
+        )
+        verdict_artifact = next(
+            (
+                item for item in prior_receipt.get("artifacts", [])
+                if isinstance(item, dict)
+                and item.get("name") == "issued-verdict"
+            ),
+            None,
+        )
+        _require(
+            isinstance(verdict_artifact, dict),
+            "completed verdict claim lost its artifact",
+        )
+        prior_verdict = json.loads(
+            _artifact_content(root, run_id, verdict_artifact).decode("utf-8")
+        )
+        return (
+            validate_verdict_document(prior_verdict),
+            prior_receipt,
+            artifacts + [verdict_artifact],
+        )
+    _boundary(boundary_hook, "after-claim", {
+        "action_id": verdict_action["action_id"],
+        "claim_id": verdict_claim["claim_id"],
+        "category": "verdict",
+    })
     verdict_bytes = (canonical_json(verdict) + "\n").encode("utf-8")
     verdict_artifact = _store_artifact(
         root,
@@ -6585,6 +6794,7 @@ def _finish_agent_action(
     verdict: dict[str, object] | None = None
     verdict_ref: dict[str, object] | None = None
     deliberation_binding: dict[str, object] | None = None
+    verdict_content_failure: str | None = None
     result = state
     route: object = state
     if state == "succeeded":
@@ -6618,28 +6828,36 @@ def _finish_agent_action(
                 "pure_receipt_hash": pure_receipt["receipt_hash"],
             }
         elif action["kind"] in {"verdict", "story-verification", "meta-verdict", "architect-verdict"}:
-            verdict, _verdict_receipt, artifacts = _issue_bound_verdict(
-                root,
-                run_id,
-                action,
-                artifacts,
-                record,
-                context,
-                config,
-                now=now,
-                boundary_hook=boundary_hook,
-            )
-            result = str(verdict["result"])
-            route = result
-            issued = next(
-                item for item in artifacts if item.get("name") == "issued-verdict"
-            )
-            verdict_ref = {
-                "hash": verdict["verdict_hash"],
-                "result": verdict["result"],
-                "type": verdict["verdict_type"],
-                "ref": issued["ref"],
-            }
+            try:
+                verdict, _verdict_receipt, artifacts = _issue_bound_verdict(
+                    root,
+                    run_id,
+                    action,
+                    artifacts,
+                    record,
+                    context,
+                    config,
+                    now=now,
+                    boundary_hook=boundary_hook,
+                )
+            except _VerdictContentError as exc:
+                state = "failed"
+                result = "failed"
+                route = "failed"
+                verdict_content_failure = str(exc)
+            else:
+                result = str(verdict["result"])
+                route = result
+                issued = next(
+                    item for item in artifacts
+                    if item.get("name") == "issued-verdict"
+                )
+                verdict_ref = {
+                    "hash": verdict["verdict_hash"],
+                    "result": verdict["result"],
+                    "type": verdict["verdict_type"],
+                    "ref": issued["ref"],
+                }
     receipt = _store_receipt(root, run_id, {
         "action_id": action["action_id"],
         "address": action["address"],
@@ -6674,6 +6892,14 @@ def _finish_agent_action(
                 {"deliberation_submission": deliberation_binding}
                 if deliberation_binding is not None else {}
             ),
+            **(
+                {
+                    "verdict_content_failure": {
+                        "reason": verdict_content_failure,
+                    }
+                }
+                if verdict_content_failure is not None else {}
+            ),
         },
         "issued_at": driver_receipt["updated_at"],
     })
@@ -6693,7 +6919,12 @@ def _finish_agent_action(
         reason=(
             "Validated and recorded the exact driver result."
             if state == "succeeded"
-            else f"Driver operation ended as {state}."
+            else (
+                "Verdict model output validation failed: "
+                + verdict_content_failure
+                if verdict_content_failure is not None
+                else f"Driver operation ended as {state}."
+            )
         ),
         now=now,
     )

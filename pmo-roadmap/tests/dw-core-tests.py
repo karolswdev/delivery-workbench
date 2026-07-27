@@ -11846,6 +11846,43 @@ class ProgramConductorTest(unittest.TestCase):
                          ("selection", "assignment"))
         return fixture
 
+    def configure_explicit_verdict(self, *, max_attempts=1):
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        implement = workflow["nodes"][0]
+        implement.pop("on_success", None)
+        workflow["nodes"] = [
+            implement,
+            {
+                "id": "verify",
+                "type": "verdict",
+                "needs": ["implement"],
+                "role": "verifier",
+                "rubric": "story-quality",
+                "subject": {
+                    "kind": "artifact",
+                    "name": "implement.candidate",
+                },
+                "freshness_seconds": 60,
+                "max_rationale_bytes": 20_000,
+                "max_attempts": max_attempts,
+                "results": ["pass", "fail"],
+                "routes": {
+                    "pass": {"kind": "terminal", "target": "complete"},
+                    "fail": {"kind": "action", "target": "block"},
+                },
+                "on_failure": {"kind": "action", "target": "block"},
+            },
+        ]
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture._git("add", "pm")
+        self.authority.fixture._git(
+            "commit", "-qm", "explicit verdict conductor fixture"
+        )
+
     def configure_outward_nudge(self):
         program_path = self.root / "pm/programs/demo-program.json"
         program = json.loads(program_path.read_text(encoding="utf-8"))
@@ -12620,6 +12657,121 @@ class ProgramConductorTest(unittest.TestCase):
             item for item in replayed["receipts"]
             if item["action_kind"] == "loop-round"
         ]), 1)
+
+    def test_malformed_verdict_is_ledgered_retried_then_routes_failure(self):
+        self.configure_explicit_verdict(max_attempts=2)
+        projection = self.start()
+        fixture = self.core.ProgramFixtureDriver({
+            "verdict": {
+                "outputs": {
+                    "judgment": {
+                        "criteria": [{"id": "intent", "result": "pass"}],
+                    },
+                },
+            },
+        })
+        result = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=10,
+            max_seconds=86_400,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual((result["state"], result["stop"]),
+                         ("stopped", "route-block"))
+        self.assertEqual(fixture.starts, 3)
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        verdicts = sorted(
+            [
+                item for item in replayed["receipts"]
+                if item["action_kind"] == "verdict"
+            ],
+            key=lambda item: item["attempt"],
+        )
+        self.assertEqual(
+            [(item["attempt"], item["outcome"]) for item in verdicts],
+            [(1, "failed"), (2, "failed")],
+        )
+        for receipt in verdicts:
+            self.assertEqual(
+                receipt["payload"]["verdict_content_failure"]["reason"],
+                "verdict criterion evidence is malformed",
+            )
+        self.assertFalse(any(
+            item["category"] == "verdict"
+            for item in replayed["authority"]["claims"]
+        ))
+
+    def test_verdict_prompt_declares_exact_response_and_candidate_evidence(self):
+        self.configure_explicit_verdict()
+        projection = self.start()
+
+        class CapturingFixture(self.core.ProgramFixtureDriver):
+            def __init__(self):
+                super().__init__()
+                self.prompts = []
+
+            def start(self, packet, profile, staging):
+                self.prompts.append(json.loads(packet["prompt"]))
+                return super().start(packet, profile, staging)
+
+        fixture = CapturingFixture()
+        result = self.core.supervise_program(
+            self.root,
+            projection["run_id"],
+            max_ticks=10,
+            max_seconds=86_400,
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual((result["state"], result["stop"]),
+                         ("story-certified", "checkpoint"))
+        prompt = next(
+            item for item in fixture.prompts
+            if item.get("action_kind") == "verdict"
+        )
+        self.assertTrue(prompt["evidence"])
+        self.assertTrue(all(
+            set(item) == {"kind", "hash", "ref"}
+            for item in prompt["evidence"]
+        ))
+        candidate = prompt["candidate_subject"]
+        self.assertEqual(candidate["kind"], "git-diff")
+        self.assertIn(candidate, prompt["evidence"])
+        self.assertIn("candidate diff", prompt["instructions"][0])
+        self.assertIn("checked-out working tree", prompt["instructions"][0])
+        self.assertIn("mechanical_facts", prompt)
+        contract = prompt["response_contract"]
+        self.assertEqual(
+            set(contract),
+            {
+                "format", "top_level_keys", "criterion_keys",
+                "evidence_keys", "citation_keys", "criteria", "template",
+                "instructions",
+            },
+        )
+        self.assertEqual(contract["format"], "single-json-document")
+        self.assertEqual(contract["top_level_keys"], ["criteria"])
+        self.assertEqual(
+            contract["criterion_keys"],
+            [
+                "id", "result", "evidence", "citations", "rationale",
+                "mechanical_fact_hash",
+            ],
+        )
+        self.assertEqual(
+            {item["id"] for item in contract["criteria"]},
+            {item["id"] for item in prompt["rubric"]["criteria"]},
+        )
+        self.assertIn(
+            "copy kind, hash, and ref verbatim",
+            " ".join(contract["instructions"]),
+        )
 
     def test_tick_conducts_implementer_then_independent_verifier(self):
         from dw_pmo.program_verdict import validate_verdict_document

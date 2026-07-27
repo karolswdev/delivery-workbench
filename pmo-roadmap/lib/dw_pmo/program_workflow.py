@@ -159,7 +159,8 @@ _NODE_KEYS = {
     },
     "verdict": _COMMON_NODE_KEYS | {
         "role", "rubric", "subject", "freshness_seconds",
-        "max_rationale_bytes", "results", "routes",
+        "max_rationale_bytes", "max_attempts", "results", "routes",
+        "on_failure",
     },
     "gate": _COMMON_NODE_KEYS | {
         "facts", "verdicts", "operator", "missing_policy",
@@ -902,7 +903,7 @@ class _RegistryCompiler:
         envelope = _empty_envelope()
         envelope["node_visits"] = 1
 
-        if node_type in {"agent", "check", "collect", "bounded_run", "subflow", "rail"}:
+        if node_type in {"agent", "check", "collect", "bounded_run", "subflow", "rail", "verdict"}:
             if "on_success" in raw:
                 node["on_success"] = self.normalize_route(raw.get("on_success"), source, f"{pointer}/on_success")
             if "on_failure" in raw:
@@ -1109,6 +1110,10 @@ class _RegistryCompiler:
             node["subject"] = self.normalize_expression(raw.get("subject"), source, f"{pointer}/subject", parameter_types, allow_artifact=True)
             freshness = self.positive_int(raw.get("freshness_seconds"), source, f"{pointer}/freshness_seconds", 3_600, 31_536_000)
             rationale = self.positive_int(raw.get("max_rationale_bytes"), source, f"{pointer}/max_rationale_bytes", 20_000, 1_000_000)
+            attempts = self.positive_int(
+                raw.get("max_attempts"), source,
+                f"{pointer}/max_attempts", 1, 20,
+            )
             results = self.string_list(
                 raw.get("results"), source, f"{pointer}/results",
                 choices=VERDICT_RESULTS, minimum=1, maximum=len(VERDICT_RESULTS),
@@ -1127,10 +1132,16 @@ class _RegistryCompiler:
             node.update({
                 "freshness_seconds": freshness,
                 "max_rationale_bytes": rationale,
+                "max_attempts": attempts,
                 "results": results,
                 "routes": routes,
             })
-            envelope.update({"agent_starts": 1, "wall_seconds": freshness, "artifact_bytes": rationale + output_bytes})
+            envelope.update({
+                "node_visits": attempts,
+                "agent_starts": attempts,
+                "wall_seconds": attempts * freshness,
+                "artifact_bytes": attempts * (rationale + output_bytes),
+            })
         elif node_type == "gate":
             facts = self.string_list(raw.get("facts", []), source, f"{pointer}/facts", maximum=100, pattern=re.compile(r"^[a-zA-Z0-9_.:-]+$"))
             verdicts = self.string_list(raw.get("verdicts", []), source, f"{pointer}/verdicts", maximum=100, pattern=re.compile(r"^[a-zA-Z0-9_.:-]+$"))
