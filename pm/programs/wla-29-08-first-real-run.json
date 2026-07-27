@@ -1,0 +1,92 @@
+{
+  "kind": "delivery-workbench-program",
+  "schema_version": 1,
+  "slug": "wla-29-08-first-real-run",
+  "title": "First real autonomous Delivery Workbench run",
+  "description": "A checkpointed, one-story live-adapter program for WLA-29-09 that ends before operator certification and Git commit.",
+  "scope": {
+    "project": "work-log-automation",
+    "phases": {"from": 29, "through": 29},
+    "stories": {
+      "include": ["WLA-29-09"]
+    },
+    "selection": "roadmap-frontier-v1",
+    "blocked_policy": "stop"
+  },
+  "organization": "wla-29-live-story-cell",
+  "bindings": [
+    {
+      "id": "wla-29-09-hook-health",
+      "priority": 10,
+      "match": {
+        "phase_from": 29,
+        "phase_through": 29,
+        "story_ids": ["WLA-29-09"]
+      },
+      "workflow": "wla-29-hook-health-delivery",
+      "with": {
+        "story-id": {
+          "kind": "context",
+          "name": "story.id"
+        }
+      },
+      "team": "story-cell",
+      "rubrics": ["wla-29-story-quality"]
+    }
+  ],
+  "phase_gates": [],
+  "mode_ceiling": "checkpointed",
+  "requested_capabilities": [
+    "program:select",
+    "agent:dispatch",
+    "check:execute",
+    "workspace:write",
+    "verdict:issue",
+    "evidence:materialize",
+    "integration:apply",
+    "contract:generate",
+    "roadmap:story-start"
+  ],
+  "budgets": {
+    "max_phases": 1,
+    "max_stories": 1,
+    "max_child_runs": 1,
+    "max_agent_starts": 6,
+    "max_provider_starts": 6,
+    "max_model_starts": 6,
+    "max_check_starts": 4,
+    "max_loop_rounds": 1,
+    "max_debate_rounds": 1,
+    "max_councils": 1,
+    "max_repairs_per_story": 1,
+    "max_verdicts": 3,
+    "max_obligations": 3,
+    "max_obligation_materializations": 3,
+    "max_obligation_dispositions": 3,
+    "max_integrations": 1,
+    "max_commits": 1,
+    "max_pushes": 1,
+    "max_nudges": 1,
+    "max_lessons": 3,
+    "max_artifact_bytes": 20000000,
+    "max_tokens": 1000000,
+    "max_observed_cost_microunits": 50000000,
+    "max_wall_seconds": 10800
+  },
+  "stop_conditions": [
+    "scope-complete",
+    "checkpoint-required",
+    "unresolved-dissent",
+    "blocked-frontier",
+    "budget-exhausted",
+    "grant-expired",
+    "grant-revoked"
+  ],
+  "layout": {
+    "nodes": {
+      "roadmap-scope": {"x": 60, "y": 100},
+      "binding:wla-29-09-hook-health": {"x": 420, "y": 100}
+    },
+    "viewport": {"x": 0, "y": 0, "zoom": 1}
+  }
+}

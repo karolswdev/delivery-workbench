@@ -1,0 +1,121 @@
+{
+  "kind": "delivery-workbench-organization",
+  "schema_version": 1,
+  "slug": "wla-29-live-story-cell",
+  "title": "WLA 29 live story cell",
+  "description": "A minimal two-seat team with a Claude implementer and an independent Codex verifier from a different provider family.",
+  "agents": [
+    {
+      "id": "claude-implementer",
+      "profile": "claude-implementer",
+      "duties": ["implementer"],
+      "workspace_domain": "claude-implementation",
+      "capability_ceiling": ["agent:dispatch", "workspace:write"],
+      "max_concurrency": 1,
+      "weight": 1
+    },
+    {
+      "id": "codex-verifier",
+      "profile": "codex-verifier",
+      "duties": ["verifier"],
+      "workspace_domain": "codex-verification",
+      "capability_ceiling": ["agent:dispatch", "verdict:issue"],
+      "max_concurrency": 1,
+      "weight": 1
+    }
+  ],
+  "pools": [
+    {
+      "id": "implementers",
+      "agents": ["claude-implementer"]
+    },
+    {
+      "id": "verifiers",
+      "agents": ["codex-verifier"]
+    }
+  ],
+  "teams": [
+    {
+      "id": "story-cell",
+      "roles": [
+        {
+          "id": "implementer",
+          "duty": "implementer",
+          "pool": "implementers",
+          "required": true,
+          "cardinality": 1,
+          "capability_ceiling": ["agent:dispatch", "workspace:write"],
+          "driver_capabilities": ["repository-read", "repository-write"],
+          "workspace": "isolated-worktree",
+          "context": {
+            "allow": ["story", "phase", "roadmap", "workflow-inputs", "mechanical-receipts", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 750000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text", "mechanical-fact"],
+            "write": ["git-diff", "markdown", "json", "text"],
+            "max_bytes": 10000000
+          },
+          "output_schema": "delivery-workbench-implementation-output@1",
+          "verdict_schema": null,
+          "max_concurrency": 1,
+          "resource_groups": ["repository-writer"],
+          "may_request": [],
+          "may_judge": [],
+          "independent_from": [],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused", "conflicted"],
+            "max_replacements": 0,
+            "fallback_pools": [],
+            "on_exhausted": "block",
+            "preserve_history": true
+          }
+        },
+        {
+          "id": "verifier",
+          "duty": "verifier",
+          "pool": "verifiers",
+          "required": true,
+          "cardinality": 1,
+          "capability_ceiling": ["agent:dispatch", "verdict:issue"],
+          "driver_capabilities": ["repository-read"],
+          "workspace": "read-only",
+          "context": {
+            "allow": ["story", "phase", "roadmap", "candidate-diff", "mechanical-receipts", "prior-verdicts", "dissent", "public-artifacts"],
+            "expressions": ["context", "parameter", "literal", "artifact"],
+            "max_bytes": 750000
+          },
+          "artifacts": {
+            "read": ["markdown", "json", "text", "git-diff", "mechanical-fact", "verdict"],
+            "write": ["verdict"],
+            "max_bytes": 10000000
+          },
+          "output_schema": null,
+          "verdict_schema": "delivery-workbench-agent-verdict@1",
+          "max_concurrency": 1,
+          "resource_groups": ["independent-verification"],
+          "may_request": [],
+          "may_judge": ["implementer"],
+          "independent_from": ["implementer"],
+          "replacement": {
+            "reasons": ["unavailable", "lost", "failed", "refused", "conflicted"],
+            "max_replacements": 0,
+            "fallback_pools": [],
+            "on_exhausted": "block",
+            "preserve_history": true
+          }
+        }
+      ]
+    }
+  ],
+  "councils": [],
+  "diversity": [
+    {
+      "id": "cross-provider-review",
+      "kind": "provider-family",
+      "roles": ["implementer", "verifier"]
+    }
+  ],
+  "layout": {}
+}

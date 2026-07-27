@@ -1,0 +1,77 @@
+{
+  "kind": "delivery-workbench-rubric",
+  "schema_version": 1,
+  "slug": "wla-29-story-quality",
+  "title": "WLA 29 maintenance story quality",
+  "description": "A required-checks veto plus independent, diff-cited judgment of WLA-29-09 intent, safety, tests, and maintainability.",
+  "version": "1.0.0",
+  "subject_type": "diff",
+  "result_vocabulary": ["pass", "fail", "needs-repair", "escalate"],
+  "freshness": {
+    "max_age_seconds": 3600,
+    "bind": ["subject", "repository", "program", "assignment", "rubric", "ledger"]
+  },
+  "criteria": [
+    {
+      "id": "required-checks",
+      "question": "Did the exact declared doctor/status regression command pass, with no introduced test failures relative to the captured baseline?",
+      "evaluation": {
+        "kind": "mechanical-fact",
+        "fact": "required-checks"
+      },
+      "required_evidence_kinds": [],
+      "min_citations": 0,
+      "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+      "veto": true,
+      "rationale_max_bytes": 512
+    },
+    {
+      "id": "hook-path-contract",
+      "question": "Does the cited git diff accept only relative or same-clone absolute .githooks paths, keep foreign paths unhealthy, and normalize only through an explicit operator-invoked repair?",
+      "evaluation": {
+        "kind": "agent-judgment",
+        "fact": null
+      },
+      "required_evidence_kinds": ["git-diff"],
+      "min_citations": 2,
+      "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+      "veto": true,
+      "rationale_max_bytes": 3000
+    },
+    {
+      "id": "status-and-step-safety",
+      "question": "Does the cited git diff prove that same-clone absolute paths are non-blocking in doctor, status, and step while foreign paths still fail loudly?",
+      "evaluation": {
+        "kind": "agent-judgment",
+        "fact": null
+      },
+      "required_evidence_kinds": ["git-diff"],
+      "min_citations": 2,
+      "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+      "veto": true,
+      "rationale_max_bytes": 3000
+    },
+    {
+      "id": "quality-and-scope",
+      "question": "Is the cited implementation maintainable, documented in the existing doctor guidance, regression-tested, and confined to WLA-29-09 without changing gate semantics or unrelated behavior?",
+      "evaluation": {
+        "kind": "agent-judgment",
+        "fact": null
+      },
+      "required_evidence_kinds": ["git-diff"],
+      "min_citations": 2,
+      "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+      "veto": false,
+      "rationale_max_bytes": 3000
+    }
+  ],
+  "aggregation": {
+    "method": "all",
+    "threshold": 4,
+    "on_pass": "pass",
+    "on_fail": "needs-repair",
+    "on_abstain": "escalate",
+    "on_inconclusive": "needs-repair"
+  },
+  "layout": {}
+}

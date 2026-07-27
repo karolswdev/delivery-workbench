@@ -1,0 +1,173 @@
+{
+  "kind": "delivery-workbench-workflow",
+  "schema_version": 1,
+  "slug": "wla-29-hook-health-delivery",
+  "title": "Implement and independently verify hook-path health",
+  "description": "Build the one scoped maintenance story, run one declared doctor/status regression command, obtain an independent cross-provider verdict, then stop for operator approval before integration.",
+  "version": "1.0.0",
+  "parameters": [
+    {
+      "id": "story-id",
+      "type": "string",
+      "required": true,
+      "max_bytes": 128
+    }
+  ],
+  "defaults": {},
+  "nodes": [
+    {
+      "id": "implement-hook-health",
+      "type": "agent",
+      "role": "implementer",
+      "task": "Implement only WLA-29-09. Use the supplied knowledge packet and re-verify its hints. Make dw doctor accept a same-clone absolute core.hooksPath with a normalization hint, keep foreign paths unhealthy, add an explicit normalization repair, cover doctor/status/step behavior with focused regression tests, and update the existing doctor documentation. Do not edit roadmap status or evidence, certify a contract, commit, push, or publish.",
+      "workspace": "isolated-worktree",
+      "capability_ceiling": ["agent:dispatch", "workspace:write"],
+      "timeout_seconds": 3600,
+      "max_attempts": 1,
+      "inputs": {
+        "story": {
+          "kind": "parameter",
+          "name": "story-id"
+        }
+      },
+      "outputs": [
+        {
+          "id": "candidate",
+          "kind": "git-diff",
+          "max_bytes": 2000000
+        }
+      ],
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    },
+    {
+      "id": "focused-doctor-status-regression",
+      "type": "check",
+      "needs": ["implement-hook-health"],
+      "inputs": {
+        "candidate": {
+          "kind": "artifact",
+          "name": "implement-hook-health.candidate"
+        }
+      },
+      "runner": {
+        "kind": "command",
+        "argv": [
+          "python3",
+          "pmo-roadmap/tests/dw-core-tests.py",
+          "GateTest.test_doctor_detections_and_health",
+          "StatusBriefingTest"
+        ],
+        "cwd": ".",
+        "writes": [],
+        "output_bytes": 1000000
+      },
+      "expect": {
+        "exit_code": 0
+      },
+      "timeout_seconds": 1200,
+      "max_attempts": 1,
+      "outputs": [
+        {
+          "id": "required-checks",
+          "kind": "mechanical-fact",
+          "max_bytes": 1000000
+        }
+      ],
+      "on_failure": {
+        "kind": "action",
+        "target": "block"
+      }
+    },
+    {
+      "id": "verify-hook-health",
+      "type": "verdict",
+      "needs": ["focused-doctor-status-regression"],
+      "role": "verifier",
+      "rubric": "wla-29-story-quality",
+      "subject": {
+        "kind": "artifact",
+        "name": "implement-hook-health.candidate"
+      },
+      "freshness_seconds": 3600,
+      "max_rationale_bytes": 30000,
+      "results": ["pass", "fail", "abstain", "inconclusive"],
+      "routes": {
+        "pass": {
+          "kind": "node",
+          "target": "approve-before-integration"
+        },
+        "fail": {
+          "kind": "action",
+          "target": "block"
+        },
+        "abstain": {
+          "kind": "action",
+          "target": "checkpoint"
+        },
+        "inconclusive": {
+          "kind": "action",
+          "target": "block"
+        }
+      },
+      "outputs": [
+        {
+          "id": "verdict",
+          "kind": "verdict",
+          "max_bytes": 50000
+        }
+      ]
+    },
+    {
+      "id": "approve-before-integration",
+      "type": "checkpoint",
+      "activation": "route",
+      "needs": ["verify-hook-health"],
+      "inputs": {
+        "verdict": {
+          "kind": "artifact",
+          "name": "verify-hook-health.verdict"
+        }
+      },
+      "prompt_id": "approve-wla-29-09-before-integration",
+      "prompt": "The focused check and independent verdict are green. Approve handing this exact candidate to the operator certification and integration seam, or block it.",
+      "expires_seconds": 1800,
+      "options": [
+        {
+          "id": "approve",
+          "label": "Approve handoff",
+          "route": {
+            "kind": "terminal",
+            "target": "complete"
+          }
+        },
+        {
+          "id": "block",
+          "label": "Block handoff",
+          "route": {
+            "kind": "action",
+            "target": "block"
+          }
+        }
+      ]
+    }
+  ],
+  "terminals": [
+    {
+      "id": "complete",
+      "meaning": "complete",
+      "description": "Quality work is complete; the conductor stops at its integration-required certification seam."
+    }
+  ],
+  "layout": {
+    "nodes": {
+      "implement-hook-health": {"x": 80, "y": 120},
+      "focused-doctor-status-regression": {"x": 380, "y": 120},
+      "verify-hook-health": {"x": 700, "y": 120},
+      "approve-before-integration": {"x": 1020, "y": 120}
+    },
+    "viewport": {"x": 0, "y": 0, "zoom": 1}
+  }
+}
