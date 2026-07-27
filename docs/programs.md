@@ -283,6 +283,8 @@ An organization contains:
   allowed context channels/expression kinds, readable/writable artifact kinds,
   output/verdict schema, concurrency/resource groups, request/judgment edges,
   and ordered independence rules;
+- optional named `diversity` rules that require two roles in one team to use
+  different declared provider families;
 - `councils` with member role slots, distinct-principal quorum, judge, optional
   meta-verifier, majority/weighted/unanimous/judge aggregation, role weights,
   vetoes, sampling/full-audit policy, and finite round/start/artifact/byte/token/
@@ -327,12 +329,15 @@ axes independently:
 
 Provider diversity, router diversity, model-family diversity and principal
 independence are different claims. Claude reached directly and Claude reached
-through OpenRouter may be router-diverse but not model-family-diverse. Policies
-may require distinct values across any declared axes, minimum distinct counts,
-or exact seat-to-profile assignments. A failed exact binding refuses; fallback
-never substitutes a harness/provider/model unless the tracked policy allowed
-it. Replacement increments assignment generation and invalidates affected
-claims, discussion artifacts and verdicts.
+through OpenRouter may be router-diverse but not model-family-diverse.
+Organizations currently support one diversity kind: a `provider-family` rule
+between two roles. The adapter roster declares the family. Delivery Workbench
+does not infer it from an executable or model name. Fixture profiles may declare
+a family for deterministic tests. An adapter without a declaration cannot
+satisfy the rule. A failed exact binding refuses; fallback never substitutes a
+harness, provider, or model unless the tracked policy allowed it. Replacement
+increments assignment generation and invalidates affected claims, discussion
+artifacts and verdicts.
 
 The roster/grant fingerprint includes the requested and resolved adapter
 version, harness, provider/router, model vendor/family/id and revision or alias
@@ -1621,6 +1626,7 @@ Program operations return a versioned refusal with `code`, bounded `message`,
 | `workflow-recursive` | Workflow/subflow reference recursion was found |
 | `role-unavailable` | No resolved candidate satisfies the role |
 | `separation-violation` | Principal/workspace/duty independence cannot be proven |
+| `provider-diversity-unsatisfied` | A named role pair has no assignment with two declared, different provider families |
 | `quorum-lost` | Declared distinct-principal quorum cannot be reached |
 | `dissent-unresolved` | Policy requires resolution of preserved dissent |
 | `verdict-stale` | Subject/rubric/assignment/ledger facts changed after verdict |

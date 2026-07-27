@@ -114,7 +114,7 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 | WLA-29-03 | Ground the work before it starts | done | [story-03-ground-the-work-before-it-starts](./story-03-ground-the-work-before-it-starts.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-29-04 | Serve knowledge packets to agents | backlog | [story-04-serve-knowledge-packets-to-agents](./story-04-serve-knowledge-packets-to-agents.md) | — |
 | WLA-29-05 | Judge only the failures we introduced | backlog | [story-05-judge-only-the-failures-we-introduced](./story-05-judge-only-the-failures-we-introduced.md) | — |
-| WLA-29-06 | Decorrelate the author and the reviewer | backlog | [story-06-decorrelate-the-author-and-the-reviewer](./story-06-decorrelate-the-author-and-the-reviewer.md) | — |
+| WLA-29-06 | Decorrelate the author and the reviewer | done | [story-06-decorrelate-the-author-and-the-reviewer](./story-06-decorrelate-the-author-and-the-reviewer.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-29-07 | Write the delivery back | backlog | [story-07-write-the-delivery-back](./story-07-write-the-delivery-back.md) | — |
 | WLA-29-08 | Serve ourselves for real | backlog | [story-08-serve-ourselves-for-real](./story-08-serve-ourselves-for-real.md) | — |
 
@@ -180,6 +180,22 @@ WLA-29-04/05. It has no dependencies, its implementation is complete and
 exam-proven in an isolated worktree, and it touches the same driver and
 program modules WLA-29-04 must edit — landing it first avoids a pointless
 conflict pass. Recorded here as an owner-direction scheduling decision.
+
+WLA-29-06 landed on that schedule. Provider family is now a declared
+adapter attribute (`fixture`, `openai`, `anthropic`, `pi`; fixtures can
+declare alternate families for tests), and organizations may declare named
+`diversity` rules of kind `provider-family` between exactly two roles.
+Enforcement runs at initial assignment, candidate search, replacement, and
+plan/start diagnostics; an unsatisfiable roster refuses before start with
+`provider-diversity-unsatisfied` naming the rule and the missing family,
+and an undeclared family fails closed. Organizations without the field are
+untouched — diversity is not default-on, and the exemplar organization
+deliberately stays without it. Assignment receipts record the
+role-to-family pairing; the team and live-review surfaces say "reviewed by
+a different model family" in product language with snapshots re-pinned.
+The packaged autonomous exam gained both legs (satisfying assignment and
+refused variant) and runs complete against the merged tree. Core suite
+571 → 573 green; product-language contract ok.
 
 ## Active risks
 

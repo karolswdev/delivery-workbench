@@ -21,6 +21,7 @@ from typing import Any
 PRESENTATION_KIND = "delivery-workbench-presentation"
 PRESENTATION_SCHEMA_VERSION = 1
 TECHNICAL_DETAILS_LABEL = "Technical details"
+DIFFERENT_MODEL_FAMILY_COPY = "reviewed by a different model family"
 
 # BEGIN EVERYDAY PRESENTATION COPY
 # The executable product-language checker compares this census and every

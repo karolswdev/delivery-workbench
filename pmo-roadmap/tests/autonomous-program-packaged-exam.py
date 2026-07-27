@@ -1255,6 +1255,82 @@ def main():
         workflow_runtime = compiled_program["references"][
             "workflow_instances"
         ]["ax-1-01"]
+
+        # Provider-family diversity is an opt-in organization rule. Fixture
+        # profiles declare their families explicitly so this fresh-wheel exam
+        # proves both the only allowed pairing and the pre-dispatch refusal.
+        diversity_org = copy.deepcopy(authored["organization"])
+        diversity_org["diversity"] = [{
+            "id": "cross-family-review",
+            "kind": "provider-family",
+            "roles": ["implementer", "verifier"],
+        }]
+        compiled_diversity_org = compile_organization(root, diversity_org)
+        fixture_families = copy.deepcopy(config)
+        for profile_id, profile in fixture_families["profiles"].items():
+            profile["adapter"] = "fixture"
+            profile["provider_family"] = (
+                "author-family"
+                if profile_id in {"claude-builder", "claude-repairer"}
+                else "review-family"
+            )
+        diverse_assignment = assign_organization_team(
+            compiled_diversity_org,
+            "story-cell",
+            driver_config=fixture_families,
+            policy_bundle_hash=compiled_program["policy_bundle_hash"],
+            story_id="AX-1-01",
+            workflow_address=(
+                "program/autonomous-exit/phase/1/story/AX-1-01/"
+                "workflow/ax-1-01"
+            ),
+            program_capabilities=authored["program"][
+                "requested_capabilities"
+            ],
+            workflow=workflow_runtime,
+        )
+        assert diverse_assignment["applicable"], diverse_assignment
+        assert diverse_assignment["diversity"]["passed"], diverse_assignment
+        same_family = copy.deepcopy(fixture_families)
+        same_family["profiles"]["pi-verifier"][
+            "provider_family"
+        ] = "author-family"
+        refused_diversity = assign_organization_team(
+            compiled_diversity_org,
+            "story-cell",
+            driver_config=same_family,
+            policy_bundle_hash=compiled_program["policy_bundle_hash"],
+            story_id="AX-1-01",
+            workflow_address=(
+                "program/autonomous-exit/phase/1/story/AX-1-01/"
+                "workflow/ax-1-01"
+            ),
+            program_capabilities=authored["program"][
+                "requested_capabilities"
+            ],
+            workflow=workflow_runtime,
+        )
+        assert not refused_diversity["applicable"], refused_diversity
+        diversity_diagnostic = next(
+            item for item in refused_diversity["issues"]
+            if item["code"] == "provider-diversity-unsatisfied"
+        )
+        assert "cross-family-review" in diversity_diagnostic["message"]
+        assert "missing a family different from author-family" in (
+            diversity_diagnostic["message"]
+        )
+        red["provider-family-diversity"] = [
+            item["code"] for item in refused_diversity["issues"]
+        ]
+        provider_diversity_observation = {
+            "rule": "cross-family-review",
+            "satisfying_families": diverse_assignment["diversity"][
+                "rules"
+            ][0]["families"],
+            "unsatisfied_code": diversity_diagnostic["code"],
+            "refused_before_start": not refused_diversity["starts_work"],
+            "fixture_families_declared": True,
+        }
         colliding = copy.deepcopy(config)
         for profile_id in ("claude-builder", "claude-repairer"):
             colliding["profiles"][profile_id]["principal"] = "shared-writer"
@@ -3115,6 +3191,7 @@ def main():
                 "surfaces": ["CLI", "MCP", "HTTP", "Workbench", "SSE"],
             },
             "red_matrix": red,
+            "provider_family_diversity": provider_diversity_observation,
             "fixture_bindings": {
                 "claude": {
                     "adapter": "claude-exec",

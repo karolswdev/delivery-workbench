@@ -9631,7 +9631,8 @@ class ProgramContractTest(unittest.TestCase):
             "capability-denied", "budget-exhausted", "scope-violation",
             "frontier-blocked", "dependency-incomplete", "binding-missing",
             "binding-ambiguous", "workflow-unbounded", "workflow-recursive",
-            "role-unavailable", "separation-violation", "quorum-lost",
+            "role-unavailable", "separation-violation",
+            "provider-diversity-unsatisfied", "quorum-lost",
             "dissent-unresolved", "verdict-stale", "verdict-insufficient",
             "architect-veto", "checkpoint-required", "claim-conflict",
             "ledger-corrupt", "integration-conflict", "remote-diverged",
@@ -10303,6 +10304,44 @@ class ProgramPlannerTest(unittest.TestCase):
         self.assertEqual(reasons["DM-1-03"], "out-of-scope")
         self.assertEqual(reasons["DM-2-01"], "dependency-incomplete")
         self.assertEqual(reasons["DM-2-02"], "out-of-scope")
+
+    def test_program_plan_refuses_unsatisfied_provider_family_rule(self):
+        from dw_pmo.orchestration_driver import load_driver_config
+
+        organization_path = self.root / "pm/organizations/delivery-core.json"
+        organization = json.loads(organization_path.read_text(encoding="utf-8"))
+        organization["diversity"] = [{
+            "id": "cross-family-review",
+            "kind": "provider-family",
+            "roles": ["implementer", "verifier"],
+        }]
+        self._write_json("pm/organizations/delivery-core.json", organization)
+        validation = self.programs_core.validate_program(self.root, self.program)
+        self.assertTrue(validation["valid"], validation["diagnostics"])
+
+        satisfying = load_driver_config(self.root)
+        satisfying["profiles"]["builder-a"]["provider_family"] = "family-a"
+        satisfying["profiles"]["builder-b"]["provider_family"] = "family-a"
+        satisfying["profiles"]["verifier-a"]["provider_family"] = "family-b"
+        plan = self.programs_core.build_program_plan(
+            self.root, self.program, driver_config=satisfying
+        )
+        self.assertTrue(plan["applicable"], plan["issues"])
+        self.assertTrue(plan["assignment"]["diversity"]["passed"])
+
+        unsatisfied = json.loads(json.dumps(satisfying))
+        unsatisfied["profiles"]["verifier-a"]["provider_family"] = "family-a"
+        refused = self.programs_core.build_program_plan(
+            self.root, self.program, driver_config=unsatisfied
+        )
+        self.assertFalse(refused["applicable"])
+        diagnostic = next(
+            item for item in refused["issues"]
+            if item["code"] == "provider-diversity-unsatisfied"
+        )
+        self.assertIn("cross-family-review", diagnostic["message"])
+        self.assertIn("missing a family different from family-a", diagnostic["message"])
+        self.assertFalse(refused["starts_work"])
 
     def test_after_active_completion_planner_advances_stably_to_next_phase(self):
         core = self.programs_core
@@ -15839,6 +15878,127 @@ class ProgramOrganizationTest(unittest.TestCase):
                     member["execution"]["auth_domain_fingerprint"],
                     r"^sha256:[0-9a-f]{64}$",
                 )
+
+    def test_provider_family_diversity_is_declared_enforced_and_fail_closed(self):
+        import dw_pmo.orchestration_driver as driver_core
+        from dw_pmo.team_review import build_team_review
+
+        raw = json.loads(json.dumps(self.raw))
+        raw["diversity"] = [{
+            "id": "cross-family-review",
+            "kind": "provider-family",
+            "roles": ["implementer", "verifier"],
+        }]
+        implementer_role = next(
+            role for role in raw["teams"][0]["roles"]
+            if role["id"] == "implementer"
+        )
+        implementer_role["replacement"]["fallback_pools"] = []
+        compiled = self.core.compile_organization(self.root, raw)
+
+        config = self.config()
+        config["profiles"]["builder-primary"]["provider_family"] = "family-a"
+        config["profiles"]["verifier-primary"]["provider_family"] = "family-a"
+        config["profiles"]["verifier-backup"]["provider_family"] = "family-b"
+        assignment = self.core.assign_organization_team(
+            compiled,
+            "story-cell",
+            driver_config=config,
+            policy_bundle_hash="sha256:" + "7" * 64,
+            story_id="DM-1-02",
+            workflow_address="program/demo/phase/1/story/DM-1-02/workflow/story",
+            program_capabilities=[
+                "agent:dispatch", "workspace:write", "verdict:issue",
+                "council:decide", "obligation:record",
+            ],
+        )
+        self.assertTrue(assignment["applicable"], assignment["issues"])
+        self.assertEqual(assignment["verifier"]["profile"], "verifier-backup")
+        self.assertTrue(assignment["diversity"]["passed"])
+        receipt = assignment["diversity"]["rules"][0]
+        self.assertEqual(receipt["id"], "cross-family-review")
+        self.assertEqual(
+            receipt["families"],
+            {"implementer": "family-a", "verifier": "family-b"},
+        )
+        review = build_team_review(
+            raw,
+            {"valid": True, "diagnostics": []},
+            compiled,
+            assignment=assignment,
+        )
+        family_rule = next(
+            item for item in review["quality_constraints"]
+            if item.get("kind") == "provider-family"
+        )
+        self.assertEqual(family_rule["status"], "runtime-proven")
+        self.assertIn(
+            "reviewed by a different model family",
+            review["review_before_save"]["independence"],
+        )
+
+        same_family = json.loads(json.dumps(config))
+        same_family["profiles"]["verifier-backup"]["provider_family"] = "family-a"
+        refused = self.core.assign_organization_team(
+            compiled,
+            "story-cell",
+            driver_config=same_family,
+            policy_bundle_hash="sha256:" + "7" * 64,
+            story_id="DM-1-02",
+            workflow_address="program/demo/phase/1/story/DM-1-02/workflow/story",
+            program_capabilities=[
+                "agent:dispatch", "workspace:write", "verdict:issue",
+                "council:decide", "obligation:record",
+            ],
+        )
+        diagnostic = next(
+            item for item in refused["issues"]
+            if item["code"] == "provider-diversity-unsatisfied"
+        )
+        self.assertFalse(refused["applicable"])
+        self.assertIn("cross-family-review", diagnostic["message"])
+        self.assertIn("missing a family different from family-a", diagnostic["message"])
+
+        undeclared = json.loads(json.dumps(config))
+        for profile in undeclared["profiles"].values():
+            profile.pop("provider_family", None)
+        with mock.patch.dict(
+            driver_core.ADAPTER_PROVIDER_FAMILIES, {}, clear=True
+        ):
+            refused = self.core.assign_organization_team(
+                compiled,
+                "story-cell",
+                driver_config=undeclared,
+                policy_bundle_hash="sha256:" + "7" * 64,
+                story_id="DM-1-02",
+                workflow_address="program/demo/phase/1/story/DM-1-02/workflow/story",
+                program_capabilities=[
+                    "agent:dispatch", "workspace:write", "verdict:issue",
+                    "council:decide", "obligation:record",
+                ],
+            )
+        self.assertFalse(refused["applicable"])
+        diagnostic = next(
+            item for item in refused["issues"]
+            if item["code"] == "provider-diversity-unsatisfied"
+        )
+        self.assertIn("declared provider family", diagnostic["message"])
+
+        unknown = json.loads(json.dumps(raw))
+        unknown["diversity"][0]["roles"][1] = "ghost-reviewer"
+        validation = self.core.validate_organization(self.root, unknown)
+        self.assertFalse(validation["valid"])
+        self.assertIn("dangling-role-reference", self.codes(validation))
+
+        self.assertEqual(
+            {
+                driver_core.FixtureDriver.provider_family,
+                driver_core.CodexExecDriver.provider_family,
+                driver_core.ClaudeCodeExecDriver.provider_family,
+                driver_core.PiExecDriver.provider_family,
+            },
+            {"fixture", "openai", "anthropic", "pi"},
+        )
 
     def test_assignment_is_stable_and_explains_unavailable_fallbacks(self):
         config = self.config()

@@ -99,7 +99,7 @@
           "status": {"label": "In progress", "meaning": "Two of four work items passed review."},
           "answers": [
             {"id": "delivery", "question": "Delivery", "answer": "Improve checkout safely.", "status": "known", "source": {"model": "delivery-workbench-run-view", "path": "/score"}},
-            {"id": "team", "question": "Team and review", "answer": "Maya works; Rowan reviews independently.", "status": "known", "source": {"model": "delivery-workbench-team-review", "path": "/responsibilities"}},
+            {"id": "team", "question": "Team and review", "answer": "Maya works; Rowan reviews independently and the work is reviewed by a different model family.", "status": "known", "source": {"model": "delivery-workbench-team-review", "path": "/responsibilities"}},
             {"id": "passed", "question": "Progress", "answer": "2 of 4 work items passed review.", "status": "known", "source": {"model": "delivery-workbench-live-progress", "path": "/progress"}},
             {"id": "blocked", "question": "Blocker", "answer": "No blocker.", "status": "clear", "source": {"model": "delivery-workbench-live-progress", "path": "/blockers"}},
             {"id": "decision", "question": "Decision", "answer": "No decision is waiting.", "status": "clear", "source": {"model": "delivery-workbench-live-progress", "path": "/decisions"}},
@@ -111,7 +111,7 @@
         }
       },
       "auxiliary": null,
-      "expected": "Live delivery — Improve checkout\nIn progress: Two of four work items passed review.\nDelivery: Improve checkout safely.\nTeam and review: Maya works; Rowan reviews independently.\nProgress: 2 of 4 work items passed review.\nBlocker: No blocker.\nDecision: No decision is waiting.\nPermission and cost: Two work starts remain; money cost is unknown.\nNext step: Let the current review finish.\nWait for review: Let the current review finish.\nTechnical details:\n  Exact view: delivery-workbench-run-view\n  Exact identity: run-abc\n  Exact state: running\n  Source facts: {\"generation\":3,\"ledger_head\":\"sha256:abc\",\"source_model\":\"delivery-workbench-run-view\"}\n"
+      "expected": "Live delivery — Improve checkout\nIn progress: Two of four work items passed review.\nDelivery: Improve checkout safely.\nTeam and review: Maya works; Rowan reviews independently and the work is reviewed by a different model family.\nProgress: 2 of 4 work items passed review.\nBlocker: No blocker.\nDecision: No decision is waiting.\nPermission and cost: Two work starts remain; money cost is unknown.\nNext step: Let the current review finish.\nWait for review: Let the current review finish.\nTechnical details:\n  Exact view: delivery-workbench-run-view\n  Exact identity: run-abc\n  Exact state: running\n  Source facts: {\"generation\":3,\"ledger_head\":\"sha256:abc\",\"source_model\":\"delivery-workbench-run-view\"}\n"
     },
     {
       "id": "bounded-start-review",

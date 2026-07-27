@@ -713,6 +713,9 @@ def _roster(assignment: dict[str, object], capabilities: list[str], workflow: di
             "audit": dict(council.get("audit", {})),
         })
     councils.sort(key=lambda item: str(item["id"]))
+    separation = dict(assignment.get("separation", {}))
+    if assignment.get("diversity"):
+        separation["diversity"] = dict(assignment["diversity"])
     return {
         "roster_hash": _hash(assignment["roster_hash"], "roster hash"),
         "assignment_hash": _hash(assignment["assignment_hash"], "assignment hash"),
@@ -720,7 +723,7 @@ def _roster(assignment: dict[str, object], capabilities: list[str], workflow: di
         "team": str(assignment["team"]),
         "seats": seats,
         "councils": councils,
-        "separation": dict(assignment.get("separation", {})),
+        "separation": separation,
     }
 
 

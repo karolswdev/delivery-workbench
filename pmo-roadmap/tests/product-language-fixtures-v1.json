@@ -137,7 +137,7 @@
       "regions": [
         {
           "classification": "everyday",
-          "text": "Team: Maya does the work and Rowan provides independent review. A separate decision owner resolves disagreement, and exhausted replacement asks the delivery owner."
+          "text": "Team: Maya does the work and Rowan provides independent review from a different model family. A separate decision owner resolves disagreement, and exhausted replacement asks the delivery owner."
         },
         {
           "classification": "technical_audit",

@@ -1660,7 +1660,8 @@ def build_program_plan(
             seen_issues.add(key)
     blocking_codes = {
         "multiple-active-stories", "frontier-blocked", "no-eligible-work",
-        "role-unavailable", "separation-violation", "impossible-quorum",
+        "role-unavailable", "separation-violation",
+        "provider-diversity-unsatisfied", "impossible-quorum",
         "capability-denied", "visibility-denied", "workspace-denied",
         "roadmap-unhealthy",
     }

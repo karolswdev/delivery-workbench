@@ -17,6 +17,8 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
+from .presentation import DIFFERENT_MODEL_FAMILY_COPY
+
 
 TEAM_REVIEW_KIND = "delivery-workbench-team-review"
 TEAM_REVIEW_SCHEMA_VERSION = 1
@@ -139,6 +141,7 @@ INDEPENDENCE_CODES = {
     "missing-separation",
     "impossible-independence",
     "separation-violation",
+    "provider-diversity-unsatisfied",
     "duplicate-principal",
     "role-order",
     "judgment-not-authorized",
@@ -183,6 +186,19 @@ def _strings(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str)]
+
+
+def _assignment_diversity(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    direct = value.get("diversity")
+    if isinstance(direct, dict):
+        return direct
+    separation = value.get("separation")
+    if not isinstance(separation, dict):
+        return {}
+    nested = separation.get("diversity")
+    return nested if isinstance(nested, dict) else {}
 
 
 def _display(value: object) -> str:
@@ -304,6 +320,9 @@ def _correction(
             f"Assign {names} to different execution identities, work areas, and work sessions."
             if role_ids else
             "Choose a separate reviewer identity, work area, and work session."
+        ),
+        "provider-diversity-unsatisfied": (
+            "Choose a reviewer from a different model family."
         ),
         "duplicate-principal": "Require distinct reviewers for the saved agreement count.",
         "role-order": "Place the responsibility being reviewed before its independent reviewer.",
@@ -552,6 +571,46 @@ def _policy_independence(
     return constraints
 
 
+def _policy_diversity(
+    document: dict[str, object],
+    by_id: dict[str, dict[str, object]],
+) -> list[dict[str, object]]:
+    constraints: list[dict[str, object]] = []
+    for index, rule in enumerate(_objects(document.get("diversity"))):
+        if rule.get("kind") != "provider-family":
+            continue
+        role_ids = _strings(rule.get("roles"))
+        if len(role_ids) != 2:
+            continue
+        left = by_id.get(role_ids[0], {})
+        right = by_id.get(role_ids[1], {})
+        left_label = str(left.get("name") or _display(role_ids[0]))
+        right_label = str(right.get("name") or _display(role_ids[1]))
+        rule_id = str(rule.get("id") or f"provider-family-{index + 1}")
+        constraints.append({
+            "id": f"diversity:{rule_id}",
+            "kind": "provider-family",
+            "rule": rule_id,
+            "roles": role_ids,
+            "labels": [left_label, right_label],
+            "status": "policy-ready",
+            "summary": (
+                f"{left_label}'s work must be {DIFFERENT_MODEL_FAMILY_COPY}."
+            ),
+            "runtime_claim": (
+                "The later assignment must prove both model families are declared and different."
+            ),
+            "correction": "Choose a reviewer from a different model family.",
+            "pointer": f"/diversity/{index}",
+            "technical_details": {
+                "rule": rule_id,
+                "dimension": "provider-family",
+                "fail_closed_when_undeclared": True,
+            },
+        })
+    return constraints
+
+
 def _design_councils(
     document: dict[str, object],
     roles: dict[str, dict[str, object]],
@@ -682,6 +741,7 @@ def _design_provenance(
             "profile": selector.get("profile"),
             "workspace_domain": constraints.get("workspace_domain"),
             "provider": local.get("provider"),
+            "provider_family": local.get("provider_family"),
             "model_vendor": local.get("model_vendor"),
             "model_family": local.get("model_family"),
             "model": local.get("model"),
@@ -814,6 +874,31 @@ def build_team_review(
                         constraint["runtime_claim"] = (
                             "The current assignment cannot prove the required separation."
                         )
+    diversity_constraints = _policy_diversity(raw, by_id)
+    if assignment_doc is not None:
+        diversity = _assignment_diversity(assignment_doc)
+        receipts = {
+            str(item.get("id") or ""): item
+            for item in _objects(
+                diversity.get("rules")
+            )
+        }
+        for constraint in diversity_constraints:
+            receipt = receipts.get(str(constraint.get("rule") or ""))
+            if isinstance(receipt, dict) and receipt.get("passed"):
+                constraint["status"] = "runtime-proven"
+                constraint["runtime_claim"] = (
+                    f"The current assignment is {DIFFERENT_MODEL_FAMILY_COPY}."
+                )
+                constraint["technical_details"]["families"] = _copy(
+                    receipt.get("families", {})
+                )
+            elif isinstance(receipt, dict):
+                constraint["status"] = "needs-attention"
+                constraint["runtime_claim"] = (
+                    "The current assignment is not reviewed by a different model family."
+                )
+    constraints.extend(diversity_constraints)
     councils = _design_councils(raw, by_id)
     corrections = _corrections(raw, validation_doc)
 
@@ -1010,11 +1095,16 @@ def build_team_review(
         )
         and primary_independence_ready
     )
+    assignment_diversity = _assignment_diversity(assignment_doc)
     runtime_status = (
         "proven"
         if assignment_doc is not None
         and isinstance(assignment_doc.get("separation"), dict)
         and assignment_doc["separation"].get("passed")
+        and (
+            not assignment_diversity.get("rules")
+            or assignment_diversity.get("passed")
+        )
         else "refused" if assignment_doc is not None
         else "not-assigned"
     )
@@ -1058,7 +1148,12 @@ def build_team_review(
             "claim": (
                 "A valid team policy proves compatible separate candidates exist; it does not claim a runtime identity or session before assignment."
                 if runtime_status == "not-assigned" else
-                "The supplied assignment proves the exact runtime separation facts."
+                (
+                    "The supplied assignment proves exact runtime separation and is "
+                    f"{DIFFERENT_MODEL_FAMILY_COPY}."
+                    if diversity_constraints else
+                    "The supplied assignment proves the exact runtime separation facts."
+                )
                 if runtime_status == "proven" else
                 "The supplied assignment cannot prove every required runtime separation fact."
             ),
@@ -1230,6 +1325,38 @@ def build_live_team_review(
             "pointer": None,
             "technical_details": _copy(separation.get("facts", {})),
         })
+    diversity = _assignment_diversity(source)
+    responsibility_names = {
+        str(item["id"]): str(item["name"]) for item in responsibilities
+    }
+    for receipt in _objects(diversity.get("rules")):
+        role_ids = _strings(receipt.get("roles"))
+        labels = [
+            responsibility_names.get(role_id, _display(role_id))
+            for role_id in role_ids
+        ]
+        passed = bool(receipt.get("passed"))
+        constraints.append({
+            "id": f"live:diversity:{receipt.get('id')}",
+            "kind": "provider-family",
+            "rule": receipt.get("id"),
+            "roles": role_ids,
+            "labels": labels,
+            "status": "runtime-proven" if passed else "needs-attention",
+            "summary": (
+                f"{labels[0] if labels else 'The work'} is {DIFFERENT_MODEL_FAMILY_COPY}."
+                if passed else
+                f"{labels[0] if labels else 'The work'} is not proven reviewed by a different model family."
+            ),
+            "runtime_claim": (
+                "Both assigned model families are declared and different."
+                if passed else
+                "Delivery remains stopped until both model families are declared and different."
+            ),
+            "correction": "Choose a reviewer from a different model family.",
+            "pointer": None,
+            "technical_details": _copy(receipt),
+        })
     councils = []
     for index, council in enumerate(_objects(source.get("councils"))):
         method = str(
@@ -1258,6 +1385,11 @@ def build_live_team_review(
             "technical_details": _copy(council),
         })
 
+    diversity_passed = (
+        bool(diversity.get("passed"))
+        if diversity.get("rules") else True
+    )
+    runtime_passed = separation_passed and diversity_passed
     decision_docs = _objects(decisions)
     dissent_docs = _objects(dissent)
     gate_docs = _objects(gates)
@@ -1270,7 +1402,7 @@ def build_live_team_review(
         "No live responsibility is assigned."
     )
     independence_answer = (
-        str(constraints[0]["summary"])
+        " ".join(str(item["summary"]) for item in constraints)
         if constraints else
         "No implementer and independent-review pair is present."
     )
@@ -1332,17 +1464,22 @@ def build_live_team_review(
         "applicable": True,
         "name": source.get("slug"),
         "title": f"{_display(source.get('team'))} team and review",
-        "status": "ready" if separation_passed else "needs-attention",
+        "status": "ready" if runtime_passed else "needs-attention",
         "summary": (
             "Live ownership and review use the same responsibility and independence projection as Program Studio."
         ),
         "policy_readiness": {"ready": True},
         "runtime_independence": {
-            "status": "proven" if separation_passed else "refused",
+            "status": "proven" if runtime_passed else "refused",
             "claim": (
-                "The assigned team proves every exact separation fact."
-                if separation_passed else
-                "The assigned team does not prove every exact separation fact."
+                (
+                    "The assigned team proves every exact separation fact and is "
+                    f"{DIFFERENT_MODEL_FAMILY_COPY}."
+                    if diversity.get("rules") else
+                    "The assigned team proves every exact separation fact."
+                )
+                if runtime_passed else
+                "The assigned team does not prove every required review-separation fact."
             ),
             "separation": _copy(separation),
         },

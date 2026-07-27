@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 29
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** -
 - **Unblocks:** WLA-29-08
 - **Owner:** unassigned
@@ -76,3 +76,17 @@ logical profile; that corner is recorded, not solved.
 
 This story has no dependency on the knowledge stories and can proceed in
 parallel with WLA-29-02 through WLA-29-05.
+
+Delivered out of sequence (after WLA-29-03, before WLA-29-04/05) by the
+recorded scheduling decision in the phase status. Implemented as declared
+`provider_family` on the adapter roster, optional named `diversity` rules
+(`provider-family` kind, exactly two roles, unknown roles rejected) in
+`program_organization.py`, enforcement at assignment/replacement/candidate
+search plus plan- and start-time diagnostics via
+`provider-diversity-unsatisfied`, fail-closed undeclared families, and
+assignment receipts recording the pairing. Product language: "reviewed by a
+different model family", snapshot-pinned. Evidence carries the full
+packaged autonomous exam on the merged tree (complete, 203 ledger events)
+and the two focused enforcement tests verbatim; the exam's own JSON output
+exceeded the evidence capture bound and is truncated there, so the focused
+second run is the readable proof. Suite 571 → 573 green.

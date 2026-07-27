@@ -62,8 +62,20 @@ _PROFILE_KEYS = {
     "adapter", "capabilities", "workspace_modes", "command", "model",
     "network", "max_context_bytes", "max_stream_bytes", "timeout_ceiling",
     "principal", "available", "adapter_version", "max_concurrency",
-    "router", "provider", "model_vendor", "model_family",
+    "router", "provider", "provider_family", "model_vendor", "model_family",
     "model_revision", "model_binding", "auth_domain",
+}
+
+# A provider family is an adapter declaration, never a guess derived from an
+# executable or model name.  Fixture profiles may override their built-in
+# family so deterministic exams can model more than one provider.  If a future
+# adapter is added without a declaration, its capabilities expose ``None`` and
+# provider-diversity policy fails closed.
+ADAPTER_PROVIDER_FAMILIES = {
+    "fixture": "fixture",
+    "codex-exec": "openai",
+    "claude-exec": "anthropic",
+    "pi-exec": "pi",
 }
 _PACKET_KEYS = {
     "kind", "schema_version", "packet_hash", "run_id", "node_id", "attempt",
@@ -156,6 +168,22 @@ def validate_driver_config(value: object) -> dict[str, object]:
         adapter = raw.get("adapter")
         if adapter not in {"fixture", "codex-exec", "claude-exec", "pi-exec"}:
             raise DwError(f"driver profile {name!r} has unsupported adapter {adapter!r}")
+        provider_family = raw.get(
+            "provider_family", ADAPTER_PROVIDER_FAMILIES.get(str(adapter))
+        )
+        if provider_family is not None and (
+            not isinstance(provider_family, str)
+            or not _SAFE_ID_RE.fullmatch(provider_family)
+        ):
+            raise DwError(
+                f"driver profile {name!r} provider_family must be a safe local identity"
+            )
+        if adapter != "fixture" and "provider_family" in raw and (
+            provider_family != ADAPTER_PROVIDER_FAMILIES.get(str(adapter))
+        ):
+            raise DwError(
+                f"driver profile {name!r} cannot override the shipped adapter provider_family"
+            )
         capabilities = raw.get("capabilities", [])
         if (
             not isinstance(capabilities, list)
@@ -308,6 +336,7 @@ def validate_driver_config(value: object) -> dict[str, object]:
             "principal": principal,
             "available": available,
             "adapter_version": adapter_version,
+            "provider_family": provider_family,
             "max_concurrency": max_concurrency,
             **execution_ids,
             "model_binding": model_binding,
@@ -379,6 +408,7 @@ def driver_capability(config: dict[str, object], profile: str) -> dict[str, obje
         "harness": raw["adapter"],
         "router": raw["router"],
         "provider": raw["provider"],
+        "provider_family": raw["provider_family"],
         "model_vendor": raw["model_vendor"],
         "model_family": raw["model_family"],
         "model": raw.get("model"),
@@ -830,6 +860,7 @@ class FixtureDriver:
     """Deterministic, filesystem-persisted driver used as the CI oracle."""
 
     adapter = "fixture"
+    provider_family = ADAPTER_PROVIDER_FAMILIES[adapter]
 
     def __init__(self, responses: dict[str, dict[str, object]] | None = None) -> None:
         self.responses = responses or {}
@@ -914,6 +945,7 @@ class CodexExecDriver:
     """Real optional adapter over the stable non-interactive `codex exec`."""
 
     adapter = "codex-exec"
+    provider_family = ADAPTER_PROVIDER_FAMILIES[adapter]
 
     @staticmethod
     def _prompt(packet: dict[str, object]) -> str:
@@ -1036,6 +1068,7 @@ class ClaudeCodeExecDriver:
     """
 
     adapter = "claude-exec"
+    provider_family = ADAPTER_PROVIDER_FAMILIES[adapter]
 
     # The tested major-version pin. A different major refuses with
     # adapter-unavailable instead of guessing at flag compatibility.
@@ -1165,6 +1198,7 @@ class PiExecDriver:
     """
 
     adapter = "pi-exec"
+    provider_family = ADAPTER_PROVIDER_FAMILIES[adapter]
     _READ_TOOLS = "read,grep,find,ls"
     _WRITE_TOOLS = "read,write,edit,grep,find,ls"
     _prompt = staticmethod(CodexExecDriver._prompt)

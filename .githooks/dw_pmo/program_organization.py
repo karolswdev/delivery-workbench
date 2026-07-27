@@ -78,7 +78,7 @@ _SAFE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$")
 _SCHEMA_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:/@-]{0,199}$")
 _ORG_KEYS = {
     "kind", "schema_version", "slug", "title", "description", "agents",
-    "pools", "teams", "councils", "layout",
+    "pools", "teams", "councils", "diversity", "layout",
 }
 _AGENT_KEYS = {
     "id", "profile", "duties", "workspace_domain", "capability_ceiling",
@@ -115,6 +115,8 @@ _COUNCIL_BUDGET_KEYS = {
     "max_rounds", "max_speaker_starts", "max_artifacts",
     "max_output_bytes", "max_tokens", "max_wall_seconds",
 }
+_DIVERSITY_KEYS = {"id", "kind", "roles"}
+DIVERSITY_KINDS = ("provider-family",)
 COUNCIL_DECISION_METHODS = ("majority", "weighted", "unanimous", "judge")
 COUNCIL_AUDIT_MODES = ("none", "sample", "full")
 COUNCIL_RESULT_ROUTES = ("repair", "escalate", "block", "checkpoint", "abort")
@@ -662,6 +664,86 @@ class _Compiler:
             teams.append({"id": team_id, "roles": roles})
         return teams, all_roles
 
+    def _diversity(
+        self,
+        value: object,
+        teams: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            self.diag(
+                "/diversity", "wrong-type", "diversity must be an array",
+                "provide an array of named role-pair rules or remove it",
+            )
+            return []
+        role_teams = {
+            str(role["id"]): str(team["id"])
+            for team in teams
+            for role in team["roles"]
+        }
+        rules: list[dict[str, object]] = []
+        ids: set[str] = set()
+        for index, raw in enumerate(value):
+            pointer = f"/diversity/{index}"
+            if not isinstance(raw, dict):
+                self.diag(
+                    pointer, "wrong-type", "diversity rule must be an object",
+                    "provide id, kind, and exactly two role ids",
+                )
+                continue
+            self.exact_keys(raw, _DIVERSITY_KEYS, pointer, _DIVERSITY_KEYS)
+            rule_id = self.string(
+                raw.get("id"), f"{pointer}/id", pattern=_SAFE_ID_RE
+            )
+            if rule_id in ids:
+                self.diag(
+                    f"{pointer}/id", "duplicate-id",
+                    f"duplicate diversity rule id {rule_id!r}", "use unique ids",
+                )
+            ids.add(rule_id)
+            kind = raw.get("kind")
+            if kind not in DIVERSITY_KINDS:
+                self.diag(
+                    f"{pointer}/kind", "unsupported-value",
+                    f"unsupported diversity kind {kind!r}",
+                    "use provider-family",
+                )
+                kind = "provider-family"
+            role_ids = self.id_list(
+                raw.get("roles"), f"{pointer}/roles", allow_empty=False
+            )
+            if len(role_ids) != 2:
+                self.diag(
+                    f"{pointer}/roles", "invalid-role-pair",
+                    "diversity rule must name exactly two distinct roles",
+                    "name the author role and its reviewer role",
+                )
+            for offset, role_id in enumerate(role_ids):
+                if role_id not in role_teams:
+                    self.diag(
+                        f"{pointer}/roles/{offset}", "dangling-role-reference",
+                        f"diversity rule {rule_id!r} names unknown role {role_id!r}",
+                        "reference a declared role id",
+                    )
+            known_teams = {
+                role_teams[role_id] for role_id in role_ids
+                if role_id in role_teams
+            }
+            if len(known_teams) > 1:
+                self.diag(
+                    f"{pointer}/roles", "cross-team-role-pair",
+                    f"diversity rule {rule_id!r} spans more than one team",
+                    "name two roles in the same team",
+                )
+            rules.append({
+                "id": rule_id,
+                "kind": kind,
+                "roles": role_ids,
+                "team": next(iter(known_teams), None),
+            })
+        return rules
+
     def _councils(
         self,
         value: object,
@@ -929,6 +1011,7 @@ class _Compiler:
         agents = self._agents(raw.get("agents"))
         pools = self._pools(raw.get("pools"), {str(agent["id"]) for agent in agents})
         teams, roles = self._teams(raw.get("teams"), agents, pools)
+        diversity = self._diversity(raw.get("diversity"), teams)
         councils = self._councils(raw.get("councils"), roles)
         proofs = [self._logical_proof(team, agents, pools) for team in teams]
         for team_index, proof in enumerate(proofs):
@@ -952,6 +1035,8 @@ class _Compiler:
             "teams": teams,
             "councils": councils,
         }
+        if raw.get("diversity") is not None:
+            runtime["diversity"] = diversity
         if description is not None:
             runtime["description"] = description
         normalized = {**runtime, "layout": layout}
@@ -1249,12 +1334,39 @@ def validate_workflow_team(
     return requirements, issues
 
 
+def _families_differ(left: object, right: object) -> bool:
+    return bool(left and right and left != right)
+
+
+def _diversity_rule_applies(
+    rule: dict[str, object], left_role: object, right_role: object
+) -> bool:
+    roles = rule.get("roles", [])
+    return bool(
+        rule.get("kind") == "provider-family"
+        and left_role != right_role
+        and left_role in roles
+        and right_role in roles
+    )
+
+
 def _candidate_conflicts(
     role: dict[str, object],
     candidate: dict[str, object],
     selected: list[tuple[dict[str, object], int, dict[str, object]]],
+    diversity_rules: list[dict[str, object]],
 ) -> str | None:
     for old_role, _slot, old in selected:
+        for rule in diversity_rules:
+            if _diversity_rule_applies(
+                rule, str(role["id"]), str(old_role["id"])
+            ):
+                family = candidate.get("provider_family")
+                old_family = old.get("provider_family")
+                if not family or not old_family:
+                    return f"provider-family:{rule.get('id')}:undeclared"
+                if not _families_differ(family, old_family):
+                    return f"provider-family:{rule.get('id')}:same-family"
         same_role = role["id"] == old_role["id"]
         independent = (
             old_role["id"] in role["independent_from"]
@@ -1331,6 +1443,10 @@ def assign_organization_team(
     exclusion_map: dict[str, list[dict[str, str]]] = {}
     effective_by_role: dict[str, list[str]] = {}
     roles = list(team["roles"])
+    diversity_rules = [
+        rule for rule in runtime.get("diversity", [])
+        if isinstance(rule, dict) and rule.get("team") == team_id
+    ]
     for role in roles:
         role_id = str(role["id"])
         exclusions: list[dict[str, str]] = []
@@ -1395,6 +1511,7 @@ def assign_organization_team(
                     "principal_fingerprint": capability["principal_fingerprint"],
                     "adapter": capability["adapter"],
                     "adapter_version": capability["adapter_version"],
+                    "provider_family": capability["provider_family"],
                     "adapter_capability_fingerprint": capability["capability_fingerprint"],
                     "execution": {
                         "harness": capability["harness"],
@@ -1454,7 +1571,9 @@ def assign_organization_team(
         role, slot = slots[offset]
         role_id = str(role["id"])
         for candidate in candidate_map.get((role_id, slot), []):
-            conflict = _candidate_conflicts(role, candidate, selected)
+            conflict = _candidate_conflicts(
+                role, candidate, selected, diversity_rules
+            )
             if conflict is not None:
                 continue
             selected.append((role, slot, candidate))
@@ -1482,6 +1601,41 @@ def assign_organization_team(
                     "message": (
                         f"required role {role_id!r} has candidates for "
                         f"{available_slots}/{role['cardinality']} slots"
+                    ),
+                })
+        for rule in diversity_rules:
+            if rule.get("kind") != "provider-family":
+                continue
+            pair = [str(item) for item in rule.get("roles", [])]
+            if len(pair) != 2:
+                continue
+            left_families = {
+                str(item["provider_family"])
+                for item in candidate_map.get((pair[0], 1), [])
+                if item.get("provider_family")
+            }
+            right_families = {
+                str(item["provider_family"])
+                for item in candidate_map.get((pair[1], 1), [])
+                if item.get("provider_family")
+            }
+            family_pair_exists = bool(
+                left_families and right_families
+                and len(left_families | right_families) > 1
+            )
+            if not family_pair_exists:
+                if not left_families:
+                    missing = f"a declared provider family for role {pair[0]!r}"
+                elif not right_families:
+                    missing = f"a declared provider family for role {pair[1]!r}"
+                else:
+                    common = ", ".join(sorted(left_families | right_families))
+                    missing = f"a family different from {common}"
+                issues.append({
+                    "code": "provider-diversity-unsatisfied",
+                    "message": (
+                        f"diversity rule {rule['id']!r} cannot pair roles "
+                        f"{pair[0]!r} and {pair[1]!r}; missing {missing}"
                     ),
                 })
         issues.append({
@@ -1578,6 +1732,47 @@ def assign_organization_team(
         "different_workspace_domain", "different_session_binding",
         "verifier_read_only", "verifier_preassigned",
     ))
+    diversity_receipts: list[dict[str, object]] = []
+    for rule in diversity_rules:
+        pair = [str(item) for item in rule.get("roles", [])]
+        members = {
+            role_id: role_by_id.get(role_id, {}).get("selected")
+            for role_id in pair
+        }
+        families = {
+            role_id: (
+                member.get("provider_family")
+                if isinstance(member, dict) else None
+            )
+            for role_id, member in members.items()
+        }
+        passed = bool(
+            len(pair) == 2
+            and _families_differ(
+                families.get(pair[0]), families.get(pair[1])
+            )
+        )
+        diversity_receipts.append({
+            "id": rule.get("id"),
+            "kind": rule.get("kind"),
+            "roles": pair,
+            "passed": passed,
+            "families": families,
+        })
+    diversity_passed = all(
+        bool(receipt["passed"]) for receipt in diversity_receipts
+    )
+    if not diversity_passed and satisfiable:
+        for receipt in diversity_receipts:
+            if receipt["passed"]:
+                continue
+            issues.append({
+                "code": "provider-diversity-unsatisfied",
+                "message": (
+                    f"diversity rule {receipt['id']!r} has no assignment with "
+                    "declared different provider families"
+                ),
+            })
     if not separation_passed and satisfiable:
         issues.append({
             "code": "separation-violation",
@@ -1621,7 +1816,10 @@ def assign_organization_team(
             unique_issues.append(issue)
             seen.add(key)
     base.update({
-        "applicable": satisfiable and separation_passed and not unique_issues,
+        "applicable": (
+            satisfiable and separation_passed and diversity_passed
+            and not unique_issues
+        ),
         "roles": role_documents,
         "implementer": implementer,
         "verifier": verifier,
@@ -1629,6 +1827,10 @@ def assign_organization_team(
         "master_architect": next((item["selected"] for item in role_documents if item["duty"] == "master-architect"), None),
         "councils": councils,
         "separation": {"passed": separation_passed, "facts": separation_facts},
+        "diversity": {
+            "passed": diversity_passed,
+            "rules": diversity_receipts,
+        },
         "resource_plan": {
             "conflicts": resource_conflicts,
             "concurrency_waves": _role_waves(team),
@@ -1699,6 +1901,39 @@ def plan_assignment_replacement(
         if other["role"] in role["independent_from"]
         for member in other["members"]
     }
+    diversity_rules = [
+        item for item in assignment.get("diversity", {}).get("rules", [])
+        if isinstance(item, dict) and role_id in item.get("roles", [])
+    ]
+    roles_by_id = {
+        str(item.get("role")): item
+        for item in assignment.get("roles", [])
+        if isinstance(item, dict)
+    }
+
+    def preserves_diversity(candidate: dict[str, object]) -> bool:
+        family = candidate.get("provider_family")
+        if not family:
+            return not diversity_rules
+        for rule in diversity_rules:
+            other_roles = [
+                str(item) for item in rule.get("roles", [])
+                if str(item) != role_id
+            ]
+            for other_role_id in other_roles:
+                other_role = roles_by_id.get(other_role_id)
+                other_member = (
+                    other_role.get("selected")
+                    if isinstance(other_role, dict) else None
+                )
+                other_family = (
+                    other_member.get("provider_family")
+                    if isinstance(other_member, dict) else None
+                )
+                if not _families_differ(family, other_family):
+                    return False
+        return True
+
     slot_candidates = role.get("candidates_by_slot", {}).get(
         str(slot), role["candidates"]
     )
@@ -1707,6 +1942,7 @@ def plan_assignment_replacement(
         if item["principal_fingerprint"] not in used_principals
         and item["principal_fingerprint"] not in other_independent
         and item["agent"] not in used_agents
+        and preserves_diversity(item)
     ), None)
     if candidate is None:
         result["route"] = policy["on_exhausted"]
