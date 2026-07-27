@@ -111,7 +111,7 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 |---|---|---|---|---|
 | WLA-29-01 | Contract repository knowledge | done | [story-01-contract-repository-knowledge](./story-01-contract-repository-knowledge.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-29-02 | Build the symbol and structure map | done | [story-02-build-the-symbol-and-structure-map](./story-02-build-the-symbol-and-structure-map.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-29-03 | Ground the work before it starts | backlog | [story-03-ground-the-work-before-it-starts](./story-03-ground-the-work-before-it-starts.md) | — |
+| WLA-29-03 | Ground the work before it starts | done | [story-03-ground-the-work-before-it-starts](./story-03-ground-the-work-before-it-starts.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-29-04 | Serve knowledge packets to agents | backlog | [story-04-serve-knowledge-packets-to-agents](./story-04-serve-knowledge-packets-to-agents.md) | — |
 | WLA-29-05 | Judge only the failures we introduced | backlog | [story-05-judge-only-the-failures-we-introduced](./story-05-judge-only-the-failures-we-introduced.md) | — |
 | WLA-29-06 | Decorrelate the author and the reviewer | backlog | [story-06-decorrelate-the-author-and-the-reviewer](./story-06-decorrelate-the-author-and-the-reviewer.md) | — |
@@ -157,6 +157,29 @@ Incremental refresh re-parses only changed blobs (proven one-file-edit →
 one parse), extraction is byte-deterministic, stale reads refuse, and
 `dw knowledge map` / `dw knowledge refresh` / MCP `dw_knowledge_map` return
 one canonical model with parity tested. Core suite 547 → 559, all green.
+
+WLA-29-03 made grounding mechanical. Stories may carry an optional advisory
+`## Localization hints` section (template updated); `dw_pmo/grounding.py`
+classifies every hint as verified (file + line span from the map), new, or
+unknown, with the rule stated and enforced: `(new)` is the only way to claim
+newness and is accepted only with complete no-match evidence from both the
+map and a bounded fallback scan over sanctioned tracked-blob facts — an
+unmarked absence, a fallback text match, or an incomplete scan stays
+unknown, and the declaring story is excluded so a hint cannot satisfy
+itself. Surfaces: `dw knowledge ground`, MCP `dw_knowledge_ground`,
+advisory warnings in `dw check` (exit codes untouched), and grounding
+results inside program plans only for stories that carry hints (hint-free
+plans byte-identical). Stale maps refuse rather than answer. The manual
+check grounded WLA-29-04's real hints: 5 verified with locations, the
+`(new)` file accepted via exact tracked-path absence, and the `(new)`
+symbol honestly kept unknown pending complete no-match evidence. Core
+suite 559 → 571, all green.
+
+Deliberate resequencing, 2026-07-26: WLA-29-06 lands next, before
+WLA-29-04/05. It has no dependencies, its implementation is complete and
+exam-proven in an isolated worktree, and it touches the same driver and
+program modules WLA-29-04 must edit — landing it first avoids a pointless
+conflict pass. Recorded here as an owner-direction scheduling decision.
 
 ## Active risks
 

@@ -55,6 +55,8 @@ try:
         build_status,
         read_symbol_map,
         refresh_symbol_map,
+        ground_project_story,
+        grounding_warnings,
         build_delivery_setup,
         build_action_presentation,
         build_live_presentation,
@@ -1421,6 +1423,13 @@ def command_knowledge_refresh(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_knowledge_ground(args: argparse.Namespace) -> int:
+    project = get_project(args.root, args.project)
+    document = ground_project_story(args.root, project, args.story)
+    print(json.dumps(document, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
 def command_setup(args: argparse.Namespace) -> int:
     setup = build_delivery_setup(args.root, args.project)
     print(render_delivery_setup(setup, technical=args.technical), end="")
@@ -1588,16 +1597,19 @@ def command_check(args: argparse.Namespace) -> int:
 
     projects = [get_project(args.root, args.project)] if args.project else discover_projects(args.root)
     issues: list[str] = []
+    warnings: list[str] = []
     for project in projects:
         issues.extend(check_project(project, args.root))
+        warnings.extend(grounding_warnings(project, args.root))
     # Repo-level: rendered agent surfaces must match canon (WLA-12-04).
     issues.extend(rider_docs_issues(args.root))
-    if issues:
-        for issue in issues:
-            print(f"ERROR {issue}")
-        return 1
-    print("dw check: ok")
-    return 0
+    for issue in issues:
+        print(f"ERROR {issue}")
+    for warning in warnings:
+        print(f"WARNING {warning}")
+    if not issues:
+        print("dw check: ok")
+    return 1 if issues else 0
 
 
 def command_state(args: argparse.Namespace) -> int:
@@ -1765,6 +1777,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="emit the versioned derived fact"
     )
     knowledge_refresh.set_defaults(func=command_knowledge_refresh)
+    knowledge_ground = knowledge_sub.add_parser(
+        "ground", help="classify one story's advisory localization hints"
+    )
+    knowledge_ground.add_argument("project", help="roadmap project slug")
+    knowledge_ground.add_argument("story", help="story ID or story filename")
+    knowledge_ground.add_argument(
+        "--json", action="store_true", help="emit the versioned grounding result"
+    )
+    knowledge_ground.set_defaults(func=command_knowledge_ground)
 
     setup = sub.add_parser(
         "setup",

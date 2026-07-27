@@ -420,6 +420,41 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertNotIn(token, source)
 
+    def test_grounding_is_stdlib_offline_and_uses_the_repository_fact_boundary(self):
+        path = LIB_DIR / "grounding.py"
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        allowed_absolute = {"__future__", "re", "pathlib", "typing"}
+        allowed_relative = {
+            "repofacts", "knowledge", "model", "parse", "paths",
+            "repository_map", "symbol_map",
+        }
+        unexpected = []
+        forbidden = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+                relative = False
+            elif isinstance(node, ast.ImportFrom):
+                modules = (
+                    [node.module]
+                    if node.module
+                    else [alias.name for alias in node.names]
+                )
+                relative = bool(node.level)
+            else:
+                continue
+            for module in modules:
+                root = module.split(".", 1)[0]
+                if root in self.FORBIDDEN_IMPORT_ROOTS:
+                    forbidden.append(module)
+                allowed = allowed_relative if relative else allowed_absolute
+                if root not in allowed:
+                    unexpected.append(("." if relative else "") + module)
+        self.assertEqual(forbidden, [])
+        self.assertEqual(unexpected, [])
+        self.assertIn("repofacts.blob_content", source)
+
     def test_derived_fact_computation_has_no_clock_or_random_input(self):
         sources = "\n".join((
             inspect.getsource(knowledge._derived_document),
@@ -448,7 +483,9 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
                 self.assertIn(required.lower(), text.lower())
 
     def test_hook_payload_keeps_knowledge_modules_byte_identical(self):
-        for name in ("knowledge.py", "repository_map.py", "symbol_map.py"):
+        for name in (
+            "grounding.py", "knowledge.py", "repository_map.py", "symbol_map.py",
+        ):
             with self.subTest(module=name):
                 canonical = LIB_DIR / name
                 vendored = REPOSITORY_ROOT / ".githooks" / "dw_pmo" / name

@@ -43,6 +43,7 @@ from repository_map_tests import (
     RepositoryMapIntegrationTest,
     SymbolMapUnitTest,
 )
+from grounding_tests import GroundingIntegrationTest, GroundingUnitTest
 
 
 README = """# Demo - Roadmap
@@ -2828,7 +2829,7 @@ class MCPServerTest(unittest.TestCase):
         tools = self.rpc("tools/list")["result"]["tools"]
         names = [t["name"] for t in tools]
         self.assertEqual(names, [
-            "dw_status", "dw_knowledge_map", "dw_step", "dw_step_apply", "dw_context", "dw_next",
+            "dw_status", "dw_knowledge_map", "dw_knowledge_ground", "dw_step", "dw_step_apply", "dw_context", "dw_next",
             "dw_check", "dw_doctor",
             "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",
@@ -10183,6 +10184,65 @@ class ProgramPlannerTest(unittest.TestCase):
             baseline["references"]["workflows"]["story-work"]["document_hash"],
             moved["references"]["workflows"]["story-work"]["document_hash"],
         )
+
+    def test_plan_without_localization_hints_keeps_the_previous_shape(self):
+        core = self.programs_core
+        with mock.patch.object(
+                core, "ground_story_path",
+                side_effect=AssertionError("no-hints plan must not ground")):
+            plan = core.build_program_plan(self.root, "demo-program")
+        self.assertNotIn("grounding", plan["selection"])
+        self.assertEqual(
+            set(plan["selection"]),
+            {
+                "story", "phase", "status", "reason", "why", "binding",
+                "workflow", "team", "rubrics", "phase_gates",
+            },
+        )
+
+    def test_plan_with_localization_hints_includes_advisory_grounding(self):
+        story = (
+            self.root / "pm/roadmap/demo/phase-1-alpha"
+            / "story-02-active-build.md"
+        )
+        story.write_text(
+            story.read_text(encoding="utf-8")
+            + "\n## Localization hints\n\n"
+              "- **Affected files:**\n"
+              "  - `fixture_code.py`\n"
+              "- **Target symbols:**\n"
+              "  - `fixture_target`\n",
+            encoding="utf-8",
+        )
+        self._write(
+            "fixture_code.py",
+            "def fixture_target():\n    return True\n",
+        )
+        self._git("add", ".")
+        from dw_pmo.repository_map import refresh_symbol_map
+        refresh_symbol_map(self.root)
+
+        plan = self.programs_core.build_program_plan(
+            self.root, "demo-program"
+        )
+        grounding = plan["selection"]["grounding"]
+        self.assertEqual(grounding["status"], "grounded")
+        self.assertEqual(grounding["summary"], {
+            "verified": 2, "new": 0, "unknown": 0,
+        })
+        self.assertTrue(plan["applicable"])
+        self.assertFalse(grounding["authorizes"])
+        self.assertFalse(grounding["starts_work"])
+
+        self._write("unrelated.txt", "move the index\n")
+        self._git("add", "unrelated.txt")
+        stale = self.programs_core.build_program_plan(
+            self.root, "demo-program"
+        )
+        self.assertTrue(stale["applicable"])
+        self.assertEqual(stale["selection"]["grounding"]["status"], "refused")
+        self.assertIn("is stale", stale["selection"]["grounding"]["reason"])
+        self.assertNotIn("affected_files", stale["selection"]["grounding"])
 
     def test_planner_resumes_active_story_and_assigns_independent_verifier(self):
         core = self.programs_core

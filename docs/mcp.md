@@ -68,10 +68,11 @@ to `isError`.
 |---|---|---|
 | `dw_status` | `status.build_status` | `{project?: string}` — result: the stamped `delivery-workbench-status` v1 object, including exactly one guided `next_action` |
 | `dw_knowledge_map` | `repository_map.read_symbol_map` | `{}` — result: the index-tree-bound derived symbol, module, test, and named-gap map; refuses missing or stale cache and never refreshes or authorizes |
+| `dw_knowledge_ground` | `grounding.ground_project_story` | `{project: string, story: string}` (required) — result: advisory verified/new/unknown localization from a fresh map and bounded tracked-blob text fallback; read-only, never authorizes, and refuses stale knowledge |
 | `dw_step` | `step.build_step` | `{project?: string}` — pure `delivery-workbench-step` v1 preview of one state-bound action; never executes |
 | `dw_context` | `api.build_context_payload` | `{project?: string, compact?: boolean}` |
 | `dw_next` | `api.next_story` | `{project?: string}` — result: the story object or `{next: null}` |
-| `dw_check` | `validate.check_project` | `{project?: string}` — result: `{ok: boolean, issues: string[]}` |
+| `dw_check` | `validate.check_project` + advisory grounding lint | `{project?: string}` — result: `{ok: boolean, issues: string[], warnings?: string[]}`; grounding warnings never change `ok` |
 | `dw_doctor` | `doctor.run_doctor` | `{}` — result: `{healthy: boolean, checks: [{name, ok, detail}]}` |
 
 ### Browse (read-only)

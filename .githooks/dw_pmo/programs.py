@@ -19,6 +19,11 @@ from pathlib import Path
 from typing import Any
 
 from .gitio import current_branch, head_sha, in_rewrite_state, write_tree
+from .grounding import (
+    ground_story_path,
+    grounding_refusal,
+    parse_localization_hints,
+)
 from .model import (
     CUT_STATUSES,
     DONE_STATUSES,
@@ -1633,6 +1638,19 @@ def build_program_plan(
             ],
             "phase_gates": compiled["program"]["phase_gates"],  # type: ignore[index]
         }
+        story_path = Path(str(selected_story_full["story_path"]))
+        parsed_hints = parse_localization_hints(read_text(story_path))
+        if parsed_hints["affected_files"] or parsed_hints["target_symbols"]:
+            try:
+                selection["grounding"] = ground_story_path(
+                    root, story_path, parsed=parsed_hints
+                )
+            except DwError as exc:
+                # Knowledge is advisory. A stale or missing map refuses to answer,
+                # but it does not change selection, applicability, or authority.
+                selection["grounding"] = grounding_refusal(
+                    root, story_path, exc
+                )
     unique_issues: list[dict[str, str]] = []
     seen_issues: set[tuple[str, str]] = set()
     for issue in issues:

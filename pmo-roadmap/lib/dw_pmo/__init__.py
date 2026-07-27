@@ -160,6 +160,16 @@ from .status import (
     render_status,
 )
 from .repository_map import read_symbol_map, refresh_symbol_map
+from .grounding import (
+    GROUNDING_KIND,
+    GROUNDING_SCHEMA_VERSION,
+    ground_hints,
+    ground_project_story,
+    ground_story_path,
+    grounding_refusal,
+    grounding_warnings,
+    parse_localization_hints,
+)
 from .delivery_setup import (
     DELIVERY_SETUP_KIND,
     DELIVERY_SETUP_SCHEMA_VERSION,

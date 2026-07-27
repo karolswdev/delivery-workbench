@@ -68,6 +68,15 @@ def _tool_knowledge_map(root: Path, args: dict) -> tuple[str, dict]:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")), payload
 
 
+def _tool_knowledge_ground(root: Path, args: dict) -> tuple[str, dict]:
+    from .grounding import ground_project_story
+    from .parse import get_project
+
+    project = get_project(root, str(args["project"]))
+    payload = ground_project_story(root, project, str(args["story"]))
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")), payload
+
+
 def _tool_step(root: Path, args: dict) -> tuple[str, dict]:
     from .step import build_step, render_step
 
@@ -118,6 +127,7 @@ def _tool_next(root: Path, args: dict) -> tuple[str, dict]:
 
 
 def _tool_check(root: Path, args: dict) -> tuple[str, dict]:
+    from .grounding import grounding_warnings
     from .parse import discover_projects, get_project
     from .riderdocs import rider_docs_issues
     from .validate import check_project
@@ -125,15 +135,20 @@ def _tool_check(root: Path, args: dict) -> tuple[str, dict]:
     project = args.get("project")
     projects = [get_project(root, project)] if project else discover_projects(root)
     issues: list[str] = []
+    warnings: list[str] = []
     for proj in projects:
         issues.extend(check_project(proj, root))
+        warnings.extend(grounding_warnings(proj, root))
     # Repo-level: rendered agent surfaces must match canon (WLA-12-04).
     issues.extend(rider_docs_issues(root))
-    if issues:
-        text = "\n".join(f"ERROR {issue}" for issue in issues)
-    else:
-        text = "dw check: ok"
-    return text, {"ok": not issues, "issues": issues}
+    lines = [f"ERROR {issue}" for issue in issues]
+    lines.extend(f"WARNING {warning}" for warning in warnings)
+    if not issues:
+        lines.append("dw check: ok")
+    structured = {"ok": not issues, "issues": issues}
+    if warnings:
+        structured["warnings"] = warnings
+    return "\n".join(lines), structured
 
 
 def _tool_doctor(root: Path, args: dict) -> tuple[str, dict]:
@@ -712,6 +727,27 @@ TOOLS: dict[str, dict] = {
             "additionalProperties": False,
         },
         "handler": _tool_knowledge_map,
+    },
+    "dw_knowledge_ground": {
+        "description": (
+            "Read and classify one story's advisory localization hints against "
+            "the fresh symbol map and bounded tracked-blob text fallback. Never "
+            "starts or authorizes work. Adapter over "
+            "dw_pmo.grounding.ground_project_story."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": _PROJECT_PROP,
+                "story": {
+                    "type": "string",
+                    "description": "Story ID or story filename",
+                },
+            },
+            "required": ["project", "story"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_knowledge_ground,
     },
     "dw_step": {
         "description": (

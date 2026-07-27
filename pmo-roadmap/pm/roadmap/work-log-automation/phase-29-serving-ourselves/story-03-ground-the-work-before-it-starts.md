@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 29
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-29-02
 - **Unblocks:** WLA-29-04, WLA-29-08
 - **Owner:** unassigned
@@ -80,3 +80,19 @@ judges delivered evidence, not advice. `dw check` warnings are the ceiling.
 Whether hints should be suggested automatically from story prose (extraction,
 not generation) is left open; nothing in this story writes hints, it only
 judges the ones humans or agents wrote.
+
+Implemented as `dw_pmo/grounding.py` with `dw knowledge ground`, MCP
+`dw_knowledge_ground` (parity added beyond the criteria), advisory `dw check`
+warnings, and grounding inside program plans for hinted stories only. The
+new-vs-unknown rule as delivered: `(new)` is the only way to claim newness;
+it is honored only with complete no-match evidence from both the symbol map
+and the bounded fallback scan (which runs over the sanctioned
+`tracked_files`/`blob_content` facts, never private git access, with
+explicit skipped/truncated evidence); the declaring story is excluded from
+the scan so a hint cannot satisfy itself. The manual criterion ran against
+WLA-29-04's real hints: 5 verified with exact locations, `knowledge_packet.py
+(new)` accepted as new by tracked-path absence, `build_knowledge_packet
+(new)` kept unknown because complete no-match evidence was not established —
+fail-closed exactly as specified. Nine new tests; suite 559 → 571 green on
+both interpreters; grounding-only findings provably never change `dw check`
+exit codes.

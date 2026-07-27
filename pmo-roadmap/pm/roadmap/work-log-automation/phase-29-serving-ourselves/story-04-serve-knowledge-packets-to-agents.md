@@ -40,6 +40,18 @@ channel is how packet hashing and content boundaries rot.
   packet hashing or content-boundary semantics — the knowledge section rides
   the existing rules.
 
+## Localization hints
+
+- **Affected files:**
+  - `pmo-roadmap/lib/dw_pmo/knowledge.py`
+  - `pmo-roadmap/lib/dw_pmo/repository_map.py`
+  - `pmo-roadmap/lib/dw_pmo/orchestration_driver.py`
+  - `pmo-roadmap/lib/dw_pmo/knowledge_packet.py` (new)
+- **Target symbols:**
+  - `DerivedFactStore`
+  - `EarnedRecordStore`
+  - `build_knowledge_packet` (new)
+
 ## Acceptance criteria
 
 - [ ] The packet builder is pure and deterministic: same story, same index

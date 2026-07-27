@@ -81,6 +81,47 @@ refuse missing or stale facts. `dw knowledge refresh` is the explicit disposable
 cache refresh. These surfaces start no work, mint no authority, and change no
 tracked or authoritative repository state.
 
+## Story grounding
+
+A story may carry this optional advisory section:
+
+```markdown
+## Localization hints
+
+- **Affected files:**
+  - `path/to/existing.py`
+  - `path/to/planned.py` (new)
+- **Target symbols:**
+  - `terminal_or.qualified_name`
+  - `planned_symbol` (new)
+```
+
+Each hint is one nested list item. File hints use exact repository-relative
+tracked paths. Symbol hints use an exact terminal or qualified symbol name.
+Grounding checks the fresh symbol map first. For files outside structural
+coverage, it performs the `git grep` equivalent in pure code over the tracked
+blob bytes already exposed by `repofacts`; it does not add another private Git
+spawn or repository fact. The declaring story is excluded so a hint does not
+match its own declaration. Fallback output and bytes are bounded, and the result
+records the exclusion plus any skipped files or truncation.
+
+`(new)` is the only newness rule. It is a claim that an absent file or symbol is
+planned, not a shortcut around verification. An existing marked hint is
+verified and warned as contradictory. An absent marked symbol is **new** only
+when both the map and a complete fallback scan record no match. An absent
+unmarked hint, a textual fallback match, or any scan that cannot complete is
+**unknown**. Thus every new classification carries explicit complete no-match
+evidence; grounding never infers newness merely because a name was not found.
+Unknown hints carry at most three deterministic name-distance suggestions.
+Verified hints carry their repository path and line span.
+
+`dw knowledge ground <project> <story>` and MCP `dw_knowledge_ground` are
+read-only and refuse a missing or stale map. `dw check` renders unknown hints,
+contradictory new markers, malformed hint syntax, and acceptance-criteria code
+identifiers as greppable `WARNING` lines. Such findings never change its exit
+code. A program plan adds grounding only for a selected story that actually has
+hints; a story without hints retains the previous plan shape byte for byte.
+
 ## Earned-record boundary
 
 Earned records are scalar-only typed shapes with exact field sets:
