@@ -169,12 +169,14 @@ worktree, then the conversation (03) and the atomic setup surface (04).
 
 ## Sequencing
 
-The contract (01) gates everything. After it: `dw init` (02), the
-conversation (03), whole-bundle validation (06), and lesson write-back (09)
-can proceed in parallel. The conversation feeds the atomic setup surface
-(04), which feeds the adoption review (05). Validation feeds the scaffold
-(07), which feeds the Studio review (08). The exam (10) closes the phase
-and depends on everything. Rules learned the hard way: do not build the
+The contract (01) gates everything. After it: `dw init` (02), the atomic
+setup surface (04), whole-bundle validation (06), and lesson write-back
+(09) can proceed in parallel. The setup surface precedes the
+conversation (03), which submits proposals to it — corrected 2026-07-27:
+the draft had the dependency reversed, but a skill cannot submit to a
+surface that does not exist. The setup surface also feeds the adoption
+review (05). Validation feeds the scaffold (07), which feeds the Studio
+review (08). The exam (10) closes the phase and depends on everything. Rules learned the hard way: do not build the
 interview before the proposal contract; do not generate policy before
 validation catches the known runtime contradictions; run the exam against a
 built wheel from the start, never a checkout-relative install.

@@ -3,8 +3,8 @@
 - **Project:** work-log-automation
 - **Phase:** 30
 - **Status:** backlog
-- **Depends on:** WLA-30-01, WLA-30-03
-- **Unblocks:** WLA-30-05, WLA-30-10
+- **Depends on:** WLA-30-01
+- **Unblocks:** WLA-30-03, WLA-30-05, WLA-30-10
 - **Owner:** unassigned
 
 ## Problem
