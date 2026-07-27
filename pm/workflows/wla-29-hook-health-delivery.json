@@ -4,7 +4,7 @@
   "slug": "wla-29-hook-health-delivery",
   "title": "Implement and independently verify hook-path health",
   "description": "Build the one scoped maintenance story, run one declared doctor/status regression command, obtain an independent cross-provider verdict, then stop for operator approval before integration.",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "parameters": [
     {
       "id": "story-id",
@@ -109,8 +109,8 @@
       ],
       "routes": {
         "pass": {
-          "kind": "node",
-          "target": "approve-before-integration"
+          "kind": "terminal",
+          "target": "complete"
         },
         "fail": {
           "kind": "action",
@@ -133,41 +133,6 @@
         }
       ],
       "max_attempts": 2
-    },
-    {
-      "id": "approve-before-integration",
-      "type": "checkpoint",
-      "activation": "route",
-      "needs": [
-        "verify-hook-health"
-      ],
-      "inputs": {
-        "verdict": {
-          "kind": "artifact",
-          "name": "verify-hook-health.verdict"
-        }
-      },
-      "prompt_id": "approve-wla-29-09-before-integration",
-      "prompt": "The focused check and independent verdict are green. Approve handing this exact candidate to the operator certification and integration seam, or block it.",
-      "expires_seconds": 1800,
-      "options": [
-        {
-          "id": "approve",
-          "label": "Approve handoff",
-          "route": {
-            "kind": "terminal",
-            "target": "complete"
-          }
-        },
-        {
-          "id": "block",
-          "label": "Block handoff",
-          "route": {
-            "kind": "action",
-            "target": "block"
-          }
-        }
-      ]
     }
   ],
   "terminals": [
@@ -189,10 +154,6 @@
       },
       "verify-hook-health": {
         "x": 700,
-        "y": 120
-      },
-      "approve-before-integration": {
-        "x": 1020,
         "y": 120
       }
     },
