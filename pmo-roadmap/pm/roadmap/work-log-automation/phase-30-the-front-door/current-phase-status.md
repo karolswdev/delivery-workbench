@@ -82,7 +82,7 @@ changes who reaches the rails, never what the rails require.
 
 ## Exit criteria (evidence required)
 
-- [ ] One documented, versioned setup-proposal contract owns the front-door
+- [x] One documented, versioned setup-proposal contract owns the front-door
   journey — idea, roadmap draft, optional program bundle, local driver
   bindings — with closed fields, provenance, fail-closed refusals, and an
   explicit uninitialized → rails-ready → draft → reviewed → configured →
@@ -132,7 +132,7 @@ changes who reaches the rails, never what the rails require.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-30-01 | Contract the front-door journey | backlog | [story-01-contract-the-front-door-journey](./story-01-contract-the-front-door-journey.md) | - |
+| WLA-30-01 | Contract the front-door journey | done | [story-01-contract-the-front-door-journey](./story-01-contract-the-front-door-journey.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-30-02 | Boot an empty directory | backlog | [story-02-boot-an-empty-directory](./story-02-boot-an-empty-directory.md) | - |
 | WLA-30-03 | Hold the scope conversation | backlog | [story-03-hold-the-scope-conversation](./story-03-hold-the-scope-conversation.md) | - |
 | WLA-30-04 | Make setup one deliberate act | backlog | [story-04-make-setup-one-deliberate-act](./story-04-make-setup-one-deliberate-act.md) | - |
@@ -142,6 +142,18 @@ changes who reaches the rails, never what the rails require.
 | WLA-30-08 | Review the generated program in Studio | backlog | [story-08-review-the-generated-program-in-studio](./story-08-review-the-generated-program-in-studio.md) | - |
 | WLA-30-09 | Let the safest runs leave lessons | backlog | [story-09-let-the-safest-runs-leave-lessons](./story-09-let-the-safest-runs-leave-lessons.md) | - |
 | WLA-30-10 | Pass the empty-directory exam | backlog | [story-10-pass-the-empty-directory-exam](./story-10-pass-the-empty-directory-exam.md) | - |
+
+## Where we are
+
+WLA-30-01 is delivered: `delivery-workbench-setup-proposal@1` exists as
+`dw_pmo/setup_proposal.py` with its contract document
+(`docs/setup-proposal.md`) and 16 unit tests wired into the core suite.
+The journey state machine, inertness fields, provenance vocabulary,
+tracked/local split, and refusal catalogue are now fixed vocabulary for
+every later story. Implementation was executed by Sol (GPT-5.6) under
+orchestration — the phase is itself an exercise of the cross-model cell
+it is building the front door for. Next: WLA-30-02 (`dw init`) and
+WLA-30-06 (whole-bundle validation) proceed off the contract.
 
 ## Sequencing
 

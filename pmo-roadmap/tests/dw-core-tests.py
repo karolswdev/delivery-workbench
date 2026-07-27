@@ -46,6 +46,11 @@ from repository_map_tests import (
 from grounding_tests import GroundingIntegrationTest, GroundingUnitTest
 from knowledge_packet_tests import HonestUsageTest, KnowledgePacketTest
 from knowledge_writeback_tests import KnowledgeWritebackTest
+from setup_proposal_tests import (
+    SetupProposalContractTest,
+    SetupProposalFitnessTest,
+    SetupProposalJourneyTest,
+)
 
 
 README = """# Demo - Roadmap

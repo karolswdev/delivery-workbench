@@ -591,6 +591,7 @@ verdict taxonomy, grant, state, refusal, and threat model are in the
 - [Deliberate step contract](./deliberate-step.md)
 - [Visual orchestration contract](./orchestration.md)
 - [Optional autonomous-program contract](./programs.md)
+- [Front-door setup-proposal contract](./setup-proposal.md)
 - [Interop inventory and schema policy](./interop.md)
 - [MCP tool contract and exclusions](./mcp.md)
 - [Mission-control substrate and consent rings](./mission-control.md)

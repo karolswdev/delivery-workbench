@@ -195,6 +195,17 @@ Full detail:
 [Phase 26](./pmo-roadmap/pm/roadmap/work-log-automation/phase-26-autonomous-delivery-programs/final-summary.md)
 and the [program contract](./docs/programs.md).
 
+Phase 30 starts by fixing the front-door vocabulary before adding a producer or
+apply surface. `delivery-workbench-setup-proposal@1` is a closed, bounded,
+canonical contract for project intent, a provenance-traced roadmap draft,
+optional opaque program policy, local non-secret driver bindings, and explicit
+unresolved questions. Its six journey states permit only named adjacent moves
+plus reviewed-to-draft revision; every proposal and proposal-shaped preview
+refuses unless all four authority exclusions are false. Parsing, validation,
+serialization, and transition checks are pure and create no file, process,
+grant, certification, or commit. Full detail: [setup proposal
+contract](./docs/setup-proposal.md).
+
 This section is release-ready input, not a publication claim: the package
 remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula
 change has been performed.

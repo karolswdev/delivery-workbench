@@ -437,6 +437,7 @@ trailers and an archived contract, the full history passing
 - [Deliberate step contract](./docs/deliberate-step.md): the Phase 23 state-bound preview/apply seam and closed executable action table
 - [Visual orchestration contract](./docs/orchestration.md): the Phase 24 score editor, roles/research, outputs, checks/failures, grants, scheduling, drivers, recovery, and authority model
 - [Optional autonomous-program contract](./docs/programs.md): the Phase 26 capability ladder, multi-phase scope, hierarchical workflows, organizations, independent verification, bounded councils/loops, grants, restart-safe conductor, and exact advancement boundaries
+- [Front-door setup-proposal contract](./docs/setup-proposal.md): the inert idea-to-roadmap draft, optional tracked policy, local non-secret driver bindings, provenance, journey states, and refusal rules
 - [Architecture](./docs/architecture.md), with the test that proves each claim
 - [Framework README](./pmo-roadmap/README.md): install, update, adopt, operate
 - [The contract rules](./pmo-roadmap/templates/PMO-CONTRACT.md)
