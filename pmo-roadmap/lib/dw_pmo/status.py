@@ -194,7 +194,7 @@ def _roadmap_state(root: Path, project_selector: str | None) -> tuple[dict[str, 
         for item in build_state_feed(root)["projects"]
     }
 
-    issues: list[str] = [] if projects else ["no roadmap projects found"]
+    issues: list[str] = []
     warnings: list[str] = []
     project_items: list[dict[str, object]] = []
     for project in projects:
@@ -350,14 +350,16 @@ def _choose_action(
         return finish_story
     if not roadmap["healthy"]:
         first = str(roadmap["issues"][0])  # type: ignore[index]
-        command = (
-            [".githooks/dw", "phase", "create", "--help"]
-            if first == "no roadmap projects found"
-            else [".githooks/dw", "check"]
-        )
+        command = [".githooks/dw", "check"]
         if roadmap["selected_project"]:
             command.append(str(roadmap["selected_project"]))
         return _action("repair-roadmap", first, command, blocking=True)
+    if not roadmap["projects"]:
+        return _action(
+            "setup-project",
+            "project setup required: hold the intake conversation, then create the roadmap project",
+            ["dw", "new-project", "--help"],
+        )
     if repository["operation"] == "rewrite":
         return _action(
             "resolve-rewrite",

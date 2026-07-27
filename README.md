@@ -68,6 +68,22 @@ are gated by the copy inside the repo, not by the global install.
 `dw update /path/to/repo` refreshes the copy;
 `dw update /path/to/repo --check` reports if it is stale.
 
+### Start from an empty directory
+
+Create the directory, then let `dw init` initialize Git and install the same
+vendored rails:
+
+```bash
+mkdir my-project
+dw init my-project
+```
+
+The command stops after the rails are healthy. It does not create a roadmap
+project or start an agent. Next, open the directory in Claude Code and run
+`/dw-adopt` to begin the intake conversation and create the project. If the
+empty directory sits inside another Git repository, pass
+`--inside-existing-repo` to explicitly make it an independent nested repo.
+
 For a project with existing history, there is an adoption flow that
 inspects the repo and drafts a roadmap for you. See the
 [framework README](./pmo-roadmap/README.md).

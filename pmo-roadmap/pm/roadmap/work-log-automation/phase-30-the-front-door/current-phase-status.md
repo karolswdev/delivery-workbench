@@ -87,7 +87,7 @@ changes who reaches the rails, never what the rails require.
   bindings — with closed fields, provenance, fail-closed refusals, and an
   explicit uninitialized → rails-ready → draft → reviewed → configured →
   grant-previewed state sequence (WLA-30-01).
-- [ ] `dw init` takes an empty directory to healthy vendored rails —
+- [x] `dw init` takes an empty directory to healthy vendored rails —
   git initialized, doctor green, status asking for project setup — as an
   idempotent façade over the existing install and bootstrap primitives,
   creating no roadmap, policy, grant, run, or commit (WLA-30-02).
@@ -133,7 +133,7 @@ changes who reaches the rails, never what the rails require.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-30-01 | Contract the front-door journey | done | [story-01-contract-the-front-door-journey](./story-01-contract-the-front-door-journey.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-30-02 | Boot an empty directory | backlog | [story-02-boot-an-empty-directory](./story-02-boot-an-empty-directory.md) | - |
+| WLA-30-02 | Boot an empty directory | done | [story-02-boot-an-empty-directory](./story-02-boot-an-empty-directory.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-30-03 | Hold the scope conversation | backlog | [story-03-hold-the-scope-conversation](./story-03-hold-the-scope-conversation.md) | - |
 | WLA-30-04 | Make setup one deliberate act | backlog | [story-04-make-setup-one-deliberate-act](./story-04-make-setup-one-deliberate-act.md) | - |
 | WLA-30-05 | Review the adoption in the workbench | backlog | [story-05-review-the-adoption-in-the-workbench](./story-05-review-the-adoption-in-the-workbench.md) | - |
@@ -152,8 +152,20 @@ The journey state machine, inertness fields, provenance vocabulary,
 tracked/local split, and refusal catalogue are now fixed vocabulary for
 every later story. Implementation was executed by Sol (GPT-5.6) under
 orchestration — the phase is itself an exercise of the cross-model cell
-it is building the front door for. Next: WLA-30-02 (`dw init`) and
-WLA-30-06 (whole-bundle validation) proceed off the contract.
+it is building the front door for.
+
+WLA-30-02 is delivered: `dw init <path>` boots an empty directory to
+healthy vendored rails as a launcher façade over `git init` +
+`install.sh --skip-bootstrap`, with the nested-path refusal, idempotent
+re-runs, byte-parity with plain install proven by test, and a status
+surface that now reads "rails healthy, zero projects" as
+`ready`/`setup-project` instead of an unhealthy roadmap. One desk
+defect was found and fixed as a rider on the way: the doctor python3
+check reported the PATH binary with the running interpreter's version,
+breaking CLI/in-process status parity on split-interpreter desks.
+
+Next: WLA-30-06 (whole-bundle validation) lands off its parallel
+worktree, then the conversation (03) and the atomic setup surface (04).
 
 ## Sequencing
 

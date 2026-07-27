@@ -9,6 +9,14 @@ single-sourced from `dw_pmo.__version__` (test-asserted against
 
 ## Unreleased
 
+`dw init <path>` now takes an empty directory or empty Git repository to
+healthy vendored rails. It composes `git init` with the packaged
+`install.sh --skip-bootstrap`, refuses accidental nested repositories, and
+leaves project creation to the intake conversation. Re-running reports the
+components already present without changing them. Repositories with healthy
+rails but no roadmap project now receive a `setup-project` next action from
+`dw status` instead of treating that state as corruption.
+
 One answer before agents act: Phase 22 adds the stamped, deterministic
 `delivery-workbench-status@1` briefing across `dw status`, MCP
 `dw_status`, `GET /api/status`, the workbench overview, and every generated

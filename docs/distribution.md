@@ -38,9 +38,25 @@ through. The global CLI acts in its own right only:
 
 - outside any adopted repository (bootstrap verbs, `--version`,
   help), or
-- for the bootstrap verbs themselves (`install`, `update`,
+- for the bootstrap verbs themselves (`init`, `install`, `update`,
   `adopt-project`, `new-project`, `intake`), which by definition
   operate on a target repo from outside its rails.
+
+### Bootstrap verbs
+
+`dw init <path>` is the empty-directory front door. It runs `git init` only
+when the target is not already an empty repository, then invokes the packaged
+payload's unchanged `install.sh <path> --skip-bootstrap`. It creates healthy
+vendored rails but no roadmap project, authority, run, commit, remote, or
+background process. A target nested beneath another repository is refused by
+default; `--inside-existing-repo` is the explicit instruction to create an
+independent nested repository at that exact target. Re-running against a
+complete installation only reports the components already present.
+
+The other bootstrap verbs continue to dispatch directly to their payload
+scripts. All bootstrap verbs are handled before repository deferral because
+they operate on an explicit target; every non-bootstrap invocation inside an
+initialized repository still defers unconditionally to its `.githooks/dw`.
 
 Staleness becomes visible, never silently "fixed": when the global
 launcher defers to older vendored rails it may print a one-line

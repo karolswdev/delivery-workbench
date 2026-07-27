@@ -254,7 +254,7 @@ echo "  ✓ wrote .claude/commands/dw-*.md"
 # 6. Managed agent-docs block in CLAUDE.md / AGENTS.md
 if [ "$AGENT_DOCS" -eq 1 ]; then
   if command -v python3 >/dev/null 2>&1; then
-    DOCS_RESULT="$(cd "$TARGET" && ./.githooks/dw agent-docs)" \
+    DOCS_RESULT="$(cd "$TARGET" && PYTHONDONTWRITEBYTECODE=1 ./.githooks/dw agent-docs)" \
       && echo "  ✓ agent docs block ${DOCS_RESULT#*	} in ${DOCS_RESULT%%	*}" \
       || echo "  ! could not write the agent docs block; run .githooks/dw agent-docs manually" >&2
   else

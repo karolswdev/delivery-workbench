@@ -44,6 +44,7 @@ from repository_map_tests import (
     SymbolMapUnitTest,
 )
 from grounding_tests import GroundingIntegrationTest, GroundingUnitTest
+from init_cmd_tests import InitCommandTest
 from knowledge_packet_tests import HonestUsageTest, KnowledgePacketTest
 from knowledge_writeback_tests import KnowledgeWritebackTest
 from setup_proposal_tests import (
@@ -4002,12 +4003,15 @@ class StatusBriefingTest(unittest.TestCase):
         selected = self.status("other")
         self.assertEqual(selected["roadmap"]["selected_project"], "other")
 
-    def test_empty_roadmap_directory_is_attention_not_ready(self) -> None:
+    def test_empty_roadmap_directory_requests_project_setup(self) -> None:
         shutil.rmtree(self.root / "pm" / "roadmap" / "demo")
         status = self.status()
-        self.assertEqual(status["verdict"], "attention")
-        self.assertFalse(status["roadmap"]["healthy"])
-        self.assertEqual(status["next_action"]["id"], "repair-roadmap")
+        self.assertEqual(status["verdict"], "ready")
+        self.assertTrue(status["roadmap"]["healthy"])
+        self.assertEqual(status["roadmap"]["projects"], [])
+        self.assertEqual(status["roadmap"]["issues"], [])
+        self.assertEqual(status["next_action"]["id"], "setup-project")
+        self.assertEqual(status["next_action"]["command"], ["dw", "new-project", "--help"])
 
     def test_action_targets_next_story_phase_not_a_closed_pointer(self) -> None:
         project = self.root / "pm" / "roadmap" / "demo"
