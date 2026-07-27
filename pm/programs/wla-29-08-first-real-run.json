@@ -6,9 +6,14 @@
   "description": "A checkpointed, one-story live-adapter program for WLA-29-09 that ends before operator certification and Git commit.",
   "scope": {
     "project": "work-log-automation",
-    "phases": {"from": 29, "through": 29},
+    "phases": {
+      "from": 29,
+      "through": 29
+    },
     "stories": {
-      "include": ["WLA-29-09"]
+      "include": [
+        "WLA-29-09"
+      ]
     },
     "selection": "roadmap-frontier-v1",
     "blocked_policy": "stop"
@@ -21,7 +26,9 @@
       "match": {
         "phase_from": 29,
         "phase_through": 29,
-        "story_ids": ["WLA-29-09"]
+        "story_ids": [
+          "WLA-29-09"
+        ]
       },
       "workflow": "wla-29-hook-health-delivery",
       "with": {
@@ -31,7 +38,9 @@
         }
       },
       "team": "story-cell",
-      "rubrics": ["wla-29-story-quality"]
+      "rubrics": [
+        "wla-29-story-quality"
+      ]
     }
   ],
   "phase_gates": [],
@@ -71,7 +80,7 @@
     "max_artifact_bytes": 20000000,
     "max_tokens": 1000000,
     "max_observed_cost_microunits": 50000000,
-    "max_wall_seconds": 10800
+    "max_wall_seconds": 14400
   },
   "stop_conditions": [
     "scope-complete",
@@ -84,9 +93,19 @@
   ],
   "layout": {
     "nodes": {
-      "roadmap-scope": {"x": 60, "y": 100},
-      "binding:wla-29-09-hook-health": {"x": 420, "y": 100}
+      "roadmap-scope": {
+        "x": 60,
+        "y": 100
+      },
+      "binding:wla-29-09-hook-health": {
+        "x": 420,
+        "y": 100
+      }
     },
-    "viewport": {"x": 0, "y": 0, "zoom": 1}
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
   }
 }
