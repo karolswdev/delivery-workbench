@@ -177,6 +177,10 @@ _EVENT_DETAIL_KEYS = {
         "claim_id", "request_hash", "obligation_id", "from_state",
         "to_state", "actor", "authority", "reason", "replacement_id",
     },
+    "program_delivery_facts_recorded": {
+        "claim_id", "request_hash", "proof_hash", "story_ids",
+        "files_touched", "head_sha", "verdict_outcome", "obligation_ids",
+    },
     "program_scope_completed": {
         "claim_id", "request_hash", "proof_hash", "completed_stories",
         "completed_phases", "open_obligation_ids",
@@ -1373,6 +1377,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
     controls: list[dict[str, object]] = []
     obligations: dict[str, dict[str, object]] = {}
     obligation_history: list[dict[str, object]] = []
+    delivery_facts: dict[str, object] | None = None
     scope_completion: dict[str, object] | None = None
     selected_stories: set[str] = set()
     selected_phases: set[int] = set()
@@ -1714,6 +1719,57 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
                 "obligation_id": obligation_id,
                 **disposition,
             })
+        elif event_name == "program_delivery_facts_recorded":
+            _require(event_generation == generation, "delivery facts use the wrong generation")
+            _require(state == "running", "delivery facts were recorded outside running state")
+            _require(delivery_facts is None, "program delivery facts were recorded more than once")
+            claim_id = _safe(detail["claim_id"], "delivery facts claim id")
+            claim = next((item for item in completed if item["claim_id"] == claim_id), None)
+            _require(
+                claim is not None and claim["category"] == "assignment"
+                and claim["status"] == "succeeded"
+                and claim["request_hash"] == detail["request_hash"]
+                and claim["subject"]["kind"] == "program-scope-proof"
+                and claim["subject"]["hash"] == detail["proof_hash"],
+                "delivery facts lack the completed scope-proof claim",
+            )
+            _hash(detail["proof_hash"], "delivery facts proof hash")
+            story_ids = detail["story_ids"]
+            obligation_ids = detail["obligation_ids"]
+            files_touched = detail["files_touched"]
+            _require(
+                isinstance(story_ids, list)
+                and story_ids == sorted(set(story_ids))
+                and story_ids == sorted(selected_stories),
+                "delivery facts story set is invalid",
+            )
+            _require(
+                isinstance(obligation_ids, list)
+                and obligation_ids == sorted(obligations),
+                "delivery facts obligation set is invalid",
+            )
+            _require(
+                isinstance(files_touched, list)
+                and files_touched == sorted(set(files_touched))
+                and all(
+                    isinstance(path, str) and bool(path) and len(path) <= 500
+                    and "\x00" not in path and "\n" not in path and "\r" not in path
+                    for path in files_touched
+                ),
+                "delivery facts touched-file set is invalid",
+            )
+            _require(
+                isinstance(detail["head_sha"], str)
+                and len(detail["head_sha"]) in {40, 64}
+                and all(char in "0123456789abcdef" for char in detail["head_sha"])
+                and detail["head_sha"] == expected_repository["head"],
+                "delivery facts HEAD differs from the ledger fact binding",
+            )
+            _require(
+                detail["verdict_outcome"] == "passed",
+                "delivery facts verdict outcome is invalid",
+            )
+            delivery_facts = dict(detail)
         elif event_name == "program_scope_completed":
             _require(event_generation == generation, "scope completion uses the wrong revocation generation")
             _require(state == "running", "program scope completed outside running state")
@@ -1873,6 +1929,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
         ),
         "obligation_history": obligation_history,
         "scope_completion": scope_completion,
+        "delivery_facts": delivery_facts,
         "exhaustion": exhaustion,
         "test_baseline": test_baseline,
         "issued_at": grant["issued_at"],
@@ -3026,6 +3083,87 @@ def dispose_program_obligation(
     after = replay_program(root, run_id, now=observed)
     disposed = next(item for item in after["obligations"] if item["id"] == obligation_id)
     return {**after, "obligation": disposed, "idempotent": False}
+
+
+def record_program_delivery_facts(
+    root: Path,
+    run_id: str,
+    *,
+    claim_id: str,
+    proof_hash: str,
+    files_touched: list[str],
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    """Ledger the bounded facts from which advisory delivery memory derives."""
+    observed = _time(now, "now")
+    claim_id = _safe(claim_id, "delivery facts claim id")
+    proof_hash = _hash(proof_hash, "delivery facts proof hash")
+    touched = sorted(set(files_touched))
+    _require(touched == files_touched, "delivery touched-file set must be sorted and unique")
+    _require(
+        all(
+            isinstance(item, str) and bool(item) and len(item) <= 500
+            and "\x00" not in item and "\n" not in item and "\r" not in item
+            for item in touched
+        ),
+        "delivery touched-file set contains an unsafe path",
+    )
+    root = root.resolve()
+    path, grant, _plan = _load_documents(root, run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        expected = {
+            "claim_id": claim_id,
+            "request_hash": next(
+                (
+                    item["request_hash"]
+                    for item in projection["completed_claims"]
+                    if item["claim_id"] == claim_id
+                ),
+                None,
+            ),
+            "proof_hash": proof_hash,
+            "story_ids": list(projection["selected_stories"]),
+            "files_touched": touched,
+            "head_sha": projection["expected_repository"]["head"],
+            "verdict_outcome": "passed",
+            "obligation_ids": sorted(
+                item["id"] for item in projection["obligations"]
+            ),
+        }
+        if projection["delivery_facts"] is not None:
+            _require(
+                projection["delivery_facts"] == expected,
+                "program delivery facts were already recorded differently",
+            )
+            return {**projection, "idempotent": True}
+        _require(projection["state"] == "running", "delivery facts require a running program")
+        claim = next(
+            (
+                item for item in projection["completed_claims"]
+                if item["claim_id"] == claim_id
+            ),
+            None,
+        )
+        _require(
+            claim is not None
+            and claim["category"] == "assignment"
+            and claim["status"] == "succeeded"
+            and claim["subject"]["kind"] == "program-scope-proof"
+            and claim["subject"]["hash"] == proof_hash,
+            "delivery facts require one succeeded scope-proof claim",
+        )
+        event = _event_document(
+            run_id,
+            int(projection["event_count"]) + 1,
+            "program_delivery_facts_recorded",
+            int(projection["generation"]),
+            observed,
+            expected,
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    return {**replay_program(root, run_id, now=observed), "idempotent": False}
 
 
 def complete_program_scope(

@@ -60,6 +60,7 @@ try:
         build_delivery_setup,
         build_action_presentation,
         build_live_presentation,
+        build_lesson_inventory,
         build_start_presentation,
         build_step_result_presentation,
         build_step,
@@ -1430,6 +1431,12 @@ def command_knowledge_ground(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_knowledge_lessons(args: argparse.Namespace) -> int:
+    document = build_lesson_inventory(args.root)
+    print(json.dumps(document, sort_keys=True, separators=(",", ":")))
+    return 0
+
+
 def command_setup(args: argparse.Namespace) -> int:
     setup = build_delivery_setup(args.root, args.project)
     print(render_delivery_setup(setup, technical=args.technical), end="")
@@ -1786,6 +1793,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="emit the versioned grounding result"
     )
     knowledge_ground.set_defaults(func=command_knowledge_ground)
+    knowledge_lessons = knowledge_sub.add_parser(
+        "lessons", help="list earned machine lessons with provenance"
+    )
+    knowledge_lessons.add_argument(
+        "--json", action="store_true", help="emit the versioned lesson inventory"
+    )
+    knowledge_lessons.set_defaults(func=command_knowledge_lessons)
 
     setup = sub.add_parser(
         "setup",

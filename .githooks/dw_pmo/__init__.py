@@ -159,6 +159,7 @@ from .status import (
     build_status,
     render_status,
 )
+from .knowledge import build_lesson_inventory
 from .repository_map import read_symbol_map, refresh_symbol_map
 from .grounding import (
     GROUNDING_KIND,

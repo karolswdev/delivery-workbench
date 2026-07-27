@@ -13,6 +13,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 LIB_DIR = TESTS_DIR.parent / "lib"
 sys.path.insert(0, str(LIB_DIR))
 
+from dw_pmo.knowledge import encode_lesson_locations  # noqa: E402
 from dw_pmo.knowledge_packet import (  # noqa: E402
     StaleKnowledgePacket,
     build_knowledge_packet,
@@ -82,9 +83,14 @@ GROUNDING = {
 LESSON = {
     "record_kind": "lesson", "record_hash": "sha256:" + "2" * 64,
     "origin_kind": "run", "origin": "run-1", "head_sha": "3" * 40,
+    "timestamp": "2026-07-26T12:00:00Z",
     "detail": {
-        "subject": "alpha beta localization",
-        "lesson": "Keep alpha and beta source locations bounded.",
+        "claim": "Keep alpha and beta source locations bounded.",
+        "locations": encode_lesson_locations([{
+            "reference": "pkg.alpha", "status": "resolved", "file": "pkg.py",
+            "symbol": "pkg.alpha", "line_start": 1, "line_end": 2,
+        }]),
+        "confidence": "high",
         "supersedes": "",
     },
 }

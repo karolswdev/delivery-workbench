@@ -910,6 +910,19 @@ locations, whole-symbol snippets, mapped tests, relevant lessons, labeled
 unverified hints, and named byte-budget exclusions. Hint-free stories remain
 explicitly empty; stale map or grounding fails packet assembly rather than
 silently degrading. Knowledge remains advisory and grants no authority.
+
+A workflow agent may declare an output of kind `lesson`. The output must be the
+closed `delivery-workbench-lesson-output@1` JSON document, with bounded claim,
+location-reference, confidence, and supersession fields. These artifacts stay
+inside immutable conductor receipts during execution. They are not evidence or
+verdict input. Only after `program_scope_completed` reaches the successful
+terminal does the conductor resolve their locations and append at most the
+program budget's `max_lessons` (default 5, hard limit 50). Revoked, cancelled,
+expired, exhausted, failed, or abandoned programs write none. The same terminal
+seam appends one delivery record derived from a preceding
+`program_delivery_facts_recorded` ledger event; retries deduplicate by run, HEAD,
+and exact detail.
+
 Principal, workspace domain, and session binding must all be
 independent from the implementer (and a meta-verifier from every audited
 author). Criterion evidence and citations are references with hashes—not

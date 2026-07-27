@@ -39,6 +39,7 @@ KNOWLEDGE_SCHEMA_VERSION = 1
 DERIVED_FACT_KIND = "derived-fact"
 DELIVERY_RECORD_KIND = "delivery-record"
 LESSON_KIND = "lesson"
+LESSON_INVENTORY_KIND = "delivery-workbench-knowledge-lessons"
 EARNED_RECORD_KINDS = (DELIVERY_RECORD_KIND, LESSON_KIND)
 
 DERIVED = "derived"
@@ -82,19 +83,29 @@ _EARNED_KEYS = {
     "record_hash",
 }
 
-# Exact scalar-only detail fields. A later writer may only supply one of these
-# closed records; adding a field is a contract-version decision.
+# Exact scalar-only detail fields. Delivery identifiers are canonical JSON
+# arrays encoded as bounded strings so the earned-record envelope remains
+# scalar-only. They are produced by the ledger write-back adapter, never from
+# agent prose. Lesson locations use the same convention for a closed list of
+# resolved/unresolved references.
 EARNED_RECORD_FIELDS = {
-    DELIVERY_RECORD_KIND: ("story_id", "outcome", "summary", "evidence_ref"),
-    LESSON_KIND: ("subject", "lesson", "supersedes"),
+    DELIVERY_RECORD_KIND: (
+        "story_ids", "story_count", "files_touched", "file_count",
+        "verdict_outcome", "obligation_ids", "obligation_count",
+    ),
+    LESSON_KIND: ("claim", "locations", "confidence", "supersedes"),
 }
 EARNED_FIELD_CAPS = {
-    "story_id": 64,
-    "outcome": 32,
-    "summary": 500,
-    "evidence_ref": 500,
-    "subject": 200,
-    "lesson": 1000,
+    "story_ids": 2048,
+    "story_count": 8,
+    "files_touched": 8192,
+    "file_count": 8,
+    "verdict_outcome": 32,
+    "obligation_ids": 2048,
+    "obligation_count": 8,
+    "claim": 1000,
+    "locations": 8192,
+    "confidence": 16,
     "supersedes": 80,
 }
 _ORIGIN_KINDS = ("run", "operator")
@@ -357,6 +368,84 @@ def _parse_timestamp(value: object) -> datetime:
     return parsed
 
 
+def encode_identifier_list(values: object, field: str) -> str:
+    """Encode a deterministic, duplicate-free list for a scalar detail field."""
+    if not isinstance(values, (list, tuple, set)):
+        raise DwError("earned record %s must be a list of identifiers" % field)
+    normalized = []
+    for value in values:
+        normalized.append(_validate_identifier(value, field, 500))
+    return _canonical_json(sorted(set(normalized)))
+
+
+def decode_identifier_list(value: object, field: str) -> list:
+    if not isinstance(value, str):
+        raise DwError("earned record %s must be a canonical identifier list" % field)
+    try:
+        decoded = json.loads(value)
+    except ValueError as exc:
+        raise DwError("earned record %s must be a canonical identifier list" % field) from exc
+    if not isinstance(decoded, list):
+        raise DwError("earned record %s must be a canonical identifier list" % field)
+    normalized = [
+        _validate_identifier(item, field, 500)
+        for item in decoded
+    ]
+    if decoded != sorted(set(normalized)) or value != _canonical_json(decoded):
+        raise DwError("earned record %s identifiers must be sorted and unique" % field)
+    return decoded
+
+
+def encode_lesson_locations(locations: object) -> str:
+    if not isinstance(locations, list):
+        raise DwError("lesson locations must be a list")
+    if not locations or len(locations) > 8:
+        raise DwError("lesson locations must contain between 1 and 8 references")
+    # Validation also guarantees every nested field is closed and bounded.
+    encoded = _canonical_json(locations)
+    decode_lesson_locations(encoded)
+    return encoded
+
+
+def decode_lesson_locations(value: object) -> list:
+    if not isinstance(value, str):
+        raise DwError("lesson locations must be a canonical location list")
+    try:
+        locations = json.loads(value)
+    except ValueError as exc:
+        raise DwError("lesson locations must be a canonical location list") from exc
+    if not isinstance(locations, list) or not locations or len(locations) > 8:
+        raise DwError("lesson locations must contain between 1 and 8 references")
+    for location in locations:
+        if not isinstance(location, dict):
+            raise DwError("lesson location must be an object")
+        status = location.get("status")
+        expected = (
+            {"reference", "status", "file", "symbol", "line_start", "line_end"}
+            if status == "resolved"
+            else {"reference", "status", "reason"}
+        )
+        if set(location) != expected or status not in {"resolved", "unresolved"}:
+            raise DwError("lesson location has non-exact fields")
+        _validate_identifier(location["reference"], "lesson location reference", 200)
+        if status == "unresolved":
+            _validate_identifier(location["reason"], "lesson location reason", 80)
+            continue
+        _validate_identifier(location["file"], "lesson location file", 500)
+        symbol = location["symbol"]
+        if not isinstance(symbol, str) or len(symbol) > 500 or "\x00" in symbol:
+            raise DwError("lesson location symbol must be at most 500 chars")
+        start = location["line_start"]
+        end = location["line_end"]
+        if (not isinstance(start, int) or isinstance(start, bool)
+                or not isinstance(end, int) or isinstance(end, bool)
+                or start < 0 or end < start):
+            raise DwError("lesson location line span is invalid")
+    if value != _canonical_json(locations):
+        raise DwError("lesson locations must use canonical JSON")
+    return locations
+
+
 def _validate_detail(record_kind: str, detail: object) -> dict:
     fields = EARNED_RECORD_FIELDS.get(record_kind)
     if fields is None:
@@ -379,6 +468,24 @@ def _validate_detail(record_kind: str, detail: object) -> dict:
                        or any(c not in "0123456789abcdef"
                               for c in supersedes[7:])):
         raise DwError("lesson supersedes must reference an earned record hash")
+    if record_kind == DELIVERY_RECORD_KIND:
+        stories = decode_identifier_list(detail["story_ids"], "story_ids")
+        files = decode_identifier_list(detail["files_touched"], "files_touched")
+        obligations = decode_identifier_list(detail["obligation_ids"], "obligation_ids")
+        for count_field, values in (
+            ("story_count", stories),
+            ("file_count", files),
+            ("obligation_count", obligations),
+        ):
+            if detail[count_field] != str(len(values)):
+                raise DwError("earned record %s does not match its identifiers" % count_field)
+        outcome = detail["verdict_outcome"]
+        if any(not (char.isalnum() or char in "-_.") for char in outcome):
+            raise DwError("earned record verdict_outcome must be an identifier")
+    else:
+        decode_lesson_locations(detail["locations"])
+        if detail["confidence"] not in {"low", "medium", "high"}:
+            raise DwError("lesson confidence must be low, medium, or high")
     return detail
 
 
@@ -519,9 +626,17 @@ class EarnedRecordStore:
         return _read_records(path, record_kind)
 
     def append(self, record_kind: str, detail: dict, *, origin_kind: str,
-               origin: str, head_sha: str, timestamp: datetime = None) -> dict:
-        """Append one closed earned record; no update or rewrite API exists."""
+               origin: str, head_sha: str, timestamp: datetime = None,
+               deduplicate: bool = False) -> dict:
+        """Append one closed earned record; no update or rewrite API exists.
+
+        ``deduplicate`` is the restart-safe write-back mode: while holding the
+        earned-store lock, return an exact record already written by the same
+        run and HEAD instead of appending it twice.
+        """
         _validate_detail(record_kind, detail)
+        if not isinstance(deduplicate, bool):
+            raise DwError("earned record deduplicate must be boolean")
         timestamp_text = _format_timestamp(timestamp or _utc_now())
         _validate_provenance(origin_kind, origin, timestamp_text, head_sha)
         with _earned_lock(self.root) as directory:
@@ -529,6 +644,22 @@ class EarnedRecordStore:
             if path.is_symlink():
                 raise DwError("refusing symlinked earned record chain")
             records = _read_records(path, record_kind)
+            if deduplicate:
+                existing = next((
+                    record for record in records
+                    if record["origin_kind"] == origin_kind
+                    and record["origin"] == origin
+                    and record["head_sha"] == head_sha
+                    and record["detail"] == detail
+                ), None)
+                if existing is not None:
+                    return existing
+            if record_kind == LESSON_KIND and detail["supersedes"]:
+                earlier = {record["record_hash"] for record in records}
+                if detail["supersedes"] not in earlier:
+                    raise DwError(
+                        "lesson supersedes must reference an earlier lesson"
+                    )
             seq = len(records)
             prev_hash = records[-1]["record_hash"] if records else None
             # Whole-second UTC timestamps sort in chronological order.
@@ -546,6 +677,44 @@ class EarnedRecordStore:
                     raise DwError("short write while appending earned knowledge")
                 os.fsync(handle.fileno())
             return document
+
+
+def build_lesson_inventory(root: Path) -> dict:
+    """List every earned lesson with provenance and supersession audit links."""
+    records = EarnedRecordStore(Path(root).resolve()).read(LESSON_KIND)
+    superseded_by = {
+        record["detail"]["supersedes"]: record["record_hash"]
+        for record in records
+        if record["detail"]["supersedes"]
+    }
+    return {
+        "kind": LESSON_INVENTORY_KIND,
+        "schema_version": KNOWLEDGE_SCHEMA_VERSION,
+        "lessons": [
+            {
+                "record_hash": record["record_hash"],
+                "seq": record["seq"],
+                "claim": record["detail"]["claim"],
+                "locations": decode_lesson_locations(
+                    record["detail"]["locations"]
+                ),
+                "confidence": record["detail"]["confidence"],
+                "supersedes": record["detail"]["supersedes"],
+                "superseded_by": superseded_by.get(record["record_hash"]),
+                "origin_kind": record["origin_kind"],
+                "origin": record["origin"],
+                "head_sha": record["head_sha"],
+                "recorded_at": record["timestamp"],
+                "age_label": "recorded-at:" + record["timestamp"],
+            }
+            for record in records
+        ],
+        "count": len(records),
+        "active_count": sum(
+            record["record_hash"] not in superseded_by for record in records
+        ),
+        **_AUTHORITY_MARKERS,
+    }
 
 
 def contract_document() -> dict:

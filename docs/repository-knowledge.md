@@ -171,19 +171,56 @@ Earned records are scalar-only typed shapes with exact field sets:
 
 | Kind | Exact detail fields | Per-field caps |
 |---|---|---|
-| `delivery-record` | `story_id`, `outcome`, `summary`, `evidence_ref` | 64, 32, 500, 500 characters respectively |
-| `lesson` | `subject`, `lesson`, `supersedes` | 200, 1,000, 80 characters respectively |
+| `delivery-record` | `story_ids`, `story_count`, `files_touched`, `file_count`, `verdict_outcome`, `obligation_ids`, `obligation_count` | 2,048; 8; 8,192; 8; 32; 2,048; 8 characters respectively |
+| `lesson` | `claim`, `locations`, `confidence`, `supersedes` | 1,000; 8,192; 16; 80 characters respectively |
 
-`supersedes` is either empty or an earned-record `sha256:` hash reference. It
-expresses correction without rewriting history.
+Identifier collections and resolved location collections are canonical JSON
+encoded inside bounded strings, preserving the scalar-only envelope without
+losing typed structure. Counts must exactly match their identifier collections.
+`confidence` is `low`, `medium`, or `high`. `supersedes` is either empty or the
+hash of an earlier lesson. The earlier record remains in the chain; retrieval
+selects the newest active record and includes its supersession chain.
 
 Every append validates the exact fields, scalar types, caps, provenance, and
 Git object identifiers before writing. Every read repeats those validations and
 also verifies sequence, previous-hash linkage, record hash, and nondecreasing
 provenance timestamps. A malformed, truncated, rewritten, reordered, or
 content-expanded chain refuses closed. The store exposes append and read
-primitives only; it has no update, replace, or delete API. Real delivery
-write-back remains the responsibility of WLA-29-07.
+primitives only; it has no update, replace, or delete API.
+
+## Delivery write-back
+
+Programs declare the conservative `max_lessons` budget (default 5, hard limit
+50). An agent may emit lessons only through a workflow output of kind `lesson`.
+Its UTF-8 JSON document is the closed
+`delivery-workbench-lesson-output@1` shape: `lessons` is a bounded list whose
+items contain only `claim`, `locations`, `confidence`, and `supersedes`.
+Malformed or undeclared output is never treated as a lesson.
+
+Lesson artifacts remain immutable run receipts while work is in progress. The
+conductor reads them back only after the ledger reaches `complete`, keeps at
+most the declared per-run limit, and resolves each location reference against
+the fresh symbol map. Exact symbols and tracked paths carry resolved locations;
+missing, ambiguous, or unavailable-map references carry an explicit unresolved
+reason. Revoked, cancelled, expired, exhausted, failed, and otherwise abandoned
+runs never enter this seam and persist no lessons.
+
+Immediately before scope completion, the conductor appends a
+`program_delivery_facts_recorded` ledger event. It contains only completed story
+IDs, mechanically diffed path identifiers between the grant HEAD and final
+ledger-bound HEAD, the `passed` outcome identifier, and obligation IDs. The
+write-back adapter derives the delivery record only from that replayed event;
+it never reads diff or agent-output prose. Run ID, final HEAD SHA, and completion
+time are provenance on every append. Exact run/HEAD/detail retries deduplicate,
+so a crash after terminal transition cannot duplicate memory.
+
+`dw knowledge lessons` and MCP `dw_knowledge_lessons` list the full append-only
+lesson chain with run, HEAD, timestamp, age label, resolved/unresolved locations,
+and supersession links. Knowledge packets score active lessons by the same
+stable lexical rules as other packet items, include provenance and age labels,
+and keep superseded hashes as an audit chain. Deleting the earned store merely
+removes these advisory items from future packets; no authority, gate, verdict,
+or evidence answer changes.
 
 ## Runtime boundary
 

@@ -32,6 +32,11 @@ from .knowledge_packet import (
     build_hint_free_knowledge_packet,
     build_repository_knowledge_packet,
 )
+from .knowledge_writeback import (
+    LESSON_ARTIFACT_KIND,
+    parse_lesson_output,
+    persist_completed_program,
+)
 from .model import DwError
 from .orchestration import canonical_json
 from .orchestration_driver import (
@@ -68,6 +73,7 @@ from .program_run import (
     derive_child_grant,
     program_freshness_issues,
     record_program_obligation,
+    record_program_delivery_facts,
     record_program_dispatch,
     replay_program,
     validate_child_grant,
@@ -979,7 +985,9 @@ def _packet_outputs(outputs: list[dict[str, object]]) -> list[dict[str, object]]
     result: list[dict[str, object]] = []
     for output in outputs:
         kind = str(output["kind"])
-        fmt = "json" if kind in {"verdict", "decision", "mechanical-fact"} else kind
+        fmt = "json" if kind in {
+            "verdict", "decision", "mechanical-fact", LESSON_ARTIFACT_KIND,
+        } else kind
         result.append({
             "name": str(output["id"]),
             "format": fmt,
@@ -1132,6 +1140,9 @@ def _collect_outputs(
             except json.JSONDecodeError as exc:
                 raise DwError(f"program JSON output {name!r} is malformed") from exc
             checks.append("json")
+            if kind == LESSON_ARTIFACT_KIND:
+                parse_lesson_output(data)
+                checks.append("typed-lesson")
         elif fmt == "markdown":
             _require(bool(text.strip()), f"program Markdown output {name!r} is empty")
             checks.append("markdown")
@@ -2151,6 +2162,72 @@ def _execute_architecture_gate(
     }
 
 
+def _delivery_file_paths(
+    root: Path,
+    run_id: str,
+    projection: dict[str, object],
+) -> list[str]:
+    """Derive touched path identifiers between ledger-bound start/final HEADs."""
+    _path, grant, _plan = _load_documents(root.resolve(), run_id)
+    base = str(grant["repository"]["head"])
+    head = str(projection["expected_repository"]["head"])
+    result = subprocess.run(
+        ["git", "-C", str(root), "diff", "--name-only", "-z", base, head, "--"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    _require(result.returncode == 0, "cannot derive delivered paths from ledger HEADs")
+    try:
+        paths = result.stdout.decode("utf-8").split("\x00")
+    except UnicodeDecodeError as exc:
+        raise DwError("delivered paths are not UTF-8") from exc
+    return sorted(set(path for path in paths if path))
+
+
+def _lesson_documents(
+    root: Path,
+    run_id: str,
+    receipts: list[dict[str, object]],
+) -> list[dict]:
+    documents = []
+    for receipt in receipts:
+        for artifact in receipt.get("artifacts", []):
+            if (
+                isinstance(artifact, dict)
+                and artifact.get("artifact_kind") == LESSON_ARTIFACT_KIND
+            ):
+                documents.append(parse_lesson_output(
+                    _artifact_content(root, run_id, artifact)
+                ))
+    return documents
+
+
+def _persist_completed_knowledge(
+    root: Path,
+    run_id: str,
+    conductor: dict[str, object],
+    *,
+    now: datetime,
+) -> dict[str, object] | None:
+    projection = conductor["authority"]
+    _require(isinstance(projection, dict), "program knowledge write-back has no authority projection")
+    if projection.get("state") != "complete" or projection.get("delivery_facts") is None:
+        return None
+    budgets = projection.get("budgets", {})
+    _require(isinstance(budgets, dict), "program knowledge write-back has no budget policy")
+    lesson_budget = budgets.get("max_lessons", {})
+    _require(isinstance(lesson_budget, dict), "program max_lessons policy is absent")
+    receipts = conductor.get("receipts", [])
+    _require(isinstance(receipts, list), "program knowledge write-back receipts are invalid")
+    return persist_completed_program(
+        root,
+        projection,
+        _lesson_documents(root, run_id, receipts),
+        max_lessons=int(lesson_budget["limit"]),
+        timestamp=now,
+    )
+
+
 def _execute_scope_completion(
     root: Path,
     run_id: str,
@@ -2178,6 +2255,14 @@ def _execute_scope_completion(
         isinstance(payload, dict),
         "program scope completion payload is invalid",
     )
+    projection = record_program_delivery_facts(
+        root,
+        run_id,
+        claim_id=str(receipt["claim_id"]),
+        proof_hash=str(action["subject_hash"]),
+        files_touched=_delivery_file_paths(root, run_id, projection),
+        now=now,
+    )
     projection = complete_program_scope(
         root,
         run_id,
@@ -2185,6 +2270,12 @@ def _execute_scope_completion(
         proof_hash=str(action["subject_hash"]),
         completed_stories=list(payload["completed_stories"]),
         completed_phases=list(payload["completed_phases"]),
+        now=now,
+    )
+    _persist_completed_knowledge(
+        root,
+        run_id,
+        replay_program_conductor(root, run_id, now=now),
         now=now,
     )
     _boundary(boundary_hook, "after-scope-completion", {
@@ -6811,6 +6902,10 @@ def tick_program(
         before_head = str(before_projection["ledger_head"])
         before_receipts = len(before["receipts"])
         if before_projection["state"] != "running":
+            if before_projection["state"] == "complete":
+                _persist_completed_knowledge(
+                    root, run_id, before, now=observed
+                )
             frontier = derive_program_frontier(
                 root, run_id, driver_config=config, now=observed
             )

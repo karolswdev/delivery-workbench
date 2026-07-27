@@ -77,6 +77,13 @@ def _tool_knowledge_ground(root: Path, args: dict) -> tuple[str, dict]:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")), payload
 
 
+def _tool_knowledge_lessons(root: Path, args: dict) -> tuple[str, dict]:
+    from .knowledge import build_lesson_inventory
+
+    payload = build_lesson_inventory(root)
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")), payload
+
+
 def _tool_step(root: Path, args: dict) -> tuple[str, dict]:
     from .step import build_step, render_step
 
@@ -748,6 +755,19 @@ TOOLS: dict[str, dict] = {
             "additionalProperties": False,
         },
         "handler": _tool_knowledge_ground,
+    },
+    "dw_knowledge_lessons": {
+        "description": (
+            "List append-only machine lessons with run, HEAD, timestamp, and "
+            "supersession provenance. Lessons are advisory and never authorize "
+            "work. Adapter over dw_pmo.knowledge.build_lesson_inventory."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        "handler": _tool_knowledge_lessons,
     },
     "dw_step": {
         "description": (

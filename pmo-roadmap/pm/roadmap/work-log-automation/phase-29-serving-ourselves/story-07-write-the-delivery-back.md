@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 29
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-29-01, WLA-29-04
 - **Unblocks:** WLA-29-08
 - **Owner:** unassigned
@@ -82,3 +82,15 @@ auditable rather than corrosive.
 
 Whether the earned store should eventually be repository-tracked (so lessons
 travel with clones) stays deferred as recorded in the phase status.
+
+Implemented as `dw_pmo/knowledge_writeback.py` with the
+`program_delivery_facts_recorded` ledger event, the typed
+`delivery-workbench-lesson-output@1` workflow output, and program policy
+`max_lessons` (default 5, hard cap 50). Terminal-only persistence with
+restart-safe dedup is proven for every non-complete projection state;
+supersession chains are auditable in packet retrieval; age labels are the
+deterministic `recorded-at:<UTC>` form to keep packet assembly
+byte-stable. `dw knowledge lessons` / MCP `dw_knowledge_lessons` added,
+both carrying the non-authorizing stamps. Suite 589 → 596 green; the
+packaged exam ran from a freshly built wheel and confirmed a vanilla
+consumer with no knowledge stores is untouched.

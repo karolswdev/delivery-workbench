@@ -115,7 +115,7 @@ work by exhausting a budget — it stops at a checkpoint or refusal.
 | WLA-29-04 | Serve knowledge packets to agents | done | [story-04-serve-knowledge-packets-to-agents](./story-04-serve-knowledge-packets-to-agents.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-29-05 | Judge only the failures we introduced | done | [story-05-judge-only-the-failures-we-introduced](./story-05-judge-only-the-failures-we-introduced.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-29-06 | Decorrelate the author and the reviewer | done | [story-06-decorrelate-the-author-and-the-reviewer](./story-06-decorrelate-the-author-and-the-reviewer.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-29-07 | Write the delivery back | backlog | [story-07-write-the-delivery-back](./story-07-write-the-delivery-back.md) | — |
+| WLA-29-07 | Write the delivery back | done | [story-07-write-the-delivery-back](./story-07-write-the-delivery-back.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-29-08 | Serve ourselves for real | backlog | [story-08-serve-ourselves-for-real](./story-08-serve-ourselves-for-real.md) | — |
 | WLA-29-09 | Keep the hook path healthy under worktrees | backlog | [story-09-keep-the-hook-path-healthy-under-worktrees](./story-09-keep-the-hook-path-healthy-under-worktrees.md) | — |
 
@@ -235,6 +235,29 @@ review before landing; two structural suggestions were declined on
 architecture (baseline capture stays tick-driven for crash-recovery
 replay; event-schema centralization deferred as follow-up). Core suite
 581 → 589, all green; packaged exam complete.
+
+WLA-29-07 closed the compounding loop. `knowledge_writeback.py` derives a
+delivery record purely from ledger facts (story ids, touched paths,
+verdict outcome, obligation ids — identifiers and counts only) and appends
+it to the earned store at successful completion, recorded in the ledger as
+`program_delivery_facts_recorded`. Agents leave lessons only through the
+typed `delivery-workbench-lesson-output@1` workflow output, capped by
+program policy (`max_lessons`, default 5, hard limit 50); persistence
+happens only at the terminal seam, with restart-safe deduplication —
+revoked, cancelled, expired, exhausted, or still-running projections
+persist zero lessons. Lesson locations resolve against the symbol map or
+are explicitly marked unresolved; retrieval prefers superseding lessons
+while keeping the chain auditable, and age is the deterministic
+`recorded-at:<timestamp>` label so packets stay byte-stable. Read
+surfaces: `dw knowledge lessons` and MCP `dw_knowledge_lessons`, both
+stamped non-authorizing. The architecture fitness test expanded to cover
+the new module; a wheel-built packaged exam run proves absent knowledge
+stores stay safe in a fresh consumer. Core suite 589 → 596, all green.
+
+WLA-29-09 was authored as the real run's target story (the recurring
+worktree `core.hooksPath` corruption from this phase's own friction
+ledger), with its localization hints grounded verified by the shipped
+machinery before commit. WLA-29-08 is next: the first real program run.
 
 ## Active risks
 

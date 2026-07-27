@@ -14,7 +14,11 @@ from .grounding import (
     ground_story_path,
     parse_localization_hints,
 )
-from .knowledge import EarnedRecordStore, _canonical_json
+from .knowledge import (
+    EarnedRecordStore,
+    _canonical_json,
+    decode_lesson_locations,
+)
 from .model import DwError
 from .repository_map import read_symbol_map
 from .symbol_map import SYMBOL_MAP_KIND, SYMBOL_MAP_SCHEMA_VERSION
@@ -52,6 +56,40 @@ def _score(query: set[str], *values: object) -> int:
     overlap = query & terms
     # Integers make the score representation stable across Python versions.
     return len(overlap) * 1000 + sum(min(len(item), 40) for item in overlap)
+
+
+def _preferred_lessons(records: Iterable[dict], query: set[str]) -> list[tuple]:
+    """Return active superseding lessons with their auditable ancestry."""
+    by_hash = {
+        str(record.get("record_hash", "")): record
+        for record in records
+        if isinstance(record, dict) and record.get("record_kind") == "lesson"
+        and isinstance(record.get("detail"), dict)
+    }
+    superseded = {
+        str(record["detail"].get("supersedes", ""))
+        for record in by_hash.values()
+        if record["detail"].get("supersedes")
+    }
+    preferred = []
+    for record_hash, record in sorted(by_hash.items()):
+        if record_hash in superseded:
+            continue
+        chain = []
+        scoring = []
+        cursor = record
+        while cursor is not None:
+            detail = cursor["detail"]
+            scoring.extend((detail.get("claim"), detail.get("locations")))
+            prior_hash = str(detail.get("supersedes", ""))
+            if not prior_hash:
+                break
+            chain.append(prior_hash)
+            cursor = by_hash.get(prior_hash)
+        score = _score(query, *scoring)
+        if score > 0:
+            preferred.append((score, record_hash, record, chain))
+    return sorted(preferred, key=lambda item: (-item[0], item[1]))
 
 
 def _source_lines(data: bytes, line_start: int, line_end: int) -> str:
@@ -298,30 +336,25 @@ def build_knowledge_packet(
                 "score": score,
             })
 
-    relevant_lessons = []
     lesson_records = earned_records if grounding_status == "grounded" else ()
-    for raw in lesson_records:
-        if not isinstance(raw, dict) or raw.get("record_kind") != "lesson":
-            continue
-        detail = raw.get("detail")
-        if not isinstance(detail, dict):
-            continue
-        score = _score(query, detail.get("subject"), detail.get("lesson"))
-        if score <= 0:
-            continue
-        relevant_lessons.append((score, str(raw.get("record_hash", "")), raw, detail))
-    for score, record_hash, raw, detail in sorted(
-        relevant_lessons, key=lambda item: (-item[0], item[1])
+    for score, record_hash, raw, chain in _preferred_lessons(
+        lesson_records, query
     )[:_MAX_RELEVANT_LESSONS]:
+        detail = raw["detail"]
+        recorded_at = str(raw.get("timestamp", ""))
         name = "lesson:" + record_hash
         candidates[name] = _candidate(name, "lesson", score, {
             "record_hash": record_hash,
-            "subject": detail.get("subject"),
-            "lesson": detail.get("lesson"),
+            "claim": detail.get("claim"),
+            "locations": decode_lesson_locations(detail.get("locations")),
+            "confidence": detail.get("confidence"),
             "supersedes": detail.get("supersedes"),
+            "supersession_chain": chain,
             "origin_kind": raw.get("origin_kind"),
             "origin": raw.get("origin"),
             "head_sha": raw.get("head_sha"),
+            "recorded_at": recorded_at,
+            "age_label": "recorded-at:" + recorded_at,
             "score": score,
         })
 

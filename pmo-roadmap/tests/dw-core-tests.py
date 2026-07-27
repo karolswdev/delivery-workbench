@@ -45,6 +45,7 @@ from repository_map_tests import (
 )
 from grounding_tests import GroundingIntegrationTest, GroundingUnitTest
 from knowledge_packet_tests import HonestUsageTest, KnowledgePacketTest
+from knowledge_writeback_tests import KnowledgeWritebackTest
 
 
 README = """# Demo - Roadmap
@@ -2830,7 +2831,7 @@ class MCPServerTest(unittest.TestCase):
         tools = self.rpc("tools/list")["result"]["tools"]
         names = [t["name"] for t in tools]
         self.assertEqual(names, [
-            "dw_status", "dw_knowledge_map", "dw_knowledge_ground", "dw_step", "dw_step_apply", "dw_context", "dw_next",
+            "dw_status", "dw_knowledge_map", "dw_knowledge_ground", "dw_knowledge_lessons", "dw_step", "dw_step_apply", "dw_context", "dw_next",
             "dw_check", "dw_doctor",
             "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",
@@ -12879,8 +12880,47 @@ class ProgramConductorTest(unittest.TestCase):
         ]), 1)
 
     def test_cross_phase_continuation_carries_obligation_and_completes_scope(self):
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        workflow["nodes"][0]["outputs"].append({
+            "id": "machine-lessons",
+            "kind": "lesson",
+            "max_bytes": 10_000,
+        })
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        organization_path = self.root / "pm/organizations/delivery-core.json"
+        organization = json.loads(organization_path.read_text(encoding="utf-8"))
+        implementer = next(
+            role for role in organization["teams"][0]["roles"]
+            if role["id"] == "implementer"
+        )
+        implementer["artifacts"]["write"].append("lesson")
+        organization_path.write_text(
+            json.dumps(organization, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.fixture._git(
+            "add", "pm/workflows/story-work.json",
+            "pm/organizations/delivery-core.json",
+        )
+        self.authority.fixture._git("commit", "-qm", "declare typed lesson output")
         projection = self.start()
-        fixture = self.core.ProgramFixtureDriver()
+        lesson_output = {
+            "kind": "delivery-workbench-lesson-output",
+            "schema_version": 1,
+            "lessons": [{
+                "claim": "Keep cross-phase obligations visible until completion.",
+                "locations": ["dw_pmo.program_conductor.tick_program"],
+                "confidence": "high",
+                "supersedes": "",
+            }],
+        }
+        fixture = self.core.ProgramFixtureDriver({
+            "*": {"outputs": {"machine-lessons": lesson_output}},
+        })
         first = self.core.supervise_program(
             self.root,
             projection["run_id"],
@@ -12995,6 +13035,29 @@ class ProgramConductorTest(unittest.TestCase):
             item for item in replayed["receipts"]
             if item["action_kind"] == "scope-completion"
         ]), 1)
+        self.assertEqual(
+            replayed["authority"]["delivery_facts"]["story_ids"],
+            ["DM-1-02", "DM-2-01"],
+        )
+        self.assertEqual(
+            replayed["authority"]["delivery_facts"]["obligation_ids"],
+            ["carry-across-phase"],
+        )
+        from dw_pmo.knowledge import EarnedRecordStore
+        delivery_records = EarnedRecordStore(self.root).read("delivery-record")
+        self.assertEqual(len(delivery_records), 1)
+        self.assertEqual(delivery_records[0]["origin"], projection["run_id"])
+        self.assertEqual(
+            delivery_records[0]["head_sha"],
+            replayed["authority"]["delivery_facts"]["head_sha"],
+        )
+        lessons = EarnedRecordStore(self.root).read("lesson")
+        self.assertEqual(len(lessons), 1)
+        self.assertEqual(lessons[0]["origin"], projection["run_id"])
+        from dw_pmo.knowledge import decode_lesson_locations
+        locations = decode_lesson_locations(lessons[0]["detail"]["locations"])
+        self.assertEqual(locations[0]["status"], "unresolved")
+        self.assertEqual(locations[0]["reason"], "symbol-map-unavailable")
 
     def test_blocking_obligation_stops_cross_story_selection(self):
         projection = self.start()

@@ -1,7 +1,7 @@
 # Work Log Automation - Roadmap
 
-**Last updated:** 2026-07-26 (WLA-29-05 done: verdicts judge only introduced failures — pre-existing debt becomes typed obligations, never a free pass).
-**Current phase:** [Phase 29 - Serving ourselves](./phase-29-serving-ourselves/) (open, 6/8).
+**Last updated:** 2026-07-26 (WLA-29-07 done: every completed delivery writes its record and lessons back — the second delivery starts smarter than the first).
+**Current phase:** [Phase 29 - Serving ourselves](./phase-29-serving-ourselves/) (open, 7/9).
 **Status:** Phase 28 closed the cost of proof. Repository-derived facts now live behind one versioned boundary that says, per fact, what may be reused: where the repository *is* resolves once per process, what it *contains* is read once per observation and never retained. `rev-parse --git-dir` went from 2,435 spawns in the slowest test to zero, the suite runs sharded across processes, and an executable budget fails the build if a tick starts spending again. The core suite went **814s to ~93-147s while growing from 499 to 530 tests** — 8.8x at best, 5.5x on a loaded desk — with nothing weakened, skipped, or removed. Two latent worktree defects were found and fixed on the way. Landing and release remain separate decisions; phases 25-28 are all unreleased.
 
 ## Vision

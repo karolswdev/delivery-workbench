@@ -46,10 +46,15 @@ class RepositoryKnowledgeTest(unittest.TestCase):
     @staticmethod
     def delivery_detail(**updates):
         detail = {
-            "story_id": "WLA-29-01",
-            "outcome": "delivered",
-            "summary": "Contracted the repository knowledge boundary.",
-            "evidence_ref": "evidence-story-01.md",
+            "story_ids": knowledge.encode_identifier_list(["WLA-29-01"], "story_ids"),
+            "story_count": "1",
+            "files_touched": knowledge.encode_identifier_list(
+                ["dw_pmo/knowledge.py"], "files_touched"
+            ),
+            "file_count": "1",
+            "verdict_outcome": "passed",
+            "obligation_ids": knowledge.encode_identifier_list([], "obligation_ids"),
+            "obligation_count": "0",
         }
         detail.update(updates)
         return detail
@@ -57,8 +62,16 @@ class RepositoryKnowledgeTest(unittest.TestCase):
     @staticmethod
     def lesson_detail(**updates):
         detail = {
-            "subject": "freshness",
-            "lesson": "Bind every derived answer to the current index tree.",
+            "claim": "Bind every derived answer to the current index tree.",
+            "locations": knowledge.encode_lesson_locations([{
+                "reference": "DerivedFactStore.read",
+                "status": "resolved",
+                "file": "dw_pmo/knowledge.py",
+                "symbol": "dw_pmo.knowledge.DerivedFactStore.read",
+                "line_start": 301,
+                "line_end": 309,
+            }]),
+            "confidence": "high",
             "supersedes": "",
         }
         detail.update(updates)
@@ -241,19 +254,30 @@ class RepositoryKnowledgeTest(unittest.TestCase):
 
     def test_delivery_and_lesson_append_as_typed_hash_chains(self):
         delivery = self.append_delivery()
+        earlier = self.earned.append(
+            knowledge.LESSON_KIND,
+            self.lesson_detail(),
+            origin_kind="run",
+            origin="run-29-01",
+            head_sha=HEAD,
+            timestamp=STAMP,
+        )
         lesson = self.earned.append(
             knowledge.LESSON_KIND,
-            self.lesson_detail(supersedes=delivery["record_hash"]),
-            origin_kind="operator",
-            origin="karol",
+            self.lesson_detail(
+                claim="Prefer the current index tree before every derived read.",
+                supersedes=earlier["record_hash"],
+            ),
+            origin_kind="run",
+            origin="run-29-02",
             head_sha=HEAD,
             timestamp=STAMP,
         )
         self.assertEqual(
             self.earned.read(knowledge.DELIVERY_RECORD_KIND), [delivery]
         )
-        self.assertEqual(self.earned.read(knowledge.LESSON_KIND), [lesson])
-        for record in (delivery, lesson):
+        self.assertEqual(self.earned.read(knowledge.LESSON_KIND), [earlier, lesson])
+        for record in (delivery, earlier, lesson):
             self.assertIs(record["starts_work"], False)
             self.assertIs(record["authorizes"], False)
             self.assertIs(record["satisfies_gate"], False)
@@ -262,7 +286,7 @@ class RepositoryKnowledgeTest(unittest.TestCase):
     def test_read_revalidates_closed_fields_caps_and_provenance(self):
         mutations = (
             lambda record: record["detail"].update({"prompt": "smuggled"}),
-            lambda record: record["detail"].update({"summary": "x" * 501}),
+            lambda record: record["detail"].update({"story_ids": "x" * 2049}),
             lambda record: record.update({"head_sha": "not-a-sha"}),
         )
         for mutate in mutations:
@@ -278,7 +302,7 @@ class RepositoryKnowledgeTest(unittest.TestCase):
         first = self.append_delivery()
         second = self.earned.append(
             knowledge.DELIVERY_RECORD_KIND,
-            self.delivery_detail(summary="A second delivery record."),
+            self.delivery_detail(verdict_outcome="awaiting-certification"),
             origin_kind="operator", origin="karol", head_sha=HEAD,
             timestamp=STAMP,
         )
@@ -289,7 +313,7 @@ class RepositoryKnowledgeTest(unittest.TestCase):
         path = self.earned_path()
         records = [json.loads(line) for line in path.read_text(
             encoding="utf-8").splitlines()]
-        records[0]["detail"]["summary"] = "rewritten"
+        records[0]["detail"]["verdict_outcome"] = "rewritten"
         path.write_text("\n".join(json.dumps(record) for record in records) + "\n",
                         encoding="utf-8")
         with self.assertRaises(knowledge.MalformedKnowledge):
@@ -325,16 +349,22 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
             if isinstance(node, ast.Import):
                 imports.extend(alias.name for alias in node.names
                                if alias.name in {
-                                   "dw_pmo.knowledge", "dw_pmo.knowledge_packet"
+                                   "dw_pmo.knowledge", "dw_pmo.knowledge_packet",
+                                   "dw_pmo.knowledge_writeback",
                                }
                                or alias.name.startswith("dw_pmo.knowledge."))
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
-                if module in {"knowledge", "knowledge_packet"} or module.endswith(
-                        (".knowledge", ".knowledge_packet")):
+                if module in {
+                    "knowledge", "knowledge_packet", "knowledge_writeback",
+                } or module.endswith((
+                    ".knowledge", ".knowledge_packet", ".knowledge_writeback",
+                )):
                     imports.append(module)
                 if module == "dw_pmo" and any(
-                        alias.name in {"knowledge", "knowledge_packet"}
+                        alias.name in {
+                            "knowledge", "knowledge_packet", "knowledge_writeback",
+                        }
                         for alias in node.names):
                     imports.append("dw_pmo.knowledge")
         store_reads = [needle for needle in (
@@ -499,6 +529,25 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
         ):
             self.assertNotIn("from .%s" % authority, source)
 
+    def test_writeback_adapter_cannot_import_authority_or_verdict_paths(self):
+        source = (LIB_DIR / "knowledge_writeback.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        imported = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if any(token in module for token in (
+                    "contract", "gate", "grant", "program_run", "program_verdict",
+                )):
+                    imported.append(module)
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if any(token in alias.name for token in (
+                        "contract", "gate", "grant", "program_run", "program_verdict",
+                    )):
+                        imported.append(alias.name)
+        self.assertEqual(imported, [])
+
     def test_derived_fact_computation_has_no_clock_or_random_input(self):
         sources = "\n".join((
             inspect.getsource(knowledge._derived_document),
@@ -529,7 +578,7 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
     def test_hook_payload_keeps_knowledge_modules_byte_identical(self):
         for name in (
             "grounding.py", "knowledge.py", "knowledge_packet.py",
-            "repository_map.py", "symbol_map.py",
+            "knowledge_writeback.py", "repository_map.py", "symbol_map.py",
         ):
             with self.subTest(module=name):
                 canonical = LIB_DIR / name

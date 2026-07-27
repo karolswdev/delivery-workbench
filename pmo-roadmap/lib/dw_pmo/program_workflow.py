@@ -37,7 +37,7 @@ NODE_TYPES = (
 PARAMETER_TYPES = ("string", "integer", "boolean", "string-list")
 ARTIFACT_KINDS = (
     "markdown", "json", "text", "git-diff", "directory", "verdict",
-    "decision", "mechanical-fact",
+    "decision", "mechanical-fact", "lesson",
 )
 ACTIVATIONS = ("success", "route")
 WORKSPACE_MODES = ("read-only", "isolated-worktree")
