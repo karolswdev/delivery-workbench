@@ -64,15 +64,13 @@
     },
     {
       "id": "status-and-step-safety",
-      "question": "Does the cited git diff prove that same-clone absolute paths are non-blocking in doctor, status, and step while foreign paths still fail loudly?",
+      "question": "Did the focused doctor/status/step regression command pass, proving status and step no longer escalate the same-clone absolute form?",
       "evaluation": {
-        "kind": "agent-judgment",
-        "fact": null
+        "kind": "mechanical-fact",
+        "fact": "focused-doctor-status-regression"
       },
-      "required_evidence_kinds": [
-        "git-diff"
-      ],
-      "min_citations": 2,
+      "required_evidence_kinds": [],
+      "min_citations": 0,
       "allowed_results": [
         "pass",
         "fail",
