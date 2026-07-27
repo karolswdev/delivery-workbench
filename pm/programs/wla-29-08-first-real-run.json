@@ -59,7 +59,7 @@
   "budgets": {
     "max_phases": 1,
     "max_stories": 1,
-    "max_child_runs": 1,
+    "max_child_runs": 6,
     "max_agent_starts": 6,
     "max_provider_starts": 6,
     "max_model_starts": 6,
