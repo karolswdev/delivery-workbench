@@ -2619,7 +2619,13 @@ def _workflow_node_action(
     action.update({
         "node_address": node_base,
         "workspace": node.get("workspace", role.get("packet_policy", {}).get("workspace", "read-only")),
-        "capabilities": list(node.get("capability_ceiling", [])),
+        # Workflow verdict/panel nodes cannot declare capability_ceiling (the
+        # compiler rejects the key), so their dispatch capabilities default to
+        # the same pair the built-in story-verification issuance uses.
+        "capabilities": (
+            list(node.get("capability_ceiling", []))
+            or (["agent:dispatch", "verdict:issue"] if kind == "verdict" else [])
+        ),
         "timeout_seconds": int(node.get("timeout_seconds", 900)),
         "outputs": list(node.get("outputs", [])),
         "inputs": [],
