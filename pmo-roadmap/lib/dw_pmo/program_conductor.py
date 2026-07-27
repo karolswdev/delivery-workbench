@@ -2600,7 +2600,7 @@ def _verdict_response_contract(
                     "citations": [{
                         "id": "<reply-local citation id>",
                         "evidence_id": "<id from this criterion evidence>",
-                        "locator": "<precise locator within the evidence>",
+                        "locator": "<compact-reference-eg-path/file.py:26-77-no-spaces>",
                         "hash": "<same hash as the cited evidence>",
                     }],
                     "rationale": (
@@ -2627,6 +2627,7 @@ def _verdict_response_contract(
             "Every criteria[i].evidence item must copy kind, hash, and ref verbatim from the supplied evidence list; add only a reply-local id.",
             "For each criterion include every required_evidence_kinds value and at least min_citations citations; each citation must name an evidence_id and repeat that evidence hash.",
             "For mechanical-fact criteria copy the matching fact_hash and result from mechanical_facts, set rationale to null, and do not substitute prose judgment.",
+            "Every citation locator must be a compact reference of at most 1024 characters using only letters, digits, and _.:/@#=+,- with no spaces, parentheses, or prose: use the form path/to/file.py:26-77 and put any explanation in the rationale instead.",
         ],
     }
 
