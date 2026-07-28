@@ -291,6 +291,20 @@ def _driver_after(root: Path, bindings: dict[str, object]) -> bytes:
             raise DwError("cannot parse local driver config: %s" % exc) from exc
     profiles = dict(raw.get("profiles") or {})
     for name, binding in sorted(bindings.items()):
+        existing = profiles.get(name)
+        if isinstance(existing, dict):
+            # An operator's full profile is local configuration the
+            # proposal may reference but never rewrite: verify the
+            # binding names the same execution identity and keep the
+            # profile untouched (capabilities, principal, and bounds
+            # stay exactly as the operator wrote them).
+            for field in ("adapter", "model", "provider"):
+                if existing.get(field) != binding[field]:
+                    raise DwError(
+                        "/local_content/driver_bindings/%s/%s: existing local "
+                        "profile disagrees with the proposal binding" % (name, field)
+                    )
+            continue
         profiles[name] = {
             "adapter": binding["adapter"],
             "model": binding["model"],

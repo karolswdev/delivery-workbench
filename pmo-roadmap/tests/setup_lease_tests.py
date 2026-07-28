@@ -144,6 +144,49 @@ class SetupLeaseTest(unittest.TestCase):
         roster = json.loads((self.root / ".git/pmo-orchestration/drivers.json").read_text(encoding="utf-8"))
         self.assertEqual(set(roster["profiles"]), {"implementer", "reviewer"})
 
+    def test_apply_preserves_existing_full_profiles_and_refuses_divergence(self):
+        # An operator's full local profile is configuration the proposal
+        # may reference but never rewrite (found by the WLA-30-10
+        # rehearsal: the first cut replaced full profiles with
+        # capability-less stubs, breaking role matching).
+        roster_path = self.root / ".git/pmo-orchestration/drivers.json"
+        first = preview_setup(self.root, self.proposal_path)
+        apply_setup(self.root, first["proposal_id"], first["expect"])
+        roster = json.loads(roster_path.read_text(encoding="utf-8"))
+        full = dict(next(iter(roster["profiles"].values())))
+        full.update({
+            "adapter": "fixture", "model": "review-model",
+            "provider": "fixture", "capabilities": ["repository-read"],
+        })
+        roster["profiles"]["seatful"] = full
+        roster_path.write_text(json.dumps(roster, sort_keys=True), encoding="utf-8")
+
+        referencing = copy.deepcopy(self.proposal)
+        referencing["source_intent"]["mode"] = "maintain"
+        referencing["tracked_content"]["roadmap"]["phases"][0]["number"] = 3
+        referencing["tracked_content"]["roadmap"]["phases"][0]["stories"][0]["id_sketch"] = "LD-3-01"
+        referencing["local_content"]["driver_bindings"] = {
+            "seatful": {
+                "adapter": "fixture", "model": "review-model", "provider": "fixture",
+                "provenance": provenance("repository-fact", "Existing local profile."),
+            }
+        }
+        path = self.root / "referencing.json"
+        path.write_text(json.dumps(referencing, sort_keys=True), encoding="utf-8")
+        preview = preview_setup(self.root, path)
+        apply_setup(self.root, preview["proposal_id"], preview["expect"])
+        after = json.loads(roster_path.read_text(encoding="utf-8"))
+        self.assertEqual(after["profiles"]["seatful"]["capabilities"], ["repository-read"])
+
+        divergent = copy.deepcopy(referencing)
+        divergent["tracked_content"]["roadmap"]["phases"][0]["number"] = 4
+        divergent["tracked_content"]["roadmap"]["phases"][0]["stories"][0]["id_sketch"] = "LD-4-01"
+        divergent["local_content"]["driver_bindings"]["seatful"]["model"] = "other-model"
+        path.write_text(json.dumps(divergent, sort_keys=True), encoding="utf-8")
+        with self.assertRaises(Exception) as refusal:
+            preview_setup(self.root, path)
+        self.assertIn("disagrees with the proposal binding", str(refusal.exception))
+
     def test_changed_head_refuses(self):
         def mutate():
             (self.root / "head-drift.txt").write_text("head\n", encoding="utf-8")
