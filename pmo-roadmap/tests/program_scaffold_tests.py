@@ -380,5 +380,78 @@ class ProgramScaffoldGoldenTest(ProgramScaffoldFixture):
         self.assertFalse(proposal["starts_work"])
 
 
+class ProgramScaffoldBaseProposalTest(ProgramScaffoldFixture):
+    """Build mode before the roadmap exists: scope against the draft.
+
+    The front-door journey scaffolds BEFORE `dw setup apply` creates the
+    roadmap, so the conversation's proposal is the only truthful roadmap
+    source; the scaffold embeds policy into it without editing it.
+    """
+
+    def base_proposal(self):
+        return json.loads(
+            (FIXTURES.parent / "scope-chat-build-proposal.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+    def base_answers(self):
+        base = self.base_proposal()
+        answers = self.fixture("greenfield-build.json")
+        answers["project"] = {
+            "slug": base["project"]["slug"],
+            "prefix": base["project"]["prefix"],
+            "title": base["project"]["title"],
+            "mode": "build",
+            "idea": base["source_intent"]["idea"],
+        }
+        answers["scope"] = {"phase_numbers": [1], "story_ids": ["PP-1-01"]}
+        return answers
+
+    def test_build_mode_scopes_against_the_base_proposal(self):
+        base = self.base_proposal()
+        proposal = scaffold_program(
+            self.root, self.base_answers(),
+            driver_config=self.roster, base_proposal=base,
+        )
+        self.assertEqual(
+            proposal["tracked_content"]["roadmap"], base["tracked_content"]["roadmap"],
+        )
+        self.assertEqual(proposal["state"], base["state"])
+        self.assertEqual(
+            proposal["unresolved_questions"], base["unresolved_questions"],
+        )
+        self.assertIn("program", proposal["tracked_content"]["policy"])
+        self.assertEqual(
+            sorted(proposal["local_content"]["driver_bindings"]),
+            ["claude-builder", "codex-reviewer"],
+        )
+
+    def test_scope_missing_from_base_and_identity_mismatch_refuse(self):
+        answers = self.base_answers()
+        answers["scope"]["story_ids"] = ["PP-1-99"]
+        with self.assertRaises(DwError) as missing:
+            scaffold_program(
+                self.root, answers,
+                driver_config=self.roster, base_proposal=self.base_proposal(),
+            )
+        self.assertIn("/scope/story_ids", str(missing.exception))
+
+        answers = self.base_answers()
+        answers["project"]["title"] = "Different Title"
+        with self.assertRaises(DwError) as mismatch:
+            scaffold_program(
+                self.root, answers,
+                driver_config=self.roster, base_proposal=self.base_proposal(),
+            )
+        self.assertIn("/project/title", str(mismatch.exception))
+
+    def test_build_mode_without_base_or_project_names_the_remedy(self):
+        answers = self.base_answers()
+        with self.assertRaises(DwError) as refusal:
+            scaffold_program(self.root, answers, driver_config=self.roster)
+        self.assertIn("--proposal", str(refusal.exception))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

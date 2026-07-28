@@ -536,7 +536,15 @@ def command_program_scaffold(args: argparse.Namespace) -> int:
     except OSError as exc:
         raise DwError(f"cannot read scaffold answers {args.answers}: {exc}") from exc
     answers = load_scaffold_answers(answers_text)
-    proposal = scaffold_program(args.root, answers)
+    base_proposal = None
+    if getattr(args, "proposal", None) is not None:
+        from dw_pmo.setup_proposal import load_proposal
+
+        try:
+            base_proposal = load_proposal(args.proposal.read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise DwError(f"cannot read base proposal {args.proposal}: {exc}") from exc
+    proposal = scaffold_program(args.root, answers, base_proposal=base_proposal)
     if args.json:
         print(json.dumps(proposal, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
     else:
@@ -2048,6 +2056,11 @@ def build_parser() -> argparse.ArgumentParser:
     program_scaffold.add_argument(
         "--answers", required=True, type=Path,
         help="closed scaffold answers JSON file",
+    )
+    program_scaffold.add_argument(
+        "--proposal", type=Path, default=None,
+        help="base setup proposal (the conversation's draft) to scope "
+        "against and embed policy into, before the roadmap exists",
     )
     program_scaffold.add_argument(
         "--json", action="store_true", help="emit canonical compact proposal JSON",

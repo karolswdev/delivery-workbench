@@ -18,6 +18,49 @@ from .setup_proposal import canonical_json as canonical_proposal_json
 from .setup_proposal import validate_proposal
 
 
+def _roadmap_from_base(
+    base: dict[str, object], answers: dict[str, object]
+) -> dict[str, object]:
+    """Scope-check the answers against the base proposal's own roadmap.
+
+    In build mode the roadmap does not exist in the repository yet — the
+    proposal is what will create it — so the conversation's draft is the
+    only truthful roadmap source. The scaffold never filters or edits
+    it; it only refuses scope selections the draft cannot satisfy.
+    """
+    scope = answers["scope"]
+    project_answer = answers["project"]
+    assert isinstance(scope, dict) and isinstance(project_answer, dict)
+    base_project = base["project"]
+    assert isinstance(base_project, dict)
+    for field in ("slug", "prefix", "title"):
+        if base_project[field] != project_answer[field]:
+            _refuse(
+                "/project/%s" % field,
+                "answers do not match the base proposal's project identity",
+            )
+    roadmap = base["tracked_content"]["roadmap"]  # type: ignore[index]
+    assert isinstance(roadmap, dict)
+    phases = roadmap["phases"]
+    assert isinstance(phases, list)
+    known_phases = {int(item["number"]) for item in phases}  # type: ignore[index]
+    known_stories = {
+        str(story["id_sketch"])  # type: ignore[index]
+        for item in phases
+        for story in item["stories"]  # type: ignore[index]
+    }
+    missing_phases = sorted(set(scope["phase_numbers"]) - known_phases)
+    if missing_phases:
+        _refuse("/scope/phase_numbers", "the base proposal does not contain selected phases")
+    missing = sorted(set(scope["story_ids"]) - known_stories)
+    if missing:
+        _refuse(
+            "/scope/story_ids",
+            "the base proposal does not contain: %s" % ", ".join(missing),
+        )
+    return copy.deepcopy(roadmap)
+
+
 ANSWERS_SCHEMA = "delivery-workbench-program-scaffold-answers@1"
 ANSWERS_KEYS = {
     "schema", "project", "scope", "profiles", "verification", "size",
@@ -327,7 +370,12 @@ def _roadmap_document(root: Path, answers: dict[str, object]) -> dict[str, objec
         if project.slug == project_answer["slug"]
     ]
     if len(matches) != 1:
-        _refuse("/project/slug", "repository facts do not resolve one roadmap project")
+        _refuse(
+            "/project/slug",
+            "repository facts do not resolve one roadmap project; before the "
+            "roadmap exists, pass the conversation's draft with --proposal "
+            "so the scaffold scopes against it",
+        )
     project = matches[0]
     selected_phases = set(scope["phase_numbers"])
     selected_stories = set(scope["story_ids"])
@@ -764,9 +812,13 @@ def scaffold_program(
     answers: object,
     *,
     driver_config: Optional[object] = None,
+    base_proposal: Optional[object] = None,
 ) -> dict[str, object]:
     """Return one validated, inert, unsaved setup proposal; write nothing."""
     normalized = normalize_scaffold_answers(answers)
+    validated_base: Optional[dict[str, object]] = (
+        validate_proposal(base_proposal) if base_proposal is not None else None
+    )
     config = (
         load_driver_config(root.resolve())
         if driver_config is None
@@ -848,24 +900,43 @@ def scaffold_program(
                 "repository-fact", "Validated local profile %s." % name,
             ),
         }
+    if validated_base is not None:
+        roadmap = _roadmap_from_base(validated_base, normalized)
+        base_bindings = validated_base["local_content"]["driver_bindings"]  # type: ignore[index]
+        assert isinstance(base_bindings, dict)
+        for name, binding in sorted(base_bindings.items()):
+            if name in driver_bindings and driver_bindings[name] != binding:
+                _refuse(
+                    "/profiles",
+                    "base proposal binds profile %r differently" % name,
+                )
+            driver_bindings.setdefault(name, copy.deepcopy(binding))
+        state = str(validated_base["state"])
+        unresolved = copy.deepcopy(validated_base["unresolved_questions"])
+        source_intent = copy.deepcopy(validated_base["source_intent"])
+    else:
+        roadmap = _roadmap_document(root.resolve(), normalized)
+        state = "draft"
+        unresolved = []
+        source_intent = {
+            "idea": project["idea"], "mode": project["mode"],
+            "provenance": _provenance("user-answer", "Scaffold project intent."),
+        }
     proposal = {
         "schema": PROPOSAL_SCHEMA,
-        "state": "draft",
+        "state": state,
         "project": {
             "slug": project["slug"], "prefix": project["prefix"],
             "title": project["title"],
             "provenance": _provenance("user-answer", "Scaffold project identity."),
         },
-        "source_intent": {
-            "idea": project["idea"], "mode": project["mode"],
-            "provenance": _provenance("user-answer", "Scaffold project intent."),
-        },
+        "source_intent": source_intent,
         "tracked_content": {
-            "roadmap": _roadmap_document(root.resolve(), normalized),
+            "roadmap": roadmap,
             "policy": policy,
         },
         "local_content": {"driver_bindings": driver_bindings},
-        "unresolved_questions": [],
+        "unresolved_questions": unresolved,
         "starts_work": False, "creates_grant": False,
         "certifies": False, "commits": False,
     }
@@ -875,6 +946,11 @@ def scaffold_program(
         "setup-proposal:/tracked_content/policy/program/document",
         driver_config=config,
         bundle_documents=_embedded_documents(policy),
+        roadmap_document=(
+            {"project": {"slug": project["slug"]}, "roadmap": roadmap}
+            if validated_base is not None
+            else None
+        ),
     )
     assert validation["valid"], "scaffold generated invalid bundle: %r" % validation["diagnostics"]
     simulation = simulate_scaffold_proposal(proposal)

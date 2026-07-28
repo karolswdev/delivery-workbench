@@ -573,6 +573,34 @@ def _project_story_inventory(project: object) -> list[dict[str, object]]:
     return stories
 
 
+def _proposed_story_inventory(roadmap: dict[str, object]) -> list[dict[str, object]]:
+    """Story rows for a proposal roadmap that has not been applied yet."""
+    stories: list[dict[str, object]] = []
+    for phase in roadmap.get("phases", []):
+        if not isinstance(phase, dict):
+            continue
+        for order, story in enumerate(phase.get("stories", [])):
+            if not isinstance(story, dict):
+                continue
+            stories.append({
+                "id": str(story.get("id_sketch", "")),
+                "title": str(story.get("title", "")),
+                "phase": int(phase.get("number", 0)),
+                "phase_slug": "proposed-phase-%s" % phase.get("number"),
+                "phase_status": "proposed",
+                "order": order,
+                "status": "backlog",
+                "status_raw": "backlog",
+                "story_path": "",
+                "dependencies": [
+                    str(item.get("id_sketch", ""))
+                    for item in story.get("dependencies", [])
+                    if isinstance(item, dict)
+                ],
+            })
+    return stories
+
+
 class _Compiler:
     def __init__(
         self,
@@ -581,11 +609,13 @@ class _Compiler:
         source: str = "program",
         *,
         bundle_documents: dict[str, object] | None = None,
+        roadmap_document: dict[str, object] | None = None,
     ) -> None:
         self.root = root.resolve()
         self.raw = raw
         self.source = source
         self.bundle_documents = bundle_documents
+        self.roadmap_document = roadmap_document
         self.diagnostics: list[dict[str, str]] = []
         self.bundle_diagnostics: list[dict[str, str]] = []
         self.references: dict[str, object] = {
@@ -596,6 +626,18 @@ class _Compiler:
         }
         self.project: object | None = None
         self.stories: list[dict[str, object]] = []
+
+    def _proposed_roadmap_inventory(self, project_slug: str):
+        document = self.roadmap_document
+        if document is None:
+            return None
+        project = document.get("project")
+        roadmap = document.get("roadmap")
+        if not isinstance(project, dict) or not isinstance(roadmap, dict):
+            return None
+        if project.get("slug") != project_slug:
+            return None
+        return project, _proposed_story_inventory(roadmap)
 
     def diag(
         self,
@@ -871,16 +913,27 @@ class _Compiler:
             self.diag("/scope/blocked_policy", "unsupported-blocked-policy", f"unsupported blocked policy {blocked!r}", "use stop")
             blocked = BLOCKED_POLICIES[0]
 
-        projects = [project for project in discover_projects(self.root) if project.slug == project_slug]
-        if len(projects) != 1:
-            self.diag("/scope/project", "scope-project-missing", f"roadmap project {project_slug!r} does not resolve uniquely", "choose one existing roadmap project")
-        else:
-            self.project = projects[0]
-            existing_phases = {phase.number for phase in discover_phases(projects[0])}
+        proposed = self._proposed_roadmap_inventory(project_slug)
+        if proposed is not None:
+            # A setup proposal's roadmap is the truthful source before
+            # `dw setup apply` creates it in the repository (WLA-30-07
+            # base-proposal scaffolding); scope resolves against it.
+            self.project, self.stories = proposed
+            existing_phases = {story["phase"] for story in self.stories}
             missing_phases = sorted(set(phases) - existing_phases)
             if missing_phases:
                 self.diag("/scope/phases", "invalid-phase-range", f"scope names missing phases: {', '.join(map(str, missing_phases))}", "use existing phase numbers")
-            self.stories = _project_story_inventory(projects[0])
+        else:
+            projects = [project for project in discover_projects(self.root) if project.slug == project_slug]
+            if len(projects) != 1:
+                self.diag("/scope/project", "scope-project-missing", f"roadmap project {project_slug!r} does not resolve uniquely", "choose one existing roadmap project")
+            else:
+                self.project = projects[0]
+                existing_phases = {phase.number for phase in discover_phases(projects[0])}
+                missing_phases = sorted(set(phases) - existing_phases)
+                if missing_phases:
+                    self.diag("/scope/phases", "invalid-phase-range", f"scope names missing phases: {', '.join(map(str, missing_phases))}", "use existing phase numbers")
+                self.stories = _project_story_inventory(projects[0])
 
         all_ids = {str(story["id"]) for story in self.stories}
         if stories != "all":
@@ -1906,9 +1959,11 @@ def validate_program(
     *,
     driver_config: object = _LOCAL_DRIVER_ROSTER,
     bundle_documents: dict[str, object] | None = None,
+    roadmap_document: dict[str, object] | None = None,
 ) -> dict[str, object]:
     compiler = _Compiler(
         root, program, source, bundle_documents=bundle_documents,
+        roadmap_document=roadmap_document,
     )
     normalized, diagnostics, analysis = compiler.compile()
     diagnostics.extend(compiler.bundle_diagnostics)
