@@ -95,7 +95,7 @@ changes who reaches the rails, never what the rails require.
   produces one inert, schema-valid, provenance-traced proposal through
   read surfaces only, ending at a workbench review location and the exact
   next preview command (WLA-30-03).
-- [ ] Setup is one deliberate act: a canonical hash-bound preview with a
+- [x] Setup is one deliberate act: a canonical hash-bound preview with a
   single-use lease, an apply that revalidates every observed fact and
   lands the whole setup atomically or not at all, and the legacy roadmap
   mutation paths brought under the same discipline (WLA-30-04).
@@ -135,7 +135,7 @@ changes who reaches the rails, never what the rails require.
 | WLA-30-01 | Contract the front-door journey | done | [story-01-contract-the-front-door-journey](./story-01-contract-the-front-door-journey.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-30-02 | Boot an empty directory | done | [story-02-boot-an-empty-directory](./story-02-boot-an-empty-directory.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-30-03 | Hold the scope conversation | backlog | [story-03-hold-the-scope-conversation](./story-03-hold-the-scope-conversation.md) | - |
-| WLA-30-04 | Make setup one deliberate act | backlog | [story-04-make-setup-one-deliberate-act](./story-04-make-setup-one-deliberate-act.md) | - |
+| WLA-30-04 | Make setup one deliberate act | done | [story-04-make-setup-one-deliberate-act](./story-04-make-setup-one-deliberate-act.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-30-05 | Review the adoption in the workbench | backlog | [story-05-review-the-adoption-in-the-workbench](./story-05-review-the-adoption-in-the-workbench.md) | - |
 | WLA-30-06 | Validate the whole bundle before runtime | done | [story-06-validate-the-whole-bundle-before-runtime](./story-06-validate-the-whole-bundle-before-runtime.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-30-07 | Scaffold a governed program | backlog | [story-07-scaffold-a-governed-program](./story-07-scaffold-a-governed-program.md) | - |
@@ -180,8 +180,17 @@ fixtures; the findings now live in their own channel — validate reports
 all of them, grant planning refuses unconductable node types, compile
 semantics are unchanged.
 
-Next: the atomic setup surface (04) lands off its worktree, then the
-conversation (03), then the workbench reviews (05, 08).
+WLA-30-04 is delivered: `dw setup preview`/`apply` make setup one
+deliberate act — a canonical change set with before/after hashes, one
+single-use `setup-sha256:` lease bound to repository, branch, HEAD,
+index, roadmap and policy trees, roster, and proposal; a journaled
+atomic apply with planted-failure rollback; typed non-substitutable
+setup vs. program tokens; public `dw adopt --apply` retired into the
+flow; CLI/MCP/HTTP byte-parity. The first approval of the phase promise
+now exists as machinery.
+
+Next: the conversation (03), then the workbench reviews (05, 08) and
+the scaffold (07) off their worktrees, then lessons (09) and the exam.
 
 ## Sequencing
 

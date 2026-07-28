@@ -761,6 +761,37 @@ def _program_http_integer(
 def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
     """POST routes: deliberate step, roadmap edits, and score content edits."""
     route = path.rstrip("/")
+    if route == "/api/setup/preview":
+        unknown = sorted(set(body) - {"proposal_file"})
+        if unknown:
+            return _error(400, "unknown setup preview parameter(s): %s" % ", ".join(unknown))
+        try:
+            proposal_file = body.get("proposal_file")
+            if not isinstance(proposal_file, str) or not proposal_file:
+                raise DwError("setup preview requires proposal_file")
+            from .setup_lease import preview_setup
+
+            return 200, envelope(preview_setup(root, Path(proposal_file)))
+        except DwError as err:
+            return _run_error(err)
+
+    if route == "/api/setup/apply":
+        unknown = sorted(set(body) - {"proposal", "expect"})
+        if unknown:
+            return _error(400, "unknown setup apply parameter(s): %s" % ", ".join(unknown))
+        try:
+            proposal = body.get("proposal")
+            expect = body.get("expect")
+            if not isinstance(proposal, str) or not proposal:
+                raise DwError("setup apply requires proposal")
+            if not isinstance(expect, str) or not expect:
+                raise DwError("setup apply requires expect")
+            from .setup_lease import apply_setup
+
+            return 200, envelope(apply_setup(root, proposal, expect))
+        except DwError as err:
+            return _run_error(err)
+
     if route == "/api/notifications/ack":
         from datetime import datetime, timezone as _tz
 

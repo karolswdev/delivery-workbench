@@ -9,6 +9,19 @@ single-sourced from `dw_pmo.__version__` (test-asserted against
 
 ## Unreleased
 
+Setup is now one deliberate act. `dw setup preview <proposal-file>` returns a
+canonical complete write set and an exact `setup-sha256:` lease bound to the
+repository, branch, HEAD, index, roadmap, policy, driver roster, proposal, and
+every before/after hash. `dw setup apply --proposal <id> --expect <token>`
+revalidates those facts, consumes the token once, and lands roadmap, program
+policy, and local driver bindings through a journaled transaction that rolls
+back every byte on failure. MCP and localhost HTTP expose the same core preview
+and apply documents. Setup still starts no work and creates no grant,
+certification, or commit; setup and program tokens are typed separately.
+Public `dw adopt --apply` is retired as the old unleased multi-file side door,
+while the existing read-only `dw setup [project]` view and single-file
+phase/story conveniences remain.
+
 Program validation now preflights the complete linked bundle before grant
 planning. It cross-checks rubric mechanical facts against reachable workflow
 producers, team and verifier requirements against finite budgets, compiler node

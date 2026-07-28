@@ -122,17 +122,19 @@ cd "$REPO"
 grep -q 'EA-0-01' "$TMP_ROOT/adopt-preview.txt" || fail "preview should list the stories"
 [ ! -d pm/roadmap/existing-app/phase-0-stabilize-build ] \
   || fail "preview must not create files"
-.githooks/dw adopt --from-report "$REPORT" --apply >/dev/null 2>&1 \
-  || fail "dw adopt --apply failed"
-[ -f pm/roadmap/existing-app/phase-0-stabilize-build/story-01-fix-the-flaky-suite.md ] \
-  || fail "apply should scaffold the stories"
-.githooks/dw check existing-app >/dev/null || fail "adopted roadmap should pass dw check"
-.githooks/dw doctor >/dev/null || fail "three-command adoption should end with a healthy doctor"
+if .githooks/dw adopt --from-report "$REPORT" --apply \
+  >/dev/null 2>"$TMP_ROOT/adopt-apply-err.txt"; then
+  fail "dw adopt --apply should be retired in favor of setup leases"
+fi
+grep -q 'dw setup preview' "$TMP_ROOT/adopt-apply-err.txt" \
+  || fail "retired adopt apply should point to setup preview/apply"
+[ ! -d pm/roadmap/existing-app/phase-0-stabilize-build ] \
+  || fail "retired adopt apply must not scaffold files"
 
 # Malformed report: line-numbered refusal, no partial scaffold.
 sed 's/| EA-1-01 | Ship the slice | demo capture | - |/| EA-9-01 | Ship the slice | demo capture | - |/' \
   "$REPORT" > "$TMP_ROOT/bad-report.md"
-if .githooks/dw adopt --from-report "$TMP_ROOT/bad-report.md" --project existing-app2 --apply \
+if .githooks/dw adopt --from-report "$TMP_ROOT/bad-report.md" --project existing-app2 \
   >/dev/null 2>"$TMP_ROOT/adopt-err.txt"; then
   fail "malformed report should be refused"
 fi

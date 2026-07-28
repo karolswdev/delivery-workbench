@@ -873,22 +873,24 @@ pm/roadmap/myproject/adoption/adoption-discovery.md
 ```
 
 Its "Proposed Phase Index" and "Proposed First Stories" tables are
-machine-consumed — close the loop with the third command:
+machine-consumed by the read-only adoption preview. Multi-file setup no longer
+writes through `dw adopt --apply`; turn the reviewed discovery into a
+`delivery-workbench-setup-proposal@1` document, then use the guarded setup
+lease:
 
-<!-- snippet: adopt-close-loop prep=report -->
 ```bash
 cd /path/to/target-project
 .githooks/dw adopt --from-report pm/roadmap/myproject/adoption/adoption-discovery.md
-.githooks/dw adopt --from-report pm/roadmap/myproject/adoption/adoption-discovery.md --apply
+.githooks/dw setup preview /path/to/reviewed-setup-proposal.json
+.githooks/dw setup apply --proposal 'setup:…' --expect 'setup-sha256:…'
 .githooks/dw doctor
 ```
 
-`dw adopt` previews the exact files it will create (project README if
-missing, phase folders, story stubs) and writes nothing until
-`--apply`; malformed tables are refused with line-numbered errors, not
-partial scaffolds. Finish with `dw doctor` to prove the rails are live,
-then pick up work with `dw next`. The whole adoption is three commands:
-install → intake+discovery → adopt.
+`dw adopt` still validates the report and previews the phase/story scaffold,
+with line-numbered refusals for malformed tables. `dw setup preview` validates
+the closed proposal and binds every roadmap, policy, and local-driver write to
+one exact token; `dw setup apply` revalidates and lands all of it or none of it.
+Finish with `dw doctor`, then pick up work with `dw next`.
 
 ## Roadmap Lifecycle
 

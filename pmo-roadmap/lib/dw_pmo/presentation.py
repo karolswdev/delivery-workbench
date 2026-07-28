@@ -136,8 +136,8 @@ CLI_HELP = {
         "named coverage gaps; starts and authorizes no work"
     ),
     "setup": (
-        "compare ordinary work, one bounded delivery, and an optional "
-        "delivery program without starting work"
+        "compare delivery modes, or preview/apply one reviewed setup proposal "
+        "under an exact atomic lease; setup never starts work"
     ),
     "step": (
         "review or apply only the current next step; exact confirmation "

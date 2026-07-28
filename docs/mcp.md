@@ -176,6 +176,8 @@ Certification, commit, push, release, and deploy remain permanently absent.
 | Tool | Core function | Input schema |
 |---|---|---|
 | `dw_step_apply` | `step.apply_step` | `{expect: string, project?: string}` — consumes one exact preview token, starts at most its closed-table child, and returns `delivery-workbench-step-result` v1; no command/argv field, certification, commit, or continuation |
+| `dw_setup_preview` | `setup_lease.preview_setup` | `{proposal_file: string}` — validates one reviewed inert proposal and returns every before/after hash plus one typed setup lease; writes no tracked content and starts nothing |
+| `dw_setup_apply` | `setup_lease.apply_setup` | `{proposal: string, expect: string}` — revalidates and atomically applies only the pending setup plan; creates no grant, run, certification, or commit |
 | `dw_story_status` | `mutations.plan_story_status` + `mutations.apply_plan` | `{project: string, phase: string|number, story: string|number, status: string}` (required) — same transactional header+table write, same refusal of done-without-evidence |
 | `dw_evidence_capture` | `evidence.run_capture` | `{project, phase, story, command: string[], cwd?: string}` (required except cwd) — command is an argv array, executed exactly as `dw evidence capture -- …`; output recorded with the shared renderer and its truncation bounds |
 | `dw_contract_new` | `contract.build_contract` + `contract.write_contract` | `{story?: string[], consent?: "yes"|"no", reasons?: string[], tests_capture?: string, tier?: "auto"|"full"|"short", force?: boolean}` — result text states plainly: certification happens by editing `.tmp/CONTRACT.md`, and no tool does it |

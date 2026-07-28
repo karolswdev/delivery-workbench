@@ -178,6 +178,15 @@ from .delivery_setup import (
     render_delivery_setup,
     render_delivery_setup_pointer,
 )
+from .setup_lease import (
+    SETUP_APPLY_KIND,
+    SETUP_PREVIEW_KIND,
+    SETUP_SCHEMA_VERSION,
+    apply_setup,
+    build_setup_plan,
+    canonical_setup_preview,
+    preview_setup,
+)
 from .presentation import (
     CLI_HELP,
     PRESENTATION_KIND,

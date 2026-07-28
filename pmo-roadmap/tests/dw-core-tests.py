@@ -58,6 +58,7 @@ from setup_proposal_tests import (
     SetupProposalFitnessTest,
     SetupProposalJourneyTest,
 )
+from setup_lease_tests import SetupLeaseTest
 
 
 README = """# Demo - Roadmap
@@ -144,13 +145,15 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 13,
-            "only deliberate-step, guarded roadmap/score/Studio edits, run "
+            len(post_routes), 15,
+            "only deliberate-step, guarded setup/roadmap/score/Studio edits, run "
             "preview/start, program grant preview/start/plan, and the receipted "
             "notification ack use direct POST equality routes; "
             f"found: {post_routes}",
         )
         self.assertTrue(any('/api/step/apply' in line for line in post_routes))
+        self.assertTrue(any('/api/setup/preview' in line for line in post_routes))
+        self.assertTrue(any('/api/setup/apply' in line for line in post_routes))
         self.assertTrue(any('/api/mutations/preview' in line for line in post_routes))
         self.assertTrue(any('/api/mutations/apply' in line for line in post_routes))
         self.assertTrue(any('/api/orchestration/preview' in line for line in post_routes))
@@ -1622,6 +1625,7 @@ class DwCoreTest(unittest.TestCase):
             post_routes,
             {
                 "/api/step/apply",
+                "/api/setup/preview", "/api/setup/apply",
                 "/api/mutations/preview", "/api/mutations/apply",
                 "/api/orchestration/preview", "/api/orchestration/apply",
                 "/api/program-studio/preview", "/api/program-studio/apply",
@@ -2887,7 +2891,7 @@ class MCPServerTest(unittest.TestCase):
         tools = self.rpc("tools/list")["result"]["tools"]
         names = [t["name"] for t in tools]
         self.assertEqual(names, [
-            "dw_status", "dw_knowledge_map", "dw_knowledge_ground", "dw_knowledge_lessons", "dw_step", "dw_step_apply", "dw_context", "dw_next",
+            "dw_status", "dw_knowledge_map", "dw_knowledge_ground", "dw_knowledge_lessons", "dw_step", "dw_step_apply", "dw_setup_preview", "dw_setup_apply", "dw_context", "dw_next",
             "dw_check", "dw_doctor",
             "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",

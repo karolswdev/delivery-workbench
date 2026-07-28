@@ -144,7 +144,7 @@ assert init["serverInfo"]["name"] == "delivery-workbench", init
 
 names = [t["name"] for t in replies[2]["result"]["tools"]]
 expected = [
-    "dw_status", "dw_step", "dw_step_apply", "dw_context", "dw_next",
+    "dw_status", "dw_step", "dw_step_apply", "dw_setup_preview", "dw_setup_apply", "dw_context", "dw_next",
     "dw_check", "dw_doctor", "dw_verify", "dw_gate",
 ]
 for name in expected:

@@ -101,6 +101,21 @@ def _tool_step_apply(root: Path, args: dict) -> tuple[str, dict]:
     )
     return json.dumps(payload, sort_keys=True), payload
 
+
+def _tool_setup_preview(root: Path, args: dict) -> tuple[str, dict]:
+    from .setup_lease import canonical_setup_preview, preview_setup
+
+    payload = preview_setup(root, Path(str(args["proposal_file"])))
+    return canonical_setup_preview(payload), payload
+
+
+def _tool_setup_apply(root: Path, args: dict) -> tuple[str, dict]:
+    from .setup_lease import apply_setup
+
+    payload = apply_setup(root, str(args["proposal"]), str(args["expect"]))
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False), payload
+
+
 def _tool_context(root: Path, args: dict) -> tuple[str, dict]:
     from .api import build_context_payload
     from .parse import discover_projects, get_project
@@ -801,6 +816,42 @@ TOOLS: dict[str, dict] = {
             "additionalProperties": False,
         },
         "handler": _tool_step_apply,
+    },
+    "dw_setup_preview": {
+        "description": (
+            "Validate one inert setup proposal and preview every tracked and local "
+            "write with hashes plus one exact single-use setup lease. Writes no "
+            "tracked content and starts no work. Adapter over dw_pmo.setup_lease.preview_setup."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "proposal_file": {
+                    "type": "string",
+                    "description": "Path to a delivery-workbench-setup-proposal@1 JSON file",
+                }
+            },
+            "required": ["proposal_file"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_setup_preview,
+    },
+    "dw_setup_apply": {
+        "description": (
+            "Apply one pending setup proposal atomically under its exact setup token. "
+            "Accepts only proposal identity and expect; creates no grant, run, "
+            "certification, or commit. Adapter over dw_pmo.setup_lease.apply_setup."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "proposal": {"type": "string", "description": "Exact setup proposal id from preview"},
+                "expect": {"type": "string", "description": "Exact setup-sha256 token from preview"},
+            },
+            "required": ["proposal", "expect"],
+            "additionalProperties": False,
+        },
+        "handler": _tool_setup_apply,
     },
     "dw_context": {
         "description": (

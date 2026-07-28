@@ -38,6 +38,7 @@ try:
         __version__ as DW_VERSION,
         append_trailers,
         apply_plan,
+        apply_setup,
         apply_program_act,
         apply_run_act,
         apply_step,
@@ -58,6 +59,7 @@ try:
         ground_project_story,
         grounding_warnings,
         build_delivery_setup,
+        preview_setup,
         build_action_presentation,
         build_live_presentation,
         build_lesson_inventory,
@@ -1376,6 +1378,8 @@ def command_agent_docs(args: argparse.Namespace) -> int:
 
 
 def command_adopt(args: argparse.Namespace) -> int:
+    if args.apply:
+        die("dw adopt --apply is retired; create a reviewed setup proposal, then use 'dw setup preview <proposal-file>' and 'dw setup apply --proposal <id> --expect <token>'")
     result = run_adoption(
         args.root,
         args.from_report,
@@ -1450,7 +1454,25 @@ def command_knowledge_lessons(args: argparse.Namespace) -> int:
 
 
 def command_setup(args: argparse.Namespace) -> int:
-    setup = build_delivery_setup(args.root, args.project)
+    setup_args = list(args.setup_args)
+    if setup_args and setup_args[0] == "preview":
+        if len(setup_args) != 2 or args.proposal or args.expect or args.technical:
+            die("usage: dw setup preview <proposal-file>")
+        preview = preview_setup(args.root, Path(setup_args[1]))
+        print(json.dumps(preview, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+        return 0
+    if setup_args and setup_args[0] == "apply":
+        if len(setup_args) != 1 or not args.proposal or not args.expect or args.technical:
+            die("usage: dw setup apply --proposal <id> --expect <setup-token>")
+        result = apply_setup(args.root, args.proposal, args.expect)
+        print(json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+        return 0
+    if args.proposal or args.expect:
+        die("--proposal and --expect are only valid with 'dw setup apply'")
+    if len(setup_args) > 1:
+        die("usage: dw setup [project] [--technical]")
+    project = setup_args[0] if setup_args else None
+    setup = build_delivery_setup(args.root, project)
     print(render_delivery_setup(setup, technical=args.technical), end="")
     return 0 if setup["readiness"] == "ready" else 1
 
@@ -1819,10 +1841,12 @@ def build_parser() -> argparse.ArgumentParser:
         description=help_text("setup"),
     )
     setup.add_argument(
-        "project",
-        nargs="?",
-        help="roadmap project whose delivery scope is being considered",
+        "setup_args",
+        nargs="*",
+        help="legacy project slug, or reserved preview/apply subverb arguments",
     )
+    setup.add_argument("--proposal", help="proposal id from a setup preview")
+    setup.add_argument("--expect", help="exact single-use setup token from a preview")
     setup.add_argument(
         "--technical",
         action="store_true",

@@ -234,6 +234,8 @@ or provider argv.
 | `GET /api/delivery-setup?project=<slug>` | `delivery_setup.build_delivery_setup` | pure application view over status, delivery-plan inventory, and optional-program inventory: delivery scope, all three choices, effects, remaining permission, corrections, and technical sources |
 | `GET /api/step?project=<slug>` | `step.build_step` | the stamped pure preview in `data` |
 | `POST /api/step/apply` | `step.apply_step` | exact stamped result in `data`; 409 for a non-started refusal |
+| `POST /api/setup/preview` | `setup_lease.preview_setup` | canonical complete tracked/local change set and one typed setup lease in `data`; no tracked write or work start |
+| `POST /api/setup/apply` | `setup_lease.apply_setup` | exact proposal id plus setup token only; revalidated journaled all-or-nothing setup in `data` |
 | `GET /api/orchestration` | `orchestration.score_inventory` | contained score inventory with validity and hashes; pure |
 | `GET /api/orchestration/<score>` | shared compiler | raw score plus validation, compiled model, and simulation; pure |
 | `GET /api/orchestration/<score>/compiled` | `orchestration.compile_score_path` | byte-identical compiled score in `data` |
@@ -301,7 +303,7 @@ this is the inventory. Read-only: `dw_status`, `dw_knowledge_map`,
 `dw_program_preview`, `dw_program_tail`,
 `dw_run_plan`, `dw_run_list`, `dw_run_show`, `dw_run_view`, and
 `dw_run_preview`.
-Exact-token actions: `dw_step_apply`, `dw_program_start`, `dw_program_tick`,
+Setup lease tools: `dw_setup_preview` validates a reviewed proposal and records only its pending Git-local lease; `dw_setup_apply` accepts only that proposal id and exact typed token, then lands the complete setup atomically. Exact-token actions: `dw_step_apply`, `dw_program_start`, `dw_program_tick`,
 `dw_program_supervise`, `dw_program_request`, `dw_program_pause`,
 `dw_program_resume`, `dw_program_revoke`, `dw_program_cancel`,
 `dw_run_start`, `dw_run_tick`,

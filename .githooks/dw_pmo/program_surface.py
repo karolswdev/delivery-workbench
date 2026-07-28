@@ -111,6 +111,8 @@ def start_program_by_id(
     now: str | datetime | None = None,
 ) -> dict[str, object]:
     """Rebuild and consume one grant plan from ids and reviewed scalar facts."""
+    if str(expect or "").startswith("setup-sha256:"):
+        raise DwError("wrong token type: program start requires a program start token, not a setup token")
     plan = build_program_start_plan(
         root,
         program,

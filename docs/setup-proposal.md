@@ -269,6 +269,58 @@ Validation fails closed for:
 The validator reports the first deterministic refusal. It never repairs,
 defaults, truncates, selects, saves, or authorizes a proposal.
 
+## Guarded setup lease
+
+A reviewed proposal reaches canon only through one guarded setup act. The CLI
+signatures are:
+
+```text
+dw setup preview <proposal-file>
+dw setup apply --proposal <setup:id> --expect <setup-sha256:token>
+```
+
+`preview` validates the proposal with the contract above and computes the full
+write set before it creates a pending lease record under the repository's Git
+directory. The returned `delivery-workbench-setup-preview@1`-shaped document is
+canonical JSON with sorted keys and compact separators. It lists every tracked
+roadmap and policy path plus the Git-local driver roster, with an explicit
+`null` before-hash for an absent file and a SHA-256 after-hash. The same core
+document is returned by MCP `dw_setup_preview` and HTTP
+`POST /api/setup/preview`.
+
+A setup token is bound to the repository identity, branch, HEAD, exact staged
+index contents, complete observed roadmap and policy trees, driver-roster hash,
+every target before/after hash, the proposal's canonical hash, and the current
+setup-claim generation. The token begins `setup-sha256:`. Program-start and
+step tokens are different token types and cannot be substituted. Preview writes
+no tracked content, starts no process, and keeps all four inertness fields
+false.
+
+`apply` accepts only the proposal ID and exact token. It loads the pending plan,
+re-observes every bound fact, and refuses unknown IDs, wrong token types, drift,
+or reuse before changing a target. A successful apply exclusively consumes the
+token, temp-writes and renames the complete tracked-and-local set under a
+recoverable journal, and advances `reviewed` to `configured` through
+`transition_state`. If any rename fails, rollback restores every prior byte and
+removes every newly created path. Apply creates no grant, run, contract, or
+commit and invokes no child process.
+
+The transport signatures mirror the same core:
+
+- MCP `dw_setup_preview({"proposal_file": "..."})` and
+  `dw_setup_apply({"proposal": "setup:...", "expect": "setup-sha256:..."})`;
+- HTTP `POST /api/setup/preview` with only `proposal_file`, and
+  `POST /api/setup/apply` with only `proposal` and `expect`.
+
+The older `dw setup [project] [--technical]` delivery-choice view remains
+read-only. `preview` and `apply` are reserved setup subverbs and cannot be
+project slugs in a setup proposal. Public `dw adopt --apply` is retired because
+it was an unleased multi-file write; adoption parsing and phase/story planning
+remain internal building blocks. `dw phase create` and `dw story create` remain
+single-file operator conveniences. They already use the shared `plan_*` then
+`apply_plan` primitives, so roadmap writes still have one planned, stale-checked,
+rollback-capable implementation path rather than a second writer.
+
 ## What a proposal can never do
 
 A proposal or proposal-shaped preview can never:

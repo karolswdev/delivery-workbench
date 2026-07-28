@@ -413,6 +413,8 @@ def validate_proposal(proposal: object) -> Dict[str, Any]:
 
     project = _exact_object(raw["project"], _PROJECT_KEYS, "/project")
     _bounded_string(project["slug"], "/project/slug", MAX_ID, pattern=_SAFE_SLUG_RE)
+    if project["slug"] in {"preview", "apply"}:
+        _refuse("/project/slug", "preview and apply are reserved setup subverbs")
     _bounded_string(
         project["prefix"], "/project/prefix", MAX_PREFIX, pattern=_SAFE_PREFIX_RE
     )
