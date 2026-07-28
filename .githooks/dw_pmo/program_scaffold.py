@@ -560,7 +560,7 @@ def _organization(slug: str, answers: dict[str, object]) -> dict[str, object]:
             },
             "artifacts": {
                 "read": ["markdown", "json", "text", "git-diff", "mechanical-fact", "verdict"],
-                "write": ["git-diff", "markdown", "json", "text"] if duty == "implementer" else ["verdict"],
+                "write": ["git-diff", "markdown", "json", "text", "lesson"] if duty == "implementer" else ["verdict"],
                 "max_bytes": 10_000_000,
             },
             "output_schema": "delivery-workbench-implementation-output@1" if duty == "implementer" else None,
@@ -634,13 +634,31 @@ def _workflow(slug: str, answers: dict[str, object], initial_rubric: str, repair
     repair_checks = _check_specs(answers, "-after-repair")
     nodes: list[dict[str, object]] = [{
         "id": "implement", "type": "agent", "role": "implementer",
-        "task": "Implement only the supplied story. Do not edit roadmap status or evidence, certify, commit, push, merge, release, deploy, or publish.",
+        "task": (
+            "Implement only the supplied story. Do not edit roadmap status "
+            "or evidence, certify, commit, push, merge, release, deploy, or "
+            "publish. Also write the optional lesson output: one JSON "
+            "document {\"kind\": \"delivery-workbench-lesson-output\", "
+            "\"schema_version\": 1, \"lessons\": [{\"claim\": <one bounded "
+            "sentence a future implementer of this repository should know>, "
+            "\"locations\": [<file or file:symbol references>], "
+            "\"confidence\": \"low\"|\"medium\"|\"high\", "
+            "\"supersedes\": \"\"}]} with at most three lessons."
+        ),
         "workspace": "isolated-worktree",
         "capability_ceiling": ["agent:dispatch", "workspace:write"],
         "timeout_seconds": 900 * COMPLEXITY_WEIGHTS[str(size["complexity"])],
         "max_attempts": 1,
         "inputs": {"story": {"kind": "parameter", "name": "story-id"}},
-        "outputs": [{"id": "candidate", "kind": "git-diff", "max_bytes": 2_000_000}],
+        "outputs": [
+            {"id": "candidate", "kind": "git-diff", "max_bytes": 2_000_000},
+            # The safest generated run still learns (WLA-30-09): the
+            # implementer leaves bounded lessons that persist at the
+            # certified handoff. Declared outputs are mandatory by the
+            # conductor's materialization contract, so the task text
+            # spells out the exact document shape.
+            {"id": "lesson", "kind": "lesson", "max_bytes": 16_384},
+        ],
         "on_failure": {"kind": "action", "target": "block"},
     }]
     for spec in initial_checks:
