@@ -121,7 +121,7 @@ changes who reaches the rails, never what the rails require.
   the safest runs still leave bounded, delivery-state-labeled lessons that
   later knowledge packets retrieve — with lessons still unable to satisfy
   any gate, verdict, or grant prerequisite (WLA-30-09).
-- [ ] The empty-directory exam passes on a release-candidate wheel: one
+- [x] The empty-directory exam passes on a release-candidate wheel: one
   command, one conversation, three approvals, a live cross-provider
   program delivering a real first story to certified handoff within two
   grants, a lesson retrieved by a second pass, manual certification and
@@ -141,7 +141,7 @@ changes who reaches the rails, never what the rails require.
 | WLA-30-07 | Scaffold a governed program | done | [story-07-scaffold-a-governed-program](./story-07-scaffold-a-governed-program.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-30-08 | Review the generated program in Studio | done | [story-08-review-the-generated-program-in-studio](./story-08-review-the-generated-program-in-studio.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-30-09 | Let the safest runs leave lessons | done | [story-09-let-the-safest-runs-leave-lessons](./story-09-let-the-safest-runs-leave-lessons.md) | [evidence-story-09](./evidence-story-09.md) |
-| WLA-30-10 | Pass the empty-directory exam | backlog | [story-10-pass-the-empty-directory-exam](./story-10-pass-the-empty-directory-exam.md) | - |
+| WLA-30-10 | Pass the empty-directory exam | done | [story-10-pass-the-empty-directory-exam](./story-10-pass-the-empty-directory-exam.md) | [evidence-story-10](./evidence-story-10.md) |
 
 ## Where we are
 
@@ -228,6 +228,19 @@ read-only, HTTP/CLI plan facts shared. Landing it surfaced and fixed
 the build-mode scaffold gap (`dw program scaffold --proposal`, rider
 commit) — the composed front half now runs on a fresh `dw init` site
 end to end: init → scaffold-from-draft → review → preview lease.
+
+WLA-30-10 is delivered — the phase's exit exam passed on attempt 5:
+one command, one conversation, three approvals, a live cross-provider
+program delivering URL Sentinel's first story to certified handoff on
+ONE grant, a persisted lesson retrieved by the second grounded packet,
+manual certification and commit, `dw verify` green, and a cold-install
+repetition. Attempts 1-4 each forced a shipped product fix (conductable
+check vocabulary + builtin parity diagnostic, pass-to-terminal routing,
+the write-mode output channel, deterministic JSON response tolerance,
+and red-aggregate route normalization) — and attempt 4's second grant
+blocked honestly on a real introduced-test-failure, the phase-29 hard
+rule working on live bad code. Campaign ledger: 8 grants over five
+attempts versus Phase 29's 13 for one story.
 
 WLA-30-08 is delivered: Program Studio opens the generated bundle as
 one linked object behind `#/program-studio/bundle` — scope, seats and
