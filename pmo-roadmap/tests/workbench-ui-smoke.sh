@@ -48,6 +48,7 @@ run = app[app.index("function runStateBadge"):app.index("/* ── optional Prog
 program = app[app.index("/* ── autonomous program control room"):app.index("/* ── optional Program / Workflow Studio")]
 setup = app[app.index("delivery-shaped front door"):app.index("optional Program / Workflow Studio")]
 studio = app[app.index("optional Program / Workflow Studio"):app.index("/* ── router")]
+adoption = app[app.index("const adoptionReviewMarks"):app.index("const STATUS_VOCAB")]
 assert "data-argv-index" in action and "manual act" in action
 assert "<button" not in action and "JSON.stringify" not in action
 for token in ("step-review", "step-confirm", "step-apply", "step-cancel",
@@ -128,6 +129,18 @@ for token in ("/api/delivery-setup", "What are you delivering?",
     assert token in setup, token
 for forbidden in ("postJson", "localStorage", "EventSource", "setInterval"):
     assert forbidden not in setup, forbidden
+for token in ("Review adoption proposal", "Unresolved assumptions",
+              "model.configuration.label", "Files this setup would save",
+              "Accepted for preview", "Reject with corrections", "Correction packet",
+              "dw setup preview", "/api/setup/review", "Technical details",
+              "Review only.", "adoptionReviewMarks", "captureAppFocus"):
+    assert token in adoption, token
+for forbidden in ("postJson", "localStorage", "sessionStorage", "EventSource", "setInterval"):
+    assert forbidden not in adoption, forbidden
+for token in (".adoption-review", ".adoption-unresolved", ".adoption-configuration",
+              ".adoption-path-split", ".adoption-correction-form",
+              "@media (prefers-color-scheme: light)", "@media (max-width: 600px)"):
+    assert token in css, token
 for token in (".delivery-choice-grid", ".delivery-effect-grid",
               "scroll-snap-type: x mandatory", ".delivery-review-actions button:focus"):
     assert token in css, token
@@ -282,6 +295,68 @@ for path, document in zip(sys.argv[1:], (repair, terminal, decision)):
         json.dump(document, handle, indent=2)
         handle.write("\n")
 PY
+python3 - "$REPO" <<'PY'
+import copy
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+provenance = lambda kind, note: {"kind": kind, "source_note": note}
+text = lambda value, kind="user-answer": {
+    "text": value, "provenance": provenance(kind, "Recorded during setup review."),
+}
+
+def proposal(slug, prefix, title, mode="build"):
+    return {
+        "schema": "delivery-workbench-setup-proposal@1", "state": "reviewed",
+        "project": {"slug": slug, "prefix": prefix, "title": title,
+                    "provenance": provenance("user-answer", "The operator named the project.")},
+        "source_intent": {"idea": "Make setup understandable before any files are saved.",
+                          "mode": mode,
+                          "provenance": provenance("user-answer", "The opening setup answer.")},
+        "tracked_content": {"roadmap": {"phases": [{
+            "number": 2, "title": "First proof", "goal": "Prove one useful path end to end.",
+            "provenance": provenance("recommendation", "Suggested as the smallest useful phase."),
+            "stories": [{"id_sketch": f"{prefix}-2-01", "title": "Prove the first path",
+                "problem": "The useful path has not been proven yet.",
+                "scope_in": [text("Build the bounded first path.")],
+                "scope_out": [text("Hosted operation stays out.", "recommendation")],
+                "acceptance_criteria": [text("A focused check proves the path.")],
+                "dependencies": [],
+                "provenance": provenance("recommendation", "Suggested first proof.")}]
+        }], "exit_criteria": [text("The first path is reviewable.", "recommendation")]},
+        "policy": None},
+        "local_content": {"driver_bindings": {"implementer": {
+            "adapter": "fixture", "model": "fixture-model", "provider": "fixture",
+            "provenance": provenance("repository-fact", "The local fixture profile is available.")}}},
+        "unresolved_questions": [], "starts_work": False, "creates_grant": False,
+        "certifies": False, "commits": False,
+    }
+
+fixtures = root / "setup-review-fixtures"
+fixtures.mkdir()
+green = proposal("green-review", "GR", "Greenfield review")
+wrapper = lambda slug: {"document": {"slug": slug, "kind": "fixture-policy", "schema_version": 1},
+                        "provenance": provenance("recommendation", "Generated for review.")}
+green["tracked_content"]["policy"] = {
+    "program": wrapper("green-program"), "workflows": [wrapper("green-workflow")],
+    "organization": wrapper("green-team"), "rubrics": [wrapper("green-review")],
+    "provenance": provenance("recommendation", "Optional bounded delivery was requested."),
+}
+existing = proposal("sample", "SMP", "Sample", "maintain")
+unresolved = proposal("questions-review", "QR", "Questions review")
+unresolved["unresolved_questions"] = [
+    {"question": "Who owns the first review?", "provenance": provenance("user-answer", "No owner was named.")},
+    {"question": "Which deployment target comes later?", "provenance": provenance("recommendation", "The idea did not choose one.")},
+    {"question": "What is the first cost ceiling?", "provenance": provenance("repository-fact", "No budget policy exists yet.")},
+]
+invalid = copy.deepcopy(green)
+del invalid["project"]["title"]
+for name, value in (("greenfield", green), ("existing", existing),
+                    ("unresolved-heavy", unresolved), ("invalid", invalid)):
+    (fixtures / f"{name}.json").write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+PY
 git -C "$REPO" add .
 git -C "$REPO" -c core.hooksPath=/dev/null commit -q -m "UI run fixtures"
 PYTHONPATH="$REPO/.githooks" python3 - "$REPO" <<'PY'
@@ -376,6 +451,10 @@ shot "program-studio-empty-desktop" 1440,900 "$BASE/?snapshot=1#/program-studio"
 shot "program-studio-empty-mobile" 390,844 "$BASE/?snapshot=1#/program-studio"
 shot "delivery-setup-review-desktop" 1440,900 "$BASE/?snapshot=1&setupmode=program&setuptechnical=1#/program-studio"
 shot "delivery-setup-review-mobile" 390,844 "$BASE/?snapshot=1&setupmode=program&setuptechnical=1#/program-studio"
+for state in greenfield existing unresolved-heavy invalid; do
+  shot "adoption-review-$state-desktop" 1440,900 "$BASE/?snapshot=1&proposal=setup-review-fixtures/$state.json#/edit/adoption_review"
+  shot "adoption-review-$state-mobile" 390,844 "$BASE/?snapshot=1&proposal=setup-review-fixtures/$state.json#/edit/adoption_review"
+done
 
 # Explicitly adopt rich tracked fixtures only after the empty-state capture.
 # The server reads policy live; authoring these files does not create a grant or
@@ -672,4 +751,4 @@ python3 "$SCRIPT_DIR/workbench-accessibility.py" \
   --program-certified "$PROGRAM_CERTIFIED" \
   || fail "program accessibility journey exam failed"
 
-echo "workbench-ui-smoke.sh: ok (88 viewport renders plus 13 keyboard, semantic, focus, and wide/narrow journey exams)"
+echo "workbench-ui-smoke.sh: ok (96 viewport renders plus 13 keyboard, semantic, focus, and wide/narrow journey exams)"

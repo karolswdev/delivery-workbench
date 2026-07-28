@@ -9,6 +9,15 @@ single-sourced from `dw_pmo.__version__` (test-asserted against
 
 ## Unreleased
 
+Workbench can now review a setup proposal inside the existing Roadmap changes
+workspace. The adoption review explains the project, phases, story proofs,
+provenance, unresolved questions, tracked policy, local driver bindings, and the
+complete path list before setup. Policy and driver settings are labelled
+"configuration, not permission." Accepted-for-preview and structured correction
+marks stay in browser memory and write nothing. The page creates no setup token,
+permission, run, certification, or commit, and hands the next act to
+`dw setup preview <proposal-file>` in the terminal. `GET /api/setup/review`
+uses the same proposal and setup-plan cores as the CLI preview.
 `dw program scaffold --answers <file>` now compiles a closed set of typed setup
 answers into one complete, inert setup proposal. The generated program,
 workflow, two-seat cross-provider organization, check-bound rubrics, one finite

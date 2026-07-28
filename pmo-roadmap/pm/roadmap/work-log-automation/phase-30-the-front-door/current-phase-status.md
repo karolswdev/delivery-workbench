@@ -99,7 +99,7 @@ changes who reaches the rails, never what the rails require.
   single-use lease, an apply that revalidates every observed fact and
   lands the whole setup atomically or not at all, and the legacy roadmap
   mutation paths brought under the same discipline (WLA-30-04).
-- [ ] The workbench renders a setup proposal for human review — product
+- [x] The workbench renders a setup proposal for human review — product
   language first, provenance and unresolved questions visible,
   configuration visibly separated from authority — under the existing
   roadmap-changes route, with review-only sessions provably writing
@@ -136,7 +136,7 @@ changes who reaches the rails, never what the rails require.
 | WLA-30-02 | Boot an empty directory | done | [story-02-boot-an-empty-directory](./story-02-boot-an-empty-directory.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-30-03 | Hold the scope conversation | done | [story-03-hold-the-scope-conversation](./story-03-hold-the-scope-conversation.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-30-04 | Make setup one deliberate act | done | [story-04-make-setup-one-deliberate-act](./story-04-make-setup-one-deliberate-act.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-30-05 | Review the adoption in the workbench | backlog | [story-05-review-the-adoption-in-the-workbench](./story-05-review-the-adoption-in-the-workbench.md) | - |
+| WLA-30-05 | Review the adoption in the workbench | done | [story-05-review-the-adoption-in-the-workbench](./story-05-review-the-adoption-in-the-workbench.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-30-06 | Validate the whole bundle before runtime | done | [story-06-validate-the-whole-bundle-before-runtime](./story-06-validate-the-whole-bundle-before-runtime.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-30-07 | Scaffold a governed program | done | [story-07-scaffold-a-governed-program](./story-07-scaffold-a-governed-program.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-30-08 | Review the generated program in Studio | backlog | [story-08-review-the-generated-program-in-studio](./story-08-review-the-generated-program-in-studio.md) | - |
@@ -219,8 +219,17 @@ seats refused over best-effort, and every emitted bundle passing
 whole-bundle validation plus pure simulation as an internal
 post-condition. Scaffolding writes nothing.
 
-Next: the workbench reviews (05, 08) off their worktrees, then the
-exam.
+WLA-30-05 is delivered: the adoption review renders proposals (drafts
+included — the reviewed-state gate stays with lease minting) under the
+existing roadmap-changes workspace, product language first, provenance
+and unresolved questions always visible, configuration separated from
+authority under the exact label, marks ephemeral, sessions provably
+read-only, HTTP/CLI plan facts shared. Landing it surfaced and fixed
+the build-mode scaffold gap (`dw program scaffold --proposal`, rider
+commit) — the composed front half now runs on a fresh `dw init` site
+end to end: init → scaffold-from-draft → review → preview lease.
+
+Next: the Studio bundle review (08), then the exam.
 
 ## Sequencing
 

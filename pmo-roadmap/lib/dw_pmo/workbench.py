@@ -188,6 +188,100 @@ def _worklog_read(root: Path, raw_path: str) -> tuple[int, dict[str, object]]:
         return _error(404, f"no such work-log entry: {raw_path}")
     return 200, envelope({"path": str(target), "content": read_text(target)})
 
+def _setup_review(root: Path, query: dict[str, list[str]]) -> dict[str, object]:
+    """Load one proposal or pending preview without creating review authority."""
+    from .presentation import (
+        invalid_setup_review_presentation,
+        setup_review_presentation,
+    )
+    from .repofacts import git_dir
+    from .setup_lease import build_setup_plan, setup_plan_facts
+    from .setup_proposal import load_proposal, validate_proposal
+
+    raw_file = query.get("proposal_file", [""])[0].strip()
+    proposal_id = query.get("proposal", [""])[0].strip()
+    pending_preview = None
+    display_file = raw_file
+    try:
+        if raw_file and proposal_id:
+            raise DwError("choose either proposal_file or proposal, not both")
+        if raw_file:
+            candidate = Path(raw_file)
+            target = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+            allowed = root.resolve()
+            if target != allowed and allowed not in target.parents:
+                raise DwError("setup proposal is outside the served repository: %s" % raw_file)
+            try:
+                proposal = load_proposal(target.read_bytes())
+            except OSError as exc:
+                raise DwError("setup proposal cannot be read: %s" % exc) from exc
+            display_file = rel(target, root)
+            facts = setup_plan_facts(
+                proposal,
+                build_setup_plan(root, proposal, require_reviewed=False),
+            )
+        else:
+            pending_dir = git_dir(root) / "pmo-setup-leases" / "pending"
+            if proposal_id:
+                digest = proposal_id.removeprefix("setup:")
+                if (
+                    not proposal_id.startswith("setup:")
+                    or len(digest) != 64
+                    or any(character not in "0123456789abcdef" for character in digest)
+                ):
+                    raise DwError("setup proposal id must be an exact setup:<sha256> identifier")
+                records = [pending_dir / (digest + ".json")]
+            else:
+                records = sorted(pending_dir.glob("*.json")) if pending_dir.is_dir() else []
+                if len(records) > 1:
+                    raise DwError("multiple setup previews are pending; choose one with ?proposal=setup:<sha256>")
+            if not records or not records[0].is_file():
+                raise DwError(
+                    "no setup proposal selected; use ?proposal_file=<repository-relative-file> "
+                    "or choose a pending setup preview"
+                )
+            try:
+                record = json.loads(records[0].read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise DwError("pending setup preview cannot be read: %s" % exc) from exc
+            if not isinstance(record, dict) or not isinstance(record.get("preview"), dict):
+                raise DwError("pending setup preview record is malformed")
+            proposal = validate_proposal(record.get("proposal"))
+            pending_preview = record["preview"]
+            change_rows = pending_preview.get("changes")
+            if (
+                pending_preview.get("kind") != "delivery-workbench-setup-preview"
+                or not isinstance(change_rows, list)
+                or not isinstance(pending_preview.get("proposal_hash"), str)
+                or any(pending_preview.get(field) is not False for field in (
+                    "starts_work", "creates_grant", "certifies", "commits",
+                ))
+                or any(
+                    not isinstance(item, dict)
+                    or not isinstance(item.get("path"), str)
+                    or item.get("scope") not in {"tracked", "git-local"}
+                    or item.get("action") not in {"create", "update", "unchanged"}
+                    or item.get("before_hash") is not None
+                    and not isinstance(item.get("before_hash"), str)
+                    or not isinstance(item.get("after_hash"), str)
+                    for item in change_rows
+                )
+            ):
+                raise DwError("pending setup preview record is malformed")
+            facts = {
+                "proposal_hash": pending_preview["proposal_hash"],
+                "changes": pending_preview["changes"],
+            }
+        return setup_review_presentation(
+            proposal,
+            facts,
+            proposal_file=display_file,
+            pending_preview=pending_preview,
+        )
+    except DwError as err:
+        return invalid_setup_review_presentation(err.message, proposal_file=display_file)
+
+
 def mission_control_live_layer(sessions_doc: dict) -> tuple[dict, list]:
     """The belt's live-layer decision kernel (WLA-15-02), server-side
     so it is testable here: `on_story` sessions pin to their story
@@ -246,6 +340,9 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
             project = query.get("project", [""])[0].strip() or None
             return 200, envelope(build_delivery_setup(root, project))
+
+        if parts == ["api", "setup", "review"]:
+            return 200, envelope(_setup_review(root, query))
 
         if parts == ["api", "program-studio"]:
             from .program_studio import build_program_studio

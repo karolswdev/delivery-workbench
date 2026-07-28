@@ -274,6 +274,16 @@ over your own Tailscale network too (a `.ts.net` Host header is
 allowed, since that name only resolves through your own
 authenticated tailnet).
 
+Roadmap changes also contains the adoption review at
+`?proposal=<repository-relative-file>#/edit/adoption_review`. It reads a setup
+proposal and shows the project idea, phase sequence, first story proofs,
+provenance, unresolved questions, and every path setup would save. Tracked
+roadmap and policy files are shown separately from the `.git`-local driver
+bindings under the label "configuration, not permission." Review marks are
+browser-memory notes only. They do not save files or create permission. The
+page hands the reviewer back to `dw setup preview <proposal-file>` in the
+terminal for the next act.
+
 At `#/orchestration`, the same local Workbench now visually authors exact
 coordination scores: typed agent/check/rail/approval/collect nodes, parallel
 research and fan-in, prompts and context, output conventions, checks and red

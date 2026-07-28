@@ -65,6 +65,7 @@ from program_scaffold_tests import (
     ProgramScaffoldGoldenTest,
 )
 from setup_lease_tests import SetupLeaseTest
+from setup_review_tests import SetupReviewTest
 from scope_chat_tests import (
     ScopeChatFixtureTest,
     ScopeChatRevisionTest,

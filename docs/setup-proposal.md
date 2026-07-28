@@ -275,6 +275,36 @@ Validation fails closed for:
 The validator reports the first deterministic refusal. It never repairs,
 defaults, truncates, selects, saves, or authorizes a proposal.
 
+## Review in Workbench
+
+Open `?proposal=<repository-relative-file>#/edit/adoption_review` on the local
+Workbench URL to review a proposal inside the existing Roadmap changes
+workspace. The page explains the project idea, phase order, story dependencies,
+acceptance criteria, provenance, and unresolved questions. It also lists every
+path that setup would save. Tracked roadmap and policy files stay separate from
+the `.git`-local driver roster. The configuration section is labelled
+"configuration, not permission."
+
+Technical details contain the exact proposal JSON, proposal fingerprint, path
+fingerprints, and any pending preview that already exists. Unresolved questions
+stay visible even when the list is empty. A contract refusal appears verbatim
+instead of a partial or repaired proposal.
+
+The reviewer can mark the draft "Accepted for preview" or "Reject with
+corrections." A rejection produces item-level objections plus an overall note
+for the setup conversation. These marks live only in the current browser page.
+Reloading the page loses them. Workbench does not write a review note,
+repository file, roadmap, policy, driver roster, grant, or run record.
+
+Review ends with one terminal handoff:
+
+```text
+dw setup preview <proposal-file>
+```
+
+That command is the next act, not something the browser runs. It validates the
+proposal again and creates the separate setup preview described below.
+
 ## Guarded setup lease
 
 A reviewed proposal reaches canon only through one guarded setup act. The CLI

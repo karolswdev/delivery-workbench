@@ -300,10 +300,21 @@ def _driver_after(root: Path, bindings: dict[str, object]) -> bytes:
     return _json_bytes(validate_driver_config(raw))
 
 
-def build_setup_plan(root: Path, proposal: dict[str, object]) -> list[SetupChange]:
-    """Build every tracked and git-local write without mutating the repository."""
+def build_setup_plan(
+    root: Path,
+    proposal: dict[str, object],
+    *,
+    require_reviewed: bool = True,
+) -> list[SetupChange]:
+    """Build every tracked and git-local write without mutating the repository.
+
+    The reviewed-state gate belongs to lease minting: a preview is the
+    step after a human reviewed the draft. The adoption-review view
+    passes ``require_reviewed=False`` because a draft is exactly what a
+    human reviews — the plan stays a pure read either way.
+    """
     proposal = validate_proposal(proposal)
-    if proposal["state"] != "reviewed":
+    if require_reviewed and proposal["state"] != "reviewed":
         raise DwError("/state: setup preview requires a reviewed proposal")
     project = proposal["project"]
     slug = str(project["slug"])
@@ -367,21 +378,36 @@ def build_setup_plan(root: Path, proposal: dict[str, object]) -> list[SetupChang
     return changes
 
 
+def setup_plan_facts(
+    proposal: dict[str, object], changes: list[SetupChange]
+) -> dict[str, object]:
+    """Return the non-authorizing facts shared by preview and review views."""
+    proposal_bytes = canonical_proposal_json(proposal).encode("utf-8")
+    return {
+        "proposal_hash": _hash(proposal_bytes),
+        "changes": [{
+            "path": change.relative_path,
+            "scope": "tracked" if change.tracked else "git-local",
+            "before_hash": _hash(change.before),
+            "after_hash": _hash(change.after),
+            "action": (
+                "create" if change.before is None
+                else "unchanged" if change.before == change.after
+                else "update"
+            ),
+        } for change in changes],
+    }
+
+
 def _proposal_id(proposal_hash: str) -> str:
     return _SETUP_ID_PREFIX + proposal_hash.removeprefix("sha256:")
 
 
 def _preview_document(root: Path, proposal: dict[str, object], changes: list[SetupChange]) -> dict[str, object]:
-    proposal_bytes = canonical_proposal_json(proposal).encode("utf-8")
-    proposal_hash = _hash(proposal_bytes)
+    facts = setup_plan_facts(proposal, changes)
+    proposal_hash = facts["proposal_hash"]
     observed = _observed_state(root)
-    change_rows = [{
-        "path": change.relative_path,
-        "scope": "tracked" if change.tracked else "git-local",
-        "before_hash": _hash(change.before),
-        "after_hash": _hash(change.after),
-        "action": "create" if change.before is None else ("unchanged" if change.before == change.after else "update"),
-    } for change in changes]
+    change_rows = facts["changes"]
     token_facts = {
         "type": "setup-lease",
         "proposal_hash": proposal_hash,

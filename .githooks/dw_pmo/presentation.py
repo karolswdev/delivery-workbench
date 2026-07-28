@@ -388,6 +388,220 @@ def help_text(help_id: str) -> str:
         raise ValueError(f"unknown human help text: {help_id}") from exc
 
 
+def _setup_provenance(value: dict[str, object]) -> dict[str, object]:
+    labels = {
+        "user-answer": "You supplied this during the setup conversation.",
+        "repository-fact": "This comes from the repository as it exists now.",
+        "recommendation": "This is a recommendation to review, not a settled fact.",
+    }
+    kind = str(value.get("kind", ""))
+    note = str(value.get("source_note", ""))
+    return {
+        "sentence": "%s %s" % (labels.get(kind, "Its source is unknown."), note),
+        "technical": {"kind": kind, "source_note": note},
+    }
+
+
+def setup_review_presentation(
+    proposal: dict[str, object],
+    plan_facts: dict[str, object],
+    *,
+    proposal_file: str,
+    pending_preview: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Project an inert setup proposal into an everyday review model."""
+    project = proposal["project"]
+    intent = proposal["source_intent"]
+    roadmap = proposal["tracked_content"]["roadmap"]
+    policy = proposal["tracked_content"]["policy"]
+    bindings = proposal["local_content"]["driver_bindings"]
+    phases = []
+    objection_items = []
+    for phase in roadmap["phases"]:
+        phase_id = "phase-%s" % phase["number"]
+        stories = []
+        objection_items.append({"id": phase_id, "label": "Phase %s: %s" % (
+            phase["number"], phase["title"],
+        )})
+        for story in phase["stories"]:
+            story_id = "story-%s" % story["id_sketch"]
+            objection_items.append({"id": story_id, "label": "Story %s: %s" % (
+                story["id_sketch"], story["title"],
+            )})
+            stories.append({
+                "item_id": story_id,
+                "id_sketch": story["id_sketch"],
+                "title": story["title"],
+                "purpose": story["problem"],
+                "dependencies": [{
+                    "id_sketch": item["id_sketch"],
+                    "sentence": "This story follows %s." % item["id_sketch"],
+                    "provenance": _setup_provenance(item["provenance"]),
+                } for item in story["dependencies"]],
+                "acceptance_criteria": [{
+                    "text": item["text"],
+                    "provenance": _setup_provenance(item["provenance"]),
+                } for item in story["acceptance_criteria"]],
+                "provenance": _setup_provenance(story["provenance"]),
+            })
+        phases.append({
+            "item_id": phase_id,
+            "number": phase["number"],
+            "title": phase["title"],
+            "accomplishes": phase["goal"],
+            "stories": stories,
+            "provenance": _setup_provenance(phase["provenance"]),
+        })
+    unresolved = []
+    for index, question in enumerate(proposal["unresolved_questions"]):
+        item_id = "question-%s" % (index + 1)
+        objection_items.append({"id": item_id, "label": "Unresolved: %s" % question["question"]})
+        unresolved.append({
+            "item_id": item_id,
+            "question": question["question"],
+            "provenance": _setup_provenance(question["provenance"]),
+        })
+    changes = list(plan_facts["changes"])
+    tracked_changes = [item for item in changes if item["scope"] == "tracked"]
+    local_changes = [item for item in changes if item["scope"] == "git-local"]
+    policy_documents = []
+    if policy is not None:
+        wrappers = [
+            ("delivery plan", policy["program"]),
+            ("team", policy["organization"]),
+        ]
+        wrappers.extend(("work flow", item) for item in policy["workflows"])
+        wrappers.extend(("review criteria", item) for item in policy["rubrics"])
+        for family, wrapper in wrappers:
+            document = wrapper["document"]
+            name = document.get("title") or document.get("slug") or "unnamed"
+            policy_documents.append({
+                "family": family,
+                "name": str(name),
+                "sentence": "%s: %s" % (family.capitalize(), name),
+                "provenance": _setup_provenance(wrapper["provenance"]),
+            })
+    driver_rows = [{
+        "profile": name,
+        "sentence": "%s uses the %s adapter with %s from %s." % (
+            name, item["adapter"], item["model"], item["provider"],
+        ),
+        "provenance": _setup_provenance(item["provenance"]),
+    } for name, item in sorted(bindings.items())]
+    command_file = proposal_file or "<proposal-file>"
+    return {
+        "kind": "delivery-workbench-setup-review",
+        "schema_version": 1,
+        "valid": True,
+        "review_only": True,
+        "marks_persist": "Review marks live only in this browser page and are lost when it closes or reloads.",
+        "project": {
+            "title": project["title"],
+            "identity": "%s uses the %s story prefix." % (project["title"], project["prefix"]),
+            "vision": intent["idea"],
+            "vision_provenance": _setup_provenance(intent["provenance"]),
+            "context": (
+                "This adds to a project that already exists."
+                if intent["mode"] == "maintain"
+                else "This starts a new project roadmap."
+            ),
+            "provenance": _setup_provenance(project["provenance"]),
+        },
+        "phases": phases,
+        "exit_criteria": [{
+            "text": item["text"],
+            "provenance": _setup_provenance(item["provenance"]),
+        } for item in roadmap["exit_criteria"]],
+        "unresolved_questions": {
+            "summary": (
+                "%s assumption%s still need an answer."
+                % (len(unresolved), "" if len(unresolved) == 1 else "s")
+                if unresolved else "No unresolved assumptions were recorded."
+            ),
+            "items": unresolved,
+        },
+        "configuration": {
+            "label": "configuration, not permission",
+            "explanation": (
+                "These delivery policies and local driver bindings describe how later work could run. "
+                "Saving them would not permit or start that work."
+            ),
+            "policy": {
+                "present": policy is not None,
+                "sentence": (
+                    "The tracked delivery policy includes the complete linked bundle below."
+                    if policy is not None else "No optional delivery policy will be saved."
+                ),
+                "documents": policy_documents,
+                "provenance": _setup_provenance(policy["provenance"]) if policy is not None else None,
+            },
+            "driver_bindings": {
+                "sentence": (
+                    "%s non-secret local driver binding%s will be saved under .git."
+                    % (len(driver_rows), "" if len(driver_rows) == 1 else "s")
+                    if driver_rows else "No local driver bindings will be saved."
+                ),
+                "items": driver_rows,
+            },
+        },
+        "changes": {
+            "summary": "%s path%s are in this setup plan." % (
+                len(changes), "" if len(changes) == 1 else "s",
+            ),
+            "paths": [item["path"] for item in changes],
+            "tracked": tracked_changes,
+            "git_local": local_changes,
+        },
+        "objection_items": objection_items,
+        "terminal_handoff": {
+            "sentence": "Review does not save anything. The next act belongs in the terminal.",
+            "command": "dw setup preview %s" % shlex.quote(command_file),
+        },
+        "technical_details": {
+            "label": TECHNICAL_DETAILS_LABEL,
+            "proposal_file": proposal_file or None,
+            "proposal_hash": plan_facts["proposal_hash"],
+            "proposal": proposal,
+            "changes": changes,
+            "pending_preview": pending_preview,
+        },
+        "starts_work": False,
+        "creates_grant": False,
+        "certifies": False,
+        "commits": False,
+    }
+
+
+def invalid_setup_review_presentation(
+    refusal: str, *, proposal_file: str
+) -> dict[str, object]:
+    """Keep a setup-contract refusal verbatim inside the review workspace."""
+    command_file = proposal_file or "<proposal-file>"
+    return {
+        "kind": "delivery-workbench-setup-review",
+        "schema_version": 1,
+        "valid": False,
+        "review_only": True,
+        "refusal": refusal,
+        "unresolved_questions": {
+            "summary": "The proposal could not be reviewed, so its unresolved assumptions are unknown.",
+            "items": [],
+        },
+        "terminal_handoff": {
+            "sentence": "Correct the proposal before asking the terminal for a preview.",
+            "command": "dw setup preview %s" % shlex.quote(command_file),
+        },
+        "technical_details": {
+            "label": TECHNICAL_DETAILS_LABEL,
+            "proposal_file": proposal_file or None,
+        },
+        "starts_work": False,
+        "creates_grant": False,
+        "certifies": False,
+        "commits": False,
+    }
+
+
 def build_presentation_catalog() -> dict[str, object]:
     """The copy/catalog document consumed by human adapters."""
     return {

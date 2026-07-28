@@ -25,7 +25,8 @@ const FOCUS_IDENTITY_ATTRIBUTES = [
   "data-delivery-choice", "data-orch-view", "data-studio-view",
   "data-studio-technical", "data-plan-section", "data-run-act",
   "data-program-act", "data-bounded-read", "data-studio-scenario",
-  "data-studio-node", "data-node-id", "name", "href",
+  "data-studio-node", "data-node-id", "data-adoption-mark",
+  "data-adoption-objection", "name", "href",
 ];
 
 function esc(s) {
@@ -258,6 +259,8 @@ const LIVE_TECHNICAL_OPEN = new URLSearchParams(location.search).has("livetechni
 const SNAPSHOT_BOUNDED_FOCUS = new URLSearchParams(location.search).get("boundedfocus");
 const SNAPSHOT_BOUNDED_PREVIEW = new URLSearchParams(location.search).get("boundedpreview");
 const SNAPSHOT_BOUNDED_ERROR = new URLSearchParams(location.search).get("boundederror");
+const ADOPTION_PROPOSAL_FILE = new URLSearchParams(location.search).get("proposal") || "";
+const ADOPTION_PROPOSAL_ID = new URLSearchParams(location.search).get("setuppreview") || "";
 
 function syncGet(path) {
   const xhr = new XMLHttpRequest();
@@ -1250,12 +1253,192 @@ async function viewBoard(slug) {
  * server's authoritative refusals. */
 
 const EDIT_ACTIONS = {
+  adoption_review: "review adoption",
   create_phase: "create phase",
   create_story: "create story",
   update_story_status: "update story status",
   attach_evidence: "attach evidence",
   close_phase: "close phase",
 };
+
+const adoptionReviewMarks = new Map();
+const ADOPTION_TERMINAL_HANDOFF = "dw setup preview <proposal-file>";
+const ADOPTION_TECHNICAL_LABEL = "Technical details";
+
+function provenanceHtml(provenance) {
+  return `<p class="adoption-provenance"><strong>Source:</strong> ${esc(provenance?.sentence || "Unknown.")}</p>`;
+}
+
+function adoptionReviewTabs() {
+  return `<div class="tabs adoption-workspace-tabs" aria-label="Roadmap changes workspace">${Object.keys(EDIT_ACTIONS).map((name) =>
+    `<a href="#/edit/${name}" class="${name === "adoption_review" ? "active" : ""}">${esc(EDIT_ACTIONS[name])}</a>`).join("")}</div>`;
+}
+
+function adoptionMarkState(key) {
+  if (!adoptionReviewMarks.has(key)) {
+    adoptionReviewMarks.set(key, { decision: "", objections: [], overall_note: "" });
+  }
+  return adoptionReviewMarks.get(key);
+}
+
+function correctionPacket(model, state) {
+  return {
+    kind: "delivery-workbench-setup-review-corrections",
+    schema_version: 1,
+    decision: "rejected-with-corrections",
+    proposal_hash: model.technical_details.proposal_hash,
+    objections: state.objections.map((item) => ({ item: item.item, correction: item.correction })),
+    overall_note: state.overall_note,
+    authorizes_setup: false,
+    starts_work: false,
+  };
+}
+
+function renderAdoptionMarks(model, key, identity = null) {
+  const out = document.getElementById("adoption-marks");
+  if (!out) return;
+  const state = adoptionMarkState(key);
+  const options = model.objection_items.map((item) =>
+    `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("");
+  const packet = state.decision === "rejected"
+    ? correctionPacket(model, state) : null;
+  out.innerHTML = `<section class="adoption-marks" aria-labelledby="adoption-marks-title">
+    <h2 id="adoption-marks-title">Your review mark</h2>
+    <p>Marks stay in this browser page only. They do not save files, create a confirmation, or grant permission.</p>
+    <div class="adoption-mark-actions" role="group" aria-label="Review decision">
+      <button type="button" data-adoption-mark="accept" aria-pressed="${state.decision === "accepted"}">Accepted for preview</button>
+      <button type="button" data-adoption-mark="reject" aria-pressed="${state.decision === "rejected"}">Reject with corrections</button>
+      <button type="button" data-adoption-mark="abandon">Abandon this mark</button>
+    </div>
+    ${state.decision === "accepted" ? `<div class="adoption-mark-result" role="status">
+      <strong>Accepted for preview.</strong> Nothing has been applied and no terminal confirmation exists yet.
+    </div>` : ""}
+    ${state.decision === "rejected" ? `<form id="adoption-correction-form" class="adoption-correction-form">
+      <h3>Correction packet</h3>
+      <label><b>Proposal item</b><select name="item">${options}</select></label>
+      <label><b>What should change?</b><textarea name="correction" required></textarea></label>
+      <button type="submit" data-adoption-objection="add">Add objection</button>
+      <label><b>Overall note</b><textarea name="overall_note">${esc(state.overall_note)}</textarea></label>
+      <ul class="adoption-objections">${state.objections.map((item, index) => `<li>
+        <strong>${esc(model.objection_items.find((candidate) => candidate.id === item.item)?.label || item.item)}</strong>
+        <span>${esc(item.correction)}</span>
+        <button type="button" data-adoption-objection="remove-${index}" data-remove-objection="${index}">Remove</button>
+      </li>`).join("") || "<li>No item-level objections yet.</li>"}</ul>
+      <details class="adoption-packet"><summary>Correction packet for the setup conversation</summary>
+        <pre>${esc(JSON.stringify(packet, null, 2))}</pre>
+      </details>
+    </form>` : ""}
+  </section>`;
+  out.querySelector('[data-adoption-mark="accept"]').addEventListener("click", (event) => {
+    const focus = captureAppFocus() || { selector: focusSelector(event.currentTarget), index: -1, tag: "button" };
+    state.decision = "accepted";
+    state.objections = [];
+    renderAdoptionMarks(model, key, focus);
+  });
+  out.querySelector('[data-adoption-mark="reject"]').addEventListener("click", (event) => {
+    const focus = captureAppFocus() || { selector: focusSelector(event.currentTarget), index: -1, tag: "button" };
+    state.decision = "rejected";
+    renderAdoptionMarks(model, key, focus);
+  });
+  out.querySelector('[data-adoption-mark="abandon"]').addEventListener("click", (event) => {
+    const focus = captureAppFocus() || { selector: focusSelector(event.currentTarget), index: -1, tag: "button" };
+    adoptionReviewMarks.set(key, { decision: "", objections: [], overall_note: "" });
+    renderAdoptionMarks(model, key, focus);
+  });
+  const form = out.querySelector("#adoption-correction-form");
+  if (form) {
+    form.elements.overall_note.addEventListener("input", () => {
+      state.overall_note = form.elements.overall_note.value;
+    });
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const correction = form.elements.correction.value.trim();
+      if (!correction) return;
+      state.overall_note = form.elements.overall_note.value;
+      state.objections.push({ item: form.elements.item.value, correction });
+      renderAdoptionMarks(model, key, {
+        selector: '[data-adoption-objection="add"]', index: -1, tag: "button",
+      });
+    });
+    out.querySelectorAll("[data-remove-objection]").forEach((button) => button.addEventListener("click", () => {
+      const index = Number(button.dataset.removeObjection);
+      state.objections.splice(index, 1);
+      renderAdoptionMarks(model, key, {
+        selector: '[data-adoption-mark="reject"]', index: -1, tag: "button",
+      });
+    }));
+  }
+  finishDynamicRender(identity);
+}
+
+function adoptionStoryHtml(story) {
+  return `<article class="adoption-story" data-review-item="${esc(story.item_id)}">
+    <h4><code>${esc(story.id_sketch)}</code> ${esc(story.title)}</h4>
+    <p>${esc(story.purpose)}</p>
+    ${provenanceHtml(story.provenance)}
+    <h5>What this story must prove</h5>
+    <ul>${story.acceptance_criteria.map((criterion) => `<li>${esc(criterion.text)}${provenanceHtml(criterion.provenance)}</li>`).join("")}</ul>
+    <h5>What it depends on</h5>
+    ${story.dependencies.length ? `<ul>${story.dependencies.map((dependency) => `<li>${esc(dependency.sentence)}${provenanceHtml(dependency.provenance)}</li>`).join("")}</ul>` : "<p>Nothing else in this draft must finish first.</p>"}
+  </article>`;
+}
+
+async function viewAdoptionReview() {
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "roadmap changes", href: "#/edit" }, { label: "review adoption" }]);
+  const query = ADOPTION_PROPOSAL_FILE
+    ? `proposal_file=${encodeURIComponent(ADOPTION_PROPOSAL_FILE)}`
+    : ADOPTION_PROPOSAL_ID ? `proposal=${encodeURIComponent(ADOPTION_PROPOSAL_ID)}` : "";
+  const model = (await api(`/api/setup/review${query ? `?${query}` : ""}`)).data;
+  if (!model.valid) {
+    app.innerHTML = `${adoptionReviewTabs()}<div class="adoption-review invalid-adoption-review">
+      <h1>Review adoption proposal</h1>
+      <div class="guard" role="alert"><strong>Proposal refused.</strong><pre>${esc(model.refusal)}</pre></div>
+      <section class="adoption-unresolved"><h2>Unresolved assumptions</h2><p>${esc(model.unresolved_questions.summary)}</p></section>
+      <details class="adoption-technical"><summary>${esc(model.technical_details.label || ADOPTION_TECHNICAL_LABEL)}</summary><pre>${esc(JSON.stringify(model.technical_details, null, 2))}</pre></details>
+      <section class="adoption-handoff"><h2>Next act</h2><p>${esc(model.terminal_handoff.sentence)}</p><code>${esc(model.terminal_handoff.command || ADOPTION_TERMINAL_HANDOFF)}</code></section>
+    </div>`;
+    return;
+  }
+  const key = model.technical_details.proposal_hash;
+  app.innerHTML = `${adoptionReviewTabs()}<div class="adoption-review">
+    <header class="adoption-review-head"><p class="eyebrow">Roadmap changes · review only</p>
+      <h1>Review ${esc(model.project.title)}</h1>
+      <p class="adoption-vision">${esc(model.project.vision)}</p>
+      <p>${esc(model.project.context)} ${esc(model.project.identity)}</p>
+      ${provenanceHtml(model.project.vision_provenance)}
+      ${provenanceHtml(model.project.provenance)}
+      <div class="adoption-inert"><strong>Review only.</strong> This page cannot save setup, create permission, start work, certify, or commit.</div>
+    </header>
+    <section class="adoption-phases"><h2>What the phases accomplish</h2>
+      ${model.phases.map((phase) => `<article class="adoption-phase" data-review-item="${esc(phase.item_id)}">
+        <div class="adoption-phase-number">Phase ${esc(phase.number)}</div><h3>${esc(phase.title)}</h3>
+        <p>${esc(phase.accomplishes)}</p>${provenanceHtml(phase.provenance)}
+        <div class="adoption-stories">${phase.stories.map(adoptionStoryHtml).join("")}</div>
+      </article>`).join("")}
+    </section>
+    <section class="adoption-exit"><h2>What the roadmap must prove overall</h2><ul>
+      ${model.exit_criteria.map((criterion) => `<li>${esc(criterion.text)}${provenanceHtml(criterion.provenance)}</li>`).join("")}
+    </ul></section>
+    <section class="adoption-unresolved"><h2>Unresolved assumptions</h2><p>${esc(model.unresolved_questions.summary)}</p>
+      ${model.unresolved_questions.items.length ? `<ul>${model.unresolved_questions.items.map((item) => `<li data-review-item="${esc(item.item_id)}"><strong>${esc(item.question)}</strong>${provenanceHtml(item.provenance)}</li>`).join("")}</ul>` : ""}
+    </section>
+    <section class="adoption-configuration"><div><p class="eyebrow">Separate from roadmap truth</p><h2>${esc(model.configuration.label)}</h2><p>${esc(model.configuration.explanation)}</p></div>
+      <div class="adoption-config-grid"><article><h3>Tracked delivery policy</h3><p>${esc(model.configuration.policy.sentence)}</p>
+        ${model.configuration.policy.documents.length ? `<ul>${model.configuration.policy.documents.map((item) => `<li><strong>${esc(item.sentence)}</strong>${provenanceHtml(item.provenance)}</li>`).join("")}</ul>` : ""}
+        ${model.configuration.policy.provenance ? provenanceHtml(model.configuration.policy.provenance) : ""}</article>
+        <article><h3>Local driver bindings</h3><p>${esc(model.configuration.driver_bindings.sentence)}</p>
+          <ul>${model.configuration.driver_bindings.items.map((item) => `<li><strong>${esc(item.profile)}</strong> — ${esc(item.sentence)}${provenanceHtml(item.provenance)}</li>`).join("")}</ul></article></div>
+    </section>
+    <section class="adoption-paths"><h2>Files this setup would save</h2><p>${esc(model.changes.summary)}</p>
+      <div class="adoption-path-split"><article><h3>Tracked with the repository</h3><ul>${model.changes.tracked.map((item) => `<li>${badge(item.action, item.action === "unchanged" ? "warn" : "ok")}<code>${esc(item.path)}</code></li>`).join("")}</ul></article>
+      <article><h3>Local to this checkout</h3><ul>${model.changes.git_local.map((item) => `<li>${badge(item.action, item.action === "unchanged" ? "warn" : "ok")}<code>${esc(item.path)}</code></li>`).join("")}</ul></article></div>
+    </section>
+    <div id="adoption-marks"></div>
+    <details class="adoption-technical"><summary>${esc(model.technical_details.label || ADOPTION_TECHNICAL_LABEL)}</summary><pre>${esc(JSON.stringify(model.technical_details, null, 2))}</pre></details>
+    <section class="adoption-handoff"><h2>Next act</h2><p>${esc(model.terminal_handoff.sentence)}</p><code>${esc(model.terminal_handoff.command || ADOPTION_TERMINAL_HANDOFF)}</code></section>
+  </div>`;
+  renderAdoptionMarks(model, key);
+}
 
 const STATUS_VOCAB = ["backlog", "ready", "in-progress", "blocked", "on-hold", "done"];
 
@@ -1271,6 +1454,10 @@ function selectHtml(name, options, selected) {
 
 async function viewEdit(action) {
   action = action || "create_story";
+  if (action === "adoption_review") {
+    await viewAdoptionReview();
+    return;
+  }
   setCrumbs([{ label: "overview", href: "#/" }, { label: "edit" }, { label: EDIT_ACTIONS[action] || action }]);
   const ctx = await api("/api/projects");
   const projects = ctx.data.projects;
@@ -4780,6 +4967,7 @@ async function viewProgramStudio(family = "program", name) {
 /* ── router ─────────────────────────────────────────────────────────── */
 
 async function route({ focusMain = false } = {}) {
+  const routeFocus = focusMain ? null : captureAppFocus();
   stopMcPoll(); // leaving mission control stops its poll
   stopRunLive(); // leaving the run view closes its live tail
   stopProgramLive(); // leaving an explicit program run closes its live tail
@@ -4821,6 +5009,8 @@ async function route({ focusMain = false } = {}) {
         target.focus();
         target.scrollIntoView({ block: "start" });
       });
+    } else {
+      requestAnimationFrame(() => restoreAppFocus(routeFocus));
     }
   }
 }

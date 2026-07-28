@@ -912,6 +912,54 @@ class WorkbenchExam:
         )
         self.assert_focus_preserved("#run-refresh", "renderOrchestration")
 
+        self.navigate(
+            "/?proposal=setup-review-fixtures/greenfield.json#/edit/adoption_review",
+            ".adoption-review h1",
+        )
+        self.focus('[data-adoption-mark="accept"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.active_matches('[data-adoption-mark="accept"]')
+            and bool(self.driver.execute(
+                "return document.querySelector('[data-adoption-mark=accept]')?.getAttribute('aria-pressed') === 'true';"
+            )),
+            "adoption acceptance mark to restore focus without saving",
+        )
+        self.focus("#refresh-btn")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.active_matches("#refresh-btn")
+            and self.selector_exists(".adoption-review")
+            and bool(self.driver.execute(
+                "return document.querySelector('[data-adoption-mark=accept]')?.getAttribute('aria-pressed') === 'true';"
+            )),
+            "adoption refresh to preserve its browser-memory mark and focus",
+        )
+        self.focus('[data-adoption-mark="reject"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.active_matches('[data-adoption-mark="reject"]')
+            and self.selector_exists("#adoption-correction-form"),
+            "adoption correction form to open and restore focus",
+        )
+        self.focus(".adoption-technical summary")
+        self.driver.press("enter")
+        self.check(
+            self.active_matches(".adoption-technical summary"),
+            "adoption technical disclosure moved focus away from its summary",
+        )
+        self.focus('[data-adoption-mark="abandon"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.active_matches('[data-adoption-mark="abandon"]')
+            and not self.selector_exists("#adoption-correction-form")
+            and bool(self.driver.execute(
+                "return [...document.querySelectorAll('[data-adoption-mark]')].every(item => item.getAttribute('aria-pressed') !== 'true');"
+            )),
+            "abandoning the browser-memory mark to restore focus and apply nothing",
+        )
+        self.assertions += 5
+
     def test_program_interactions(self) -> None:
         active = self.ids["program_active"]
         revoked = self.ids["program_revoked"]
@@ -1015,6 +1063,17 @@ def main() -> int:
         for journey_id in JOURNEY_CASES:
             if journey_id in selected:
                 exam.audit_journey(journey_id, "narrow")
+        if args.suite in {"core", "all"}:
+            exam.navigate(
+                "/?proposal=setup-review-fixtures/greenfield.json#/edit/adoption_review",
+                ".adoption-review h1",
+            )
+            driver.set_content_zoom(1.5)
+            exam.wait(
+                lambda: int(driver.execute("return document.documentElement.clientWidth;")) <= 390,
+                "adoption review narrow viewport",
+            )
+            exam.audit_page("adoption-review", "narrow")
         driver.set_window(*WIDE)
         driver.set_content_zoom(1)
         exam.wait(
@@ -1026,6 +1085,12 @@ def main() -> int:
         for journey_id in JOURNEY_CASES:
             if journey_id in selected:
                 exam.audit_journey(journey_id, "wide")
+        if args.suite in {"core", "all"}:
+            exam.navigate(
+                "/?proposal=setup-review-fixtures/greenfield.json#/edit/adoption_review",
+                ".adoption-review h1",
+            )
+            exam.audit_page("adoption-review", "wide")
         if args.suite in {"core", "all"}:
             exam.test_core_interactions()
         if args.suite in {"program", "all"}:
