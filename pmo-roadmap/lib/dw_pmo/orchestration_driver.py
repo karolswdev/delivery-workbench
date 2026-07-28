@@ -1116,6 +1116,33 @@ class CodexExecDriver:
         return False
 
 
+def _final_json_document(data: bytes) -> bytes:
+    """The last well-formed JSON document in a stream, or the stream.
+
+    Scans candidate ``{`` positions from the end (bounded), returning the
+    first suffix that parses as JSON after stripping trailing whitespace
+    and code-fence backticks. When nothing parses, the original bytes are
+    returned so the ordinary malformed-output refusal still names the
+    real content.
+    """
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    stripped = text.strip()
+    if stripped.endswith("```"):
+        stripped = stripped[: -3].rstrip()
+    starts = [index for index, char in enumerate(stripped) if char == "{"]
+    for index in reversed(starts[-50:] if len(starts) > 50 else starts):
+        candidate = stripped[index:]
+        try:
+            json.loads(candidate)
+        except ValueError:
+            continue
+        return candidate.encode("utf-8")
+    return data
+
+
 class ClaudeCodeExecDriver:
     """Real optional adapter over non-interactive `claude -p`.
 
@@ -1241,7 +1268,18 @@ class ClaudeCodeExecDriver:
                 ]
                 if len(non_diff) == 1:
                     target = output_dir / str(non_diff[0]["name"])
-                    shutil.copyfile(stdout_path, target)
+                    if str(non_diff[0].get("format")) == "json":
+                        # Deterministic response-contract tolerance: the
+                        # output is the FINAL well-formed JSON document
+                        # in the stream; anything before it is prose and
+                        # discarded. A live agent prefixing one sentence
+                        # to an otherwise perfect document cost the
+                        # Phase 30 exam a grant.
+                        target.write_bytes(
+                            _final_json_document(stdout_path.read_bytes())
+                        )
+                    else:
+                        shutil.copyfile(stdout_path, target)
             state = "succeeded"
         else:
             state = "failed"
