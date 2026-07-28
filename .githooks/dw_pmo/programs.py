@@ -574,10 +574,18 @@ def _project_story_inventory(project: object) -> list[dict[str, object]]:
 
 
 class _Compiler:
-    def __init__(self, root: Path, raw: object, source: str = "program") -> None:
+    def __init__(
+        self,
+        root: Path,
+        raw: object,
+        source: str = "program",
+        *,
+        bundle_documents: dict[str, object] | None = None,
+    ) -> None:
         self.root = root.resolve()
         self.raw = raw
         self.source = source
+        self.bundle_documents = bundle_documents
         self.diagnostics: list[dict[str, str]] = []
         self.bundle_diagnostics: list[dict[str, str]] = []
         self.references: dict[str, object] = {
@@ -726,6 +734,26 @@ class _Compiler:
             return []
         return list(include)
 
+    def _reference(
+        self,
+        family: str,
+        slug: str,
+    ) -> tuple[str, dict[str, object]] | None:
+        """Resolve one tracked or proposal-embedded policy document."""
+        if self.bundle_documents is not None:
+            family_documents = self.bundle_documents.get(family)
+            if not isinstance(family_documents, dict):
+                return None
+            raw = family_documents.get(slug)
+            if not isinstance(raw, dict):
+                return None
+            return f"setup-proposal:/tracked_content/policy/{family}/{slug}", raw
+        found = _reference_by_slug(self.root, family, slug)
+        if found is None:
+            return None
+        path, raw = found
+        return str(path.relative_to(self.root)), raw
+
     def load_reference(
         self,
         family: str,
@@ -734,12 +762,11 @@ class _Compiler:
         allowed_keys: set[str],
         pointer: str,
     ) -> dict[str, object] | None:
-        found = _reference_by_slug(self.root, family, slug)
+        found = self._reference(family, slug)
         if found is None:
             self.diag(pointer, f"dangling-{kind.split('-')[-1]}-reference", f"cannot resolve {kind} {slug!r}", f"add one unambiguous pm/{family}/{slug}.json policy")
             return None
-        path, raw = found
-        source = str(path.relative_to(self.root))
+        source, raw = found
         self.exact_keys(raw, allowed_keys, "", source=source)
         if raw.get("kind") != kind:
             self.diag("/kind", "wrong-kind", f"expected {kind!r}", f"set kind to {kind}", source)
@@ -792,7 +819,7 @@ class _Compiler:
         return reference
 
     def normalize_organization(self, slug: str) -> dict[str, object]:
-        found = _reference_by_slug(self.root, "organizations", slug)
+        found = self._reference("organizations", slug)
         if found is None:
             self.diag(
                 "/organization", "dangling-organization-reference",
@@ -803,8 +830,7 @@ class _Compiler:
                 "slug": slug, "agents": [], "pools": [], "teams": [],
                 "councils": [], "compiled": None,
             }
-        path, raw = found
-        source = str(path.relative_to(self.root))
+        source, raw = found
         try:
             compiled = compile_organization(self.root, raw, source)
         except OrganizationValidationError as exc:
@@ -1879,8 +1905,11 @@ def validate_program(
     source: str = "program",
     *,
     driver_config: object = _LOCAL_DRIVER_ROSTER,
+    bundle_documents: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    compiler = _Compiler(root, program, source)
+    compiler = _Compiler(
+        root, program, source, bundle_documents=bundle_documents,
+    )
     normalized, diagnostics, analysis = compiler.compile()
     diagnostics.extend(compiler.bundle_diagnostics)
     roster: dict[str, object] = {

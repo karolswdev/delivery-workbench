@@ -16,7 +16,8 @@ This contract builds on the delivered bounded-run contract in
 [orchestration.md](./orchestration.md) and the outward-fact contract in
 [signals.md](./signals.md). It does not edit either contract retroactively. A
 Phase 24 score still means one bounded run with a terminal handoff; a signal is
-still observation rather than authority.
+still observation rather than authority. For the safe generated default and
+its closed setup answers, see [Scaffold a governed program](./setup-proposal.md#scaffold-a-governed-program).
 
 ## Capability ladder and default invariant
 
@@ -504,7 +505,7 @@ operator-reviewed start plan.
 
 ### Delivered pure planning surface (WLA-26-02)
 
-`dw program list|validate|simulate|plan` now implements this read boundary.
+`dw program list|scaffold|validate|simulate|plan` now implements this read boundary.
 `list` treats an absent `pm/programs/` directory as a healthy empty inventory.
 `validate` closes program keys, references, scope, budgets, bindings, minimum
 organization/team shape, and ambiguous equal-priority matches. `simulate`
@@ -1546,8 +1547,8 @@ One core compiler/planner/projection owns semantics. Delivered adapters are:
 
 - CLI policy reads: `dw organization list|validate|simulate`,
   `dw workflow list|validate|simulate`, and
-  `dw program list|validate|simulate|plan`;
-- CLI: `dw program list|show|validate|simulate|plan|start|tick|supervise|pause|
+  `dw program list|scaffold|validate|simulate|plan`;
+- CLI: `dw program list|scaffold|show|validate|simulate|plan|start|tick|supervise|pause|
   resume|revoke|cancel|request|tail|stream`;
 - MCP/HTTP: byte-equivalent reads plus exact-token, closed-parameter acts;
 - Workbench Program Studio: task-shaped Plan or Team & review, Try the flow,

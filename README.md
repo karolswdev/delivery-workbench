@@ -185,7 +185,7 @@ dw verify: ok (45 commits verified, 17 pre-epoch skipped)
 | `dw organization list\|validate\|simulate` | Purely compile optional `pm/organizations/*.json`: logical pools, exact role packet/capability policy, principal/workspace separation, councils, resource waves, and finite replacement; an empty registry is healthy. |
 | `dw workflow list\|validate\|simulate` | Purely compile reusable hierarchical `pm/workflows/*.json`: exact subflows, bounded runs/loops/debates, typed routes, finite envelopes, provenance, and capability consumers; an empty library is healthy. |
 | `dw rubric list\|validate` | Purely compile optional governed-quality policy: mechanical versus judgment criteria, evidence/citations, aggregation/veto, and freshness; an empty registry is healthy. |
-| `dw program list\|validate\|simulate\|plan` | Purely compile optional multi-phase policy, explain every roadmap candidate, and bind one deterministic workflow/team assignment to current Git, roadmap, and local roster facts; no grant or work starts. |
+| `dw program list\|scaffold\|validate\|simulate\|plan` | Compile optional multi-phase policy, or scaffold a complete inert setup proposal from closed typed answers; validation, simulation, and planning start no grant or work. |
 | `dw run plan\|start\|list\|show\|view\|preview\|tick\|supervise\|pause\|resume\|revoke\|cancel\|request\|checkpoint\|stream` | Preview and authorize an exact score-bound grant, conduct its bounded agent/check work, inspect its hash-chained run and outstanding typed requests, and apply only fresh-token controls. |
 | `dw next` | The next actionable story. Exit 0 found, 2 nothing to do. |
 | `dw context --compact` | JSON snapshot of the roadmap: issues, warnings, next story, trace paths. |

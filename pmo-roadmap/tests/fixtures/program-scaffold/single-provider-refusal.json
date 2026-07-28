@@ -1,0 +1,27 @@
+{
+  "project": {
+    "idea": "Attempt a review cell without provider diversity.",
+    "mode": "maintain",
+    "prefix": "DM",
+    "slug": "demo",
+    "title": "Demo"
+  },
+  "profiles": {
+    "implementer": "single-builder",
+    "verifier": "single-reviewer"
+  },
+  "schema": "delivery-workbench-program-scaffold-answers@1",
+  "scope": {
+    "phase_numbers": [1],
+    "story_ids": ["DM-1-01"]
+  },
+  "size": {
+    "complexity": "small",
+    "fan_out": 1,
+    "repair_rounds": 1
+  },
+  "verification": {
+    "built_in_checks": ["rail-status"],
+    "regression_argv": null
+  }
+}

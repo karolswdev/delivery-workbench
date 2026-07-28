@@ -151,6 +151,7 @@ is added when an external consumer asks for one.
 | `dw rubric list --json` | `program_verdict.rubric_inventory` | healthy empty inventory or direct-contained rubric validation/hash summaries; pure |
 | `dw rubric validate <rubric> --json` | `program_verdict.validate_rubric` | exact criteria, evidence/citation, aggregation/veto and freshness policy with source-aware diagnostics; exit 1 invalid |
 | `dw program list --json` | `programs.program_inventory` | healthy empty inventory when no program is configured; otherwise contained policy validation/hashes; pure |
+| `dw program scaffold --answers <file> --json` | `program_scaffold.scaffold_program` | closed answers to one canonical inert setup proposal; embedded whole-bundle validation and pure route simulation; writes nothing |
 | `dw program validate <program> --json` | `programs.validate_program` | exact-key policy/reference/scope/binding verdict plus source-aware diagnostics; exit 1 invalid |
 | `dw program simulate <program> --json` | `programs.simulate_program` | every roadmap candidate reason plus deterministic workflow/team/role assignment; explicitly no work/state/grant |
 | `dw program plan <program> --json` | `programs.build_program_plan` | without `--mode`: repository/roadmap snapshot, selected story, workflow/team/roles, policy/roster hashes, and complete derivation; pure |

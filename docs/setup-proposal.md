@@ -345,3 +345,137 @@ Project choice, setup consent, runtime grant, certification, and commit remain
 separate deliberate acts under their owning contracts. A later surface that
 assigns any of that authority to this proposal violates
 `delivery-workbench-setup-proposal@1`.
+
+## Scaffold a governed program
+
+`dw program scaffold` compiles a small, closed answers object into a complete
+setup proposal. It does not save the proposal. The command reads the local
+non-secret driver roster, selects only the two profiles named in the answers,
+embeds the generated policy under `tracked_content.policy`, and copies the
+selected profile metadata into `local_content.driver_bindings`.
+
+```sh
+.githooks/dw program scaffold --answers answers.json --json
+```
+
+Without `--json`, the command prints indented JSON for review. With `--json`, it
+prints the canonical compact proposal. Both forms write nothing and report the
+four inertness fields as `false`.
+
+The answers object uses schema
+`delivery-workbench-program-scaffold-answers@1` and has these exact fields:
+
+```json
+{
+  "schema": "delivery-workbench-program-scaffold-answers@1",
+  "project": {
+    "slug": "sample-project",
+    "prefix": "SP",
+    "title": "Sample project",
+    "mode": "build",
+    "idea": "Build a small tool."
+  },
+  "scope": {
+    "phase_numbers": [1],
+    "story_ids": ["SP-1-01"]
+  },
+  "profiles": {
+    "implementer": "claude-builder",
+    "verifier": "codex-reviewer"
+  },
+  "verification": {
+    "built_in_checks": ["rail-status"],
+    "regression_argv": ["/usr/bin/python3", "-B", "tests/focused.py"]
+  },
+  "size": {
+    "complexity": "medium",
+    "fan_out": 1,
+    "repair_rounds": 1
+  },
+  "autonomy_mode": "checkpointed"
+}
+```
+
+`autonomy_mode` is the only optional field. Omitting it selects
+`checkpointed`. Its accepted values are `advisory` and `checkpointed`;
+continuous operation is not a scaffold default. `project.mode` is `build` or
+`maintain`. `size.complexity` is `small`, `medium`, or `large`.
+`repair_rounds` is exactly `1` in this version. The finite repair shape is part
+of the generated workflow rather than a caller-controlled graph knob.
+
+`built_in_checks` currently accepts `rail-status`. `regression_argv` is either
+`null` or one non-empty exact token array. The compiler places that array only
+in the sanctioned check-runner position. It never accepts a shell string,
+environment map, write list, adapter flag, executable template, or command
+produced by an agent.
+
+The two profile names must resolve in the validated local roster. The
+implementer needs repository read/write access and an isolated worktree. The
+verifier needs repository read access and read-only mode. They must have
+different principals, bounded model aliases, and different declared provider
+families. Missing profiles, missing verifier capability, and same-family review
+all refuse at `/profiles/...`; the compiler does not substitute another profile.
+Provider family comes from the validated adapter profile, not its display name
+or model string.
+
+### Generated policy
+
+The proposal contains one program, one workflow, one two-seat organization,
+and two rubrics. The workflow implements the story, runs every declared check,
+asks the independent verifier for a verdict, permits one bounded repair, reruns
+the checks, and stops at `certified-handoff`. Mechanical rubric facts name the
+producing check node exactly. This avoids the fact/output-label mismatch that
+cost an extra Phase 29 attempt.
+
+The requested capability set is fixed to:
+
+```text
+program:select
+agent:dispatch
+check:execute
+workspace:write
+verdict:issue
+```
+
+It excludes commit, push, integration, contract generation, certification,
+merge, release, deploy, publish, arbitrary shell, and arbitrary network
+authority. The exact regression command is evidence work inside a bounded check
+node; it does not grant arbitrary shell capability.
+
+Before returning the proposal, the compiler runs whole-bundle validation from
+[`programs.py`](./programs.md). It checks the embedded documents directly, so
+it does not stage temporary policy files. It also runs a pure route simulation
+that proves one bounded green route plus typed check, abstention, repair,
+verdict, and budget failure routes. Any generated validation failure is a
+compiler bug and blocks output.
+
+### Budget derivation
+
+Let:
+
+- `S` be selected stories and `P` selected phases;
+- `C` be built-in checks plus one when `regression_argv` is present;
+- `W` be the complexity weight (`small=1`, `medium=2`, `large=4`);
+- `F` be `fan_out`;
+- `R` be `repair_rounds` (currently `1`);
+- `M` be the autonomy factor (`advisory=1`, `checkpointed=2`); and
+- `T` be the two required team slots.
+
+The primary envelopes are:
+
+```text
+role_starts = S * (T + R + 1) * F * M
+check_starts = S * C * (R + 1) * F
+units = S * W * F * (R + 1) * M
+```
+
+`max_child_runs`, `max_agent_starts`, `max_provider_starts`, and
+`max_model_starts` use `role_starts`. `max_check_starts` uses `check_starts`.
+The remaining count limits derive from `S`, `P`, `F`, `R`, `W`, and `M`.
+Artifact, token, cost, and wall-time limits use the same shape plus the known
+workflow node envelopes. Changing scope, complexity, fan-out, verification,
+repair count, or autonomy therefore changes the relevant budgets. The compiler
+never copies Phase 29's hand-written budget object.
+
+For the tracked program document and grant boundary after setup approval, see
+[Governed programs](./programs.md).

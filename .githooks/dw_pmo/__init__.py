@@ -303,6 +303,16 @@ from .programs import (
     validate_program,
     validate_program_path,
 )
+from .program_scaffold import (
+    ANSWERS_SCHEMA as PROGRAM_SCAFFOLD_ANSWERS_SCHEMA,
+    BUILT_IN_CHECKS as PROGRAM_SCAFFOLD_BUILT_IN_CHECKS,
+    EXCLUDED_CAPABILITIES as PROGRAM_SCAFFOLD_EXCLUDED_CAPABILITIES,
+    derive_program_budgets,
+    load_scaffold_answers,
+    normalize_scaffold_answers,
+    scaffold_program,
+    simulate_scaffold_proposal,
+)
 from .program_workflow import (
     ARTIFACT_KINDS as WORKFLOW_ARTIFACT_KINDS,
     COMPILED_WORKFLOW_KIND,

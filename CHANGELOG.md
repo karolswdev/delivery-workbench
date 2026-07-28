@@ -9,6 +9,15 @@ single-sourced from `dw_pmo.__version__` (test-asserted against
 
 ## Unreleased
 
+`dw program scaffold --answers <file>` now compiles a closed set of typed setup
+answers into one complete, inert setup proposal. The generated program,
+workflow, two-seat cross-provider organization, check-bound rubrics, one finite
+repair route, certified handoff, local profile bindings, and every finite budget
+are deterministic and validated together before output. Checkpointed mode is
+the default; commit, push, integration, certification, release, deploy, publish,
+arbitrary shell, and arbitrary network authority are excluded. The command
+writes no policy, roster, grant, run, or roadmap state.
+
 `/dw-scope` now holds one build-or-maintain scope conversation and writes one
 inert, provenance-traced draft to `.tmp/setup-proposal.json`. Build mode starts
 with a rails-ready repository and an idea; maintain mode reads the codebase and

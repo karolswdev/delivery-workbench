@@ -59,6 +59,11 @@ from setup_proposal_tests import (
     SetupProposalFitnessTest,
     SetupProposalJourneyTest,
 )
+from program_scaffold_tests import (
+    ProgramScaffoldAnswersTest,
+    ProgramScaffoldCompilerTest,
+    ProgramScaffoldGoldenTest,
+)
 from setup_lease_tests import SetupLeaseTest
 from scope_chat_tests import (
     ScopeChatFixtureTest,
@@ -1656,7 +1661,7 @@ class DwCoreTest(unittest.TestCase):
             "dw organization list", "dw organization validate", "dw organization simulate",
             "dw workflow list", "dw workflow validate", "dw workflow simulate",
             "dw rubric list", "dw rubric validate",
-            "dw program list", "dw program validate", "dw program simulate",
+            "dw program list", "dw program scaffold", "dw program validate", "dw program simulate",
             "dw program plan", "dw program show", "dw program start",
             "dw program preview", "dw program tick", "dw program supervise",
             "dw program request", "dw program pause", "dw program resume",

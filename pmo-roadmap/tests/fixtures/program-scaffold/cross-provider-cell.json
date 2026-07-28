@@ -1,0 +1,28 @@
+{
+  "autonomy_mode": "checkpointed",
+  "project": {
+    "idea": "Deliver two stories with a cross-provider implement and review cell.",
+    "mode": "maintain",
+    "prefix": "DM",
+    "slug": "demo",
+    "title": "Demo"
+  },
+  "profiles": {
+    "implementer": "claude-builder",
+    "verifier": "codex-reviewer"
+  },
+  "schema": "delivery-workbench-program-scaffold-answers@1",
+  "scope": {
+    "phase_numbers": [1],
+    "story_ids": ["DM-1-01", "DM-1-02"]
+  },
+  "size": {
+    "complexity": "large",
+    "fan_out": 2,
+    "repair_rounds": 1
+  },
+  "verification": {
+    "built_in_checks": ["rail-status"],
+    "regression_argv": ["/usr/bin/python3", "-B", "tests/focused.py"]
+  }
+}

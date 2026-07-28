@@ -143,6 +143,8 @@ try:
         simulate_program,
         validate_organization,
         validate_program_path,
+        load_scaffold_answers,
+        scaffold_program,
         validate_rubric,
         write_agent_docs,
         write_contract,
@@ -525,6 +527,20 @@ def command_program_list(args: argparse.Namespace) -> int:
             f"{run.get('operational_state', '-')}\t"
             f"{run.get('program') or '-'}\t{run.get('stop') or '-'}"
         )
+    return 0
+
+
+def command_program_scaffold(args: argparse.Namespace) -> int:
+    try:
+        answers_text = args.answers.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise DwError(f"cannot read scaffold answers {args.answers}: {exc}") from exc
+    answers = load_scaffold_answers(answers_text)
+    proposal = scaffold_program(args.root, answers)
+    if args.json:
+        print(json.dumps(proposal, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+    else:
+        print(json.dumps(proposal, indent=2, sort_keys=True, ensure_ascii=False))
     return 0
 
 
@@ -2025,6 +2041,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     program_list.add_argument("--json", action="store_true", help="emit the stamped inventory")
     program_list.set_defaults(func=command_program_list)
+    program_scaffold = program_sub.add_parser(
+        "scaffold",
+        help="compile typed setup answers into one inert validated proposal",
+    )
+    program_scaffold.add_argument(
+        "--answers", required=True, type=Path,
+        help="closed scaffold answers JSON file",
+    )
+    program_scaffold.add_argument(
+        "--json", action="store_true", help="emit canonical compact proposal JSON",
+    )
+    program_scaffold.set_defaults(func=command_program_scaffold)
     program_validate = program_sub.add_parser(
         "validate", help="validate one program, references, scope, and bindings"
     )

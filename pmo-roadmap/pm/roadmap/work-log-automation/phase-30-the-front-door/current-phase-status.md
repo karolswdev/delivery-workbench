@@ -109,7 +109,7 @@ changes who reaches the rails, never what the rails require.
   envelopes, compiler nodes against conductor support, diversity against
   the local roster — rejecting before grant time what Phase 29 paid to
   discover at verdict time (WLA-30-06).
-- [ ] `dw program scaffold` deterministically compiles interview choices
+- [x] `dw program scaffold` deterministically compiles interview choices
   into a complete, validated, checkpointed no-commit policy bundle that
   stays inside the unsaved proposal until the one setup approval
   (WLA-30-07).
@@ -138,7 +138,7 @@ changes who reaches the rails, never what the rails require.
 | WLA-30-04 | Make setup one deliberate act | done | [story-04-make-setup-one-deliberate-act](./story-04-make-setup-one-deliberate-act.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-30-05 | Review the adoption in the workbench | backlog | [story-05-review-the-adoption-in-the-workbench](./story-05-review-the-adoption-in-the-workbench.md) | - |
 | WLA-30-06 | Validate the whole bundle before runtime | done | [story-06-validate-the-whole-bundle-before-runtime](./story-06-validate-the-whole-bundle-before-runtime.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-30-07 | Scaffold a governed program | backlog | [story-07-scaffold-a-governed-program](./story-07-scaffold-a-governed-program.md) | - |
+| WLA-30-07 | Scaffold a governed program | done | [story-07-scaffold-a-governed-program](./story-07-scaffold-a-governed-program.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-30-08 | Review the generated program in Studio | backlog | [story-08-review-the-generated-program-in-studio](./story-08-review-the-generated-program-in-studio.md) | - |
 | WLA-30-09 | Let the safest runs leave lessons | done | [story-09-let-the-safest-runs-leave-lessons](./story-09-let-the-safest-runs-leave-lessons.md) | [evidence-story-09](./evidence-story-09.md) |
 | WLA-30-10 | Pass the empty-directory exam | backlog | [story-10-pass-the-empty-directory-exam](./story-10-pass-the-empty-directory-exam.md) | - |
@@ -209,8 +209,18 @@ the demo proved the chain end to end: fixture proposal → contract →
 preview → minted setup lease. `dw init` now hands off to `/dw-scope` —
 boot and conversation are one continuous journey.
 
-Next: the workbench reviews (05, 08) and the scaffold (07) off their
-worktrees, then the exam.
+WLA-30-07 is delivered: `dw program scaffold --answers` compiles a
+closed typed answers object into a complete governed bundle inside an
+unsaved proposal — five requested capabilities versus the hand-written
+Phase 29 bundle's nine, checkpointed by default, budgets as formulas
+over scope and size (12 of 24 respond to a size change in the demo),
+rubric fact ids structurally bound to producing checks, same-family
+seats refused over best-effort, and every emitted bundle passing
+whole-bundle validation plus pure simulation as an internal
+post-condition. Scaffolding writes nothing.
+
+Next: the workbench reviews (05, 08) off their worktrees, then the
+exam.
 
 ## Sequencing
 
