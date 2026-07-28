@@ -1465,17 +1465,18 @@ class _Compiler:
         all_producers: set[str] = set()
 
         def producers_for(instance: dict[str, object]) -> set[str]:
-            green_route = instance.get("green_route", {})
-            reachable = set(
-                green_route.get("reachable_nodes", [])
-                if isinstance(green_route, dict) else []
-            )
+            # Every check/rail node in the conducted graph produces its
+            # fact: repair-leg checks live on the FAILURE route by
+            # design (a passing first verdict goes straight to the
+            # terminal), and a repair rubric consumed only on that
+            # route legitimately names them. The attempt-7 defect this
+            # guard exists for was a fact-id NAME mismatch, which
+            # whole-graph matching still catches.
             return {
                 str(node.get("node"))
                 for node in instance.get("expanded_nodes", [])
                 if (
                     isinstance(node, dict)
-                    and node.get("address") in reachable
                     and node.get("type") in {"check", "rail"}
                 )
             }

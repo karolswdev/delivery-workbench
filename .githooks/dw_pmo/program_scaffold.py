@@ -660,7 +660,12 @@ def _workflow(slug: str, answers: dict[str, object], initial_rubric: str, repair
         "freshness_seconds": 3_600, "max_rationale_bytes": 30_000,
         "max_attempts": 1, "results": ["pass", "fail", "abstain", "inconclusive"],
         "routes": {
-            "pass": {"kind": "node", "target": "repair-once"},
+            # A passing first verdict goes straight to the certified
+            # handoff; only failure takes the bounded repair leg. The
+            # Phase 30 exam's live run proved the alternative absurd:
+            # a repair seat handed a passing candidate has nothing to
+            # fix and honestly refuses with an empty diff.
+            "pass": {"kind": "terminal", "target": "certified-handoff"},
             "fail": {"kind": "node", "target": "repair-once"},
             "abstain": {"kind": "action", "target": "checkpoint"},
             "inconclusive": {"kind": "action", "target": "block"},
@@ -801,7 +806,7 @@ def simulate_scaffold_proposal(proposal: object) -> dict[str, object]:
             assert isinstance(node.get("max_attempts"), int) and node["max_attempts"] == 1
     initial = by_id["verify-initial"]
     final = by_id["verify-repair"]
-    assert initial["routes"]["pass"] == {"kind": "node", "target": "repair-once"}
+    assert initial["routes"]["pass"] == {"kind": "terminal", "target": "certified-handoff"}
     assert initial["routes"]["fail"] == {"kind": "node", "target": "repair-once"}
     assert final["routes"]["pass"] == {"kind": "terminal", "target": "certified-handoff"}
     assert final["routes"]["fail"] == {"kind": "action", "target": "block"}
