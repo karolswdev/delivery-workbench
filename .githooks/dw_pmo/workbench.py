@@ -258,6 +258,17 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             return 200, envelope(program_summary_inventory(root))
 
         if (
+            len(parts) == 4
+            and parts[:2] == ["api", "programs"]
+            and parts[3] == "validate"
+        ):
+            from .programs import find_program_path, validate_program_path
+
+            return 200, envelope(validate_program_path(
+                root, find_program_path(root, parts[2]),
+            ))
+
+        if (
             len(parts) in {3, 4}
             and parts[:2] == ["api", "programs"]
             and (len(parts) == 3 or parts[3] == "view")

@@ -117,6 +117,49 @@ this document means that pair, not a filename. References use a stable slug;
 the compiler resolves every reference in the same repository, stamps its
 semantic hash into the bundle, and rejects missing or ambiguous references.
 
+### Whole-bundle validation
+
+`dw program validate` validates one linked object, not four documents in
+isolation. It resolves the program's roadmap scope, workflow instances,
+organization teams, rubrics, and the operator-local driver roster before any
+program plan or grant. The same canonical result is used by the CLI,
+`dw_program_validate`, and `GET /api/programs/<program>/validate`.
+
+For every binding, validation proves all of the following:
+
+- each rubric `mechanical-fact` id is the exact id of a reachable `check` node
+  or trusted `rail`; an output label or unreachable producer does not count;
+- the program budgets cover the workflow's finite fan-out, every required team
+  slot, independent verifier verdicts, provider/model starts, and at least one
+  all-green route to a `complete` or `awaiting-certification` terminal;
+- every compiler-accepted node kind is present in the conductor's code-owned
+  support set. An accepted but unconductable node, including `checkpoint`,
+  refuses at its source node's `/type` pointer; and
+- a present local roster can assign every required slot with the declared
+  capabilities, principal/workspace separation, and provider-family diversity.
+
+A successful roster check reports only closed, non-secret capability facts:
+logical profile, availability, adapter kind and version, provider family,
+capabilities, principal, workspace modes, and bounded model alias/binding. The
+roster schema rejects credential-shaped fields before diagnostics are built,
+and validation never emits command paths or credential material. If the local
+roster is absent, validation does not invent feasibility and does not reject an
+otherwise structural bundle. It returns a typed
+`driver-roster-unverifiable-locally` finding; configure the roster and validate
+again before requesting a grant.
+
+Tracked policy cannot choose local execution mechanics. Whole-bundle
+validation refuses executable selectors, command runners, arbitrary `argv`,
+environment variables, and driver flags with the source file, JSON pointer, and
+remediation. The standalone workflow compiler continues to parse the legacy
+command-runner shape so old documents remain inspectable, but no program bundle
+containing that shape can validate or reach grant planning; use a closed
+built-in check instead.
+
+Validation is pure. Its result stamps `starts_work: false` and false write flags
+for policy, roster, grant, run, and roadmap state. It does not create a local
+roster, normalize policy in place, plan a grant, or touch roadmap Markdown.
+
 ### Program document
 
 A representative program policy is:

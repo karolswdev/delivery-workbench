@@ -34,6 +34,8 @@ NODE_TYPES = (
     "agent", "check", "collect", "bounded_run", "subflow", "loop",
     "debate", "verdict", "gate", "checkpoint", "rail",
 )
+GREEN_ROUTE_OUTCOMES = frozenset({"success", "pass", "consensus"})
+GREEN_TERMINAL_MEANINGS = frozenset({"complete", "awaiting-certification"})
 PARAMETER_TYPES = ("string", "integer", "boolean", "string-list")
 ARTIFACT_KINDS = (
     "markdown", "json", "text", "git-diff", "directory", "verdict",
@@ -1890,7 +1892,78 @@ class _RegistryCompiler:
         compiled["sources"] = {
             key: self.sources[key] for key in sorted(self.sources)
         }
+        compiled["green_route"] = analyze_green_route(compiled)
         return compiled
+
+
+def analyze_green_route(compiled: dict[str, object]) -> dict[str, object]:
+    """Use the compiled simulation graph to prove one all-green completion path."""
+    nodes = {
+        str(node["address"]): node
+        for node in compiled.get("expanded_nodes", [])
+        if isinstance(node, dict) and node.get("address")
+    }
+    routes = [
+        route for route in compiled.get("routes", [])
+        if isinstance(route, dict)
+    ]
+    reachable: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for address, node in sorted(nodes.items()):
+            if address in reachable:
+                continue
+            needs = {
+                str(need) for need in node.get("needs", [])
+                if isinstance(need, str)
+            }
+            if not needs <= reachable:
+                continue
+            activation = node.get("activation", "success")
+            if activation == "success":
+                reachable.add(address)
+                changed = True
+                continue
+            if activation == "route" and any(
+                route.get("kind") == "node"
+                and route.get("target") == address
+                and route.get("source") in reachable
+                and route.get("outcome") in GREEN_ROUTE_OUTCOMES
+                for route in routes
+            ):
+                reachable.add(address)
+                changed = True
+
+    terminal_meanings = {
+        str(item["id"]): str(item["meaning"])
+        for item in compiled.get("terminals", [])
+        if isinstance(item, dict) and item.get("id") and item.get("meaning")
+    }
+    terminals: list[dict[str, str]] = []
+    for route in routes:
+        if (
+            route.get("kind") != "terminal"
+            or route.get("source") not in reachable
+            or route.get("outcome") not in GREEN_ROUTE_OUTCOMES
+        ):
+            continue
+        target = str(route.get("target") or "")
+        terminal_id = target.rsplit("#terminal/", 1)[-1]
+        meaning = terminal_meanings.get(terminal_id)
+        if meaning not in GREEN_TERMINAL_MEANINGS:
+            continue
+        terminals.append({
+            "id": terminal_id,
+            "meaning": meaning,
+            "source": str(route["source"]),
+        })
+    terminals.sort(key=lambda item: (item["id"], item["source"]))
+    return {
+        "complete": bool(terminals),
+        "reachable_nodes": sorted(reachable),
+        "complete_terminals": terminals,
+    }
 
 
 def validate_workflow(
@@ -1998,6 +2071,7 @@ def simulate_workflow(
         "loops": compiled["loops"],
         "debates": compiled["debates"],
         "terminals": compiled["terminals"],
+        "green_route": compiled["green_route"],
         "envelopes": {
             "by_node": compiled["node_envelopes"],
             "worst_case": compiled["envelope"],

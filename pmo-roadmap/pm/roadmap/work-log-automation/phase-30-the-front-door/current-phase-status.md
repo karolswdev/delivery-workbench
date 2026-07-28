@@ -104,7 +104,7 @@ changes who reaches the rails, never what the rails require.
   configuration visibly separated from authority — under the existing
   roadmap-changes route, with review-only sessions provably writing
   nothing (WLA-30-05).
-- [ ] `dw program validate` preflights the complete linked bundle — rubric
+- [x] `dw program validate` preflights the complete linked bundle — rubric
   facts against reachable workflow checks, budgets against team and route
   envelopes, compiler nodes against conductor support, diversity against
   the local roster — rejecting before grant time what Phase 29 paid to
@@ -137,7 +137,7 @@ changes who reaches the rails, never what the rails require.
 | WLA-30-03 | Hold the scope conversation | backlog | [story-03-hold-the-scope-conversation](./story-03-hold-the-scope-conversation.md) | - |
 | WLA-30-04 | Make setup one deliberate act | backlog | [story-04-make-setup-one-deliberate-act](./story-04-make-setup-one-deliberate-act.md) | - |
 | WLA-30-05 | Review the adoption in the workbench | backlog | [story-05-review-the-adoption-in-the-workbench](./story-05-review-the-adoption-in-the-workbench.md) | - |
-| WLA-30-06 | Validate the whole bundle before runtime | backlog | [story-06-validate-the-whole-bundle-before-runtime](./story-06-validate-the-whole-bundle-before-runtime.md) | - |
+| WLA-30-06 | Validate the whole bundle before runtime | done | [story-06-validate-the-whole-bundle-before-runtime](./story-06-validate-the-whole-bundle-before-runtime.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-30-07 | Scaffold a governed program | backlog | [story-07-scaffold-a-governed-program](./story-07-scaffold-a-governed-program.md) | - |
 | WLA-30-08 | Review the generated program in Studio | backlog | [story-08-review-the-generated-program-in-studio](./story-08-review-the-generated-program-in-studio.md) | - |
 | WLA-30-09 | Let the safest runs leave lessons | backlog | [story-09-let-the-safest-runs-leave-lessons](./story-09-let-the-safest-runs-leave-lessons.md) | - |
@@ -164,8 +164,24 @@ defect was found and fixed as a rider on the way: the doctor python3
 check reported the PATH binary with the running interpreter's version,
 breaking CLI/in-process status parity on split-interpreter desks.
 
-Next: WLA-30-06 (whole-bundle validation) lands off its parallel
-worktree, then the conversation (03) and the atomic setup surface (04).
+WLA-30-06 is delivered: `dw program validate` preflights the complete
+linked bundle — rubric facts against reachable producers, budgets
+against team/diversity/fan-out and one complete green route,
+compiler/conductor node parity (both sets code-derived), roster
+diagnostics with a typed roster-absent finding, and tracked
+execution-control refusals — with the Phase 29 defect classes encoded
+as regression fixtures and CLI/MCP/HTTP sharing one canonical pure
+core. Two orchestrator corrections on landing: the first cut
+blanket-refused the command channel (the sanctioned check-runner shape
+— exact tokenized argv, the form the phase-29 exam actually ran — is
+now accepted; every deviation and every other position refuses), and it
+raised bundle findings inside plain `compile_program`, breaking legacy
+fixtures; the findings now live in their own channel — validate reports
+all of them, grant planning refuses unconductable node types, compile
+semantics are unchanged.
+
+Next: the atomic setup surface (04) lands off its worktree, then the
+conversation (03), then the workbench reviews (05, 08).
 
 ## Sequencing
 

@@ -33,7 +33,12 @@ from .model import (
     normalize_status,
 )
 from .orchestration import NUDGE_SIGNALS, canonical_json
-from .orchestration_driver import load_driver_config
+from .orchestration_driver import (
+    driver_config_path,
+    driver_inventory,
+    load_driver_config,
+    validate_driver_config,
+)
 from .program_organization import (
     DUTIES,
     ORGANIZATION_KIND,
@@ -42,7 +47,11 @@ from .program_organization import (
     compile_organization,
     validate_workflow_team,
 )
-from .program_workflow import WorkflowValidationError, compile_workflow
+from .program_workflow import (
+    NODE_TYPES,
+    WorkflowValidationError,
+    compile_workflow,
+)
 from .program_verdict import (
     RUBRIC_KIND,
     RubricValidationError,
@@ -200,6 +209,20 @@ _RUBRIC_KEYS = {
     "subject_type", "result_vocabulary", "freshness", "criteria",
     "aggregation", "layout",
 }
+_LOCAL_DRIVER_ROSTER = object()
+_DRIVER_ROSTER_SOURCE = ".git/pmo-orchestration/drivers.json"
+_TRACKED_EXECUTABLE_KEYS = frozenset({"binary", "command", "executable"})
+_TRACKED_ARGV_KEYS = frozenset({"args", "arguments", "argv"})
+_TRACKED_ENVIRONMENT_KEYS = frozenset({
+    "env", "environment", "environment-variables", "environment_variables",
+})
+_TRACKED_DRIVER_FLAG_KEYS = frozenset({
+    "adapter_flags", "cli_flags", "driver-flags", "driver_flags", "flags",
+})
+_SENSITIVE_DIAGNOSTIC_VALUE_RE = re.compile(
+    r"(?:secret|token|credential|password|api[_-]?key|bearer|sk-[A-Za-z0-9])",
+    re.I,
+)
 
 
 class ProgramValidationError(DwError):
@@ -257,6 +280,159 @@ def load_program(path: Path) -> dict[str, object]:
         return parse_program_text(path.read_text(encoding="utf-8"), str(path))
     except OSError as exc:
         raise DwError(f"cannot read program policy {path}: {exc}") from exc
+
+
+def _pointer_part(value: object) -> str:
+    return str(value).replace("~", "~0").replace("/", "~1")
+
+
+_SANCTIONED_RUNNER_KEYS = {"kind", "argv", "cwd", "writes", "output_bytes"}
+
+
+def _is_sanctioned_check_runner(value: object) -> bool:
+    """The one legal command shape in tracked policy: a check node's runner.
+
+    The orchestration contract sanctions exactly one command channel —
+    a check node's ``runner`` carrying exact tokenized argv from the
+    reviewed score (no shell-string mode, no environment, no extra
+    keys). The Phase 29 exit-exam bundle runs its declared regression
+    command through precisely this shape and the conductor's baseline
+    subtraction depends on it, so validation must accept the conforming
+    form and refuse every deviation, not blanket-refuse the channel.
+    """
+    if not isinstance(value, dict) or value.get("kind") != "command":
+        return False
+    if not set(value).issubset(_SANCTIONED_RUNNER_KEYS):
+        return False
+    argv = value.get("argv")
+    if not isinstance(argv, list) or not argv:
+        return False
+    if any(not isinstance(item, str) or not item for item in argv):
+        return False
+    writes = value.get("writes", [])
+    if not isinstance(writes, list) or any(not isinstance(item, str) for item in writes):
+        return False
+    return isinstance(value.get("cwd", "."), str)
+
+
+def _tracked_policy_controls(
+    value: object,
+    *,
+    source: str,
+    pointer: str = "",
+) -> list[dict[str, str]]:
+    """Reject local execution controls wherever tracked bundle data hides them."""
+    diagnostics: list[dict[str, str]] = []
+    if isinstance(value, dict):
+        if (
+            value.get("type") == "check"
+            and _is_sanctioned_check_runner(value.get("runner"))
+        ):
+            rest = {key: item for key, item in value.items() if key != "runner"}
+            return _tracked_policy_controls(rest, source=source, pointer=pointer)
+        if value.get("kind") == "command":
+            diagnostics.append({
+                "source": source,
+                "pointer": f"{pointer}/kind" or "/kind",
+                "code": "tracked-executable",
+                "message": "tracked program policy cannot select a command executable",
+                "remediation": "replace the command runner with a closed built-in check",
+            })
+        for key, item in sorted(value.items(), key=lambda pair: str(pair[0])):
+            item_pointer = f"{pointer}/{_pointer_part(key)}"
+            key_text = str(key)
+            if key_text in _TRACKED_EXECUTABLE_KEYS:
+                diagnostics.append({
+                    "source": source,
+                    "pointer": item_pointer,
+                    "code": "tracked-executable",
+                    "message": "tracked program policy cannot name a local executable",
+                    "remediation": "move executable selection to the local driver roster or use a closed built-in rail",
+                })
+            elif key_text in _TRACKED_ARGV_KEYS:
+                diagnostics.append({
+                    "source": source,
+                    "pointer": item_pointer,
+                    "code": "tracked-argv",
+                    "message": "tracked program policy cannot supply arbitrary argv",
+                    "remediation": "use a closed built-in check or keep adapter arguments in local driver code",
+                })
+            elif key_text in _TRACKED_ENVIRONMENT_KEYS:
+                diagnostics.append({
+                    "source": source,
+                    "pointer": item_pointer,
+                    "code": "tracked-environment",
+                    "message": "tracked program policy cannot supply environment variables",
+                    "remediation": "configure non-secret environment controls in the local adapter implementation",
+                })
+            elif key_text in _TRACKED_DRIVER_FLAG_KEYS:
+                diagnostics.append({
+                    "source": source,
+                    "pointer": item_pointer,
+                    "code": "tracked-driver-flags",
+                    "message": "tracked program policy cannot supply driver flags",
+                    "remediation": "remove the flags; only declared local adapter behavior may form driver argv",
+                })
+            diagnostics.extend(
+                _tracked_policy_controls(
+                    item, source=source, pointer=item_pointer,
+                )
+            )
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            diagnostics.extend(
+                _tracked_policy_controls(
+                    item, source=source, pointer=f"{pointer}/{index}",
+                )
+            )
+    return diagnostics
+
+
+def _redact_diagnostic_value(value: object) -> object:
+    if isinstance(value, str):
+        return (
+            "[redacted]"
+            if _SENSITIVE_DIAGNOSTIC_VALUE_RE.search(value) else value
+        )
+    if isinstance(value, list):
+        return [_redact_diagnostic_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _redact_diagnostic_value(item)
+            for key, item in value.items()
+        }
+    return value
+
+
+def _driver_roster_diagnostics(
+    config: dict[str, object],
+) -> dict[str, object]:
+    inventory = driver_inventory(config)
+    profiles = []
+    for raw in inventory["profiles"]:
+        profiles.append(_redact_diagnostic_value({
+            "profile": raw["profile"],
+            "available": raw["available"],
+            "adapter": {
+                "kind": raw["adapter"],
+                "version": raw["adapter_version"],
+            },
+            "provider_family": raw["provider_family"],
+            "capabilities": raw["capabilities"],
+            "principal": raw["principal"],
+            "workspace_modes": raw["workspace_modes"],
+            "model": {
+                "alias": raw["model"],
+                "binding": raw["model_binding"],
+                "revision": raw["model_revision"],
+            },
+        }))
+    return {
+        "status": "available",
+        "source": _DRIVER_ROSTER_SOURCE,
+        "profiles": profiles,
+        "stores_credentials": False,
+    }
 
 
 def _policy_dir(root: Path, name: str) -> Path:
@@ -400,6 +576,7 @@ class _Compiler:
         self.raw = raw
         self.source = source
         self.diagnostics: list[dict[str, str]] = []
+        self.bundle_diagnostics: list[dict[str, str]] = []
         self.references: dict[str, object] = {
             "organization": None,
             "workflows": {},
@@ -418,6 +595,30 @@ class _Compiler:
         source: str | None = None,
     ) -> None:
         self.diagnostics.append({
+            "source": source or self.source,
+            "pointer": pointer or "/",
+            "code": code,
+            "message": message,
+            "remediation": remediation,
+        })
+
+    def bundle_diag(
+        self,
+        pointer: str,
+        code: str,
+        message: str,
+        remediation: str,
+        source: str | None = None,
+    ) -> None:
+        """Whole-bundle preflight findings (WLA-30-06).
+
+        These reject a bundle at validate time and gate grant planning,
+        but deliberately do not fail plain ``compile_program`` — the
+        compiler's document semantics are unchanged so studio editing,
+        simulation, and legacy fixtures keep compiling while the
+        validate surface and the grant path refuse.
+        """
+        self.bundle_diagnostics.append({
             "source": source or self.source,
             "pointer": pointer or "/",
             "code": code,
@@ -573,6 +774,9 @@ class _Compiler:
             )
         except RubricValidationError as exc:
             self.diagnostics.extend(exc.diagnostics)
+            self.bundle_diagnostics.extend(_tracked_policy_controls(
+                reference["document"], source=str(reference["path"]),
+            ))
             return None
         reference.update({
             "semantic_document": compiled["rubric"],
@@ -602,6 +806,9 @@ class _Compiler:
             compiled = compile_organization(self.root, raw, source)
         except OrganizationValidationError as exc:
             self.diagnostics.extend(exc.diagnostics)
+            self.bundle_diagnostics.extend(_tracked_policy_controls(
+                raw, source=source,
+            ))
             return {
                 "slug": slug, "agents": [], "pools": [], "teams": [],
                 "councils": [], "compiled": None,
@@ -1033,6 +1240,258 @@ class _Compiler:
             rules.append(rule)
         return rules
 
+    def _workflow_node_location(
+        self,
+        instance: dict[str, object],
+        expanded: dict[str, object],
+    ) -> tuple[str, str]:
+        workflow = str(expanded.get("workflow") or instance.get("slug") or "")
+        version = str(expanded.get("version") or instance.get("version") or "")
+        source_record = instance.get("sources", {}).get(f"{workflow}@{version}")  # type: ignore[union-attr]
+        source = str(
+            source_record.get("path")
+            if isinstance(source_record, dict) else instance.get("source", self.source)
+        )
+        try:
+            document = parse_program_text(
+                (self.root / source).read_text(encoding="utf-8"), source,
+            )
+        except (DwError, OSError):
+            return source, "/nodes"
+        for index, node in enumerate(document.get("nodes", [])):
+            if isinstance(node, dict) and node.get("id") == expanded.get("node"):
+                return source, f"/nodes/{index}"
+        return source, "/nodes"
+
+    def _bundle_policy_controls(self) -> None:
+        documents: list[tuple[str, object]] = [(self.source, self.raw)]
+        organization = self.references.get("organization")
+        if isinstance(organization, dict):
+            compiled = organization.get("compiled")
+            if isinstance(compiled, dict):
+                documents.append((str(organization["path"]), compiled["organization"]))
+        for family in ("workflows", "rubrics"):
+            references = self.references.get(family, {})
+            if not isinstance(references, dict):
+                continue
+            for reference in references.values():
+                if isinstance(reference, dict):
+                    documents.append((str(reference["path"]), reference["document"]))
+        instances = self.references.get("workflow_instances", {})
+        if isinstance(instances, dict):
+            for instance in instances.values():
+                if not isinstance(instance, dict):
+                    continue
+                for source_record in instance.get("sources", {}).values():
+                    if not isinstance(source_record, dict):
+                        continue
+                    source_path = str(source_record.get("path") or "")
+                    try:
+                        document = parse_program_text(
+                            (self.root / source_path).read_text(encoding="utf-8"),
+                            source_path,
+                        )
+                    except (DwError, OSError):
+                        continue
+                    documents.append((source_path, document))
+        seen: set[tuple[str, str, str]] = set()
+        for source, document in documents:
+            for diagnostic in _tracked_policy_controls(document, source=source):
+                key = (
+                    diagnostic["source"], diagnostic["pointer"],
+                    diagnostic["code"],
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                self.bundle_diagnostics.append(diagnostic)
+
+    def _bundle_node_and_route_checks(self) -> None:
+        # Imported lazily because the conductor itself imports this module.
+        from .program_conductor import CONDUCTOR_NODE_TYPES
+
+        compiler_only = set(NODE_TYPES) - set(CONDUCTOR_NODE_TYPES)
+        instances = self.references.get("workflow_instances", {})
+        if not isinstance(instances, dict):
+            return
+        for binding_id, instance in sorted(instances.items()):
+            if not isinstance(instance, dict):
+                continue
+            for expanded in instance.get("expanded_nodes", []):
+                if not isinstance(expanded, dict):
+                    continue
+                node_type = str(expanded.get("type") or "")
+                if node_type not in compiler_only:
+                    continue
+                source, pointer = self._workflow_node_location(instance, expanded)
+                self.bundle_diag(
+                    f"{pointer}/type",
+                    "unconductable-node-type",
+                    f"compiler accepts node type {node_type!r}, but the program conductor does not conduct it",
+                    "replace it with a conductor-supported node or add conductor support before granting the program",
+                    source,
+                )
+            green_route = instance.get("green_route", {})
+            if not isinstance(green_route, dict) or not green_route.get("complete"):
+                source = str(instance.get("source") or self.source)
+                self.bundle_diag(
+                    "/terminals",
+                    "no-complete-green-route",
+                    f"binding {binding_id!r} has no reachable all-green route to a complete terminal",
+                    "route a reachable success/pass/consensus outcome to a complete or awaiting-certification terminal",
+                    source,
+                )
+
+    def _bundle_rubric_fact_checks(
+        self,
+        bindings: list[dict[str, object]],
+    ) -> None:
+        instances = self.references.get("workflow_instances", {})
+        rubrics = self.references.get("rubrics", {})
+        if not isinstance(instances, dict) or not isinstance(rubrics, dict):
+            return
+        checked_rubrics: set[str] = set()
+        all_producers: set[str] = set()
+
+        def producers_for(instance: dict[str, object]) -> set[str]:
+            green_route = instance.get("green_route", {})
+            reachable = set(
+                green_route.get("reachable_nodes", [])
+                if isinstance(green_route, dict) else []
+            )
+            return {
+                str(node.get("node"))
+                for node in instance.get("expanded_nodes", [])
+                if (
+                    isinstance(node, dict)
+                    and node.get("address") in reachable
+                    and node.get("type") in {"check", "rail"}
+                )
+            }
+
+        def check_rubric(
+            rubric_slug: object,
+            producers: set[str],
+            binding_label: str,
+        ) -> None:
+            reference = rubrics.get(str(rubric_slug))
+            if not isinstance(reference, dict):
+                return
+            checked_rubrics.add(str(rubric_slug))
+            document = reference.get("document", {})
+            if not isinstance(document, dict):
+                return
+            for index, criterion in enumerate(document.get("criteria", [])):
+                evaluation = (
+                    criterion.get("evaluation")
+                    if isinstance(criterion, dict) else None
+                )
+                if not isinstance(evaluation, dict) or evaluation.get("kind") != "mechanical-fact":
+                    continue
+                fact = str(evaluation.get("fact") or "")
+                if fact in producers:
+                    continue
+                self.bundle_diag(
+                    f"/criteria/{index}/evaluation/fact",
+                    "mechanical-fact-unproduced",
+                    f"mechanical fact {fact!r} is not produced by a reachable check or trusted rail {binding_label}",
+                    "name the producing check/rail node id exactly or make that producer reachable on the green route",
+                    str(reference["path"]),
+                )
+
+        for binding in bindings:
+            instance = instances.get(str(binding["id"]))
+            if not isinstance(instance, dict):
+                continue
+            producers = producers_for(instance)
+            all_producers.update(producers)
+            for rubric_slug in binding.get("rubrics", []):
+                check_rubric(
+                    rubric_slug, producers,
+                    f"in binding {binding['id']!r}",
+                )
+        for rubric_slug in sorted(set(rubrics) - checked_rubrics):
+            check_rubric(
+                rubric_slug, all_producers, "in the linked workflow bundle",
+            )
+
+    def _bundle_team_budget_checks(
+        self,
+        organization: dict[str, object],
+        bindings: list[dict[str, object]],
+        budgets: dict[str, int],
+        phase_gates: list[dict[str, object]],
+    ) -> None:
+        compiled = organization.get("compiled")
+        runtime = compiled.get("organization") if isinstance(compiled, dict) else None
+        if not isinstance(runtime, dict):
+            return
+        instances = self.references.get("workflow_instances", {})
+        if not isinstance(instances, dict):
+            return
+        teams = {str(team["id"]): team for team in runtime.get("teams", [])}
+        source = str(organization.get("path") or self.source)
+        gate_duties = {str(gate["role"]) for gate in phase_gates}
+        for binding in bindings:
+            team = teams.get(str(binding["team"]))
+            instance = instances.get(str(binding["id"]))
+            if not isinstance(team, dict) or not isinstance(instance, dict):
+                continue
+            workflow_roles = {
+                str(lane["role"])
+                for lane in instance.get("role_lanes", [])
+                if isinstance(lane, dict) and lane.get("role")
+            }
+            required_roles = [
+                role for role in team.get("roles", [])
+                if isinstance(role, dict) and (
+                    role.get("required")
+                    or role.get("id") in workflow_roles
+                    or role.get("duty") in gate_duties
+                )
+            ]
+            minimum = sum(int(role["cardinality"]) for role in required_roles)
+            verifier_slots = sum(
+                int(role["cardinality"])
+                for role in required_roles if role.get("duty") == "verifier"
+            )
+            for budget_key in (
+                "max_child_runs", "max_agent_starts", "max_provider_starts",
+                "max_model_starts",
+            ):
+                if budgets[budget_key] >= minimum:
+                    continue
+                self.bundle_diag(
+                    f"/budgets/{budget_key}",
+                    "team-exceeds-budget",
+                    f"binding {binding['id']!r} requires at least {minimum} distinct team starts, but {budget_key}={budgets[budget_key]}",
+                    "raise the finite budget to the bound team's required cardinality or reduce required role slots",
+                )
+            if budgets["max_verdicts"] < verifier_slots:
+                self.bundle_diag(
+                    "/budgets/max_verdicts",
+                    "verifier-exceeds-budget",
+                    f"binding {binding['id']!r} requires {verifier_slots} independent verifier verdict(s), but max_verdicts={budgets['max_verdicts']}",
+                    "raise max_verdicts to cover every required verifier slot",
+                )
+            implementer = next(
+                (role for role in required_roles if role.get("duty") == "implementer"),
+                None,
+            )
+            verifier = next(
+                (role for role in required_roles if role.get("duty") == "verifier"),
+                None,
+            )
+            if implementer is not None and verifier is not None and minimum < 2:
+                team_index = list(runtime.get("teams", [])).index(team)
+                self.bundle_diag(
+                    f"/teams/{team_index}/roles",
+                    "separation-violation",
+                    "implementer/verifier separation requires at least two role slots",
+                    "declare distinct required singleton implementer and verifier roles",
+                    source,
+                )
+
     def compile(self) -> tuple[dict[str, object], list[dict[str, str]], dict[str, object]]:
         if not isinstance(self.raw, dict):
             self.diag("/", "wrong-type", "program must be an object", "provide a program object")
@@ -1193,6 +1652,12 @@ class _Compiler:
                         f"{budgets[budget_key]}",
                         "raise the finite program budget or lower workflow/nudge bounds",
                     )
+        self._bundle_policy_controls()
+        self._bundle_node_and_route_checks()
+        self._bundle_rubric_fact_checks(bindings)
+        self._bundle_team_budget_checks(
+            organization, bindings, budgets, phase_gates,
+        )
         stops = raw.get("stop_conditions", list(STOP_CONDITIONS))
         if (
             not isinstance(stops, list) or not stops
@@ -1236,16 +1701,216 @@ class _Compiler:
         return normalized, self.diagnostics, analysis
 
 
-def validate_program(root: Path, program: object, source: str = "program") -> dict[str, object]:
-    normalized, diagnostics, _analysis = _Compiler(root, program, source).compile()
+def _validate_local_bundle_roster(
+    compiler: _Compiler,
+    normalized: dict[str, object],
+    analysis: dict[str, object],
+    driver_config: object,
+) -> tuple[dict[str, object], list[dict[str, str]], list[dict[str, str]]]:
+    root = compiler.root
+    roster_source = _DRIVER_ROSTER_SOURCE
+    findings: list[dict[str, str]] = []
+    if driver_config is _LOCAL_DRIVER_ROSTER:
+        try:
+            path = driver_config_path(root)
+        except DwError:
+            # A root with no git repository (pure fixtures, studio
+            # sandboxes) cannot hold a .git-local roster; that is the
+            # same honest answer as roster-absent, not a refusal.
+            path = None
+        if path is None or not path.is_file():
+            findings.append({
+                "source": roster_source,
+                "pointer": "/",
+                "code": "driver-roster-unverifiable-locally",
+                "type": "unverifiable-locally",
+                "message": "the linked bundle is structurally valid, but local driver feasibility cannot be verified because no roster is present",
+                "remediation": "configure the local non-secret driver roster, then validate again before requesting a grant",
+            })
+            return {
+                "status": "unverifiable-locally",
+                "source": roster_source,
+                "profiles": [],
+                "stores_credentials": False,
+            }, [], findings
+        try:
+            config = load_driver_config(root)
+        except DwError:
+            return {
+                "status": "invalid",
+                "source": roster_source,
+                "profiles": [],
+                "stores_credentials": False,
+            }, [{
+                "source": roster_source,
+                "pointer": "/",
+                "code": "driver-roster-invalid",
+                "message": "local driver roster is invalid",
+                "remediation": "remove credentials and unsupported fields, then provide closed non-secret driver profiles",
+            }], findings
+    elif driver_config is None:
+        findings.append({
+            "source": roster_source,
+            "pointer": "/",
+            "code": "driver-roster-unverifiable-locally",
+            "type": "unverifiable-locally",
+            "message": "local driver feasibility was not supplied for this validation",
+            "remediation": "validate with a closed local driver roster before requesting a grant",
+        })
+        return {
+            "status": "unverifiable-locally",
+            "source": roster_source,
+            "profiles": [],
+            "stores_credentials": False,
+        }, [], findings
+    else:
+        try:
+            config = validate_driver_config(driver_config)
+        except DwError:
+            return {
+                "status": "invalid",
+                "source": roster_source,
+                "profiles": [],
+                "stores_credentials": False,
+            }, [{
+                "source": roster_source,
+                "pointer": "/",
+                "code": "driver-roster-invalid",
+                "message": "local driver roster is invalid",
+                "remediation": "remove credentials and unsupported fields, then provide closed non-secret driver profiles",
+            }], findings
+
+    roster = _driver_roster_diagnostics(config)
+    diagnostics: list[dict[str, str]] = []
+    organization = compiler.references.get("organization")
+    instances = compiler.references.get("workflow_instances", {})
+    if not isinstance(organization, dict) or not isinstance(instances, dict):
+        return roster, diagnostics, findings
+    organization_compiled = organization.get("compiled")
+    if not isinstance(organization_compiled, dict):
+        return roster, diagnostics, findings
+    story_bindings = analysis.get("binding_by_story", {})
+    for binding in normalized.get("bindings", []):
+        if not isinstance(binding, dict):
+            continue
+        binding_id = str(binding["id"])
+        instance = instances.get(binding_id)
+        if not isinstance(instance, dict):
+            continue
+        story_id = next(
+            (
+                str(candidate) for candidate, candidate_binding
+                in sorted(story_bindings.items())
+                if candidate_binding == binding_id
+            ),
+            "bundle-validation",
+        )
+        assignment = assign_organization_team(
+            organization_compiled,
+            str(binding["team"]),
+            driver_config=config,
+            policy_bundle_hash=_sha({
+                "program": normalized,
+                "purpose": "bundle-validation",
+            }),
+            story_id=story_id,
+            workflow_address=(
+                f"program/{normalized['slug']}/story/{story_id}/workflow/{binding_id}"
+            ),
+            program_capabilities=normalized.get("requested_capabilities", []),
+            workflow=instance,
+        )
+        if assignment.get("applicable"):
+            continue
+        organization_runtime = organization_compiled["organization"]
+        teams = list(organization_runtime.get("teams", []))
+        team_index = next(
+            (
+                index for index, team in enumerate(teams)
+                if team.get("id") == binding["team"]
+            ),
+            0,
+        )
+        diversity = list(organization_runtime.get("diversity", []))
+        for issue in assignment.get("issues", []):
+            if not isinstance(issue, dict):
+                continue
+            code = str(issue.get("code") or "role-unavailable")
+            if code == "provider-diversity-unsatisfied":
+                pointer = (
+                    f"/diversity/{next((index for index, rule in enumerate(diversity) if str(rule.get('id')) in str(issue.get('message'))), 0)}"
+                )
+            else:
+                pointer = f"/teams/{team_index}/roles"
+            diagnostics.append({
+                "source": str(organization["path"]),
+                "pointer": pointer,
+                "code": code,
+                "message": str(_redact_diagnostic_value(
+                    str(issue.get("message") or "local roster cannot satisfy the bound team")
+                )),
+                "remediation": "configure enough available, capability-compatible, independently-principalled local profiles with the required provider families",
+            })
+    unique: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for diagnostic in diagnostics:
+        key = (
+            diagnostic["source"], diagnostic["pointer"],
+            diagnostic["code"], diagnostic["message"],
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(diagnostic)
+    unique.sort(
+        key=lambda item: (
+            item["source"], item["pointer"], item["code"], item["message"],
+        )
+    )
+    return roster, unique, findings
+
+
+def validate_program(
+    root: Path,
+    program: object,
+    source: str = "program",
+    *,
+    driver_config: object = _LOCAL_DRIVER_ROSTER,
+) -> dict[str, object]:
+    compiler = _Compiler(root, program, source)
+    normalized, diagnostics, analysis = compiler.compile()
+    diagnostics.extend(compiler.bundle_diagnostics)
+    roster: dict[str, object] = {
+        "status": "not-checked",
+        "source": _DRIVER_ROSTER_SOURCE,
+        "profiles": [],
+        "stores_credentials": False,
+    }
+    findings: list[dict[str, str]] = []
+    roster, roster_diagnostics, findings = _validate_local_bundle_roster(
+        compiler, normalized, analysis, driver_config,
+    )
+    diagnostics.extend(roster_diagnostics)
+    diagnostics.sort(
+        key=lambda item: (
+            item["source"], item["pointer"], item["code"], item["message"],
+        )
+    )
     return {
         "kind": VALIDATION_KIND,
         "schema_version": PROGRAM_SCHEMA_VERSION,
         "valid": not diagnostics,
         "diagnostics": diagnostics,
+        "findings": findings,
+        "driver_roster": roster,
         "normalized": normalized if not diagnostics else None,
         "starts_work": False,
         "writes_state": False,
+        "writes_policy": False,
+        "writes_roster": False,
+        "writes_grant": False,
+        "writes_run": False,
+        "writes_roadmap": False,
     }
 
 
@@ -1258,6 +1923,7 @@ def compile_program(root: Path, program: object, source: str = "program") -> dic
     normalized, diagnostics, analysis = compiler.compile()
     if diagnostics:
         raise ProgramValidationError(diagnostics)
+    bundle_diagnostics = list(compiler.bundle_diagnostics)
     runtime = {key: value for key, value in normalized.items() if key != "layout"}
     reference_payload = compiler.references
     organization = reference_payload["organization"]
@@ -1301,6 +1967,7 @@ def compile_program(root: Path, program: object, source: str = "program") -> dic
         "references": reference_payload,
         "reference_hashes": reference_hashes,
         "analysis": analysis,
+        "bundle_diagnostics": bundle_diagnostics,
     }
 
 
@@ -1471,6 +2138,16 @@ def build_program_plan(
     else:
         compiled = compile_program(root, program)
         program_path = None
+    # WLA-30-06: a node the conductor cannot conduct is rejected before
+    # grant planning — the one whole-bundle finding that gates this path
+    # (the rest reject at the validate surface).
+    unconductable = [
+        item
+        for item in compiled.get("bundle_diagnostics", [])
+        if item["code"] == "unconductable-node-type"
+    ]
+    if unconductable:
+        raise ProgramValidationError(unconductable)
     scope = compiled["program"]["scope"]  # type: ignore[index]
     project = next(
         item for item in discover_projects(root)

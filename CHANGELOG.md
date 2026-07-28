@@ -9,6 +9,16 @@ single-sourced from `dw_pmo.__version__` (test-asserted against
 
 ## Unreleased
 
+Program validation now preflights the complete linked bundle before grant
+planning. It cross-checks rubric mechanical facts against reachable workflow
+producers, team and verifier requirements against finite budgets, compiler node
+kinds against conductor support, complete green routes through the existing
+workflow simulation graph, and provider diversity against the local driver
+roster. Roster-absent hosts receive a typed unverifiable-local finding; present
+rosters expose only closed non-secret capability diagnostics. Tracked
+executables, argv, environment, and driver flags refuse with source JSON
+pointers. CLI, MCP, and localhost HTTP validation share one pure canonical core.
+
 `dw init <path>` now takes an empty directory or empty Git repository to
 healthy vendored rails. It composes `git init` with the packaged
 `install.sh --skip-bootstrap`, refuses accidental nested repositories, and

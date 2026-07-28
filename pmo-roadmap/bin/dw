@@ -533,6 +533,12 @@ def command_program_validate(args: argparse.Namespace) -> int:
         print(json.dumps(document, sort_keys=True))
     elif document["valid"]:
         print(f"valid\t{path.relative_to(args.root)}")
+        for finding in document.get("findings", []):
+            print(
+                f"FINDING {finding['source']}:{finding['pointer']} "
+                f"[{finding['code']}] {finding['message']}; "
+                f"{finding['remediation']}"
+            )
     else:
         for diagnostic in document["diagnostics"]:
             print(

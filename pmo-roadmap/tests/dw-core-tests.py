@@ -47,6 +47,12 @@ from grounding_tests import GroundingIntegrationTest, GroundingUnitTest
 from init_cmd_tests import InitCommandTest
 from knowledge_packet_tests import HonestUsageTest, KnowledgePacketTest
 from knowledge_writeback_tests import KnowledgeWritebackTest
+from bundle_validation_tests import (
+    BundleFactAndBudgetTest,
+    BundlePolicyPurityAndParityTest,
+    BundleRealPhase29IntegrationTest,
+    BundleRosterAndParityTest,
+)
 from setup_proposal_tests import (
     SetupProposalContractTest,
     SetupProposalFitnessTest,
@@ -10459,12 +10465,19 @@ class ProgramPlannerTest(unittest.TestCase):
         }]
         self._write_json("pm/organizations/delivery-core.json", organization)
         validation = self.programs_core.validate_program(self.root, self.program)
-        self.assertTrue(validation["valid"], validation["diagnostics"])
+        self.assertFalse(validation["valid"])
+        self.assertIn(
+            "provider-diversity-unsatisfied", self.codes(validation),
+        )
 
         satisfying = load_driver_config(self.root)
         satisfying["profiles"]["builder-a"]["provider_family"] = "family-a"
         satisfying["profiles"]["builder-b"]["provider_family"] = "family-a"
         satisfying["profiles"]["verifier-a"]["provider_family"] = "family-b"
+        validation = self.programs_core.validate_program(
+            self.root, self.program, driver_config=satisfying,
+        )
+        self.assertTrue(validation["valid"], validation["diagnostics"])
         plan = self.programs_core.build_program_plan(
             self.root, self.program, driver_config=satisfying
         )
@@ -13356,6 +13369,8 @@ class ProgramConductorTest(unittest.TestCase):
         self.assertEqual(replayed["dispatches"], [])
 
     def test_preexisting_failure_becomes_debt_and_planted_regression_blocks(self):
+        # This command runner sits in the sanctioned check-node position,
+        # so whole-bundle validation accepts it — no bypass needed.
         baseline_script = (
             "import sys\n"
             "print('FAIL: test_existing (suite.Case.test_existing)')\n"

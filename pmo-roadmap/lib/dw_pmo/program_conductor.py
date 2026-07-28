@@ -127,6 +127,14 @@ PROGRAM_ARTIFACT_KIND = "delivery-workbench-program-artifact-receipt"
 PROGRAM_DRIVER_OPERATION_KIND = "delivery-workbench-program-driver-operation"
 PROGRAM_REQUEST_RESULT_KIND = "delivery-workbench-program-request-result"
 
+# Public workflow kinds this conductor can turn into finite actions or governed
+# structural progress. Bundle validation compares this code-owned set with the
+# compiler's accepted kinds, so drift fails before a grant exists.
+CONDUCTOR_NODE_TYPES = frozenset({
+    "agent", "check", "collect", "subflow", "loop", "debate", "verdict",
+})
+_CONDUCTOR_INTERNAL_NODE_TYPES = frozenset({"panel"})
+
 TERMINAL_AUTHORITY_STATES = {
     "advisory", "complete", "expired", "exhausted", "revoked", "cancelled",
 }
@@ -5359,7 +5367,7 @@ def derive_program_frontier(
             )
             virtual_results[node_base] = str(deliberation["result"])
             continue
-        if node_type not in {"agent", "verdict", "panel", "check", "collect"}:
+        if node_type not in CONDUCTOR_NODE_TYPES | _CONDUCTOR_INTERNAL_NODE_TYPES:
             return _frontier_result(
                 run_id, plan, "stopped", [],
                 stop=f"unsupported-workflow-node:{node_type}",
