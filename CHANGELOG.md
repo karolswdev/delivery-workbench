@@ -40,6 +40,15 @@ components already present without changing them. Repositories with healthy
 rails but no roadmap project now receive a `setup-project` next action from
 `dw status` instead of treating that state as corruption.
 
+Checkpointed no-commit programs may now request the narrow
+`knowledge:lesson-writeback` capability. At the exact certified handoff it
+spends one finite `max_lesson_writebacks` unit and appends bounded lessons labeled
+`certified-not-integrated`, with run, story, candidate, adapter/profile, verdict,
+and deterministic receipt provenance. Replay neither duplicates a record nor
+spends another unit. A later exact delivery commit appends `confirmed`; a
+superseding integration appends `superseded`. Knowledge packets keep the label
+visible, and authority paths still cannot use any lesson as proof.
+
 One answer before agents act: Phase 22 adds the stamped, deterministic
 `delivery-workbench-status@1` briefing across `dw status`, MCP
 `dw_status`, `GET /api/status`, the workbench overview, and every generated

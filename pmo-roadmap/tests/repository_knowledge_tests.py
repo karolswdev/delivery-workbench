@@ -114,6 +114,8 @@ class RepositoryKnowledgeTest(unittest.TestCase):
                 knowledge.DERIVED_FACT_KIND,
                 knowledge.DELIVERY_RECORD_KIND,
                 knowledge.LESSON_KIND,
+                knowledge.CERTIFIED_LESSON_KIND,
+                knowledge.LESSON_DELIVERY_OBSERVATION_KIND,
             },
         )
         self.assertEqual(

@@ -117,7 +117,7 @@ changes who reaches the rails, never what the rails require.
   whole-bundle diagnostics and a pure simulation, handing off to the
   existing exact grant preview — no new pane, no browser consent
   (WLA-30-08).
-- [ ] No-commit grants can request a narrow lesson-write-back capability so
+- [x] No-commit grants can request a narrow lesson-write-back capability so
   the safest runs still leave bounded, delivery-state-labeled lessons that
   later knowledge packets retrieve — with lessons still unable to satisfy
   any gate, verdict, or grant prerequisite (WLA-30-09).
@@ -140,7 +140,7 @@ changes who reaches the rails, never what the rails require.
 | WLA-30-06 | Validate the whole bundle before runtime | done | [story-06-validate-the-whole-bundle-before-runtime](./story-06-validate-the-whole-bundle-before-runtime.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-30-07 | Scaffold a governed program | backlog | [story-07-scaffold-a-governed-program](./story-07-scaffold-a-governed-program.md) | - |
 | WLA-30-08 | Review the generated program in Studio | backlog | [story-08-review-the-generated-program-in-studio](./story-08-review-the-generated-program-in-studio.md) | - |
-| WLA-30-09 | Let the safest runs leave lessons | backlog | [story-09-let-the-safest-runs-leave-lessons](./story-09-let-the-safest-runs-leave-lessons.md) | - |
+| WLA-30-09 | Let the safest runs leave lessons | done | [story-09-let-the-safest-runs-leave-lessons](./story-09-let-the-safest-runs-leave-lessons.md) | [evidence-story-09](./evidence-story-09.md) |
 | WLA-30-10 | Pass the empty-directory exam | backlog | [story-10-pass-the-empty-directory-exam](./story-10-pass-the-empty-directory-exam.md) | - |
 
 ## Where we are
@@ -189,8 +189,18 @@ setup vs. program tokens; public `dw adopt --apply` retired into the
 flow; CLI/MCP/HTTP byte-parity. The first approval of the phase promise
 now exists as machinery.
 
-Next: the conversation (03), then the workbench reviews (05, 08) and
-the scaffold (07) off their worktrees, then lessons (09) and the exam.
+WLA-30-09 is delivered: `knowledge:lesson-writeback` — a narrow,
+independently budgeted capability no-commit grants can request — makes
+the safest runs epistemically productive. Lessons persist at exactly
+the certified-handoff terminal, carry the closed
+`certified-not-integrated` → `confirmed`/`superseded` delivery-state
+vocabulary in append-only earned records, replay idempotently via
+deterministic receipt ids, retrieve into knowledge packets with labels
+preserved, and remain unable to satisfy any gate, verdict, or grant
+prerequisite. Phase 29's named obligation is closed.
+
+Next: the conversation (03), the workbench reviews (05, 08), and the
+scaffold (07) off their worktrees, then the exam.
 
 ## Sequencing
 

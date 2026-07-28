@@ -53,6 +53,7 @@ from bundle_validation_tests import (
     BundleRealPhase29IntegrationTest,
     BundleRosterAndParityTest,
 )
+from lesson_writeback_tests import LessonWritebackTest
 from setup_proposal_tests import (
     SetupProposalContractTest,
     SetupProposalFitnessTest,
@@ -9763,7 +9764,7 @@ class ProgramContractTest(unittest.TestCase):
             "obligation:record", "obligation:materialize",
             "obligation:disposition",
             "nudge:deliver", "notification:send", "evidence:materialize",
-            "integration:apply", "contract:generate",
+            "knowledge:lesson-writeback", "integration:apply", "contract:generate",
             "certification:objective", "certification:verdict", "git:commit",
             "git:push", "roadmap:story-start", "roadmap:story-complete",
             "roadmap:phase-advance",
@@ -13124,6 +13125,126 @@ class ProgramConductorTest(unittest.TestCase):
             and item["attempt"] == 2
         ]), 1)
 
+    def test_no_commit_certified_lesson_crash_replays_one_budgeted_write(self):
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        workflow["nodes"][0]["outputs"].append({
+            "id": "machine-lessons",
+            "kind": "lesson",
+            "max_bytes": 10_000,
+        })
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        organization_path = self.root / "pm/organizations/delivery-core.json"
+        organization = json.loads(organization_path.read_text(encoding="utf-8"))
+        implementer = next(
+            role for role in organization["teams"][0]["roles"]
+            if role["id"] == "implementer"
+        )
+        implementer["artifacts"]["write"].append("lesson")
+        organization_path.write_text(
+            json.dumps(organization, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        program_path = self.root / "pm/programs/demo-program.json"
+        program = json.loads(program_path.read_text(encoding="utf-8"))
+        forbidden_authority = {
+            "integration:apply", "contract:generate",
+            "certification:objective", "certification:verdict",
+            "git:commit", "git:push", "roadmap:story-start",
+            "roadmap:story-complete", "roadmap:phase-advance",
+        }
+        program["requested_capabilities"] = [
+            capability for capability in program["requested_capabilities"]
+            if capability not in forbidden_authority
+        ] + ["knowledge:lesson-writeback"]
+        program["budgets"]["max_lesson_writebacks"] = 1
+        program_path.write_text(
+            json.dumps(program, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.capabilities = [
+            capability for capability in self.authority.capabilities
+            if capability not in forbidden_authority
+        ] + ["knowledge:lesson-writeback"]
+        self.authority.budgets["max_lesson_writebacks"] = 1
+        self.authority.fixture.program = program
+        self.authority.fixture._git(
+            "add", "pm/workflows/story-work.json",
+            "pm/organizations/delivery-core.json",
+            "pm/programs/demo-program.json",
+        )
+        self.authority.fixture._git(
+            "commit", "-qm", "declare certified lesson write-back"
+        )
+        projection = self.start()
+        lesson_output = {
+            "kind": "delivery-workbench-lesson-output",
+            "schema_version": 1,
+            "lessons": [{
+                "claim": "Replay the certified handoff write exactly once.",
+                "locations": ["dw_pmo.program_conductor.tick_program"],
+                "confidence": "high",
+                "supersedes": "",
+            }],
+        }
+        fixture = self.core.ProgramFixtureDriver({
+            "*": {"outputs": {"machine-lessons": lesson_output}},
+        })
+        crashed = {"done": False}
+
+        def crash(name, detail):
+            if name == "after-knowledge-persist" and not crashed["done"]:
+                crashed["done"] = True
+                raise RuntimeError("lesson persisted before ledger ack")
+
+        with self.assertRaisesRegex(RuntimeError, "before ledger ack"):
+            self.core.supervise_program(
+                self.root,
+                projection["run_id"],
+                max_ticks=10,
+                max_seconds=86_400,
+                driver_config=self.config,
+                adapters={"fixture": fixture},
+                now=self.now,
+                boundary_hook=crash,
+            )
+        from dw_pmo.knowledge import CERTIFIED_LESSON_KIND, EarnedRecordStore
+        store = EarnedRecordStore(self.root)
+        first = store.read(CERTIFIED_LESSON_KIND)
+        self.assertEqual(len(first), 1)
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(
+            replayed["authority"]["budgets"]["max_lesson_writebacks"]["used"],
+            1,
+        )
+        recovered = self.core.tick_program(
+            self.root,
+            projection["run_id"],
+            driver_config=self.config,
+            adapters={"fixture": fixture},
+            now=self.now,
+        )
+        self.assertEqual(recovered["action"]["kind"], "lesson-writeback")
+        self.assertEqual(recovered["state"], "story-certified")
+        replayed = self.core.replay_program_conductor(
+            self.root, projection["run_id"], now=self.now
+        )
+        self.assertEqual(
+            replayed["authority"]["budgets"]["max_lesson_writebacks"]["used"],
+            1,
+        )
+        self.assertEqual(store.read(CERTIFIED_LESSON_KIND), first)
+        self.assertNotIn("integration:apply", replayed["authority"]["capabilities"])
+        self.assertNotIn("git:commit", replayed["authority"]["capabilities"])
+        self.assertNotIn(
+            "roadmap:story-complete", replayed["authority"]["capabilities"]
+        )
+
     def test_cross_phase_continuation_carries_obligation_and_completes_scope(self):
         workflow_path = self.root / "pm/workflows/story-work.json"
         workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
@@ -15042,6 +15163,99 @@ class ProgramDeliveryTest(unittest.TestCase):
         verified = run_verify(self.root, all_history=True)
         self.assertTrue(verified.ok, verified.violations)
         self.assertEqual(verified.verified, 2)
+
+    def test_commit_observation_confirms_certified_lesson_append_only(self):
+        workflow_path = self.root / "pm/workflows/story-work.json"
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+        workflow["nodes"][0]["outputs"].append({
+            "id": "machine-lessons", "kind": "lesson", "max_bytes": 10_000,
+        })
+        workflow_path.write_text(
+            json.dumps(workflow, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        organization_path = self.root / "pm/organizations/delivery-core.json"
+        organization = json.loads(organization_path.read_text(encoding="utf-8"))
+        implementer = next(
+            role for role in organization["teams"][0]["roles"]
+            if role["id"] == "implementer"
+        )
+        implementer["artifacts"]["write"].append("lesson")
+        organization_path.write_text(
+            json.dumps(organization, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        program_path = self.root / "pm/programs/demo-program.json"
+        program = json.loads(program_path.read_text(encoding="utf-8"))
+        program["requested_capabilities"].append("knowledge:lesson-writeback")
+        program["budgets"]["max_lesson_writebacks"] = 1
+        program_path.write_text(
+            json.dumps(program, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.authority.capabilities.append("knowledge:lesson-writeback")
+        self.authority.budgets["max_lesson_writebacks"] = 1
+        self.authority.fixture.program = program
+        self.authority.fixture._git(
+            "add", "pm/workflows/story-work.json",
+            "pm/organizations/delivery-core.json", "pm/programs/demo-program.json",
+        )
+        self.authority.fixture._git(
+            "commit", "-qm", "declare delivery lesson observation"
+        )
+        projection = self.conductor.start(
+            remote="origin", remote_ref="refs/remotes/origin/main"
+        )
+        lesson_output = {
+            "kind": "delivery-workbench-lesson-output",
+            "schema_version": 1,
+            "lessons": [{
+                "claim": "Confirm this lesson only after the exact commit lands.",
+                "locations": ["dw_pmo.program_delivery._execute_commit"],
+                "confidence": "high",
+                "supersedes": "",
+            }],
+        }
+        fixture = self.conductor.core.ProgramFixtureDriver({
+            "*": {"outputs": {"machine-lessons": lesson_output}},
+        })
+        result = self.conductor.core.supervise_program(
+            self.root, projection["run_id"], max_ticks=12,
+            max_seconds=86_400, driver_config=self.config,
+            adapters={"fixture": fixture}, now=self.now,
+        )
+        self.assertEqual(result["state"], "story-certified")
+        from dw_pmo.knowledge import (
+            CERTIFIED_LESSON_KIND,
+            LESSON_DELIVERY_OBSERVATION_KIND,
+            EarnedRecordStore,
+            read_lesson_knowledge,
+        )
+        store = EarnedRecordStore(self.root)
+        original = store.read(CERTIFIED_LESSON_KIND)[0]
+        self.assertEqual(
+            original["detail"]["delivery_state"], "certified-not-integrated"
+        )
+        _preview, frontier = self.preview_and_start(projection["run_id"])
+        delivery_id = frontier["delivery_id"]
+        while True:
+            tick = self.core.tick_program_delivery(
+                self.root, projection["run_id"], delivery_id,
+                driver_config=self.config, now=self.now,
+            )
+            if tick["action"]["kind"] == "commit":
+                break
+        observation = tick["receipt"]["result"]["lesson_writeback"]
+        self.assertEqual(observation["delivery_state"], "confirmed")
+        self.assertEqual(observation["new_observations"], 1)
+        self.assertEqual(store.read(CERTIFIED_LESSON_KIND)[0], original)
+        self.assertEqual(
+            len(store.read(LESSON_DELIVERY_OBSERVATION_KIND)), 1
+        )
+        self.assertEqual(
+            read_lesson_knowledge(self.root)[0]["effective_delivery_state"],
+            "confirmed",
+        )
 
     def test_commit_hook_and_remote_divergence_fail_closed_without_force(self):
         projection, _fixture = self.start_and_certify()

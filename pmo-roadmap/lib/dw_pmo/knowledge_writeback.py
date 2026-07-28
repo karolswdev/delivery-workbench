@@ -7,6 +7,7 @@ returns a decision, verdict, grant, gate result, or evidence fact.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +15,9 @@ from typing import Iterable, Optional
 
 from . import repofacts
 from .knowledge import (
+    CERTIFIED_LESSON_KIND,
     DELIVERY_RECORD_KIND,
+    LESSON_DELIVERY_OBSERVATION_KIND,
     LESSON_KIND,
     EarnedRecordStore,
     KnowledgeRefusal,
@@ -32,6 +35,10 @@ LESSON_ARTIFACT_KIND = "lesson"
 DEFAULT_MAX_LESSONS = 5
 MAX_LESSONS_LIMIT = 50
 MAX_LOCATION_REFERENCES = 8
+CERTIFIED_HANDOFF_STATE = "story-certified"
+CERTIFIED_HANDOFF_STOP = "integration-required"
+CERTIFIED_NOT_INTEGRATED = "certified-not-integrated"
+INTEGRATION_OBSERVATION_STATES = ("confirmed", "superseded")
 _LESSON_DOCUMENT_KEYS = {"kind", "schema_version", "lessons"}
 _LESSON_ITEM_KEYS = {"claim", "locations", "confidence", "supersedes"}
 _CONFIDENCE = {"low", "medium", "high"}
@@ -265,4 +272,202 @@ def persist_completed_program(
         "lesson_hashes": lesson_hashes,
         "deduplicated_lessons": len(records) - len(lesson_hashes),
         "discarded_lessons": len(emitted) - len(accepted),
+    }
+
+
+def _sha(value: object) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def certified_lesson_receipt_id(
+    terminal_receipt_id: str,
+    ordinal: int,
+    lesson: dict,
+) -> str:
+    """Derive one replay-stable lesson identity from the terminal receipt."""
+    _identifier(terminal_receipt_id, "terminal lesson receipt id", 71)
+    if not terminal_receipt_id.startswith("sha256:") or len(terminal_receipt_id) != 71:
+        raise DwError("terminal lesson receipt id must be a sha256 reference")
+    if not isinstance(ordinal, int) or isinstance(ordinal, bool) or ordinal < 0:
+        raise DwError("certified lesson ordinal must be a non-negative integer")
+    normalized = validate_lesson_output({
+        "kind": LESSON_OUTPUT_KIND,
+        "schema_version": LESSON_OUTPUT_SCHEMA_VERSION,
+        "lessons": [lesson],
+    })["lessons"][0]
+    return _sha({
+        "kind": "delivery-workbench-certified-lesson-receipt",
+        "schema_version": 1,
+        "terminal_receipt_id": terminal_receipt_id,
+        "ordinal": ordinal,
+        "lesson": normalized,
+    })
+
+
+def persist_certified_handoff(
+    root: Path,
+    *,
+    run_id: str,
+    story: str,
+    subject: str,
+    head_sha: str,
+    verdict_ref: str,
+    terminal_receipt_id: str,
+    lesson_emissions: Iterable[dict],
+    max_lessons: int = DEFAULT_MAX_LESSONS,
+    frontier_state: str = CERTIFIED_HANDOFF_STATE,
+    frontier_stop: str = CERTIFIED_HANDOFF_STOP,
+    timestamp: Optional[datetime] = None,
+) -> dict:
+    """Persist bounded advisory lessons only at the exact certified handoff."""
+    if (
+        frontier_state != CERTIFIED_HANDOFF_STATE
+        or frontier_stop != CERTIFIED_HANDOFF_STOP
+    ):
+        return {
+            "status": "not-certified-handoff",
+            "lessons": 0,
+            "new_lessons": 0,
+            "discarded_lessons": 0,
+        }
+    if (not isinstance(max_lessons, int) or isinstance(max_lessons, bool)
+            or not 0 <= max_lessons <= MAX_LESSONS_LIMIT):
+        raise DwError("max_lessons must be between 0 and %d" % MAX_LESSONS_LIMIT)
+    run_id = _identifier(run_id, "certified lesson run id", 200)
+    story = _identifier(story, "certified lesson story", 80)
+    subject = _identifier(subject, "certified lesson subject", 71)
+    verdict_ref = _identifier(verdict_ref, "certified lesson verdict", 71)
+    _identifier(head_sha, "certified lesson HEAD", 64)
+    _identifier(terminal_receipt_id, "terminal lesson receipt id", 71)
+
+    emitted = []
+    for raw in lesson_emissions:
+        if not isinstance(raw, dict) or set(raw) != {
+            "document", "adapter", "driver_profile", "emitter_receipt",
+        }:
+            raise DwError("certified lesson emission has non-exact fields")
+        adapter = _identifier(raw["adapter"], "certified lesson adapter", 80)
+        profile = _identifier(
+            raw["driver_profile"], "certified lesson driver profile", 200
+        )
+        emitter = _identifier(
+            raw["emitter_receipt"], "certified lesson emitter receipt", 71
+        )
+        for lesson in validate_lesson_output(raw["document"])["lessons"]:
+            emitted.append((lesson, adapter, profile, emitter))
+    accepted = emitted[:max_lessons]
+    store = EarnedRecordStore(Path(root).resolve())
+    existing_ids = {
+        record["detail"]["receipt_id"]
+        for record in store.read(CERTIFIED_LESSON_KIND)
+    }
+    records = []
+    new_count = 0
+    for ordinal, (lesson, adapter, profile, emitter) in enumerate(accepted):
+        receipt_id = certified_lesson_receipt_id(
+            terminal_receipt_id,
+            ordinal,
+            {**lesson, "supersedes": lesson["supersedes"]},
+        )
+        detail = {
+            "receipt_id": receipt_id,
+            "story": story,
+            "subject": subject,
+            "adapter": adapter,
+            "driver_profile": profile,
+            "verdict_ref": verdict_ref,
+            "delivery_state": CERTIFIED_NOT_INTEGRATED,
+            "claim": lesson["claim"],
+            "locations": resolve_lesson_locations(root, lesson["locations"]),
+            "confidence": lesson["confidence"],
+            "supersedes": lesson["supersedes"],
+        }
+        record = store.append(
+            CERTIFIED_LESSON_KIND,
+            detail,
+            origin_kind="run",
+            origin=run_id,
+            head_sha=head_sha,
+            timestamp=timestamp,
+            deduplicate=True,
+        )
+        records.append(record)
+        if receipt_id not in existing_ids:
+            new_count += 1
+            existing_ids.add(receipt_id)
+    return {
+        "status": "persisted",
+        "lessons": len(records),
+        "new_lessons": new_count,
+        "lesson_hashes": [record["record_hash"] for record in records],
+        "receipt_ids": [record["detail"]["receipt_id"] for record in records],
+        "deduplicated_lessons": len(records) - new_count,
+        "discarded_lessons": len(emitted) - len(accepted),
+    }
+
+
+def observe_lesson_integration(
+    root: Path,
+    *,
+    run_id: str,
+    story: str,
+    commit_sha: str,
+    delivery_state: str = "confirmed",
+    timestamp: Optional[datetime] = None,
+) -> dict:
+    """Append confirmation or supersession; never rewrite the candidate lesson."""
+    if delivery_state not in INTEGRATION_OBSERVATION_STATES:
+        raise DwError("lesson delivery observation state is not contracted")
+    store = EarnedRecordStore(Path(root).resolve())
+    candidates = [
+        record for record in store.read(CERTIFIED_LESSON_KIND)
+        if record["origin"] == run_id and record["detail"]["story"] == story
+    ]
+    existing_ids = {
+        record["detail"]["receipt_id"]
+        for record in store.read(LESSON_DELIVERY_OBSERVATION_KIND)
+    }
+    records = []
+    new_count = 0
+    for lesson in candidates:
+        detail = lesson["detail"]
+        receipt_id = _sha({
+            "kind": "delivery-workbench-lesson-delivery-observation-receipt",
+            "schema_version": 1,
+            "lesson_receipt_id": detail["receipt_id"],
+            "lesson_record_hash": lesson["record_hash"],
+            "delivery_state": delivery_state,
+            "observed_commit": commit_sha,
+        })
+        observation = store.append(
+            LESSON_DELIVERY_OBSERVATION_KIND,
+            {
+                "receipt_id": receipt_id,
+                "lesson_receipt_id": detail["receipt_id"],
+                "lesson_record_hash": lesson["record_hash"],
+                "story": story,
+                "subject": detail["subject"],
+                "delivery_state": delivery_state,
+                "observed_commit": commit_sha,
+            },
+            origin_kind="run",
+            origin=run_id,
+            head_sha=commit_sha,
+            timestamp=timestamp,
+            deduplicate=True,
+        )
+        records.append(observation)
+        if receipt_id not in existing_ids:
+            new_count += 1
+            existing_ids.add(receipt_id)
+    return {
+        "status": "observed" if candidates else "no-candidates",
+        "delivery_state": delivery_state,
+        "observations": len(records),
+        "new_observations": new_count,
+        "observation_hashes": [record["record_hash"] for record in records],
     }

@@ -281,7 +281,8 @@ _ROLE_CAPABILITIES = {
 }
 _NON_DELEGABLE = {
     "program:select", "obligation:materialize", "obligation:disposition",
-    "evidence:materialize", "integration:apply", "contract:generate",
+    "evidence:materialize", "knowledge:lesson-writeback",
+    "integration:apply", "contract:generate",
     "certification:objective", "certification:verdict", "git:commit",
     "git:push", "roadmap:story-start", "roadmap:story-complete",
     "roadmap:phase-advance",
@@ -318,6 +319,9 @@ _CLAIM_RULES: dict[str, tuple[str, str, dict[str, int]]] = {
     ),
     "integration": ("integration:apply", "apply", {"max_integrations": 1}),
     "evidence": ("evidence:materialize", "apply", {}),
+    "lesson-writeback": (
+        "knowledge:lesson-writeback", "record", {"max_lesson_writebacks": 1},
+    ),
     "contract": ("contract:generate", "apply", {}),
     "certification-objective": ("certification:objective", "apply", {}),
     "certification-verdict": ("certification:verdict", "apply", {}),

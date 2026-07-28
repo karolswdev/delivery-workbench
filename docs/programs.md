@@ -231,6 +231,7 @@ A representative program policy is:
     "obligation:materialize",
     "obligation:disposition",
     "evidence:materialize",
+    "knowledge:lesson-writeback",
     "integration:apply",
     "contract:generate",
     "certification:verdict",
@@ -260,6 +261,8 @@ A representative program policy is:
     "max_commits": 12,
     "max_pushes": 12,
     "max_nudges": 24,
+    "max_lesson_writebacks": 12,
+    "max_lessons": 5,
     "max_artifact_bytes": 50000000,
     "max_tokens": 12000000,
     "max_observed_cost_microunits": 750000000,
@@ -958,13 +961,24 @@ A workflow agent may declare an output of kind `lesson`. The output must be the
 closed `delivery-workbench-lesson-output@1` JSON document, with bounded claim,
 location-reference, confidence, and supersession fields. These artifacts stay
 inside immutable conductor receipts during execution. They are not evidence or
-verdict input. Only after `program_scope_completed` reaches the successful
-terminal does the conductor resolve their locations and append at most the
-program budget's `max_lessons` (default 5, hard limit 50). Revoked, cancelled,
-expired, exhausted, failed, or abandoned programs write none. The same terminal
-seam appends one delivery record derived from a preceding
-`program_delivery_facts_recorded` ledger event; retries deduplicate by run, HEAD,
-and exact detail.
+verdict input.
+
+A grant with `knowledge:lesson-writeback` may append them when the conductor
+reaches the exact `story-certified` / `integration-required` handoff. This works
+without integration, certification, commit, push, or roadmap capabilities. The
+claim spends one finite `max_lesson_writebacks` unit and appends no more than
+`max_lessons` records (default 5, hard limit 50). Each record carries the run,
+story, candidate subject, adapter, driver profile, verdict receipt, and the
+`certified-not-integrated` delivery state. The receipt id is deterministic, so a
+crash after append but before claim completion reuses the same budget reservation
+and record.
+
+A successful delivery commit appends a `confirmed` observation for those records.
+A later observation may instead append `superseded`. It does not edit the original
+`certified-not-integrated` record. Failed, refused, lost, malformed, uncertified,
+revoked, cancelled, expired, exhausted, paused, or otherwise stopped runs append
+nothing. Scope completion still appends the existing delivery record and legacy
+lessons from `program_delivery_facts_recorded`.
 
 Principal, workspace domain, and session binding must all be
 independent from the implementer (and a meta-verifier from every audited
@@ -1030,6 +1044,7 @@ The Phase 26 capability vocabulary is closed:
 | `nudge:deliver` | use a score/program-declared Phase 25 standing rule within budget |
 | `notification:send` | publish a content-safe declared notification |
 | `evidence:materialize` | write one exact captured evidence artifact through the evidence rail |
+| `knowledge:lesson-writeback` | append bounded advisory lessons at the exact certified handoff |
 | `integration:apply` | apply one previewed candidate diff to the integration lane |
 | `contract:generate` | generate a contract over the exact staged tree |
 | `certification:objective` | record only fully machine-derived certification claims defined as objective by canon |
@@ -1133,8 +1148,9 @@ does not acquire a second authority system.
 All continuous grants have finite positive limits for phases, stories, child
 runs, agent, provider and model starts, check starts, total loop rounds, debate
 rounds, councils, repairs per story, verdicts, obligations and their
-materialization/disposition, integrations, commits, pushes, nudges, artifact
-bytes, tokens, observed cost and wall time. A capability absent from the grant
+materialization/disposition, integrations, commits, pushes, nudges, lesson
+write-backs, lessons per handoff, artifact bytes, tokens, observed cost and wall
+time. A capability absent from the grant
 has an effective budget of zero. Cost is explicitly `observed-only`; no
 unavailable provider bill is presented as a mechanical fact.
 

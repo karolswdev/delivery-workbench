@@ -40,6 +40,7 @@ from . import repofacts
 from .gate import run_gate
 from .gitio import head_sha, write_tree
 from .model import DwError
+from .knowledge_writeback import observe_lesson_integration
 from .mutations import (
     FileChange,
     MutationPlan,
@@ -2117,7 +2118,15 @@ def _execute_action(
     if kind in {"certification-objective", "certification-verdict"}:
         return _execute_certification(root, run_id, action)
     if kind == "commit":
-        return _execute_commit(root, action)
+        committed = _execute_commit(root, action)
+        observation = observe_lesson_integration(
+            root,
+            run_id=run_id,
+            story=str(action["story"]),
+            commit_sha=str(committed["commit"]),
+            delivery_state="confirmed",
+        )
+        return {**committed, "lesson_writeback": observation}
     if kind == "push":
         detail = action["detail"]
         assert isinstance(detail, dict)

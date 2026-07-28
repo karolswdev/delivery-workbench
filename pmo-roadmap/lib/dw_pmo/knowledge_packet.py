@@ -15,9 +15,11 @@ from .grounding import (
     parse_localization_hints,
 )
 from .knowledge import (
-    EarnedRecordStore,
+    CERTIFIED_LESSON_KIND,
+    LESSON_KIND,
     _canonical_json,
     decode_lesson_locations,
+    read_lesson_knowledge,
 )
 from .model import DwError
 from .repository_map import read_symbol_map
@@ -63,7 +65,8 @@ def _preferred_lessons(records: Iterable[dict], query: set[str]) -> list[tuple]:
     by_hash = {
         str(record.get("record_hash", "")): record
         for record in records
-        if isinstance(record, dict) and record.get("record_kind") == "lesson"
+        if isinstance(record, dict)
+        and record.get("record_kind") in {LESSON_KIND, CERTIFIED_LESSON_KIND}
         and isinstance(record.get("detail"), dict)
     }
     superseded = {
@@ -355,6 +358,15 @@ def build_knowledge_packet(
             "head_sha": raw.get("head_sha"),
             "recorded_at": recorded_at,
             "age_label": "recorded-at:" + recorded_at,
+            "delivery_state": raw.get(
+                "effective_delivery_state", detail.get("delivery_state")
+            ),
+            "receipt_id": detail.get("receipt_id"),
+            "story": detail.get("story"),
+            "subject": detail.get("subject"),
+            "adapter": detail.get("adapter"),
+            "driver_profile": detail.get("driver_profile"),
+            "verdict_ref": detail.get("verdict_ref"),
             "score": score,
         })
 
@@ -410,7 +422,7 @@ def build_hint_free_knowledge_packet(
     root = Path(root).resolve()
     tree = repofacts.index_tree(root, repofacts.Derivation(root))
     return build_knowledge_packet(
-        story, None, None, {}, EarnedRecordStore(root).read("lesson"),
+        story, None, None, {}, read_lesson_knowledge(root),
         story=story, index_tree=tree, byte_budget=byte_budget,
     )
 
@@ -431,7 +443,7 @@ def build_repository_knowledge_packet(
     if not has_hints:
         tree = repofacts.index_tree(root, repofacts.Derivation(root))
         return build_knowledge_packet(
-            story_text, None, None, {}, EarnedRecordStore(root).read("lesson"),
+            story_text, None, None, {}, read_lesson_knowledge(root),
             story=str(story_path.relative_to(root)), index_tree=tree,
             byte_budget=byte_budget,
         )
@@ -457,7 +469,7 @@ def build_repository_knowledge_packet(
         grounded,
         document,
         blobs,
-        EarnedRecordStore(root).read("lesson"),
+        read_lesson_knowledge(root),
         story=str(story_path.relative_to(root)),
         byte_budget=byte_budget,
     )

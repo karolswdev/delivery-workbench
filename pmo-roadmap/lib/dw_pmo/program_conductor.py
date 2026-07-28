@@ -35,6 +35,7 @@ from .knowledge_packet import (
 from .knowledge_writeback import (
     LESSON_ARTIFACT_KIND,
     parse_lesson_output,
+    persist_certified_handoff,
     persist_completed_program,
 )
 from .model import DwError
@@ -2222,6 +2223,231 @@ def _lesson_documents(
                     _artifact_content(root, run_id, artifact)
                 ))
     return documents
+
+
+def _certified_lesson_context(
+    root: Path,
+    run_id: str,
+    plan: dict[str, object],
+    projection: dict[str, object],
+    receipts: list[dict[str, object]],
+) -> dict[str, object] | None:
+    """Derive exact candidate, verdict, driver, and receipt provenance."""
+    lesson_receipts = [
+        receipt for receipt in receipts
+        if any(
+            isinstance(artifact, dict)
+            and artifact.get("artifact_kind") == LESSON_ARTIFACT_KIND
+            for artifact in receipt.get("artifacts", [])
+        )
+    ]
+    if not lesson_receipts:
+        return None
+    claims = projection.get("claims", [])
+    order = {
+        str(claim["claim_id"]): index
+        for index, claim in enumerate(claims)
+        if isinstance(claim, dict) and isinstance(claim.get("claim_id"), str)
+    }
+    story = str(plan["selection"]["story"])  # type: ignore[index]
+    story_receipts = [item for item in receipts if item.get("story") == story]
+    candidates = []
+    for receipt in story_receipts:
+        if receipt.get("outcome") != "succeeded":
+            continue
+        for artifact in receipt.get("artifacts", []):
+            if isinstance(artifact, dict) and artifact.get("artifact_kind") == "git-diff":
+                candidates.append((
+                    order.get(str(receipt.get("claim_id")), -1), artifact,
+                ))
+    _require(candidates, "certified lesson write-back has no exact candidate subject")
+    _candidate_order, candidate = max(candidates, key=lambda item: item[0])
+    verdicts = [
+        receipt for receipt in story_receipts
+        if receipt.get("action_kind") in {"story-verification", "verdict"}
+        and receipt.get("outcome") == "succeeded"
+        and receipt.get("result") in GREEN_RESULTS
+        and isinstance(receipt.get("receipt_hash"), str)
+    ]
+    _require(verdicts, "certified lesson write-back has no exact green verdict")
+    verdict = max(
+        verdicts,
+        key=lambda item: order.get(str(item.get("claim_id")), -1),
+    )
+    emission_receipts = sorted(str(item["receipt_hash"]) for item in lesson_receipts)
+    terminal_receipt_id = _sha({
+        "kind": "delivery-workbench-certified-handoff-receipt",
+        "schema_version": 1,
+        "run_id": run_id,
+        "story": story,
+        "subject": candidate["sha256"],
+        "verdict_ref": verdict["receipt_hash"],
+        "lesson_emitter_receipts": emission_receipts,
+        "grant_hash": projection["grant_hash"],
+    })
+    return {
+        "story": story,
+        "subject": candidate["sha256"],
+        "verdict_ref": verdict["receipt_hash"],
+        "terminal_receipt_id": terminal_receipt_id,
+        "lesson_emitter_receipts": emission_receipts,
+    }
+
+
+def _certified_lesson_action(
+    root: Path,
+    run_id: str,
+    plan: dict[str, object],
+    projection: dict[str, object],
+    receipts: list[dict[str, object]],
+) -> dict[str, object] | None:
+    if "knowledge:lesson-writeback" not in projection.get("capabilities", []):
+        return None
+    context = _certified_lesson_context(root, run_id, plan, projection, receipts)
+    if context is None:
+        return None
+    action = _base_action(
+        plan,
+        kind="lesson-writeback",
+        address=f"{_workflow_address(plan)}/lesson-writeback/attempt/1",
+        attempt=1,
+    )
+    action.update({
+        "subject_hash": context["terminal_receipt_id"],
+        "payload": context,
+    })
+    if _receipt_for(receipts, str(action["action_id"])) is not None:
+        return None
+    return action
+
+
+def _certified_lesson_emissions(
+    root: Path,
+    run_id: str,
+    receipts: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    emissions = []
+    for receipt in receipts:
+        operation = receipt.get("operation")
+        for artifact in receipt.get("artifacts", []):
+            if not (
+                isinstance(artifact, dict)
+                and artifact.get("artifact_kind") == LESSON_ARTIFACT_KIND
+            ):
+                continue
+            _require(
+                isinstance(operation, dict)
+                and isinstance(operation.get("adapter"), str)
+                and isinstance(operation.get("profile"), str),
+                "certified lesson has no exact adapter/profile provenance",
+            )
+            emissions.append({
+                "document": parse_lesson_output(
+                    _artifact_content(root, run_id, artifact)
+                ),
+                "adapter": operation["adapter"],
+                "driver_profile": operation["profile"],
+                "emitter_receipt": receipt["receipt_hash"],
+            })
+    return emissions
+
+
+def _execute_certified_lesson_writeback(
+    root: Path,
+    run_id: str,
+    action: dict[str, object],
+    conductor: dict[str, object],
+    config: dict[str, object],
+    *,
+    now: datetime,
+    boundary_hook: BoundaryHook | None,
+) -> dict[str, object]:
+    projection = conductor["authority"]
+    _require(isinstance(projection, dict), "lesson write-back authority is absent")
+    claim = _reserve_claim(
+        root,
+        run_id,
+        action=action,
+        category="lesson-writeback",
+        subject_kind="certified-handoff-lessons",
+        subject_hash=str(action["subject_hash"]),
+        suffix="knowledge",
+        now=now,
+        driver_config=config,
+    )
+    if claim["status"] != "active":
+        receipt = _load_receipt(root, run_id, str(claim["receipt_hash"]))
+        return {
+            "status": "complete",
+            "projection": replay_program(root, run_id, now=now),
+            "receipt": receipt,
+        }
+    _boundary(boundary_hook, "after-claim", {
+        "action_id": action["action_id"],
+        "claim_id": claim["claim_id"],
+        "category": "lesson-writeback",
+    })
+    payload = action["payload"]
+    _require(isinstance(payload, dict), "lesson write-back payload is invalid")
+    lesson_budget = projection.get("budgets", {}).get("max_lessons", {})  # type: ignore[union-attr]
+    _require(isinstance(lesson_budget, dict), "program max_lessons policy is absent")
+    persisted = persist_certified_handoff(
+        root,
+        run_id=run_id,
+        story=str(payload["story"]),
+        subject=str(payload["subject"]),
+        head_sha=str(projection["expected_repository"]["head"]),  # type: ignore[index]
+        verdict_ref=str(payload["verdict_ref"]),
+        terminal_receipt_id=str(payload["terminal_receipt_id"]),
+        lesson_emissions=_certified_lesson_emissions(
+            root, run_id, conductor["receipts"]  # type: ignore[arg-type]
+        ),
+        max_lessons=int(lesson_budget["limit"]),
+        timestamp=now,
+    )
+    _boundary(boundary_hook, "after-knowledge-persist", {
+        "action_id": action["action_id"],
+        "claim_id": claim["claim_id"],
+        "terminal_receipt_id": payload["terminal_receipt_id"],
+        "new_lessons": persisted["new_lessons"],
+    })
+    receipt = _store_receipt(root, run_id, {
+        "action_id": action["action_id"],
+        "address": action["address"],
+        "action_kind": action["kind"],
+        "phase": action["phase"],
+        "story": action["story"],
+        "workflow_address": action["workflow_address"],
+        "node": action.get("node"),
+        "role": action.get("role"),
+        "role_address": action.get("role_address"),
+        "attempt": action["attempt"],
+        "claim_id": claim["claim_id"],
+        "request_hash": claim["request_hash"],
+        "outcome": "succeeded",
+        "result": "persisted",
+        "route": None,
+        "operation": None,
+        "artifacts": [],
+        "verdict": None,
+        "decision": None,
+        "obligation_ids": [],
+        "payload": persisted,
+        "issued_at": str(claim["reserved_at"]),
+    })
+    _boundary(boundary_hook, "after-receipt", {
+        "action_id": action["action_id"],
+        "claim_id": claim["claim_id"],
+        "receipt_hash": receipt["receipt_hash"],
+        "receipt_kind": "lesson-writeback",
+    })
+    updated = _complete_claim(
+        root, run_id, claim, str(receipt["receipt_hash"]),
+        result="succeeded",
+        reason="Recorded bounded certified-handoff lessons.",
+        now=now,
+    )
+    return {"status": "complete", "projection": updated, "receipt": receipt}
 
 
 def _persist_completed_knowledge(
@@ -5629,6 +5855,11 @@ def derive_program_frontier(
         architecture.get("completed") is True,
         "phase architecture gate lost its deterministic completion state",
     )
+    lesson_action = _certified_lesson_action(
+        root, run_id, plan, projection, receipts
+    )
+    if lesson_action is not None:
+        return _frontier_result(run_id, plan, "ready", [lesson_action])
     return _frontier_result(
         run_id, plan, "story-certified", [],
         checkpoint=True, stop="integration-required",
@@ -7372,6 +7603,16 @@ def tick_program(
                 root,
                 run_id,
                 action,
+                config,
+                now=observed,
+                boundary_hook=boundary_hook,
+            )
+        elif action["kind"] == "lesson-writeback":
+            execution = _execute_certified_lesson_writeback(
+                root,
+                run_id,
+                action,
+                before,
                 config,
                 now=observed,
                 boundary_hook=boundary_hook,

@@ -39,8 +39,20 @@ KNOWLEDGE_SCHEMA_VERSION = 1
 DERIVED_FACT_KIND = "derived-fact"
 DELIVERY_RECORD_KIND = "delivery-record"
 LESSON_KIND = "lesson"
+CERTIFIED_LESSON_KIND = "certified-handoff-lesson"
+LESSON_DELIVERY_OBSERVATION_KIND = "lesson-delivery-observation"
 LESSON_INVENTORY_KIND = "delivery-workbench-knowledge-lessons"
-EARNED_RECORD_KINDS = (DELIVERY_RECORD_KIND, LESSON_KIND)
+EARNED_RECORD_KINDS = (
+    DELIVERY_RECORD_KIND,
+    LESSON_KIND,
+    CERTIFIED_LESSON_KIND,
+    LESSON_DELIVERY_OBSERVATION_KIND,
+)
+LESSON_DELIVERY_STATES = (
+    "certified-not-integrated",
+    "confirmed",
+    "superseded",
+)
 
 DERIVED = "derived"
 EARNED = "earned"
@@ -49,6 +61,8 @@ KNOWLEDGE_ITEM_CLASSES = {
     DERIVED_FACT_KIND: DERIVED,
     DELIVERY_RECORD_KIND: EARNED,
     LESSON_KIND: EARNED,
+    CERTIFIED_LESSON_KIND: EARNED,
+    LESSON_DELIVERY_OBSERVATION_KIND: EARNED,
 }
 
 _DERIVED_DOCUMENT_KIND = "delivery-workbench-derived-fact"
@@ -94,6 +108,15 @@ EARNED_RECORD_FIELDS = {
         "verdict_outcome", "obligation_ids", "obligation_count",
     ),
     LESSON_KIND: ("claim", "locations", "confidence", "supersedes"),
+    CERTIFIED_LESSON_KIND: (
+        "receipt_id", "story", "subject", "adapter", "driver_profile",
+        "verdict_ref", "delivery_state", "claim", "locations",
+        "confidence", "supersedes",
+    ),
+    LESSON_DELIVERY_OBSERVATION_KIND: (
+        "receipt_id", "lesson_receipt_id", "lesson_record_hash", "story",
+        "subject", "delivery_state", "observed_commit",
+    ),
 }
 EARNED_FIELD_CAPS = {
     "story_ids": 2048,
@@ -107,6 +130,16 @@ EARNED_FIELD_CAPS = {
     "locations": 8192,
     "confidence": 16,
     "supersedes": 80,
+    "receipt_id": 71,
+    "lesson_receipt_id": 71,
+    "lesson_record_hash": 71,
+    "story": 80,
+    "subject": 71,
+    "adapter": 80,
+    "driver_profile": 200,
+    "verdict_ref": 71,
+    "delivery_state": 32,
+    "observed_commit": 64,
 }
 _ORIGIN_KINDS = ("run", "operator")
 _AUTHORITY_MARKERS = {
@@ -482,10 +515,33 @@ def _validate_detail(record_kind: str, detail: object) -> dict:
         outcome = detail["verdict_outcome"]
         if any(not (char.isalnum() or char in "-_.") for char in outcome):
             raise DwError("earned record verdict_outcome must be an identifier")
-    else:
+    elif record_kind in {LESSON_KIND, CERTIFIED_LESSON_KIND}:
         decode_lesson_locations(detail["locations"])
         if detail["confidence"] not in {"low", "medium", "high"}:
             raise DwError("lesson confidence must be low, medium, or high")
+        if record_kind == CERTIFIED_LESSON_KIND:
+            if detail["delivery_state"] != "certified-not-integrated":
+                raise DwError("certified lesson must start certified-not-integrated")
+            for field in ("receipt_id", "subject", "verdict_ref"):
+                if (
+                    not detail[field].startswith("sha256:")
+                    or len(detail[field]) != 71
+                    or any(char not in "0123456789abcdef" for char in detail[field][7:])
+                ):
+                    raise DwError("certified lesson %s must be a sha256 reference" % field)
+    else:
+        if detail["delivery_state"] not in {"confirmed", "superseded"}:
+            raise DwError("lesson delivery observation state must be confirmed or superseded")
+        for field in (
+            "receipt_id", "lesson_receipt_id", "lesson_record_hash", "subject",
+        ):
+            if (
+                not detail[field].startswith("sha256:")
+                or len(detail[field]) != 71
+                or any(char not in "0123456789abcdef" for char in detail[field][7:])
+            ):
+                raise DwError("lesson delivery observation %s must be a sha256 reference" % field)
+        _validate_git_object(detail["observed_commit"], "observed_commit")
     return detail
 
 
@@ -645,6 +701,19 @@ class EarnedRecordStore:
                 raise DwError("refusing symlinked earned record chain")
             records = _read_records(path, record_kind)
             if deduplicate:
+                receipt_id = detail.get("receipt_id")
+                receipt_match = next((
+                    record for record in records
+                    if receipt_id and record["detail"].get("receipt_id") == receipt_id
+                ), None)
+                if receipt_match is not None:
+                    if (
+                        receipt_match["origin_kind"] != origin_kind
+                        or receipt_match["origin"] != origin
+                        or receipt_match["detail"] != detail
+                    ):
+                        raise DwError("earned record receipt id collides with different content")
+                    return receipt_match
                 existing = next((
                     record for record in records
                     if record["origin_kind"] == origin_kind
@@ -654,8 +723,15 @@ class EarnedRecordStore:
                 ), None)
                 if existing is not None:
                     return existing
-            if record_kind == LESSON_KIND and detail["supersedes"]:
+            if record_kind in {LESSON_KIND, CERTIFIED_LESSON_KIND} and detail["supersedes"]:
                 earlier = {record["record_hash"] for record in records}
+                if record_kind == CERTIFIED_LESSON_KIND:
+                    earlier.update(
+                        record["record_hash"]
+                        for record in _read_records(
+                            directory / self._filename(LESSON_KIND), LESSON_KIND
+                        )
+                    )
                 if detail["supersedes"] not in earlier:
                     raise DwError(
                         "lesson supersedes must reference an earlier lesson"
@@ -679,9 +755,36 @@ class EarnedRecordStore:
             return document
 
 
+def read_lesson_knowledge(root: Path) -> list:
+    """Read legacy and certified lessons with append-only delivery observations."""
+    store = EarnedRecordStore(Path(root).resolve())
+    lessons = store.read(LESSON_KIND) + store.read(CERTIFIED_LESSON_KIND)
+    observations = store.read(LESSON_DELIVERY_OBSERVATION_KIND)
+    latest = {}
+    for observation in observations:
+        lesson_hash = observation["detail"]["lesson_record_hash"]
+        prior = latest.get(lesson_hash)
+        if prior is None or (
+            observation["timestamp"], observation["seq"]
+        ) > (prior["timestamp"], prior["seq"]):
+            latest[lesson_hash] = observation
+    resolved = []
+    for record in lessons:
+        observation = latest.get(record["record_hash"])
+        if observation is None:
+            resolved.append(record)
+            continue
+        resolved.append({
+            **record,
+            "effective_delivery_state": observation["detail"]["delivery_state"],
+            "delivery_observation": observation,
+        })
+    return sorted(resolved, key=lambda item: (item["timestamp"], item["record_hash"]))
+
+
 def build_lesson_inventory(root: Path) -> dict:
     """List every earned lesson with provenance and supersession audit links."""
-    records = EarnedRecordStore(Path(root).resolve()).read(LESSON_KIND)
+    records = read_lesson_knowledge(Path(root).resolve())
     superseded_by = {
         record["detail"]["supersedes"]: record["record_hash"]
         for record in records
@@ -706,6 +809,17 @@ def build_lesson_inventory(root: Path) -> dict:
                 "head_sha": record["head_sha"],
                 "recorded_at": record["timestamp"],
                 "age_label": "recorded-at:" + record["timestamp"],
+                "delivery_state": record.get(
+                    "effective_delivery_state",
+                    record["detail"].get("delivery_state"),
+                ),
+                "receipt_id": record["detail"].get("receipt_id"),
+                "story": record["detail"].get("story"),
+                "subject": record["detail"].get("subject"),
+                "adapter": record["detail"].get("adapter"),
+                "driver_profile": record["detail"].get("driver_profile"),
+                "verdict_ref": record["detail"].get("verdict_ref"),
+                "delivery_observation": record.get("delivery_observation"),
             }
             for record in records
         ],

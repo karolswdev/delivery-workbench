@@ -173,6 +173,8 @@ Earned records are scalar-only typed shapes with exact field sets:
 |---|---|---|
 | `delivery-record` | `story_ids`, `story_count`, `files_touched`, `file_count`, `verdict_outcome`, `obligation_ids`, `obligation_count` | 2,048; 8; 8,192; 8; 32; 2,048; 8 characters respectively |
 | `lesson` | `claim`, `locations`, `confidence`, `supersedes` | 1,000; 8,192; 16; 80 characters respectively |
+| `certified-handoff-lesson` | `receipt_id`, `story`, `subject`, `adapter`, `driver_profile`, `verdict_ref`, `delivery_state`, `claim`, `locations`, `confidence`, `supersedes` | closed caps from 16 to 8,192 characters; hashes are full `sha256:` references |
+| `lesson-delivery-observation` | `receipt_id`, `lesson_receipt_id`, `lesson_record_hash`, `story`, `subject`, `delivery_state`, `observed_commit` | closed caps from 32 to 80 characters; hashes and commit IDs are full references |
 
 Identifier collections and resolved location collections are canonical JSON
 encoded inside bounded strings, preserving the scalar-only envelope without
@@ -213,6 +215,45 @@ write-back adapter derives the delivery record only from that replayed event;
 it never reads diff or agent-output prose. Run ID, final HEAD SHA, and completion
 time are provenance on every append. Exact run/HEAD/detail retries deduplicate,
 so a crash after terminal transition cannot duplicate memory.
+
+### Certified handoff lessons
+
+A checkpointed no-commit grant may request `knowledge:lesson-writeback`. The bit
+permits one act only: append bounded lessons when the conductor reaches the exact
+`story-certified` state with the `integration-required` stop. It does not imply
+integration, contract, certification, commit, push, or roadmap authority. Each
+claim reserves one finite `max_lesson_writebacks` unit. `max_lessons` remains the
+per-handoff record cap.
+
+The conductor writes `certified-handoff-lesson` records with the delivery state
+`certified-not-integrated`. The detail binds a deterministic receipt id, story,
+candidate subject hash, emitting adapter and driver profile, green verdict
+receipt, claim, resolved locations, confidence, and any lesson supersession. The
+run id and repository HEAD remain in the earned-record envelope. The receipt id
+is `sha256` over the terminal receipt id, zero-based lesson ordinal, and normalized
+lesson. Replaying the same terminal receipt returns the existing record. Because
+the conductor also reuses the active claim's idempotency key, replay spends no
+second budget unit.
+
+The delivery-state vocabulary is closed:
+
+| Label | Meaning |
+|---|---|
+| `certified-not-integrated` | the candidate passed the handoff but has not landed |
+| `confirmed` | the exact delivery path later committed the candidate |
+| `superseded` | a later integration observation replaced the candidate |
+
+Confirmation and supersession are separate `lesson-delivery-observation` appends.
+They reference the original lesson and observed commit. The store never rewrites
+the candidate record. Packet assembly joins the latest observation and keeps the
+label visible. In particular, a packet never presents `certified-not-integrated`
+advice as shipped experience.
+
+All other terminals write nothing. This includes failed, refused, lost,
+malformed, uncertified, revoked, cancelled, expired, exhausted, paused, advisory,
+complete-without-this-handoff, and stopped frontiers. Knowledge packets may read
+these records as advice. Gate, grant, verdict, and certification paths do not read
+them, and the records retain all four false authority markers.
 
 `dw knowledge lessons` and MCP `dw_knowledge_lessons` list the full append-only
 lesson chain with run, HEAD, timestamp, age label, resolved/unresolved locations,
