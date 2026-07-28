@@ -1,0 +1,139 @@
+{
+  "schema": "delivery-workbench-setup-proposal@1",
+  "state": "draft",
+  "project": {
+    "slug": "task-board",
+    "prefix": "TB",
+    "title": "Task Board",
+    "provenance": {
+      "kind": "repository-fact",
+      "source_note": "pm/roadmap/task-board/README.md declares the slug, TB prefix, and project title."
+    }
+  },
+  "source_intent": {
+    "idea": "Extend the existing support queue so an agent can suggest assignments while a person keeps control of the final owner.",
+    "mode": "maintain",
+    "provenance": {
+      "kind": "user-answer",
+      "source_note": "The user asked to add assignment suggestions without automatic assignment."
+    }
+  },
+  "tracked_content": {
+    "roadmap": {
+      "phases": [
+        {
+          "number": 2,
+          "title": "Shared queue",
+          "goal": "Make the local queue safe for a small support team.",
+          "provenance": {
+            "kind": "repository-fact",
+            "source_note": "pm/roadmap/task-board/phase-2-shared-queue/current-phase-status.md declares phase 2 and its goal."
+          },
+          "stories": [
+            {
+              "id_sketch": "TB-2-03",
+              "title": "Suggest a ticket owner",
+              "problem": "Support leads currently scan every open ticket and team member by hand before choosing an owner.",
+              "scope_in": [
+                {
+                  "text": "Rank eligible team members for one open ticket using skills and current open-ticket count.",
+                  "provenance": {
+                    "kind": "user-answer",
+                    "source_note": "The user named skills and current workload as the two inputs for a useful suggestion."
+                  }
+                },
+                {
+                  "text": "Show the facts behind each suggestion before the support lead chooses an owner.",
+                  "provenance": {
+                    "kind": "recommendation",
+                    "source_note": "Recommended to match the user's review-first autonomy level and keep the suggestion inspectable."
+                  }
+                }
+              ],
+              "scope_out": [
+                {
+                  "text": "Changing a ticket owner without a support lead's explicit action.",
+                  "provenance": {
+                    "kind": "user-answer",
+                    "source_note": "The user explicitly prohibited autonomous assignment."
+                  }
+                },
+                {
+                  "text": "Replacing the existing command-line interface with a web application.",
+                  "provenance": {
+                    "kind": "repository-fact",
+                    "source_note": "README.md identifies the maintained product as a Python 3.9 command-line application."
+                  }
+                }
+              ],
+              "acceptance_criteria": [
+                {
+                  "text": "For a fixed ticket and team fixture, the command returns the same ranked candidates and explains each score from skills and workload.",
+                  "provenance": {
+                    "kind": "recommendation",
+                    "source_note": "Recommended as deterministic proof of the ranking and explanation behavior."
+                  }
+                },
+                {
+                  "text": "Running the suggestion command leaves the ticket's saved owner unchanged.",
+                  "provenance": {
+                    "kind": "user-answer",
+                    "source_note": "The user requires a person to make every final ownership change."
+                  }
+                },
+                {
+                  "text": "/usr/bin/python3 -m unittest discover -s tests passes on Python 3.9.",
+                  "provenance": {
+                    "kind": "repository-fact",
+                    "source_note": "pyproject.toml records Python 3.9 as the floor and the fixture repository's unit-test command."
+                  }
+                }
+              ],
+              "dependencies": [],
+              "provenance": {
+                "kind": "repository-fact",
+                "source_note": "The current phase status names TB-2-03 as the next story slot in the existing roadmap."
+              }
+            }
+          ]
+        }
+      ],
+      "exit_criteria": [
+        {
+          "text": "A support lead can request a ranked, explained suggestion for a fixture ticket, choose an owner separately, and pass the existing Python 3.9 test suite.",
+          "provenance": {
+            "kind": "recommendation",
+            "source_note": "Recommended as the first usable maintain-mode milestone combining the user's outcome with repository verification facts."
+          }
+        }
+      ]
+    },
+    "policy": null
+  },
+  "local_content": {
+    "driver_bindings": {
+      "reviewer": {
+        "adapter": "claude-code",
+        "model": "default",
+        "provider": "anthropic",
+        "provenance": {
+          "kind": "recommendation",
+          "source_note": "Recommended as non-secret local metadata for a review-oriented agent profile; no runtime authority is included."
+        }
+      }
+    }
+  },
+  "unresolved_questions": [
+    {
+      "question": "When two candidates have equal skills and workload, should the ranking prefer the longest-idle person or leave them tied?",
+      "provenance": {
+        "kind": "user-answer",
+        "source_note": "The user said either tie behavior could work and deferred the decision."
+      }
+    }
+  ],
+  "starts_work": false,
+  "creates_grant": false,
+  "certifies": false,
+  "commits": false
+}

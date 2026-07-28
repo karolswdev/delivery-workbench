@@ -1,0 +1,167 @@
+{
+  "schema": "delivery-workbench-setup-proposal@1",
+  "state": "draft",
+  "project": {
+    "slug": "pantry-ping",
+    "prefix": "PP",
+    "title": "Pantry Ping",
+    "provenance": {
+      "kind": "user-answer",
+      "source_note": "The user supplied the project name, slug, and PP story prefix."
+    }
+  },
+  "source_intent": {
+    "idea": "Help a household notice pantry food that should be used soon without requiring a full inventory system.",
+    "mode": "build",
+    "provenance": {
+      "kind": "user-answer",
+      "source_note": "The user's opening answer described a lightweight expiry reminder for household use."
+    }
+  },
+  "tracked_content": {
+    "roadmap": {
+      "phases": [
+        {
+          "number": 1,
+          "title": "A usable pantry list",
+          "goal": "Let one household record dated pantry items and see what to use next from a local command.",
+          "provenance": {
+            "kind": "recommendation",
+            "source_note": "Recommended as the smallest end-to-end milestone that satisfies the requested outcome without adding notifications."
+          },
+          "stories": [
+            {
+              "id_sketch": "PP-1-01",
+              "title": "Store pantry items locally",
+              "problem": "The household needs a quick way to record an item, quantity, and best-before date without creating an account.",
+              "scope_in": [
+                {
+                  "text": "Provide a local command that adds and lists pantry items.",
+                  "provenance": {
+                    "kind": "user-answer",
+                    "source_note": "The user chose a local command and explicitly rejected accounts for the first milestone."
+                  }
+                },
+                {
+                  "text": "Persist data in a human-readable file under the user's chosen data directory.",
+                  "provenance": {
+                    "kind": "recommendation",
+                    "source_note": "Recommended to keep the first milestone inspectable and avoid a database dependency."
+                  }
+                }
+              ],
+              "scope_out": [
+                {
+                  "text": "Shared household accounts and cloud synchronization.",
+                  "provenance": {
+                    "kind": "user-answer",
+                    "source_note": "The user named multi-user sync as a non-goal for the first release."
+                  }
+                },
+                {
+                  "text": "Migration of existing application or pantry data.",
+                  "provenance": {
+                    "kind": "repository-fact",
+                    "source_note": "The build-mode fixture repository read found rails but no existing application or pantry data."
+                  }
+                }
+              ],
+              "acceptance_criteria": [
+                {
+                  "text": "A user can add an item with name, quantity, and ISO date, then list the same values in a fresh process.",
+                  "provenance": {
+                    "kind": "user-answer",
+                    "source_note": "The user said a fresh-process round trip is the minimum proof that storage works."
+                  }
+                },
+                {
+                  "text": "Automated tests cover valid input, an invalid date, and persistence across two command invocations.",
+                  "provenance": {
+                    "kind": "recommendation",
+                    "source_note": "Recommended from the user's request for repeatable command-level verification."
+                  }
+                }
+              ],
+              "dependencies": [],
+              "provenance": {
+                "kind": "recommendation",
+                "source_note": "Recommended as the first atomic story needed by the usable milestone."
+              }
+            },
+            {
+              "id_sketch": "PP-1-02",
+              "title": "Show what to use next",
+              "problem": "A stored list does not help the household act unless soonest-dated items are easy to find.",
+              "scope_in": [
+                {
+                  "text": "Sort active items by best-before date and mark items due within seven days.",
+                  "provenance": {
+                    "kind": "user-answer",
+                    "source_note": "The user defined seven days as the useful planning window."
+                  }
+                }
+              ],
+              "scope_out": [
+                {
+                  "text": "Email, push, or text-message delivery.",
+                  "provenance": {
+                    "kind": "user-answer",
+                    "source_note": "The user deferred outbound notifications until the preferred channel is known."
+                  }
+                }
+              ],
+              "acceptance_criteria": [
+                {
+                  "text": "Given fixed fixture dates, the command orders items deterministically and labels only items inside the seven-day window.",
+                  "provenance": {
+                    "kind": "recommendation",
+                    "source_note": "Recommended as a clock-independent verification of the user-visible milestone."
+                  }
+                }
+              ],
+              "dependencies": [
+                {
+                  "id_sketch": "PP-1-01",
+                  "provenance": {
+                    "kind": "recommendation",
+                    "source_note": "The due-soon view requires the local item store from PP-1-01."
+                  }
+                }
+              ],
+              "provenance": {
+                "kind": "recommendation",
+                "source_note": "Recommended as the second story that turns storage into a usable household result."
+              }
+            }
+          ]
+        }
+      ],
+      "exit_criteria": [
+        {
+          "text": "A new user can install the command, record three items, and identify the soonest item from documented steps, with the command tests passing.",
+          "provenance": {
+            "kind": "user-answer",
+            "source_note": "The user described this as the first handoff they would consider usable."
+          }
+        }
+      ]
+    },
+    "policy": null
+  },
+  "local_content": {
+    "driver_bindings": {}
+  },
+  "unresolved_questions": [
+    {
+      "question": "If outbound reminders enter a later milestone, should the first supported channel be email, a calendar entry, or a phone notification?",
+      "provenance": {
+        "kind": "user-answer",
+        "source_note": "The user wants reminders eventually but has not chosen a delivery channel."
+      }
+    }
+  ],
+  "starts_work": false,
+  "creates_grant": false,
+  "certifies": false,
+  "commits": false
+}

@@ -60,6 +60,11 @@ from setup_proposal_tests import (
     SetupProposalJourneyTest,
 )
 from setup_lease_tests import SetupLeaseTest
+from scope_chat_tests import (
+    ScopeChatFixtureTest,
+    ScopeChatRevisionTest,
+    ScopeChatSkillFitnessTest,
+)
 
 
 README = """# Demo - Roadmap

@@ -82,7 +82,7 @@ class InitCommandTest(unittest.TestCase):
         self.assertTrue((target / ".git").is_dir())
         self.assertTrue((target / ".githooks/dw").is_file())
         self.assertIn("start the intake conversation", stdout)
-        self.assertIn("Run /dw-adopt", stdout)
+        self.assertIn("Run /dw-scope", stdout)
         self.assertIn("No project or agent was started automatically", stdout)
 
         doctor = run(SYSTEM_PYTHON, str(target / ".githooks/dw"), "doctor", cwd=target)

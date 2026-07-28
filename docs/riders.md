@@ -37,10 +37,10 @@ the rails run under Claude Code today.
   by `dw agent-docs` (canon in
   `pmo-roadmap/lib/dw_pmo/agentdocs.py`), staleness checked by
   `dw doctor`.
-- Commands: four slash commands in `.claude/commands/`, currently
+- Commands: five slash commands in `.claude/commands/`, currently
   byte-identical hand-synced twins of `plugin/commands/` — the
   duplication WLA-12-04 exists to collapse.
-- Plugin: `plugin/` with `.claude-plugin/plugin.json`, the four
+- Plugin: `plugin/` with `.claude-plugin/plugin.json`, the five
   commands, and one skill.
 - MCP: `.mcp.json` wires the `delivery-workbench` server over stdio
   to `.githooks/dw-mcp` (contract in [mcp.md](./mcp.md)).
@@ -65,7 +65,7 @@ the rails run under Claude Code today.
   (built-ins ship under `.system/`) and repo-level
   `.codex/skills/<name>/SKILL.md`. A fixture skill planted in a repo
   was discovered and honored by `codex exec` with no flags. This is
-  the surface WLA-12-05 renders the four commands onto, and it
+  the surface WLA-12-05 renders the five commands onto, and it
   amends that story's "custom prompts" wording.
 - MCP: **verified-live.** `codex mcp add|list|get|remove|login`
   manages `[mcp_servers]` entries in `~/.codex/config.toml` (a live
@@ -221,7 +221,7 @@ integrations instead of one contract:
 flowchart LR
     subgraph canon [Canonical sources]
         B[agent brief<br/>agentdocs canon]
-        C[four command specs<br/>pmo-roadmap/agent/dw-*.md]
+        C[five command specs<br/>pmo-roadmap/agent/dw-*.md]
     end
     R[dw rider docs<br/>renderer, grown from dw agent-docs]
     B --> R
@@ -233,7 +233,7 @@ flowchart LR
 ```
 
 - **Canonical sources.** The brief canon lives where it already
-  lives (`agentdocs.py`'s canonical block) and the four command
+  lives (`agentdocs.py`'s canonical block) and the five command
   specs in `pmo-roadmap/agent/dw-*.md`. WLA-12-04 refactors both
   into per-surface-renderable form; it does not invent a new
   document format first and a renderer second.
@@ -340,7 +340,7 @@ of what the tool would probably do.
   hand-editing any rendered copy makes `dw check` fail with the
   drift ERROR naming the file and its source, test-proven.
 - **WLA-12-05** — `dw rider install codex` wires a fixture repo
-  idempotently: AGENTS.md managed block, the four commands as
+  idempotently: AGENTS.md managed block, the five commands as
   `.codex/skills/` skills (per this matrix — not `~/.codex/prompts`),
   MCP snippet printed, never silently written; the full story loop
   runs under the real Codex CLI; coexistence with HoldSpeak's Codex
@@ -453,7 +453,7 @@ Shipped by WLA-12-05, on the WLA-12-04 seam. In a rails repo:
 ```
 
 wires three things, idempotently: the AGENTS.md managed block
-(agents variant of the brief), the four commands as repo-level
+(agents variant of the brief), the five commands as repo-level
 Codex skills (`.codex/skills/dw-*/SKILL.md` — the surface the
 matrix verified; Codex discovers them with no flags), and the MCP
 registration snippet for `~/.codex/config.toml`, printed for the
@@ -492,7 +492,7 @@ Shipped by WLA-12-06. In a rails repo:
 .githooks/dw rider install pi
 ```
 
-wires the shared AGENTS.md managed block and the four commands as
+wires the shared AGENTS.md managed block and the five commands as
 project prompt templates in `.pi/prompts/` (type `/dw-next` in pi's
 editor). The templates are the canon verbatim — pi's format is
 byte-identical to the command-spec format — and they are

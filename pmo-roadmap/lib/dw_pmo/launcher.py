@@ -157,7 +157,7 @@ def _print_completed_init(target: Path) -> None:
     print(f"Delivery Workbench rails are ready in {target}.")
     print("Next, start the intake conversation that will create your roadmap project:")
     print("  1. Open this directory in Claude Code.")
-    print("  2. Run /dw-adopt and describe what you want to build.")
+    print("  2. Run /dw-scope and describe what you want to build.")
     print("No project or agent was started automatically.")
 
 

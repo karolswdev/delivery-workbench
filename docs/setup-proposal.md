@@ -27,6 +27,12 @@ Conversation output and Workbench review are inert. A transcript, proposal, or
 proposal-shaped preview is not a setup lease or program grant. The terminal
 must not infer consent from review activity.
 
+Run `/dw-scope` to hold the drafting conversation. Its build mode starts with a
+rails-ready repository and an idea; its maintain mode reads the existing
+codebase and roadmap first. Both modes write only `.tmp/setup-proposal.json`,
+then hand the draft to Roadmap changes in the Workbench and name
+`dw setup preview .tmp/setup-proposal.json` as the next separate terminal step.
+
 ## Journey states
 
 The closed state sequence is:

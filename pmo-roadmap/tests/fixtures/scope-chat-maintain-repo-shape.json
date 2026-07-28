@@ -1,0 +1,23 @@
+{
+  "files": {
+    "README.md": {
+      "product": "Task Board",
+      "users": "A small support team",
+      "runtime": "Python 3.9 command-line application"
+    },
+    "pyproject.toml": {
+      "test_command": "/usr/bin/python3 -m unittest discover -s tests",
+      "python_floor": "3.9"
+    },
+    "pm/roadmap/task-board/README.md": {
+      "prefix": "TB",
+      "slug": "task-board",
+      "title": "Task Board"
+    },
+    "pm/roadmap/task-board/phase-2-shared-queue/current-phase-status.md": {
+      "next_story": "TB-2-03",
+      "phase": 2,
+      "phase_goal": "Make the local queue safe for a small support team."
+    }
+  }
+}

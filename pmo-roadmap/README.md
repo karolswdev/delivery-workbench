@@ -129,7 +129,8 @@ The installer:
 7. Copies `bin/work-log-summarize` → `target/.githooks/work-log-summarize`
 8. Copies `bin/work-log-read` → `target/.githooks/work-log-read`
 9. Copies `agent/dw-*.md` → `target/.claude/commands/` (agent slash
-   commands: `/dw-next`, `/dw-contract`, `/dw-story-done`, `/dw-adopt`)
+   commands: `/dw-next`, `/dw-contract`, `/dw-story-done`, `/dw-adopt`,
+   `/dw-scope`)
 10. Writes the managed Delivery Workbench block into `CLAUDE.md` (or an
    existing `AGENTS.md`) between markers; `update.sh` refreshes only
    inside them, user content is never touched (`--no-agent-docs` to opt
@@ -655,7 +656,7 @@ workbench).
 
 Claude Code users can install the agent surface as a plugin — a
 `delivery-workbench` skill teaching the full operating loop (orient →
-work → prove → gate, with refusal recovery) plus the four slash
+work → prove → gate, with refusal recovery) plus the five slash
 commands — without cloning this repo into every project:
 
 ```bash
@@ -918,7 +919,8 @@ pmo-roadmap/
 ├── install.sh                    ← initial install into a target project
 ├── update.sh                     ← roll framework updates forward
 ├── agent/                        ← slash-command sources (dw-next, dw-contract,
-│                                    dw-story-done, dw-adopt) → .claude/commands/
+│                                    dw-story-done, dw-adopt, dw-scope)
+│                                    → .claude/commands/
 ├── assets/                       ← icon and image assets
 ├── bin/
 │   ├── dw                        ← roadmap CLI (thin adapter over the core)

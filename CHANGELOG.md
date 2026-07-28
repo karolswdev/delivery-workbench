@@ -9,6 +9,14 @@ single-sourced from `dw_pmo.__version__` (test-asserted against
 
 ## Unreleased
 
+`/dw-scope` now holds one build-or-maintain scope conversation and writes one
+inert, provenance-traced draft to `.tmp/setup-proposal.json`. Build mode starts
+with a rails-ready repository and an idea; maintain mode reads the codebase and
+roadmap first. Ambiguity stays visible as unresolved questions, revisions keep
+unchanged sections byte-stable, and the command ends at Workbench review plus
+the separate `dw setup preview .tmp/setup-proposal.json` handoff. It cannot
+write canon, apply setup, start work, grant authority, certify, or commit.
+
 Setup is now one deliberate act. `dw setup preview <proposal-file>` returns a
 canonical complete write set and an exact `setup-sha256:` lease bound to the
 repository, branch, HEAD, index, roadmap, policy, driver roster, proposal, and
