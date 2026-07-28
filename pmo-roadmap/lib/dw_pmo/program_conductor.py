@@ -1550,6 +1550,25 @@ def _git_process(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _workflow_route_result(result: object) -> str:
+    """Map a rubric aggregate into the closed workflow route vocabulary.
+
+    Workflow verdict routes are closed over pass/fail/abstain/
+    inconclusive, but rubric aggregation also produces red results like
+    needs-repair (a vetoed criterion) — the Phase 30 exam's first real
+    red verdict aggregated to needs-repair, missed the route table, and
+    blocked a run that had a declared repair leg. Every red aggregate
+    routes as fail; unknown values also route as fail so a novel red
+    vocabulary can never silently take the pass route.
+    """
+    value = str(result)
+    if value in GREEN_RESULTS:
+        return "pass"
+    if value in {"abstain", "inconclusive"}:
+        return value
+    return "fail"
+
+
 def _baseline_workspace(root: Path, head: str) -> Path:
     tag = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:16]
     workspace = root.parent / ".delivery-workbench-program-baselines" / tag / "baseline"
@@ -5692,7 +5711,7 @@ def derive_program_frontier(
                         )
                         if failed
                         else node.get("routes", {}).get(  # type: ignore[union-attr]
-                            str(prior.get("result")),
+                            _workflow_route_result(prior.get("result")),
                             {"kind": "action", "target": "block"},
                         )
                     )
