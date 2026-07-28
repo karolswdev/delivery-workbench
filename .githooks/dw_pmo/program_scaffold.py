@@ -74,7 +74,15 @@ VERIFICATION_KEYS = {"built_in_checks", "regression_argv"}
 SIZE_KEYS = {"complexity", "fan_out", "repair_rounds"}
 AUTONOMY_MODES = {"advisory", "checkpointed"}
 COMPLEXITY_WEIGHTS = {"small": 1, "medium": 2, "large": 4}
-BUILT_IN_CHECKS = {"rail-status"}
+# Only checks the conductor conducts AND the answers can fully
+# configure belong here. diff-scope is the governance guard: the
+# candidate diff must stay inside ordinary project paths, so a
+# candidate touching pm/roadmap/ or .githooks/ fails its own check.
+BUILT_IN_CHECKS = {"diff-scope"}
+DIFF_SCOPE_ALLOWED_PATHS = [
+    "src/**", "tests/**", "docs/**", "*.py", "*.md", "*.toml",
+    "*.cfg", "*.txt", "Makefile", ".gitignore",
+]
 EXCLUDED_CAPABILITIES = {
     "git:commit", "git:push", "merge", "release", "deploy", "publish",
     "arbitrary-shell", "arbitrary-network", "integration:apply",
@@ -450,9 +458,14 @@ def _check_specs(answers: dict[str, object], suffix: str = "") -> list[dict[str,
     assert isinstance(verification, dict)
     specs: list[dict[str, object]] = []
     for name in verification["built_in_checks"]:
+        runner: dict[str, object] = {
+            "kind": "builtin", "name": name, "output_bytes": 100_000,
+        }
+        if name == "diff-scope":
+            runner["allowed_paths"] = list(DIFF_SCOPE_ALLOWED_PATHS)
         specs.append({
             "id": "check-%s%s" % (name, suffix),
-            "runner": {"kind": "builtin", "name": name, "output_bytes": 100_000},
+            "runner": runner,
         })
     if verification["regression_argv"] is not None:
         specs.append({

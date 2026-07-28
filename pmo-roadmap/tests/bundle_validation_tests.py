@@ -174,7 +174,7 @@ Fixture story.
                     "id": "required-check",
                     "type": "check",
                     "needs": ["implement"],
-                    "runner": {"kind": "builtin", "name": "rail-status", "output_bytes": 100000},
+                    "runner": {"kind": "builtin", "name": "diff-scope", "allowed_paths": ["src/**"], "output_bytes": 100000},
                     "expect": {"exit_code": 0},
                     "timeout_seconds": 60,
                     "max_attempts": 1,
@@ -549,6 +549,20 @@ class BundleRosterAndParityTest(BundleValidationFixture):
         refused = self.validate(family_adversarial)
         self.assertFalse(refused["valid"])
         self.assertNotIn(secret, canonical_json(refused))
+
+    def test_unconductable_builtin_check_name_refuses_at_validation(self):
+        # The Phase 30 exam's first live attempt refused at its first
+        # tick on rail-status (separately authorized rail adapter);
+        # builtin runner names now share the parity rule.
+        self.workflow["nodes"][1]["runner"] = {
+            "kind": "builtin", "name": "rail-status", "output_bytes": 100000,
+        }
+        self.flush_bundle()
+        refused = self.validate()
+        diagnostic = self.diagnostic(refused, "unconductable-builtin-check")
+        self.assertIn("rail-status", diagnostic["message"])
+        self.assertIn("diff-scope", diagnostic["remediation"])
+        self.assert_source_pointer_remediation(diagnostic)
 
     def test_compiler_conductor_node_sets_are_code_owned_and_checkpoint_refuses(self):
         compiler_only = set(NODE_TYPES) - set(CONDUCTOR_NODE_TYPES)

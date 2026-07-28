@@ -187,7 +187,7 @@ class ProgramScaffoldAnswersTest(ProgramScaffoldFixture):
         answers["verification"]["built_in_checks"] = ["hope-tests-pass"]
         with self.assertRaisesRegex(DwError, r"^/verification/built_in_checks/0"):
             normalize_scaffold_answers(answers)
-        answers["verification"]["built_in_checks"] = ["rail-status"]
+        answers["verification"]["built_in_checks"] = ["diff-scope"]
         answers["verification"]["regression_argv"] = []
         with self.assertRaisesRegex(DwError, r"^/verification/regression_argv"):
             normalize_scaffold_answers(answers)

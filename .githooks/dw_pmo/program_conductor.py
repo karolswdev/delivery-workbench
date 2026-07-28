@@ -131,6 +131,17 @@ PROGRAM_REQUEST_RESULT_KIND = "delivery-workbench-program-request-result"
 # Public workflow kinds this conductor can turn into finite actions or governed
 # structural progress. Bundle validation compares this code-owned set with the
 # compiler's accepted kinds, so drift fails before a grant exists.
+CONDUCTOR_BUILTIN_CHECKS = frozenset({"file-exists", "json-schema", "diff-scope"})
+"""Builtin check runner names this conductor actually conducts.
+
+rail-status is deliberately absent: rails are separately authorized
+(WLA-26-10) and the conductor refuses them here. Whole-bundle
+validation reads this set so a policy naming an unconductable builtin
+refuses at validate time, not at the first live tick (found by the
+Phase 30 exam's first attempt).
+"""
+
+
 CONDUCTOR_NODE_TYPES = frozenset({
     "agent", "check", "collect", "subflow", "loop", "debate", "verdict",
 })

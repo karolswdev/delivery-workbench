@@ -1390,9 +1390,38 @@ class _Compiler:
 
     def _bundle_node_and_route_checks(self) -> None:
         # Imported lazily because the conductor itself imports this module.
-        from .program_conductor import CONDUCTOR_NODE_TYPES
+        from .program_conductor import CONDUCTOR_BUILTIN_CHECKS, CONDUCTOR_NODE_TYPES
 
         compiler_only = set(NODE_TYPES) - set(CONDUCTOR_NODE_TYPES)
+        workflows = self.references.get("workflows", {})
+        if isinstance(workflows, dict):
+            # The Phase 30 exam's first attempt reached a live tick before
+            # discovering rail-status is separately authorized; builtin
+            # runner NAMES now share the node-type parity rule, read from
+            # the workflow documents the compiler actually loaded.
+            for reference in workflows.values():
+                if not isinstance(reference, dict):
+                    continue
+                document = reference.get("document")
+                if not isinstance(document, dict):
+                    continue
+                for index, node in enumerate(document.get("nodes", [])):
+                    if not isinstance(node, dict) or node.get("type") != "check":
+                        continue
+                    runner = node.get("runner")
+                    if (
+                        isinstance(runner, dict)
+                        and runner.get("kind") == "builtin"
+                        and str(runner.get("name")) not in CONDUCTOR_BUILTIN_CHECKS
+                    ):
+                        self.bundle_diag(
+                            f"/nodes/{index}/runner/name",
+                            "unconductable-builtin-check",
+                            f"the program conductor does not conduct builtin check {runner.get('name')!r}",
+                            "use a conductor-supported builtin (%s) or an exact command check"
+                            % ", ".join(sorted(CONDUCTOR_BUILTIN_CHECKS)),
+                            str(reference.get("path") or self.source),
+                        )
         instances = self.references.get("workflow_instances", {})
         if not isinstance(instances, dict):
             return

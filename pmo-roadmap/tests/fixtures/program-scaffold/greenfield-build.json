@@ -21,7 +21,7 @@
     "repair_rounds": 1
   },
   "verification": {
-    "built_in_checks": ["rail-status"],
+    "built_in_checks": ["diff-scope"],
     "regression_argv": null
   }
 }
