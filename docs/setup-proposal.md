@@ -479,6 +479,39 @@ that proves one bounded green route plus typed check, abstention, repair,
 verdict, and budget failure routes. Any generated validation failure is a
 compiler bug and blocks output.
 
+### Review the generated bundle in Program Studio
+
+Open the generated policy as one linked review rather than five unrelated JSON
+documents:
+
+```text
+?proposal_file=<repository-relative-file>#/program-studio/bundle
+```
+
+The page answers what will run, who implements, who verifies, why the verifier
+is independent, what each check proves, what the program can spend, when it
+stops, and how it reaches certified handoff. It resolves the named profiles
+against the local non-secret driver roster and labels tracked policy and
+`.git`-local bindings "configuration, not permission."
+
+The backing `GET /api/setup/bundle` route reuses `validate_program` with the
+embedded `bundle_documents` and proposal `roadmap_document`. Diagnostics retain
+their source and JSON Pointer and link to the relevant overview section. A pure
+simulation uses `simulate_scaffold_proposal`; refreshing the route writes
+nothing.
+
+The route accepts only `proposal_file`. It neither accepts nor returns setup or
+program tokens. After a separately authorized `dw setup apply`, the page shows
+the exact terminal handoff:
+
+```text
+.githooks/dw program plan <program-slug>
+```
+
+The browser does not run this command, apply setup, or create a grant. See
+[Delivery-plan authoring](./plan-authoring.md#review-a-generated-setup-bundle)
+for the Program Studio route details.
+
 ### Budget derivation
 
 Let:

@@ -2458,6 +2458,149 @@ details.blane.closed[open] summary { margin-bottom: 8px; }
   user-select: all;
 }
 
+/* Generated setup bundles are reviewed as one linked object in Program Studio. */
+.studio-bundle-review {
+  display: grid;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.bundle-hero,
+.bundle-configuration,
+.bundle-diagnostics,
+.bundle-section,
+.bundle-simulation,
+.bundle-handoff {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 18px;
+}
+.bundle-hero,
+.bundle-diagnostics,
+.bundle-simulation,
+.bundle-handoff {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.bundle-hero.ready { border-top: 4px solid var(--accent); }
+.bundle-hero.refused { border-top: 4px solid var(--err); }
+.bundle-hero h1,
+.bundle-section h2,
+.bundle-configuration h2,
+.bundle-diagnostics h2,
+.bundle-simulation h2,
+.bundle-handoff h2 { margin: 2px 0 7px; }
+.bundle-configuration {
+  border: 2px solid var(--link);
+  background: var(--panel-2);
+}
+.bundle-config-cards,
+.bundle-seat-grid,
+.bundle-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.bundle-config-cards article,
+.bundle-seat-grid article,
+.bundle-checks article,
+.bundle-drivers article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 12px;
+}
+.bundle-config-cards .tracked { border-left: 5px solid var(--accent); }
+.bundle-config-cards .git-local { border-left: 5px dashed var(--warn); }
+.bundle-config-cards small {
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.bundle-diagnostics { border-color: var(--err); }
+.bundle-diagnostics.clear { border-color: var(--accent); }
+.bundle-diagnostics ol {
+  width: min(100%, 42rem);
+  margin: 0;
+  padding-left: 22px;
+}
+.bundle-diagnostics li + li { margin-top: 8px; }
+.bundle-diagnostics a {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel-2);
+  padding: 10px;
+}
+.bundle-diagnostics a > span,
+.bundle-diagnostics a > small { color: var(--muted); }
+.bundle-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.bundle-section.wide { grid-column: 1 / -1; }
+.bundle-section:target { outline: 3px solid var(--focus); outline-offset: 4px; }
+.bundle-section dl,
+.bundle-budgets { margin: 12px 0 0; }
+.bundle-section dl > div,
+.bundle-budgets > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 7px 0;
+}
+.bundle-section dd { margin: 0; text-align: right; }
+.bundle-route {
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  list-style: none;
+  padding: 8px 2px 10px;
+}
+.bundle-route li {
+  display: grid;
+  flex: 0 0 min(12rem, 55vw);
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 10px;
+}
+.bundle-route li.terminal { border-color: var(--accent); }
+.bundle-route li span,
+.bundle-route li small { color: var(--muted); }
+.bundle-checks article.missing { border-color: var(--err); }
+.bundle-rules { color: var(--muted); }
+.bundle-drivers { display: grid; gap: 8px; margin: 12px 0; }
+.bundle-simulation { display: block; }
+.bundle-simulation header { display: flex; justify-content: space-between; gap: 18px; }
+.bundle-handoff {
+  align-items: center;
+  border: 2px solid var(--accent);
+}
+.bundle-handoff code {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel-2);
+  padding: 12px;
+  user-select: all;
+}
+.adoption-bundle-link { display: inline-block; margin-top: 10px; font-weight: 700; }
+
 @media (max-width: 600px) {
   .adoption-config-grid,
   .adoption-path-split { grid-template-columns: 1fr; }
@@ -2473,6 +2616,21 @@ details.blane.closed[open] summary { margin-bottom: 8px; }
   .adoption-objections li { grid-template-columns: 1fr; }
   .adoption-workspace-tabs { overflow-x: auto; }
   .adoption-workspace-tabs a { flex: none; }
+  .bundle-overview-grid,
+  .bundle-config-cards,
+  .bundle-seat-grid,
+  .bundle-checks { grid-template-columns: 1fr; }
+  .bundle-hero,
+  .bundle-diagnostics,
+  .bundle-simulation header,
+  .bundle-handoff { display: grid; }
+  .bundle-section.wide { grid-column: auto; }
+  .bundle-hero,
+  .bundle-configuration,
+  .bundle-diagnostics,
+  .bundle-section,
+  .bundle-simulation,
+  .bundle-handoff { padding: 14px; }
 }
 
 @media (prefers-color-scheme: light) {

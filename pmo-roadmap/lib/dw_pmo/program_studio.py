@@ -54,6 +54,8 @@ from .programs import (
     simulate_program,
     validate_program,
 )
+from .program_scaffold import simulate_scaffold_proposal
+from .setup_proposal import validate_proposal
 
 
 STUDIO_KIND = "delivery-workbench-program-studio"
@@ -1291,6 +1293,346 @@ def new_studio_document(family: str, slug: str | None = None) -> dict[str, objec
             },
             "viewport": {"x": 0, "y": 0, "zoom": 1},
         },
+    }
+
+
+BUNDLE_REVIEW_KIND = "delivery-workbench-program-studio-bundle-review"
+_BUNDLE_SECTION_IDS = {
+    "scope": "bundle-scope",
+    "workflow": "bundle-workflow",
+    "team": "bundle-team",
+    "checks": "bundle-checks",
+    "capabilities": "bundle-capabilities",
+    "budgets": "bundle-budgets",
+    "stops": "bundle-stops",
+    "drivers": "bundle-drivers",
+    "handoff": "bundle-handoff",
+}
+
+
+def _proposal_bundle_documents(policy: dict[str, object]) -> dict[str, object]:
+    workflows = policy.get("workflows")
+    rubrics = policy.get("rubrics")
+    organization = policy.get("organization")
+    if not isinstance(workflows, list) or not isinstance(rubrics, list):
+        raise DwError("/tracked_content/policy: generated bundle is incomplete")
+    if not isinstance(organization, dict):
+        raise DwError("/tracked_content/policy/organization: generated bundle is incomplete")
+    organization_document = organization.get("document")
+    if not isinstance(organization_document, dict):
+        raise DwError("/tracked_content/policy/organization/document: must be an object")
+    return {
+        "workflows": {
+            str(wrapper["document"].get("slug", "")): wrapper["document"]
+            for wrapper in workflows
+            if isinstance(wrapper, dict) and isinstance(wrapper.get("document"), dict)
+        },
+        "organizations": {
+            str(organization_document.get("slug", "")): organization_document,
+        },
+        "rubrics": {
+            str(wrapper["document"].get("slug", "")): wrapper["document"]
+            for wrapper in rubrics
+            if isinstance(wrapper, dict) and isinstance(wrapper.get("document"), dict)
+        },
+    }
+
+
+def _bundle_anchor(diagnostic: dict[str, object]) -> tuple[str, str]:
+    source = str(diagnostic.get("source", ""))
+    pointer = str(diagnostic.get("pointer", "/"))
+    code = str(diagnostic.get("code", ""))
+    if "driver" in source or code.startswith(("driver-", "role-", "provider-")):
+        section = "drivers"
+    elif "organization" in source or pointer.startswith("/organization"):
+        section = "team"
+    elif "rubric" in source:
+        section = "checks"
+    elif "workflow" in source or pointer.startswith("/bindings"):
+        section = "workflow"
+    elif pointer.startswith("/budgets"):
+        section = "budgets"
+    elif pointer.startswith("/stop_conditions"):
+        section = "stops"
+    elif pointer.startswith("/requested_capabilities"):
+        section = "capabilities"
+    else:
+        section = "scope"
+    anchor_id = _BUNDLE_SECTION_IDS[section]
+    return anchor_id, "#/program-studio/bundle/%s" % anchor_id
+
+
+def _bundle_diagnostics(validation: dict[str, object]) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for raw in validation.get("diagnostics", []):
+        if not isinstance(raw, dict):
+            continue
+        anchor_id, anchor_href = _bundle_anchor(raw)
+        result.append({
+            "source": str(raw.get("source", "program")),
+            "pointer": str(raw.get("pointer", "/")),
+            "code": str(raw.get("code", "invalid-bundle")),
+            "message": str(raw.get("message", "The linked bundle is invalid.")),
+            "remediation": str(raw.get("remediation", "Correct the source decision.")),
+            "anchor_id": anchor_id,
+            "anchor_href": anchor_href,
+        })
+    return result
+
+
+def _generated_workflow_shape(workflow: dict[str, object]) -> dict[str, object]:
+    nodes = workflow.get("nodes")
+    terminals = workflow.get("terminals")
+    node_rows = []
+    for node in nodes if isinstance(nodes, list) else []:
+        if not isinstance(node, dict):
+            continue
+        node_rows.append({
+            "id": str(node.get("id", "unnamed-step")),
+            "type": str(node.get("type", "unknown")),
+            "role": node.get("role") if isinstance(node.get("role"), str) else None,
+            "activation": str(node.get("activation", "dependency")),
+        })
+    terminal_rows = []
+    for terminal in terminals if isinstance(terminals, list) else []:
+        if isinstance(terminal, dict):
+            terminal_rows.append({
+                "id": str(terminal.get("id", "terminal")),
+                "meaning": str(terminal.get("meaning", "stop")),
+                "description": str(terminal.get("description", "Delivery stops here.")),
+            })
+    return {
+        "title": str(workflow.get("title", workflow.get("slug", "Generated workflow"))),
+        "summary": "Implement, run the declared checks, obtain an independent verdict, allow one bounded repair, rerun checks, and stop at certified handoff.",
+        "nodes": node_rows,
+        "terminals": terminal_rows,
+    }
+
+
+def _generated_team(
+    organization: dict[str, object],
+    roster: dict[str, object],
+) -> dict[str, object]:
+    agents = {
+        str(agent.get("id")): agent
+        for agent in organization.get("agents", [])
+        if isinstance(agent, dict)
+    }
+    pools = {
+        str(pool.get("id")): pool
+        for pool in organization.get("pools", [])
+        if isinstance(pool, dict)
+    }
+    roster_profiles = {
+        str(profile.get("profile")): profile
+        for profile in roster.get("profiles", [])
+        if isinstance(profile, dict)
+    }
+    seats = []
+    teams = organization.get("teams")
+    first_team = teams[0] if isinstance(teams, list) and teams and isinstance(teams[0], dict) else {}
+    for role in first_team.get("roles", []):
+        if not isinstance(role, dict):
+            continue
+        pool = pools.get(str(role.get("pool")), {})
+        pool_agents = pool.get("agents") if isinstance(pool, dict) else []
+        agent = agents.get(str(pool_agents[0]), {}) if isinstance(pool_agents, list) and pool_agents else {}
+        profile_name = str(agent.get("profile", "unresolved"))
+        local = roster_profiles.get(profile_name)
+        seats.append({
+            "role": str(role.get("id", role.get("duty", "seat"))),
+            "duty": str(role.get("duty", "delivery")),
+            "profile": profile_name,
+            "workspace": str(role.get("workspace", "unspecified")),
+            "independent_from": [str(item) for item in role.get("independent_from", [])],
+            "local": {
+                "resolved": local is not None,
+                "available": bool(local.get("available")) if local else False,
+                "provider_family": str(local.get("provider_family", "unresolved")) if local else "unresolved",
+                "adapter": local.get("adapter") if local else None,
+                "model": local.get("model") if local else None,
+            },
+        })
+    diversity = [
+        {
+            "id": str(rule.get("id", "independence-rule")),
+            "kind": str(rule.get("kind", "separation")),
+            "roles": [str(role) for role in rule.get("roles", [])],
+        }
+        for rule in organization.get("diversity", [])
+        if isinstance(rule, dict)
+    ]
+    return {
+        "title": str(organization.get("title", "Generated delivery cell")),
+        "seats": seats,
+        "independence_rules": diversity,
+        "independence_explanation": "The verifier is read-only, uses a different principal, and must resolve to a different provider family from the isolated implementer.",
+    }
+
+
+def _generated_checks(
+    rubrics: list[dict[str, object]], workflow: dict[str, object],
+) -> list[dict[str, object]]:
+    node_ids = {
+        str(node.get("id")) for node in workflow.get("nodes", [])
+        if isinstance(node, dict)
+    }
+    result = []
+    for rubric in rubrics:
+        criteria = []
+        for criterion in rubric.get("criteria", []):
+            if not isinstance(criterion, dict):
+                continue
+            evaluation = criterion.get("evaluation")
+            fact = evaluation.get("fact") if isinstance(evaluation, dict) else None
+            criteria.append({
+                "id": str(criterion.get("id", "criterion")),
+                "question": str(criterion.get("question", "What must this check prove?")),
+                "evaluation": str(evaluation.get("kind", "unknown")) if isinstance(evaluation, dict) else "unknown",
+                "producing_check": fact if isinstance(fact, str) else None,
+                "producer_exists": fact in node_ids if isinstance(fact, str) else None,
+                "veto": bool(criterion.get("veto")),
+            })
+        result.append({
+            "slug": str(rubric.get("slug", "rubric")),
+            "title": str(rubric.get("title", "Review criteria")),
+            "criteria": criteria,
+        })
+    return result
+
+
+def build_studio_bundle_review(
+    root: Path,
+    proposal: object,
+    *,
+    proposal_file: str,
+    driver_config: object | None = None,
+) -> dict[str, object]:
+    """Project one generated setup bundle into a pure linked Studio review."""
+    root = root.resolve()
+    validated = validate_proposal(proposal)
+    policy = validated["tracked_content"]["policy"]
+    if not isinstance(policy, dict):
+        raise DwError("/tracked_content/policy: Program Studio bundle review requires generated policy")
+    program_wrapper = policy.get("program")
+    if not isinstance(program_wrapper, dict) or not isinstance(program_wrapper.get("document"), dict):
+        raise DwError("/tracked_content/policy/program/document: must be an object")
+    program = program_wrapper["document"]
+    documents = _proposal_bundle_documents(policy)
+    roadmap = validated["tracked_content"]["roadmap"]
+    project = validated["project"]
+    validation_args = {
+        "bundle_documents": documents,
+        "roadmap_document": {
+            "project": {"slug": project["slug"]}, "roadmap": roadmap,
+        },
+    }
+    if driver_config is None:
+        validation = validate_program(
+            root,
+            program,
+            "setup-proposal:/tracked_content/policy/program/document",
+            **validation_args,
+        )
+    else:
+        validation = validate_program(
+            root,
+            program,
+            "setup-proposal:/tracked_content/policy/program/document",
+            driver_config=driver_config,
+            **validation_args,
+        )
+    workflow_values = list(documents["workflows"].values())
+    organization_values = list(documents["organizations"].values())
+    rubric_values = list(documents["rubrics"].values())
+    workflow = workflow_values[0] if workflow_values else {}
+    organization = organization_values[0] if organization_values else {}
+    selected_phases = program.get("scope", {}).get("phases", {}).get("include", [])
+    selected_stories = program.get("scope", {}).get("stories", {}).get("include", [])
+    simulation = simulate_scaffold_proposal(validated)
+    diagnostics = _bundle_diagnostics(validation)
+    program_slug = str(program.get("slug", "generated-program"))
+    return {
+        "kind": BUNDLE_REVIEW_KIND,
+        "schema_version": STUDIO_SCHEMA_VERSION,
+        "valid": bool(validation.get("valid")),
+        "proposal_file": proposal_file,
+        "route": "#/program-studio/bundle",
+        "title": str(program.get("title", program_slug)),
+        "summary": "A linked review of the roadmap scope, generated delivery policy, and local non-secret driver resolution.",
+        "sections": dict(_BUNDLE_SECTION_IDS),
+        "roadmap_scope": {
+            "project": str(project["slug"]),
+            "project_title": str(project["title"]),
+            "phase_numbers": list(selected_phases) if isinstance(selected_phases, list) else [],
+            "story_ids": list(selected_stories) if isinstance(selected_stories, list) else [],
+            "source": "setup-proposal:/tracked_content/roadmap",
+        },
+        "workflow": _generated_workflow_shape(workflow),
+        "team": _generated_team(organization, validation["driver_roster"]),
+        "rubrics": _generated_checks(rubric_values, workflow),
+        "requested_capabilities": list(program.get("requested_capabilities", [])),
+        "budgets": dict(program.get("budgets", {})) if isinstance(program.get("budgets"), dict) else {},
+        "stop_conditions": list(program.get("stop_conditions", [])) if isinstance(program.get("stop_conditions"), list) else [],
+        "driver_resolution": validation["driver_roster"],
+        "diagnostics": diagnostics,
+        "findings": validation.get("findings", []),
+        "simulation": simulation,
+        "configuration": {
+            "label": "configuration, not permission",
+            "tracked": {
+                "label": "Tracked policy",
+                "scope": "tracked",
+                "source": "setup-proposal:/tracked_content/policy",
+                "non_authorizing": True,
+            },
+            "git_local": {
+                "label": ".git-local bindings",
+                "scope": "git-local",
+                "source": "setup-proposal:/local_content/driver_bindings",
+                "non_authorizing": True,
+            },
+        },
+        "handoff": {
+            "after": "dw setup apply",
+            "label": "Preview the separate program grant in the terminal",
+            "command": ".githooks/dw program plan %s" % program_slug,
+            "browser_executes": False,
+            "creates_grant": False,
+        },
+        "review_only": True,
+        "accepts_authority": False,
+        "starts_work": False,
+        "writes_state": False,
+        "writes_policy": False,
+        "writes_roster": False,
+        "writes_roadmap": False,
+        "writes_grant": False,
+        "writes_run": False,
+        "creates_grant": False,
+    }
+
+
+def invalid_studio_bundle_review(message: str, *, proposal_file: str = "") -> dict[str, object]:
+    """Return a complete inert refusal instead of a partial linked bundle."""
+    return {
+        "kind": BUNDLE_REVIEW_KIND,
+        "schema_version": STUDIO_SCHEMA_VERSION,
+        "valid": False,
+        "proposal_file": proposal_file,
+        "route": "#/program-studio/bundle",
+        "refusal": message,
+        "diagnostics": [],
+        "review_only": True,
+        "accepts_authority": False,
+        "starts_work": False,
+        "writes_state": False,
+        "writes_policy": False,
+        "writes_roster": False,
+        "writes_roadmap": False,
+        "writes_grant": False,
+        "writes_run": False,
+        "creates_grant": False,
     }
 
 

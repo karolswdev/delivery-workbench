@@ -81,6 +81,48 @@ responsibilities, independent review, contested decisions, escalation, and
 review-of-review while preserving the same lossless Technical-details
 boundary.
 
+## Review a generated setup bundle
+
+A proposal produced by `dw program scaffold` opens at:
+
+```text
+?proposal_file=<repository-relative-file>#/program-studio/bundle
+```
+
+This route reviews the five generated documents as one bundle. It shows the
+selected roadmap scope, workflow, implementer and verifier seats, independence
+rules, rubric criteria and their producing checks, requested capabilities,
+budgets, stop conditions, and local driver availability. The overview uses
+product language first. The existing graph and exact JSON views remain the
+expert path for saved policy documents.
+
+`GET /api/setup/bundle?proposal_file=...` loads the proposal without staging its
+contents. It calls `validate_program` with the proposal's `bundle_documents` and
+`roadmap_document`; Program Studio does not maintain a second whole-bundle
+validator. Each diagnostic keeps the validator's source and JSON Pointer and
+links to the affected overview section. The route also returns the pure
+`simulate_scaffold_proposal` result, including the green, repair, failure, and
+budget-exhaustion routes.
+
+Tracked policy and `.git`-local driver bindings are shown separately under the
+same "configuration, not permission" label used by adoption review. Neither
+kind of configuration authorizes a run. This route accepts only
+`proposal_file`: it does not accept or return a setup lease or program start
+token, and it has no apply or grant control.
+
+After `dw setup apply` saves the reviewed bundle, Program Studio hands the next
+act back to the terminal:
+
+```text
+.githooks/dw program plan <program-slug>
+```
+
+That command is the existing separate program grant preview. The browser does
+not run it or mint a grant.
+
+The setup journey and proposal contract are documented in
+[Front-door setup proposal](./setup-proposal.md).
+
 ## Lossless editing and safe refusal
 
 The browser always edits a clone of `studio.raw`; it never reconstructs a

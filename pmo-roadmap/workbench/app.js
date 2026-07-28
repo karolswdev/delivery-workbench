@@ -1425,7 +1425,7 @@ async function viewAdoptionReview() {
     <section class="adoption-configuration"><div><p class="eyebrow">Separate from roadmap truth</p><h2>${esc(model.configuration.label)}</h2><p>${esc(model.configuration.explanation)}</p></div>
       <div class="adoption-config-grid"><article><h3>Tracked delivery policy</h3><p>${esc(model.configuration.policy.sentence)}</p>
         ${model.configuration.policy.documents.length ? `<ul>${model.configuration.policy.documents.map((item) => `<li><strong>${esc(item.sentence)}</strong>${provenanceHtml(item.provenance)}</li>`).join("")}</ul>` : ""}
-        ${model.configuration.policy.provenance ? provenanceHtml(model.configuration.policy.provenance) : ""}</article>
+        ${model.configuration.policy.provenance ? provenanceHtml(model.configuration.policy.provenance) : ""}${model.configuration.policy.present && ADOPTION_PROPOSAL_FILE ? '<a class="adoption-bundle-link" href="#/program-studio/bundle">Review the generated program as one linked bundle</a>' : ""}</article>
         <article><h3>Local driver bindings</h3><p>${esc(model.configuration.driver_bindings.sentence)}</p>
           <ul>${model.configuration.driver_bindings.items.map((item) => `<li><strong>${esc(item.profile)}</strong> — ${esc(item.sentence)}${provenanceHtml(item.provenance)}</li>`).join("")}</ul></article></div>
     </section>
@@ -4923,6 +4923,52 @@ function wireProgramStudio() {
   document.getElementById("studio-json-import")?.addEventListener("change", async (event) => { const file = event.target.files[0]; if (!file) return; jsonText.value = await file.text(); studioState.jsonDraft = jsonText.value; });
 }
 
+function bundleBadges(items, tone = "") {
+  return (items || []).map((item) => badge(String(item), tone)).join(" ") || '<span class="hint">None declared.</span>';
+}
+
+function renderStudioBundle(model) {
+  if (!model.valid && model.refusal) {
+    app.innerHTML = `<div class="program-studio studio-bundle-review"><header class="bundle-hero refused"><div><span class="orch-eyebrow">Generated program review</span><h1>Bundle review refused</h1><p>${esc(model.refusal)}</p></div>${badge("needs attention", "issue")}</header><p class="studio-no-grant">This review is read-only. It accepted no lease or grant credential, wrote nothing, and started nothing.</p></div>`;
+    return;
+  }
+  const scope = model.roadmap_scope || {};
+  const workflow = model.workflow || {};
+  const team = model.team || {};
+  const diagnostics = model.diagnostics || [];
+  const simulation = model.simulation || {};
+  const driverProfiles = model.driver_resolution?.profiles || [];
+  const criteria = (model.rubrics || []).flatMap((rubric) => (rubric.criteria || []).map((criterion) => ({ ...criterion, rubric: rubric.title })));
+  app.innerHTML = `<div class="program-studio studio-bundle-review" data-bundle-valid="${model.valid ? "true" : "false"}">
+    <header class="bundle-hero ${model.valid ? "ready" : "refused"}"><div><span class="orch-eyebrow">Program Studio · generated bundle</span><h1>${esc(model.title)}</h1><p>${esc(model.summary)}</p></div>${badge(model.valid ? "ready for setup review" : `${diagnostics.length} linked issue${diagnostics.length === 1 ? "" : "s"}`, model.valid ? "ok" : "issue")}</header>
+    <section class="bundle-configuration" aria-labelledby="bundle-configuration-title"><div><span class="orch-eyebrow">Separate from authority</span><h2 id="bundle-configuration-title">${esc(model.configuration?.label)}</h2><p>These are two kinds of configuration. Neither saves itself, creates permission, or starts delivery.</p></div><div class="bundle-config-cards"><article class="tracked"><span>${esc(model.configuration?.tracked?.label)}</span><strong>Roadmap and program policy</strong><code>${esc(model.configuration?.tracked?.source)}</code><small>non-authorizing</small></article><article class="git-local"><span>${esc(model.configuration?.git_local?.label)}</span><strong>Local non-secret driver resolution</strong><code>${esc(model.configuration?.git_local?.source)}</code><small>non-authorizing</small></article></div></section>
+    ${diagnostics.length ? `<section class="bundle-diagnostics" aria-labelledby="bundle-diagnostics-title"><header><div><span class="orch-eyebrow">Whole-bundle check</span><h2 id="bundle-diagnostics-title">Source decisions that need attention</h2><p>The shared program validator checked the embedded roadmap, policy documents, budgets, and local roster together.</p></div>${badge(`${diagnostics.length} issue${diagnostics.length === 1 ? "" : "s"}`, "issue")}</header><ol>${diagnostics.map((item) => `<li><a href="${esc(item.anchor_href)}" data-bundle-anchor="${esc(item.anchor_id)}"><span>${esc(item.code)}</span><strong>${esc(item.message)}</strong><code>${esc(item.source)}${esc(item.pointer)}</code><small>${esc(item.remediation)}</small></a></li>`).join("")}</ol></section>` : `<section class="bundle-diagnostics clear"><div><span class="orch-eyebrow">Whole-bundle check</span><h2>Every linked decision agrees</h2><p>The shared program validator found no roadmap, workflow, rubric, budget, team, diversity, or local-driver contradiction.</p></div>${badge("ready", "ok")}</section>`}
+    <div class="bundle-overview-grid">
+      <section id="${esc(model.sections.scope)}" class="bundle-section"><span class="orch-eyebrow">What will run</span><h2>${esc(scope.project_title)}</h2><p>The generated program selects the roadmap frontier only inside this reviewed scope.</p><dl><div><dt>Project</dt><dd>${esc(scope.project)}</dd></div><div><dt>Phases</dt><dd>${bundleBadges(scope.phase_numbers)}</dd></div><div><dt>Stories</dt><dd>${bundleBadges(scope.story_ids)}</dd></div></dl></section>
+      <section id="${esc(model.sections.workflow)}" class="bundle-section wide"><span class="orch-eyebrow">How work moves</span><h2>${esc(workflow.title)}</h2><p>${esc(workflow.summary)}</p><ol class="bundle-route">${(workflow.nodes || []).map((node) => `<li><span>${esc(node.type)}</span><strong>${esc(node.id)}</strong>${node.role ? `<small>${esc(node.role)}</small>` : ""}</li>`).join("")}${(workflow.terminals || []).map((terminal) => `<li class="terminal"><span>stop</span><strong>${esc(terminal.id)}</strong><small>${esc(terminal.description)}</small></li>`).join("")}</ol></section>
+      <section id="${esc(model.sections.team)}" class="bundle-section wide"><span class="orch-eyebrow">Who implements and verifies</span><h2>${esc(team.title)}</h2><p>${esc(team.independence_explanation)}</p><div class="bundle-seat-grid">${(team.seats || []).map((seat) => `<article><span>${esc(seat.duty)}</span><strong>${esc(seat.profile)}</strong><p>${esc(seat.workspace)} · ${esc(seat.local?.provider_family)}</p>${seat.independent_from?.length ? `<small>independent from ${esc(seat.independent_from.join(", "))}</small>` : '<small>isolated implementation seat</small>'}${badge(seat.local?.available ? "available locally" : "missing locally", seat.local?.available ? "ok" : "issue")}</article>`).join("")}</div><p class="bundle-rules">${(team.independence_rules || []).map((rule) => `${esc(rule.kind)}: ${esc(rule.roles.join(" ↔ "))}`).join(" · ")}</p></section>
+      <section id="${esc(model.sections.checks)}" class="bundle-section wide"><span class="orch-eyebrow">What the checks prove</span><h2>Rubric criteria are bound to producers</h2><div class="bundle-checks">${criteria.map((criterion) => `<article class="${criterion.producer_exists === false ? "missing" : ""}"><span>${esc(criterion.rubric)}</span><strong>${esc(criterion.question)}</strong><p>${criterion.producing_check ? `Produced by <code>${esc(criterion.producing_check)}</code>` : "Independent diff-cited judgment"}</p>${criterion.producing_check ? badge(criterion.producer_exists ? "producer found" : "producer missing", criterion.producer_exists ? "ok" : "issue") : badge("verifier judgment")}</article>`).join("")}</div></section>
+      <section id="${esc(model.sections.capabilities)}" class="bundle-section"><span class="orch-eyebrow">What it may request later</span><h2>Bounded capabilities</h2><p>Policy requests are not permission. A separate grant may authorize only a reviewed subset.</p><div>${bundleBadges(model.requested_capabilities, "warn")}</div></section>
+      <section id="${esc(model.sections.budgets)}" class="bundle-section"><span class="orch-eyebrow">What it can spend</span><h2>Finite budgets</h2><dl class="bundle-budgets">${Object.entries(model.budgets || {}).map(([name, value]) => `<div><dt>${esc(name.replace(/^max_/, "").replaceAll("_", " "))}</dt><dd>${esc(value)}</dd></div>`).join("")}</dl></section>
+      <section id="${esc(model.sections.stops)}" class="bundle-section"><span class="orch-eyebrow">When it stops</span><h2>Declared stop conditions</h2><div>${bundleBadges(model.stop_conditions)}</div><p>No stop grants authority to continue by itself.</p></section>
+      <section id="${esc(model.sections.drivers)}" class="bundle-section"><span class="orch-eyebrow">Local driver resolution</span><h2>${esc(model.driver_resolution?.status || "not checked")}</h2><div class="bundle-drivers">${driverProfiles.map((profile) => `<article><strong>${esc(profile.profile)}</strong><span>${esc(profile.provider_family)} · ${esc(profile.adapter?.kind || "adapter unresolved")}</span><small>${esc(profile.model?.alias || "model unresolved")}</small>${badge(profile.available ? "available" : "unavailable", profile.available ? "ok" : "issue")}</article>`).join("") || '<p class="hint">No local profiles resolved.</p>'}</div><p>Local bindings disclose availability and non-secret metadata only.</p></section>
+    </div>
+    <section class="bundle-simulation"><header><div><span class="orch-eyebrow">Pure simulation</span><h2>One bounded route, before any work starts</h2><p>This is the same scaffold simulation core used by the terminal surface. It writes no state.</p></div>${badge(simulation.bounded ? "bounded" : "unavailable", simulation.bounded ? "ok" : "issue")}</header><ol class="bundle-route">${(simulation.green_route || []).map((step) => `<li><strong>${esc(step)}</strong></li>`).join("")}</ol><details><summary>Failure and repair routes</summary><p><strong>Repair:</strong> ${esc((simulation.repair_route || []).join(" → "))}</p><ul>${(simulation.failure_routes || []).map((route) => `<li><code>${esc(route.type)}</code> stops at <strong>${esc(route.target)}</strong></li>`).join("")}</ul></details></section>
+    <section id="${esc(model.sections.handoff)}" class="bundle-handoff"><div><span class="orch-eyebrow">After dw setup apply</span><h2>${esc(model.handoff?.label)}</h2><p>Return to the terminal for a fresh, separate grant preview. The browser mints nothing and runs nothing.</p></div><code>${esc(model.handoff?.command)}</code><small>configuration, not permission · creates grant: false</small></section>
+  </div>`;
+  document.querySelectorAll("[data-bundle-anchor]").forEach((link) => link.addEventListener("click", () => {
+    requestAnimationFrame(() => document.getElementById(link.dataset.bundleAnchor)?.scrollIntoView({ block: "start" }));
+  }));
+}
+
+async function viewStudioBundle(anchor = "") {
+  const proposalFile = new URLSearchParams(location.search).get("proposal_file") || "";
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "delivery setup", href: "#/program-studio" }, { label: "generated bundle" }]);
+  const response = await api(`/api/setup/bundle?proposal_file=${encodeURIComponent(proposalFile)}`);
+  renderStudioBundle(response.data);
+  if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ block: "start" }));
+}
+
 async function viewProgramStudio(family = "program", name) {
   family = STUDIO_FAMILIES.includes(family) ? family : "program";
   const familyLabel = family === "program" ? "delivery plans" : family === "workflow" ? "work flows" : "teams and review";
@@ -4988,6 +5034,7 @@ async function route({ focusMain = false } = {}) {
     else if (parts[0] === "orchestration") await viewOrchestration(parts[1]);
     else if (parts[0] === "programs") await viewPrograms(parts[1]);
     else if (parts[0] === "program-studio" && parts.length === 1) await viewDeliverySetup();
+    else if (parts[0] === "program-studio" && parts[1] === "bundle") await viewStudioBundle(parts[2]);
     else if (parts[0] === "program-studio") await viewProgramStudio(parts[1], parts[2]);
     else if (parts[0] === "edit") await viewEdit(parts[1]);
     else if (parts[0] === "health") await viewHealth();

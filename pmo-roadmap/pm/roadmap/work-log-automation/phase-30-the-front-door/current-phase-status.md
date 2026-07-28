@@ -113,7 +113,7 @@ changes who reaches the rails, never what the rails require.
   into a complete, validated, checkpointed no-commit policy bundle that
   stays inside the unsaved proposal until the one setup approval
   (WLA-30-07).
-- [ ] Program Studio reviews the generated bundle as one linked object with
+- [x] Program Studio reviews the generated bundle as one linked object with
   whole-bundle diagnostics and a pure simulation, handing off to the
   existing exact grant preview — no new pane, no browser consent
   (WLA-30-08).
@@ -139,7 +139,7 @@ changes who reaches the rails, never what the rails require.
 | WLA-30-05 | Review the adoption in the workbench | done | [story-05-review-the-adoption-in-the-workbench](./story-05-review-the-adoption-in-the-workbench.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-30-06 | Validate the whole bundle before runtime | done | [story-06-validate-the-whole-bundle-before-runtime](./story-06-validate-the-whole-bundle-before-runtime.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-30-07 | Scaffold a governed program | done | [story-07-scaffold-a-governed-program](./story-07-scaffold-a-governed-program.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-30-08 | Review the generated program in Studio | backlog | [story-08-review-the-generated-program-in-studio](./story-08-review-the-generated-program-in-studio.md) | - |
+| WLA-30-08 | Review the generated program in Studio | done | [story-08-review-the-generated-program-in-studio](./story-08-review-the-generated-program-in-studio.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-30-09 | Let the safest runs leave lessons | done | [story-09-let-the-safest-runs-leave-lessons](./story-09-let-the-safest-runs-leave-lessons.md) | [evidence-story-09](./evidence-story-09.md) |
 | WLA-30-10 | Pass the empty-directory exam | backlog | [story-10-pass-the-empty-directory-exam](./story-10-pass-the-empty-directory-exam.md) | - |
 
@@ -229,7 +229,18 @@ the build-mode scaffold gap (`dw program scaffold --proposal`, rider
 commit) — the composed front half now runs on a fresh `dw init` site
 end to end: init → scaffold-from-draft → review → preview lease.
 
-Next: the Studio bundle review (08), then the exam.
+WLA-30-08 is delivered: Program Studio opens the generated bundle as
+one linked object behind `#/program-studio/bundle` — scope, seats and
+independence, rubric-to-check binding, capabilities, budgets, stops,
+driver resolution, whole-bundle diagnostics with source/pointer/anchor,
+one pure simulation, and the exact `dw program plan` handoff. No token
+crosses the browser boundary in either direction. Two rider fixes
+landed from the exam rehearsal alongside: setup apply preserves
+existing full driver profiles, and generated programs request
+`knowledge:lesson-writeback` by default so the safest run still learns.
+
+Next: the empty-directory exam (10) on a freshly built
+release-candidate wheel, then phase close and the landing packet.
 
 ## Sequencing
 

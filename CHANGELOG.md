@@ -18,6 +18,17 @@ marks stay in browser memory and write nothing. The page creates no setup token,
 permission, run, certification, or commit, and hands the next act to
 `dw setup preview <proposal-file>` in the terminal. `GET /api/setup/review`
 uses the same proposal and setup-plan cores as the CLI preview.
+Program Studio now reviews a scaffolded setup proposal as one linked bundle at
+`#/program-studio/bundle`. The read-only overview covers roadmap scope,
+workflow, team seats and verifier independence, rubric criteria and their
+producing checks, requested capabilities, budgets, stops, certified handoff,
+and local driver availability. `GET /api/setup/bundle` reuses whole-bundle
+`validate_program` diagnostics with source pointers and returns the same pure
+scaffold simulation used by the terminal core. Tracked policy and `.git`-local
+bindings stay separate under "configuration, not permission." The route accepts
+no setup or program token, writes nothing, and hands the next act to
+`.githooks/dw program plan <program-slug>` after setup apply.
+
 `dw program scaffold --answers <file>` now compiles a closed set of typed setup
 answers into one complete, inert setup proposal. The generated program,
 workflow, two-seat cross-provider organization, check-bound rubrics, one finite

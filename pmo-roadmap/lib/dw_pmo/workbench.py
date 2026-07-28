@@ -282,6 +282,40 @@ def _setup_review(root: Path, query: dict[str, list[str]]) -> dict[str, object]:
         return invalid_setup_review_presentation(err.message, proposal_file=display_file)
 
 
+def _studio_bundle_review(root: Path, query: dict[str, list[str]]) -> dict[str, object]:
+    """Open one proposal-embedded bundle without accepting runtime authority."""
+    from .program_studio import (
+        build_studio_bundle_review,
+        invalid_studio_bundle_review,
+    )
+    from .setup_proposal import load_proposal
+
+    raw_file = query.get("proposal_file", [""])[0].strip()
+    try:
+        if set(query) != {"proposal_file"} or len(query.get("proposal_file", [])) != 1:
+            raise DwError(
+                "Program Studio bundle review accepts only one proposal_file; "
+                "leases and grant credentials are not accepted"
+            )
+        if not raw_file:
+            raise DwError("Program Studio bundle review requires proposal_file")
+        candidate = Path(raw_file)
+        target = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+        allowed = root.resolve()
+        if target != allowed and allowed not in target.parents:
+            raise DwError("setup proposal is outside the served repository: %s" % raw_file)
+        try:
+            proposal = load_proposal(target.read_bytes())
+        except OSError as exc:
+            raise DwError("setup proposal cannot be read: %s" % exc) from exc
+        return build_studio_bundle_review(
+            root, proposal, proposal_file=rel(target, root),
+        )
+    except (DwError, AssertionError) as err:
+        message = err.message if isinstance(err, DwError) else str(err)
+        return invalid_studio_bundle_review(message, proposal_file=raw_file)
+
+
 def mission_control_live_layer(sessions_doc: dict) -> tuple[dict, list]:
     """The belt's live-layer decision kernel (WLA-15-02), server-side
     so it is testable here: `on_story` sessions pin to their story
@@ -343,6 +377,9 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
         if parts == ["api", "setup", "review"]:
             return 200, envelope(_setup_review(root, query))
+
+        if parts == ["api", "setup", "bundle"]:
+            return 200, envelope(_studio_bundle_review(root, query))
 
         if parts == ["api", "program-studio"]:
             from .program_studio import build_program_studio
