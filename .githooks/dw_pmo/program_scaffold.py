@@ -637,8 +637,9 @@ def _workflow(slug: str, answers: dict[str, object], initial_rubric: str, repair
         "task": (
             "Implement only the supplied story. Do not edit roadmap status "
             "or evidence, certify, commit, push, merge, release, deploy, or "
-            "publish. Also write the optional lesson output: one JSON "
-            "document {\"kind\": \"delivery-workbench-lesson-output\", "
+            "publish. Your FINAL MESSAGE must be exactly the declared "
+            "lesson output document and nothing else - no prose, no code "
+            "fences: {\"kind\": \"delivery-workbench-lesson-output\", "
             "\"schema_version\": 1, \"lessons\": [{\"claim\": <one bounded "
             "sentence a future implementer of this repository should know>, "
             "\"locations\": [<file or file:symbol references>], "

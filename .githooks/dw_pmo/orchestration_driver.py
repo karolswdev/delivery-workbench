@@ -1227,6 +1227,21 @@ class ClaudeCodeExecDriver:
             if read_only:
                 target = output_dir / str(outputs[0]["name"])
                 shutil.copyfile(stdout_path, target)
+            else:
+                # Write mode mirrors the read-only response contract for
+                # exactly one declared non-diff output: the final message
+                # IS that output (the packet task tells the agent it must
+                # be the pure typed document). The candidate itself is
+                # collected from the worktree diff, never from stdout.
+                # Found by the Phase 30 exam: a declared lesson output had
+                # no materialization channel in write mode at all.
+                non_diff = [
+                    item for item in outputs
+                    if str(item.get("format")) != "git-diff"
+                ]
+                if len(non_diff) == 1:
+                    target = output_dir / str(non_diff[0]["name"])
+                    shutil.copyfile(stdout_path, target)
             state = "succeeded"
         else:
             state = "failed"
