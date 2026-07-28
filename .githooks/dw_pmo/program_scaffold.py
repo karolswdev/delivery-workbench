@@ -83,6 +83,10 @@ EXCLUDED_CAPABILITIES = {
 REQUESTED_CAPABILITIES = [
     "program:select", "agent:dispatch", "check:execute", "workspace:write",
     "verdict:issue",
+    # The safest generated program still learns: certified handoffs may
+    # persist bounded delivery-state-labeled lessons (WLA-30-09) without
+    # gaining any integration, certification, commit, or push authority.
+    "knowledge:lesson-writeback",
 ]
 _SAFE_SLUG_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _SAFE_PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]{0,15}$")
@@ -337,6 +341,7 @@ def derive_program_budgets(answers: dict[str, object]) -> dict[str, int]:
         "max_pushes": stories,
         "max_nudges": stories * fan_out,
         "max_lessons": min(50, stories * weight),
+        "max_lesson_writebacks": stories * (repairs + 1),
         "max_artifact_bytes": (
             stories * fan_out * mode_factor * (4_160_000 + (4_000_000 * checks))
         ),

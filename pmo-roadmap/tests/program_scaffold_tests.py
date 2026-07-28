@@ -325,12 +325,15 @@ class ProgramScaffoldGoldenTest(ProgramScaffoldFixture):
         program, documents = self.policy_parts(proposal)
         organization = next(iter(documents["organizations"].values()))
         # Side-by-side with pm/programs/wla-29-08-first-real-run.json: the
-        # generated cell requests five capabilities instead of nine, omits
-        # integration/contract/roadmap-start authority, has exactly two seats,
-        # binds mechanical facts to their producing node ids, and expresses one
-        # route-activated repair rather than relying on live grant attempts to
-        # discover contradictions.
-        self.assertEqual(len(program["requested_capabilities"]), 5)
+        # generated cell requests six capabilities instead of nine — the
+        # sixth is knowledge:lesson-writeback so the safest run still
+        # learns (WLA-30-09) — omits integration/contract/roadmap-start
+        # authority, has exactly two seats, binds mechanical facts to
+        # their producing node ids, and expresses one route-activated
+        # repair rather than relying on live grant attempts to discover
+        # contradictions.
+        self.assertEqual(len(program["requested_capabilities"]), 6)
+        self.assertIn("knowledge:lesson-writeback", program["requested_capabilities"])
         self.assertEqual(len(organization["agents"]), 2)
         self.assertEqual(len(organization["diversity"]), 1)
         for rubric in documents["rubrics"].values():
