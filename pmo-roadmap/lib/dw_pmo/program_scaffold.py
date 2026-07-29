@@ -80,8 +80,10 @@ COMPLEXITY_WEIGHTS = {"small": 1, "medium": 2, "large": 4}
 # candidate touching pm/roadmap/ or .githooks/ fails its own check.
 BUILT_IN_CHECKS = {"diff-scope"}
 DIFF_SCOPE_ALLOWED_PATHS = [
-    "src/**", "tests/**", "docs/**", "*.py", "*.md", "*.toml",
-    "*.cfg", "*.txt", "Makefile", ".gitignore",
+    "src/**", "tests/**", "test/**", "docs/**", "public/**",
+    "static/**", "assets/**", "*.py", "*.js", "*.mjs", "*.cjs",
+    "*.ts", "*.html", "*.css", "*.md", "*.toml", "*.cfg", "*.txt",
+    "Makefile", ".gitignore", "package.json", "package-lock.json",
 ]
 EXCLUDED_CAPABILITIES = {
     "git:commit", "git:push", "merge", "release", "deploy", "publish",

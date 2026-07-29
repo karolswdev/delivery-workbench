@@ -31,7 +31,7 @@ Release phases 25-30 as v1.15.0 with a recorded full-pipeline ceremony demo: emp
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-31-01 | The ceremony demo | ready | [story-01-ceremony-demo](./story-01-ceremony-demo.md) | - |
+| WLA-31-01 | The ceremony demo | in-progress | [story-01-ceremony-demo](./story-01-ceremony-demo.md) | - |
 | WLA-31-02 | Release v1.15.0 | ready | [story-02-release-v1-15-0](./story-02-release-v1-15-0.md) | - |
 
 ## Where we are

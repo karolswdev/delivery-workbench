@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 31
-- **Status:** ready
+- **Status:** in-progress
 - **Depends on:** none
 - **Unblocks:** WLA-31-02
 - **Owner:** unassigned
@@ -29,14 +29,26 @@ the evidence get made.
   grant visible; live claude + codex rider ticks delivering the
   game; evidence capture; the guarded finish and the gated ship
   commit; a closing shot of the game actually being played in two
-  browser windows over WebSockets. Supporting sources under
+  browser windows over WebSockets. The cut alternates surfaces on
+  purpose (owner direction, 2026-07-28: "we need this all to be
+  visual"): terminal for the command rituals, and the Workbench
+  browser UI for the adoption/proposal review, Program Studio
+  bundle, and Mission Control live during the run — the demo shows
+  both hands, CLI and web. Supporting sources under
   `demos/`: the segment tapes / driver script and a
   `demos/README.md` row so the recording is regenerable. The demo
   project itself is a throwaway under `/tmp`; only the recording
   and its sources land here.
+- **In (amended 2026-07-28):** minimal machinery fixes the ceremony
+  run itself flushes out, shipped through the gate like the exam
+  phases did. First finding: the scaffold's default `diff-scope`
+  allowlist was Python-shaped, so any Node/web delivery failed its
+  own governance check; the default now covers mainstream layouts
+  (`test/**`, `public/**`, `*.js`, `package.json`, …).
 - **Out:** publishing the video anywhere (README embed or hosting
   is the owner's call, and GitHub can't inline mp4 from the repo
-  anyway); re-running the Phase 30 exam; any framework code change.
+  anyway); re-running the Phase 30 exam; framework changes beyond
+  what the ceremony run itself proves necessary.
 
 ## Acceptance criteria
 
