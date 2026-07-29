@@ -32,12 +32,14 @@ fail() {
 # Renderer contract runs even when no browser is installed. It keeps the
 # recommendation separate from the deliberate act boundary: argv stays
 # tokenized, apply has only project+token, and prohibited states get no button.
-python3 - "$PMO_DIR/workbench/app.js" "$PMO_DIR/workbench/style.css" <<'PY' \
+python3 - "$PMO_DIR/workbench/app.js" "$PMO_DIR/workbench/style.css" \
+  "$PMO_DIR/workbench/index.html" <<'PY' \
   || fail "status-panel renderer contract failed"
 import sys
 
 app = open(sys.argv[1], encoding="utf-8").read()
 css = open(sys.argv[2], encoding="utf-8").read()
+index = open(sys.argv[3], encoding="utf-8").read()
 action = app[app.index("function statusActionHtml"):app.index("function stepArgvHtml")]
 controls = app[app.index("function stepControlHtml"):app.index("function statusPanel")]
 apply = app[app.index("async function applyReviewedStep"):app.index("function wireStepControl")]
@@ -49,6 +51,14 @@ program = app[app.index("/* ── autonomous program control room"):app.index("
 setup = app[app.index("delivery-shaped front door"):app.index("optional Program / Workflow Studio")]
 studio = app[app.index("optional Program / Workflow Studio"):app.index("/* ── router")]
 adoption = app[app.index("const adoptionReviewMarks"):app.index("const STATUS_VOCAB")]
+assert index.count('class="navlink"') == 5
+for label in ("Work", "Plan", "Delivery", "Live", "Health"):
+    assert f">{label}</a>" in index, label
+for token in ("project-switcher", "PROJECT_STORAGE_KEY", "viewProjectSelector",
+              "viewUnavailableProject", "wireTechnicalFolds", "destinationNav"):
+    assert token in index + app, token
+assert "projects.length > 1 && !selectedProject" in app
+assert "projects[0].slug" not in app[app.index("async function viewBoard"):app.index("const ADOPTION_TECHNICAL_LABEL")]
 assert "data-argv-index" in action and "manual act" in action
 assert "<button" not in action and "JSON.stringify" not in action
 for token in ("step-review", "step-confirm", "step-apply", "step-cancel",
@@ -649,6 +659,8 @@ mv "$REPO/.githooks/pre-commit.off" "$REPO/.githooks/pre-commit"
 "$PMO_DIR/bootstrap/new-project.sh" "$REPO" other "Other" OTH >/dev/null
 shot "overview-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
 shot "overview-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
+shot "project-selected-desktop" 1440,900 "$BASE/?snapshot=1&project=other#/board"
+shot "project-selected-mobile" 390,844 "$BASE/?snapshot=1&project=other#/board"
 
 # A second exact fixture exercises the live control-room projection in an
 # active nested-program state, a council-certified checkpoint with preserved
@@ -739,6 +751,7 @@ PROGRAM_REPO="$(sed -n '1p' "$PROGRAM_FIXTURE_INFO")"
 PROGRAM_ACTIVE="$(sed -n '2p' "$PROGRAM_FIXTURE_INFO")"
 PROGRAM_REVOKED="$(sed -n '3p' "$PROGRAM_FIXTURE_INFO")"
 PROGRAM_CERTIFIED="$(sed -n '4p' "$PROGRAM_FIXTURE_INFO")"
+"$PMO_DIR/bootstrap/new-project.sh" "$PROGRAM_REPO" selector-fixture "Selector fixture" SEL >/dev/null
 PORT=$(( (RANDOM % 2000) + 23001 ))
 "$PMO_DIR/bin/dw-workbench" --root "$PROGRAM_REPO" --port "$PORT" --quiet &
 SERVER_PID=$!
@@ -747,26 +760,28 @@ until curl -sf "http://127.0.0.1:$PORT/api/programs" >/dev/null 2>&1; do
   i=$((i + 1)); [ "$i" -lt 40 ] || fail "program fixture server did not start"; sleep 0.25
 done
 BASE="http://127.0.0.1:$PORT"
-shot "program-active-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_ACTIVE"
-shot "program-active-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_ACTIVE"
-shot "program-technical-desktop" 1440,900 "$BASE/?snapshot=1&livetechnical=1#/programs/$PROGRAM_ACTIVE"
-shot "program-technical-mobile" 390,844 "$BASE/?snapshot=1&livetechnical=1#/programs/$PROGRAM_ACTIVE"
-shot "program-revoked-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_REVOKED"
-shot "program-revoked-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_REVOKED"
-shot "program-certified-desktop" 1440,900 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
-shot "program-certified-mobile" 390,844 "$BASE/?snapshot=1#/programs/$PROGRAM_CERTIFIED"
-shot "program-remaining-limits-desktop" 1440,900 "$BASE/?snapshot=1&boundedfocus=limits#/programs/$PROGRAM_ACTIVE"
-shot "program-remaining-limits-mobile" 390,844 "$BASE/?snapshot=1&boundedfocus=limits#/programs/$PROGRAM_ACTIVE"
-shot "program-pause-preview-desktop" 1440,900 "$BASE/?snapshot=1&boundedpreview=pause&boundedfocus=preview#/programs/$PROGRAM_ACTIVE"
-shot "program-pause-preview-mobile" 390,844 "$BASE/?snapshot=1&boundedpreview=pause&boundedfocus=preview#/programs/$PROGRAM_ACTIVE"
-shot "program-stop-receipt-desktop" 1440,900 "$BASE/?snapshot=1&boundedfocus=receipts#/programs/$PROGRAM_REVOKED"
-shot "program-stop-receipt-mobile" 390,844 "$BASE/?snapshot=1&boundedfocus=receipts#/programs/$PROGRAM_REVOKED"
+PROGRAM_PROJECT="$(curl -s "$BASE/api/projects" | python3 -c 'import json,sys; print(next(p["slug"] for p in json.load(sys.stdin)["data"]["projects"] if p["slug"] != "selector-fixture"))')"
+shot "program-active-desktop" 1440,900 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT#/programs/$PROGRAM_ACTIVE"
+shot "program-active-mobile" 390,844 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT#/programs/$PROGRAM_ACTIVE"
+shot "program-technical-desktop" 1440,900 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT&livetechnical=1#/programs/$PROGRAM_ACTIVE"
+shot "program-technical-mobile" 390,844 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT&livetechnical=1#/programs/$PROGRAM_ACTIVE"
+shot "program-revoked-desktop" 1440,900 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT#/programs/$PROGRAM_REVOKED"
+shot "program-revoked-mobile" 390,844 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT#/programs/$PROGRAM_REVOKED"
+shot "program-certified-desktop" 1440,900 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT#/programs/$PROGRAM_CERTIFIED"
+shot "program-certified-mobile" 390,844 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT#/programs/$PROGRAM_CERTIFIED"
+shot "program-remaining-limits-desktop" 1440,900 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT&boundedfocus=limits#/programs/$PROGRAM_ACTIVE"
+shot "program-remaining-limits-mobile" 390,844 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT&boundedfocus=limits#/programs/$PROGRAM_ACTIVE"
+shot "program-pause-preview-desktop" 1440,900 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT&boundedpreview=pause&boundedfocus=preview#/programs/$PROGRAM_ACTIVE"
+shot "program-pause-preview-mobile" 390,844 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT&boundedpreview=pause&boundedfocus=preview#/programs/$PROGRAM_ACTIVE"
+shot "program-stop-receipt-desktop" 1440,900 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT&boundedfocus=receipts#/programs/$PROGRAM_REVOKED"
+shot "program-stop-receipt-mobile" 390,844 "$BASE/?snapshot=1&project=$PROGRAM_PROJECT&boundedfocus=receipts#/programs/$PROGRAM_REVOKED"
 
 python3 "$SCRIPT_DIR/workbench-accessibility.py" \
   --firefox "$FF" --base "$BASE" --suite program \
   --program-active "$PROGRAM_ACTIVE" \
   --program-revoked "$PROGRAM_REVOKED" \
   --program-certified "$PROGRAM_CERTIFIED" \
+  --project "$PROGRAM_PROJECT" \
   || fail "program accessibility journey exam failed"
 
-echo "workbench-ui-smoke.sh: ok (192 viewport renders: every view at two widths in light and dark, plus 13 keyboard, semantic, focus, and wide/narrow journey exams)"
+echo "workbench-ui-smoke.sh: ok (196 viewport renders: every view at two widths in light and dark, plus the project front door and 13 keyboard, semantic, focus, and wide/narrow journey exams)"

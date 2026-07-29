@@ -283,7 +283,7 @@ class StudioBundleTest(unittest.TestCase):
 
     def test_bundle_route_stays_in_studio_and_navigation_inventory_is_unchanged(self):
         index = (PMO_ROOT / "workbench" / "index.html").read_text(encoding="utf-8")
-        self.assertEqual(index.count('class="navlink"'), 7)
+        self.assertEqual(index.count('class="navlink"'), 5)
         self.assertNotIn("generated bundle", index.lower())
         app_source = (PMO_ROOT / "workbench" / "app.js").read_text(encoding="utf-8")
         self.assertIn('parts[1] === "bundle"', app_source)

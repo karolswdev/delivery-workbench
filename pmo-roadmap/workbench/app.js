@@ -15,6 +15,115 @@ let presentationCatalog = null;
 let semanticId = 0;
 const returnFocus = new Map();
 const liveAnnouncementKeys = new Map();
+const PROJECT_STORAGE_KEY = "delivery-workbench.selected-project";
+let projectInventory = null;
+let selectedProject = "";
+let projectReturnHash = "#/board";
+
+function storedProject() {
+  try { return localStorage.getItem(PROJECT_STORAGE_KEY) || ""; }
+  catch (_err) { return ""; }
+}
+
+function rememberProject(slug) {
+  selectedProject = slug || "";
+  try {
+    if (selectedProject) localStorage.setItem(PROJECT_STORAGE_KEY, selectedProject);
+    else localStorage.removeItem(PROJECT_STORAGE_KEY);
+  } catch (_err) {
+    // Storage can be unavailable in hardened browsers; selection still lasts
+    // for this page without changing any repository state.
+  }
+  const switcher = document.getElementById("project-switcher");
+  if (switcher) switcher.textContent = selectedProject
+    ? `Project: ${selectedProject}` : "Choose project";
+}
+
+async function loadProjects() {
+  projectInventory = (await api("/api/projects")).data.projects || [];
+  return projectInventory;
+}
+
+function projectBySlug(slug) {
+  return (projectInventory || []).find((project) => project.slug === slug);
+}
+
+function routeProject(parts) {
+  if (parts[0] === "p" && parts[1]) return parts[1];
+  if (parts[0] === "board" && parts[1]) return parts[1];
+  return "";
+}
+
+function destinationNav(active, current = "") {
+  const groups = {
+    work: [["Board", `#/board/${encodeURIComponent(selectedProject)}`], ["Project details", `#/p/${encodeURIComponent(selectedProject)}`]],
+    plan: [["Delivery options", "#/program-studio"], ["Roadmap changes", "#/edit"]],
+    delivery: [["Delivery plans", "#/orchestration"]],
+    live: [["Live delivery", "#/programs"], ["Activity", "#/mc"]],
+    health: [["Repository health", "#/health"]],
+  };
+  const links = groups[active] || [];
+  if (links.length < 2) return "";
+  return `<nav class="destination-nav" aria-label="${esc(active)} views">${links.map(([label, href], index) => {
+    const isCurrent = current ? href.startsWith(current) : index === 0;
+    return `<a href="${href}"${isCurrent ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
+  }).join("")}</nav>`;
+}
+
+function projectSelectorHtml(projects, unavailable = "") {
+  const explanation = unavailable
+    ? `<p class="project-unavailable"><strong>${esc(unavailable)}</strong> is not available in this repository. Choose an available project; nothing was changed.</p>`
+    : "<p>Choose the work you want to see. The choice stays with you as you move around or reload.</p>";
+  return `<section class="project-selector" aria-labelledby="project-selector-title">
+    <span class="selector-eyebrow">First, choose your work</span>
+    <h1 id="project-selector-title">Choose a project</h1>
+    ${explanation}
+    <form id="project-selector-form">
+      <fieldset><legend>Available projects</legend>
+        <div class="project-options">${projects.map((project) => `<label>
+          <input type="radio" name="project" value="${esc(project.slug)}"${project.slug === selectedProject ? " checked" : ""}>
+          <span><strong>${esc(project.slug)}</strong><small>${project.next_story ? `${esc(project.next_story.title)} is next` : "No next work is available"}</small></span>
+        </label>`).join("")}</div>
+      </fieldset>
+      <button class="primary" type="submit">Open this project</button>
+    </form>
+    <details><summary>Technical details</summary><p>The exact project slug is kept only in this browser. Choosing a project starts no work and changes no files.</p></details>
+  </section>`;
+}
+
+function wireProjectSelector(returnHash) {
+  const form = document.getElementById("project-selector-form");
+  if (!form) return;
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const choice = new FormData(form).get("project");
+    if (!choice) {
+      form.querySelector("fieldset")?.setAttribute("aria-invalid", "true");
+      form.querySelector("input")?.focus();
+      return;
+    }
+    rememberProject(String(choice));
+    const target = returnHash && !["#/projects", "#/board"].includes(returnHash)
+      ? returnHash : `#/board/${encodeURIComponent(selectedProject)}`;
+    if (location.hash === target) route({ focusMain: true });
+    else location.hash = target;
+  });
+}
+
+function viewProjectSelector(returnHash = "#/board", unavailable = "") {
+  setCrumbs([{ label: "choose project" }]);
+  app.innerHTML = projectSelectorHtml(projectInventory || [], unavailable);
+  wireProjectSelector(returnHash);
+}
+
+function viewUnavailableProject(slug) {
+  setCrumbs([{ label: "project unavailable" }]);
+  app.innerHTML = `<section class="project-missing"><h1>That project is not available</h1>
+    <p><strong>${esc(slug)}</strong> is not in this repository. We did not open another project. Nothing changed.</p>
+    <a class="primary" href="#/projects">Choose an available project</a>
+    <details><summary>Technical details</summary><p>Requested project slug: <code>${esc(slug)}</code>.</p></details>
+  </section>`;
+}
 
 const FOCUSABLE_SELECTOR = [
   "a[href]", "button:not([disabled])", "input:not([disabled])",
@@ -126,8 +235,29 @@ function semanticLabel(root, selector, prefix) {
   });
 }
 
+function wireTechnicalFolds(root = app) {
+  root.querySelectorAll("details > summary").forEach((summary) => {
+    if (!summary.textContent.trim().startsWith("Technical details")
+        || summary.dataset.technicalFoldWired === "true") return;
+    summary.dataset.technicalFoldWired = "true";
+    const details = summary.parentElement;
+    details.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !details.open) return;
+      event.preventDefault();
+      details.open = false;
+      summary.focus({ preventScroll: true });
+    });
+    details.addEventListener("toggle", () => {
+      if (!details.open && details.contains(document.activeElement)) {
+        summary.focus({ preventScroll: true });
+      }
+    });
+  });
+}
+
 function enhanceSemantics(root = app) {
   semanticLabel(root, "section", "section-title");
+  wireTechnicalFolds(root);
   semanticLabel(root, "form", "form-title");
   root.querySelectorAll("form:not([aria-label]):not([aria-labelledby])").forEach((form) => {
     form.setAttribute(
@@ -240,12 +370,19 @@ function wireArrowGroup(selector, itemSelector = "button:not([disabled])") {
 }
 
 function updatePrimaryNavigation(hash) {
+  const surface = hash.split("/").filter(Boolean)[0] || "";
+  const activeId = surface === "board" || surface === "p" ? "work-link"
+    : surface === "program-studio" || surface === "edit" ? "plan-link"
+      : surface === "orchestration" ? "delivery-link"
+        : surface === "programs" || surface === "mc" ? "live-link"
+          : surface === "health" ? "health-link" : "";
   document.querySelectorAll(".primary-nav a").forEach((link) => {
-    const target = link.getAttribute("href")?.replace(/^#/, "") || "";
-    const active = target !== "/" && hash.startsWith(target);
-    if (active) link.setAttribute("aria-current", "page");
+    if (link.id === activeId) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
+  const projectSwitcher = document.getElementById("project-switcher");
+  if (surface === "projects") projectSwitcher?.setAttribute("aria-current", "page");
+  else projectSwitcher?.removeAttribute("aria-current");
   if (hash === "/") document.querySelector(".brand")?.setAttribute("aria-current", "page");
   else document.querySelector(".brand")?.removeAttribute("aria-current");
 }
@@ -659,9 +796,9 @@ async function loadMissionControl() {
     const data = body.data;
     const el = document.getElementById("mc-root");
     if (!el) { stopMcPoll(); return; } // view left; stop polling
-    el.innerHTML = `
-      <div class="section"><h1>Current activity</h1><p>Work, team activity, decisions, and recent saved changes. This view is read-only.</p><h2>Current phase work</h2>
-        ${data.feed.projects.map((p) => mcBelt(p, data.pins || {})).join("") || stateHtml("No current work is available.")}
+    el.innerHTML = `${destinationNav("live", "#/mc")}
+      <div class="section"><h1>Current activity</h1><p>See what people and deliveries are doing now. Reading this page starts nothing.</p><p class="canonical-next"><strong>Next step:</strong> Open the current work that needs your attention.</p><h2>Current phase work</h2>
+        ${data.feed.projects.filter((project) => !selectedProject || project.slug === selectedProject).map((p) => mcBelt(p, data.pins || {})).join("") || stateHtml("No current work is available.")}
       </div>
       <div class="section"><h2>Team activity not matched to work</h2>${mcOffBelt(data.sessions, data.off_belt || [])}</div>
       <details class="section"><summary>Technical details</summary><h2>Exact saved events</h2>${mcEvents(data.events)}</details>
@@ -695,9 +832,11 @@ async function viewMissionControl() {
 
 async function viewOverview(notice = null) {
   setCrumbs([{ label: "overview" }]);
+  const projectQuery = selectedProject
+    ? `?project=${encodeURIComponent(selectedProject)}` : "";
   const [statusBody, stepBody, body, setupBody, presentationBody] = await Promise.all([
-    api("/api/status"), api("/api/step"), api("/api/projects"),
-    api("/api/delivery-setup"), api("/api/presentation/status"),
+    api(`/api/status${projectQuery}`), api(`/api/step${projectQuery}`), api("/api/projects"),
+    api(`/api/delivery-setup${projectQuery}`), api(`/api/presentation/status${projectQuery}`),
   ]);
   const projects = body.data.projects;
   const step = stepBody.data;
@@ -748,7 +887,8 @@ async function viewProject(slug) {
         ? `<a href="#/f/${encodeURIComponent(ph.final_summary)}">${badge("summary", "ok")}</a>` : "—"}</td>
     </tr>`;
   }).join("");
-  app.innerHTML = `
+  app.innerHTML = `${destinationNav("work", "#/p")}
+    <header class="destination-hero"><span>Project</span><h1>${esc(slug)}</h1><p>Review the next work and the plan around it.</p></header>
     ${p.next_story ? `<div class="next"><span class="lbl">next</span>
       <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(p.next_story.story_id)}">
         <code>${esc(p.next_story.story_id)}</code></a> ${esc(p.next_story.title)} ${badge(p.next_story.status)}</div>` : ""}
@@ -873,7 +1013,10 @@ async function viewHealth() {
   const body = await api("/api/health");
   const h = body.data;
   const sections = [];
-  for (const proj of h.projects) {
+  const shownProjects = selectedProject
+    ? h.projects.filter((project) => project.slug === selectedProject)
+    : h.projects;
+  for (const proj of shownProjects) {
     const byCat = {};
     proj.issues.concat(proj.warnings).forEach((item) => {
       (byCat[item.category] = byCat[item.category] || []).push(item);
@@ -892,10 +1035,13 @@ async function viewHealth() {
     ["local rule seam (pre-commit.local)", hook.has_local_seam],
     ["work-log capture", hook.has_work_log_capture],
   ].map(([k, v]) => `<div class="hitem">${badge(v ? "ok" : "missing", v ? "ok" : "issue")}<span class="msg">${esc(k)}</span></div>`).join("");
-  app.innerHTML = `
-    <div class="guard ${h.mutation_safe ? "ok" : ""}">${h.mutation_safe
-      ? "Delivery changes are ready. Review each change before saving it."
-      : `Delivery changes are blocked: resolve ${h.total_issues} readiness issue${h.total_issues === 1 ? "" : "s"} in the affected work first.`}</div>
+  const issueCount = shownProjects.reduce((total, project) => total + project.issues.length, 0);
+  app.innerHTML = `${destinationNav("health", "#/health")}
+    <header class="destination-hero"><span>Health</span><h1>Is this project ready?</h1><p>See what is ready and what needs attention before you change the plan.</p></header>
+    <div class="guard ${issueCount === 0 ? "ok" : ""}">${issueCount === 0
+      ? "This project is ready. Your next step is to return to current work."
+      : `Resolve ${issueCount} health issue${issueCount === 1 ? "" : "s"} in this project before changing its plan.`}</div>
+    <a class="primary canonical-primary" href="#/board/${encodeURIComponent(selectedProject)}">Return to current work</a>
     ${sections.join("")}
     <details class="section"><summary>Technical details</summary>
       <h2>Repository setup checks</h2>${hookRows}
@@ -1201,27 +1347,20 @@ function wireBoardMoves(slug) {
 }
 
 async function viewBoard(slug) {
+  slug = slug || selectedProject;
   if (!slug) {
-    const ctx = await api("/api/projects");
-    const projects = ctx.data.projects;
-    if (!projects.length) {
-      app.innerHTML = stateHtml("No roadmap projects found under pm/roadmap/.");
-      return;
-    }
-    slug = projects[0].slug;
-    if (projects.length > 1) {
-      location.hash = `#/board/${encodeURIComponent(slug)}`;
-      return;
-    }
+    viewProjectSelector("#/board");
+    return;
   }
   setCrumbs([{ label: "overview", href: "#/" },
     { label: slug, href: `#/p/${encodeURIComponent(slug)}` },
-    { label: "board" }]);
+    { label: "work" }]);
   const body = await api(`/api/projects/${encodeURIComponent(slug)}/board`);
   const model = body.data;
   const open = model.phases.filter((lane) => !lane.closed);
   const closed = model.phases.filter((lane) => lane.closed);
-  app.innerHTML = `
+  app.innerHTML = `${destinationNav("work", "#/board")}
+    <header class="destination-hero"><span>Current work</span><h1>Your work</h1><p>See what is ready, underway, waiting, or complete.</p><a class="primary" href="#/p/${encodeURIComponent(slug)}">Open the next work details</a></header>
     <div class="board">
       <div id="board-move"></div>
       ${open.map((lane) => boardLane(slug, model.columns, lane)).join("") || stateHtml("no open phases")}
@@ -1390,7 +1529,7 @@ async function viewAdoptionReview() {
     : ADOPTION_PROPOSAL_ID ? `proposal=${encodeURIComponent(ADOPTION_PROPOSAL_ID)}` : "";
   const model = (await api(`/api/setup/review${query ? `?${query}` : ""}`)).data;
   if (!model.valid) {
-    app.innerHTML = `${adoptionReviewTabs()}<div class="adoption-review invalid-adoption-review">
+    app.innerHTML = `${destinationNav("plan", "#/edit")}${adoptionReviewTabs()}<div class="adoption-review invalid-adoption-review">
       <h1>Review adoption proposal</h1>
       <div class="guard" role="alert"><strong>Proposal refused.</strong><pre>${esc(model.refusal)}</pre></div>
       <section class="adoption-unresolved"><h2>Unresolved assumptions</h2><p>${esc(model.unresolved_questions.summary)}</p></section>
@@ -1400,7 +1539,7 @@ async function viewAdoptionReview() {
     return;
   }
   const key = model.technical_details.proposal_hash;
-  app.innerHTML = `${adoptionReviewTabs()}<div class="adoption-review">
+  app.innerHTML = `${destinationNav("plan", "#/edit")}${adoptionReviewTabs()}<div class="adoption-review">
     <header class="adoption-review-head"><p class="eyebrow">Roadmap changes · review only</p>
       <h1>Review ${esc(model.project.title)}</h1>
       <p class="adoption-vision">${esc(model.project.vision)}</p>
@@ -1465,7 +1604,11 @@ async function viewEdit(action) {
     app.innerHTML = stateHtml("No projects to edit.");
     return;
   }
-  const proj = projects[0];
+  const proj = projects.find((project) => project.slug === selectedProject);
+  if (!proj) {
+    viewUnavailableProject(selectedProject || "the chosen project");
+    return;
+  }
   const guarded = proj.issue_count > 0;
   const projDetail = await api(`/api/projects/${encodeURIComponent(proj.slug)}`);
   const phases = projDetail.data.phases;
@@ -1518,12 +1661,12 @@ async function viewEdit(action) {
     ].join("");
   }
 
-  app.innerHTML = `
+  app.innerHTML = `${destinationNav("plan", "#/edit")}
+    <header class="destination-hero"><span>Plan</span><h1>Review a roadmap change</h1><p>Choose one change, review exactly what it would affect, then decide whether to continue.</p></header>
     <div class="tabs">${tabs}</div>
-    ${guarded ? `<div class="guard">mutations guarded — <a href="#/health">${proj.issue_count} validation issue${proj.issue_count === 1 ? "" : "s"}</a>.
-      Preview requires explicit acknowledgment below.</div>` : ""}
+    ${guarded ? `<div class="guard">Changes are paused — <a href="#/health">review ${proj.issue_count} health issue${proj.issue_count === 1 ? "" : "s"}</a> first.</div>` : ""}
     <form class="edit" id="edit-form">
-      ${field("project", selectHtml("project", projects.map((x) => x.slug), proj.slug))}
+      ${field("project", selectHtml("project", [proj.slug], proj.slug))}
       ${formFields}
       ${guarded ? `<div class="checkline"><input type="checkbox" name="acknowledge_issues" id="f-ack">
         <label for="f-ack">I acknowledge the validation issues and still want a preview</label></div>` : ""}
@@ -2446,8 +2589,8 @@ function orchestrationBody() {
 function renderOrchestration() {
   const focus = captureAppFocus();
   const current = orchState.name || orchState.score.slug;
-  app.innerHTML = `<div class="orchestration" data-score="${esc(current)}">
-    <header class="orch-toolbar"><div><span class="orch-eyebrow">visual orchestration score</span><h1>${esc(orchState.score.title || orchState.score.slug)}</h1><code>pm/orchestration/${esc(orchState.score.slug)}.json</code></div>
+  app.innerHTML = `${destinationNav("delivery", "#/orchestration")}<div class="orchestration" data-score="${esc(current)}">
+    <header class="orch-toolbar"><div><span class="orch-eyebrow">Delivery</span><h1>${esc(orchState.score.title || orchState.score.slug)}</h1><p>Review the work and its order before you continue.</p><details><summary>Technical details</summary><span>visual orchestration score</span><code>pm/orchestration/${esc(orchState.score.slug)}.json</code></details></div>
       <div class="orch-score-actions"><label>score<select id="orch-score-select"><option value="">new unsaved score</option>${orchState.inventory.map((s) => `<option value="${esc(s.name)}"${s.name === orchState.name ? " selected" : ""}>${esc(s.slug || s.name)}${s.valid ? "" : " (invalid)"}</option>`).join("")}</select></label><button type="button" id="orch-new">new</button><button type="button" id="orch-duplicate">duplicate</button><button type="button" id="orch-preview-save">preview save</button><button type="button" id="orch-preview-delete" class="danger"${orchState.exists ? "" : " disabled"}>preview delete</button></div>
     </header>
     <div class="orch-tabs" role="tablist" aria-label="Orchestration editor views">${[
@@ -3165,7 +3308,8 @@ function renderPrograms() {
     finishDynamicRender(focus);
     return;
   }
-  app.innerHTML = programState.view ? programRunHtml(programState.view) : programInventoryHtml();
+  app.innerHTML = destinationNav("live", "#/programs")
+    + (programState.view ? programRunHtml(programState.view) : programInventoryHtml());
   wirePrograms();
   finishDynamicRender(focus);
 }
@@ -3536,8 +3680,8 @@ function renderDeliverySetup() {
   if (!deliverySetupState.project && scope.selected_project) deliverySetupState.project = scope.selected_project;
   if (!deliverySetupState.phase && phase?.number !== undefined) deliverySetupState.phase = String(phase.number);
   const choice = setupChoice(model, deliverySetupState.choice);
-  app.innerHTML = `<div class="delivery-setup" data-readiness="${esc(model.readiness)}">
-    <header class="delivery-setup-hero"><div><span>Delivery setup · read-only until a reviewed save or start</span><h1>What are you delivering?</h1><p>${esc(model.summary)}</p></div>${badge(model.readiness, model.readiness === "ready" ? "ok" : "issue")}</header>
+  app.innerHTML = `${destinationNav("plan", "#/program-studio")}<div class="delivery-setup" data-readiness="${esc(model.readiness)}">
+    <header class="delivery-setup-hero"><div><span>Plan your delivery</span><h1>What are you delivering?</h1><p>${esc(model.summary)} Nothing starts until you review and confirm it.</p></div>${badge(model.readiness, model.readiness === "ready" ? "ok" : "issue")}</header>
     <section class="delivery-scope" aria-labelledby="delivery-scope-title"><div><span>Step 1</span><h2 id="delivery-scope-title">Choose the delivery scope</h2></div>
       <label>Roadmap project<select id="delivery-project"><option value="">Choose a project</option>${projects.map((item) => `<option value="${esc(item.slug)}"${item.slug === deliverySetupState.project ? " selected" : ""}>${esc(item.slug)}</option>`).join("")}</select></label>
       <label>Phase to review<input id="delivery-phase" type="number" min="0" value="${esc(deliverySetupState.phase)}" inputmode="numeric"></label>
@@ -3557,6 +3701,7 @@ function renderDeliverySetup() {
 function wireDeliverySetup() {
   document.getElementById("delivery-project")?.addEventListener("change", async (event) => {
     deliverySetupState.project = event.target.value;
+    if (deliverySetupState.project) rememberProject(deliverySetupState.project);
     deliverySetupState.phase = "";
     deliverySetupState.choice = "";
     const query = deliverySetupState.project
@@ -3622,7 +3767,7 @@ function wireDeliverySetup() {
 async function viewDeliverySetup() {
   setCrumbs([{ label: "overview", href: "#/" }, { label: "delivery setup" }]);
   const requested = new URLSearchParams(location.search);
-  const queryProject = requested.get("setupproject") || "";
+  const queryProject = requested.get("setupproject") || selectedProject;
   const query = queryProject ? `?project=${encodeURIComponent(queryProject)}` : "";
   deliverySetupState.model = (await api(`/api/delivery-setup${query}`)).data;
   deliverySetupState.project = queryProject || deliverySetupState.model.delivery_scope.selected_project || "";
@@ -4296,7 +4441,7 @@ function renderProgramStudio() {
     authority: "Permission details",
   };
   const objectLabel = objectLabels[studioState.family] || "delivery design";
-  app.innerHTML = `<div class="program-studio" data-family="${esc(studioState.family)}" data-policy="${esc(studioState.name)}">
+  app.innerHTML = `${destinationNav("plan", "#/program-studio")}<div class="program-studio" data-family="${esc(studioState.family)}" data-policy="${esc(studioState.name)}">
     ${studioState.setupContext ? `<section class="studio-setup-context"><div><span>Delivery scope from setup</span><strong>${esc(studioState.setupContext.project || "project not chosen")} · phase ${esc(studioState.setupContext.phase || "review needed")}</strong><p>This is an unsaved delivery-plan draft. Editing and checking it start nothing; Save draft still requires its own exact preview and confirmation.</p></div><div><a href="#/program-studio">Back to delivery choices</a><a href="#/">Leave for now</a></div></section>` : ""}
     ${empty ? `<section class="studio-empty-neutral"><div><span class="orch-eyebrow">Optional delivery design</span><h2>Nothing has been saved here yet</h2><p>Ordinary roadmap work is ready. Drafting a ${esc(objectLabel)} is optional and starts no work.</p></div><a href="#/">Return to current work</a></section>` : ""}
     <header class="studio-toolbar"><div><span class="orch-eyebrow">${esc(familyLabels[studioState.family])}</span><h1>${esc(document.title || document.slug || "Delivery plan")}</h1><p>Draft, check, and review before saving. Nothing here starts work or provides permission.</p><details><summary>Technical details</summary><code>pm/${esc(family?.plural || `${studioState.family}s`)}/${esc(document.slug || studioState.name)}.json</code></details></div><div class="studio-policy-actions"><label>Design area<select id="studio-family-select">${STUDIO_FAMILIES.map((id) => `<option value="${id}"${id === studioState.family ? " selected" : ""}>${esc(familyLabels[id])}</option>`).join("")}</select></label><label>Saved ${esc(objectLabel)}<select id="studio-policy-select"><option value="">New unsaved ${esc(objectLabel)}</option>${items.map((item) => `<option value="${esc(item.name)}"${item.name === studioState.name && studioState.exists ? " selected" : ""}>${esc(item.slug || item.name)}${item.valid ? "" : " · needs attention"}</option>`).join("")}</select></label><button type="button" id="studio-new">New</button><button type="button" id="studio-duplicate">Duplicate</button><button type="button" id="studio-preview-save">${studioState.setupContext && studioState.family === "program" ? "Review draft save" : `Review ${esc(objectLabel)} save`}</button><button type="button" id="studio-preview-delete" class="danger"${studioState.exists ? "" : " disabled"}>Review removal</button></div></header>
@@ -5023,8 +5168,38 @@ async function route({ focusMain = false } = {}) {
   const parts = hash.split("/").filter(Boolean);
   try {
     await loadPresentationCatalog();
+    const projects = await loadProjects();
+    const requestedProject = new URLSearchParams(location.search).get("project")
+      || routeProject(parts);
+    let blockedByProjectChoice = false;
+    if (requestedProject) {
+      if (projectBySlug(requestedProject)) rememberProject(requestedProject);
+      else {
+        viewUnavailableProject(requestedProject);
+        blockedByProjectChoice = true;
+      }
+    } else if (!selectedProject) {
+      selectedProject = storedProject();
+    }
+    if (!blockedByProjectChoice && selectedProject && !projectBySlug(selectedProject)) {
+      viewUnavailableProject(selectedProject);
+      blockedByProjectChoice = true;
+    }
+    if (!blockedByProjectChoice && parts[0] === "projects") {
+      viewProjectSelector(projectReturnHash);
+      blockedByProjectChoice = true;
+    }
+    if (!blockedByProjectChoice && projects.length > 1 && !selectedProject) {
+      projectReturnHash = `#${hash}`;
+      viewProjectSelector(projectReturnHash);
+      blockedByProjectChoice = true;
+    }
+    if (!blockedByProjectChoice && projects.length === 1 && !selectedProject) {
+      rememberProject(projects[0].slug);
+    }
     let handled = true;
-    if (!parts.length) await viewOverview();
+    if (blockedByProjectChoice) handled = true;
+    else if (!parts.length) await viewOverview();
     else if (parts[0] === "p" && parts.length === 2) await viewProject(parts[1]);
     else if (parts[0] === "p" && parts[2] === "ph") await viewPhase(parts[1], parts[3]);
     else if (parts[0] === "p" && parts[2] === "s") await viewStory(parts[1], parts[3]);
@@ -5069,6 +5244,10 @@ document.getElementById("skip-link").addEventListener("click", () => {
   target.scrollIntoView({ block: "start" });
 });
 document.getElementById("refresh-btn").addEventListener("click", () => route());
+document.getElementById("project-switcher").addEventListener("click", () => {
+  projectReturnHash = location.hash && location.hash !== "#/projects"
+    ? location.hash : `#/board/${encodeURIComponent(selectedProject)}`;
+});
 window.addEventListener("hashchange", () => route({ focusMain: true }));
 
 api("/api/context").then((body) => {

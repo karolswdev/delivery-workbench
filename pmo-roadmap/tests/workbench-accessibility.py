@@ -19,6 +19,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import quote
 
 
 WIDE = (1440, 900)
@@ -28,6 +29,7 @@ KEYS = {
     "enter": "\ue007",
     "shift": "\ue008",
     "escape": "\ue00c",
+    "space": "\ue00d",
     "home": "\ue011",
     "left": "\ue012",
     "up": "\ue013",
@@ -533,9 +535,11 @@ class WorkbenchExam:
         program_active: str = "",
         program_revoked: str = "",
         program_certified: str = "",
+        project: str = "",
     ) -> None:
         self.driver = driver
         self.base = base.rstrip("/")
+        self.project = project
         self.ids = {
             "program_active": program_active,
             "program_revoked": program_revoked,
@@ -576,6 +580,12 @@ class WorkbenchExam:
             raise ExamFailure(f"missing fixture id for route: {exc}") from exc
         if "{" in route:
             raise ExamFailure(f"unresolved fixture route: {route}")
+        if self.project:
+            project = "project=" + quote(self.project, safe="")
+            if route.startswith("/?"):
+                route = "/?" + project + "&" + route[2:]
+            elif route.startswith("/#"):
+                route = "/?" + project + route[1:]
         return self.base + route
 
     def navigate(self, route: str, selector: str) -> None:
@@ -746,7 +756,7 @@ class WorkbenchExam:
         )
         self.assertions += 1
 
-        self.focus("#program-studio-link")
+        self.focus("#plan-link")
         self.driver.press("enter")
         self.wait(
             lambda: self.driver.execute(
@@ -961,6 +971,70 @@ class WorkbenchExam:
         self.assertions += 5
 
     def test_program_interactions(self) -> None:
+        # The program fixture has two roadmap projects. Enter the selector
+        # without a query override, choose the other project by keyboard, and
+        # prove the choice survives a route change and reload.
+        selector_url = self.base + "/#/projects"
+        self.driver.navigate(selector_url)
+        self.wait(
+            lambda: self.selector_exists(".project-selector")
+            and bool(self.driver.execute(
+                "return document.getElementById('app')?.getAttribute('aria-busy') === 'false';"
+            )),
+            "project selector to render",
+        )
+        self.focus(".project-options input:checked")
+        self.driver.press("down")
+        chosen = self.wait(
+            lambda: self.driver.execute(
+                "return document.activeElement?.checked ? document.activeElement.value : '';"
+            ),
+            "arrow-key project choice",
+        )
+        self.focus("#project-selector-form button.primary")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.driver.execute(
+                """
+                return location.hash.startsWith("#/board/")
+                  && document.getElementById("project-switcher")?.textContent.includes(arguments[0])
+                  && Boolean(document.querySelector(".board"));
+                """,
+                [chosen],
+            ),
+            "chosen project to open",
+        )
+        selected_url = self.base + "/#/health"
+        self.driver.navigate(selected_url)
+        self.wait(
+            lambda: self.selector_exists(".destination-hero h1")
+            and bool(self.driver.execute(
+                "return document.getElementById('project-switcher')?.textContent.includes(arguments[0]);",
+                [chosen],
+            )),
+            "chosen project to persist across route and reload",
+        )
+        self.focus("#app details > summary")
+        self.driver.press("enter")
+        self.driver.press("escape")
+        self.check(
+            self.active_matches("#app details > summary"),
+            "closing Technical details did not return focus to its opener",
+        )
+        self.driver.navigate(self.base + "/#/board/project-that-is-gone")
+        self.wait(
+            lambda: self.selector_exists(".project-missing"),
+            "unavailable project explanation",
+        )
+        self.focus(".project-missing a.primary")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".project-selector")
+            and self.active_matches("#app h1"),
+            "unavailable project route back to the selector",
+        )
+        self.assertions += 5
+
         active = self.ids["program_active"]
         revoked = self.ids["program_revoked"]
         certified = self.ids["program_certified"]
@@ -1033,6 +1107,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--program-active", default="")
     parser.add_argument("--program-revoked", default="")
     parser.add_argument("--program-certified", default="")
+    parser.add_argument("--project", default="")
     return parser.parse_args()
 
 
@@ -1054,6 +1129,7 @@ def main() -> int:
             program_active=args.program_active,
             program_revoked=args.program_revoked,
             program_certified=args.program_certified,
+            project=args.project,
         )
         selected = {
             journey_id

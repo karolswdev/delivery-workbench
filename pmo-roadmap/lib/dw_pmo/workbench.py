@@ -619,7 +619,11 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
         if parts == ["api", "projects"]:
             summaries = [_project_summary(p, root) for p in discover_projects(root)]
-            return 200, envelope({"projects": summaries})
+            return 200, envelope({
+                "projects": summaries,
+                "project_count": len(summaries),
+                "selection_required": len(summaries) > 1,
+            })
 
         if len(parts) == 3 and parts[:2] == ["api", "projects"]:
             project = get_project(root, parts[2])

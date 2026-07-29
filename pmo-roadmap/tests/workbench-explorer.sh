@@ -56,6 +56,7 @@ DW="$PMO_DIR/bin/dw"
 mkdir -p "$REPO/pm/orchestration"
 cp "$PMO_DIR/templates/orchestration/research-build-review.json" \
   "$REPO/pm/orchestration/research-build-review.json"
+"$PMO_DIR/bootstrap/new-project.sh" "$REPO" zebra "Zebra" ZBR >/dev/null
 
 # ── start the documented command ─────────────────────────────────────
 # Work-log root for the trace tests: exported before start, but the
@@ -109,6 +110,10 @@ assert http["ok"] is True, http
 assert cli == http["data"] == mcp_result["structuredContent"]
 PY
 
+curl -s "$BASE/api/status" | python3 -c \
+  'import json,sys; d=json.load(sys.stdin)["data"]["roadmap"]; assert d["selection_required"] and d["selected_project"] is None' \
+  || fail "multi-project status must require a choice instead of selecting the first project"
+
 curl -s "$BASE/api/presentation" > "$TMP_ROOT/presentation.json"
 curl -s "$BASE/api/presentation/status?project=sample" \
   > "$TMP_ROOT/presentation-status.json"
@@ -144,6 +149,8 @@ import json, sys
 body = json.load(open(sys.argv[1]))
 assert body["kind"] == "delivery-workbench-workbench-response"
 assert body["ok"] is True
+assert body["data"]["project_count"] == 2
+assert body["data"]["selection_required"] is True
 p = body["data"]["projects"][0]
 assert p["slug"] == "sample" and p["prefix"] == "SMP"
 assert p["phase_count"] == 1 and p["active_phase_count"] == 1
@@ -195,10 +202,22 @@ assert "fixture evidence body" in d["evidence_markdown"]
 PY
 
 # ── static shell + supplemental file reads ───────────────────────────
-curl -s "$BASE/" | grep -q 'id="app"' || fail "index.html should serve the app shell"
-curl -s "$BASE/app.js" | grep -q "read-only" || fail "app.js should be served"
-curl -s "$BASE/" | grep -q '#/orchestration' || fail "app shell should link the orchestration editor"
-curl -s "$BASE/" | grep -q '#/program-studio' || fail "app shell should disclose delivery setup"
+curl -s "$BASE/" > "$TMP_ROOT/index.html"
+curl -s "$BASE/app.js" > "$TMP_ROOT/app.js"
+grep -q 'id="app"' "$TMP_ROOT/index.html" || fail "index.html should serve the app shell"
+grep -q "read-only" "$TMP_ROOT/app.js" || fail "app.js should be served"
+[ "$(grep -o 'class="navlink"' "$TMP_ROOT/index.html" | wc -l | tr -d ' ')" = "5" ] \
+  || fail "app shell should expose exactly five destinations"
+for label in Work Plan Delivery Live Health; do
+  grep -q ">$label</a>" "$TMP_ROOT/index.html" || fail "app shell should expose $label"
+done
+for marker in 'id="project-switcher"' 'Choose a project' 'PROJECT_STORAGE_KEY' \
+  'viewUnavailableProject' 'wireTechnicalFolds'; do
+  grep -q "$marker" "$TMP_ROOT/index.html" "$TMP_ROOT/app.js" \
+    || fail "front door is missing $marker"
+done
+grep -q '#/orchestration' "$TMP_ROOT/index.html" || fail "app shell should link delivery planning"
+grep -q '#/program-studio' "$TMP_ROOT/index.html" || fail "app shell should link the plan destination"
 curl -s "$BASE/api/file?path=pm/roadmap/sample/README.md" \
   | grep -q 'Sample - Roadmap' || fail "file endpoint should serve roadmap files"
 
