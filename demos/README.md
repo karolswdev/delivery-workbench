@@ -9,6 +9,7 @@ same treatment as code.
 | `rendered/onboarding.gif` | guided session intake, then adoption prompt generation | `vhs demos/onboarding.vhs` |
 | `rendered/commit-gate.gif` | the commit hook blocking a missing contract, then accepting a certified one and appending a consented work-log entry | `vhs demos/commit-gate.vhs` |
 | `rendered/workbench-tour.gif` | the workbench web view: overview → project → health → trace → guarded editor → preview/diff | `demos/scripts/capture-workbench-demo.sh` |
+| `rendered/full-pipeline.mp4` | the whole pipeline on film: empty directory → `dw init` → intake → Workbench review → setup lease → gated adopt → finite grant → live claude+codex delivery → certified handoff → operator ship → the game played in two browser clients | the segment ritual in [`full-pipeline/README.md`](./full-pipeline/README.md) (live riders; costs real provider money) |
 
 The terminal tapes are Charm VHS sources and require the `vhs` CLI;
 run them from the repository root. Their helper scripts

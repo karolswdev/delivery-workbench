@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><style>
+body { margin:0; width:1280px; height:720px; background:#282a36; display:flex;
+  align-items:center; justify-content:center; font-family:"Menlo",monospace; }
+.card { text-align:center; }
+h1 { color:#f8f8f2; font-size:64px; margin:0 0 28px; font-weight:700; letter-spacing:-1px; }
+p.sub { color:#bd93f9; font-size:28px; margin:0 0 10px; }
+p.dim { color:#6272a4; font-size:22px; margin:0; }
+p.install { color:#50fa7b; font-size:26px; margin:22px 0 0; }
+</style><body><div class="card" id="c"></div>
+<script>
+const kind = location.hash.slice(1);
+document.getElementById('c').innerHTML = kind === 'end'
+ ? `<h1>delivery-workbench v1.15.0</h1><p class="sub">every step leased &middot; every claim receipted &middot; every commit through the gate</p><p class="install">pipx install delivery-workbench</p>`
+ : `<h1>Delivery Workbench</h1><p class="sub">an empty directory becomes delivered software</p><p class="dim">live agents, on rails &mdash; every approval on camera</p>`;
+</script></body>

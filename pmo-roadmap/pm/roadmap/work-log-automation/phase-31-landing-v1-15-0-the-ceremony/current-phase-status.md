@@ -31,13 +31,18 @@ Release phases 25-30 as v1.15.0 with a recorded full-pipeline ceremony demo: emp
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-31-01 | The ceremony demo | in-progress | [story-01-ceremony-demo](./story-01-ceremony-demo.md) | - |
+| WLA-31-01 | The ceremony demo | done | [story-01-ceremony-demo](./story-01-ceremony-demo.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-31-02 | Release v1.15.0 | ready | [story-02-release-v1-15-0](./story-02-release-v1-15-0.md) | - |
 
 ## Where we are
 
-Both stories are planned and ready; the demo (WLA-31-01) runs
-first so the release ships with its ceremony on film.
+WLA-31-01 is done: `demos/rendered/full-pipeline.mp4` (5:21) shows
+the whole pipeline live — init, intake, browser review, setup lease,
+gated adopt, explicit grant, claude implementing, codex certifying,
+certified handoff, operator ship through the gate, and the game
+played by two synced WebSocket clients. The ceremony run also fixed
+a real scaffold defect (Python-shaped diff-scope allowlist) on the
+way. WLA-31-02 (the release) is next.
 
 ## Active risks
 

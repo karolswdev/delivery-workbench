@@ -1,0 +1,37 @@
+{
+  "schema": "delivery-workbench-program-scaffold-answers@1",
+  "project": {
+    "slug": "tic-tac-toe",
+    "prefix": "TTT",
+    "title": "Tic Tac Toe",
+    "mode": "build",
+    "idea": "Build an interactive Tic Tac Toe web app served by a plain Node.js HTTP and WebSocket server. Two browser clients play one server-authoritative game. Deliver the static HTML, CSS, and JavaScript client; WebSocket upgrade and frame handling using only Node standard-library modules; alternating X and O turns; rejection of illegal or out-of-turn moves; win and draw detection; reset behavior; synchronized client state; and deterministic tests. The exact regression command is node --test with no third-party test framework or npm runtime dependency. Scope the tests deliberately: thorough unit tests for the pure game rules (turn order, move legality, win and draw detection, reset) and for WebSocket frame encoding and decoding as pure functions, plus exactly one smoke test that starts the HTTP server on an ephemeral port, fetches the client page, and closes the server. Do not open live WebSocket connections inside node --test; interactive two-browser play is verified by hand at delivery. Every test closes what it opens so node --test exits on its own with no lingering handles."
+  },
+  "scope": {
+    "phase_numbers": [
+      1
+    ],
+    "story_ids": [
+      "TTT-1-01"
+    ]
+  },
+  "profiles": {
+    "implementer": "claude-implementer",
+    "verifier": "codex-verifier"
+  },
+  "verification": {
+    "built_in_checks": [
+      "diff-scope"
+    ],
+    "regression_argv": [
+      "node",
+      "--test"
+    ]
+  },
+  "size": {
+    "complexity": "small",
+    "fan_out": 1,
+    "repair_rounds": 1
+  },
+  "autonomy_mode": "checkpointed"
+}
