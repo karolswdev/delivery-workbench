@@ -619,6 +619,126 @@ curl -s "$BASE/api/projects/sample/phases/0/events" \
   | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['ok'] and d['data']['events'] == []" \
   || fail "phase events should degrade cleanly without git"
 
+# ── rough idea → reviewed phase plan → one-use setup apply (WLA-32-04) ──
+python3 - "$TMP_ROOT" <<'PY'
+import copy, json, pathlib, sys
+out = pathlib.Path(sys.argv[1])
+
+def provenance(kind, note):
+    return {"kind": kind, "source_note": note}
+
+def text(value):
+    return {"text": value, "provenance": provenance("recommendation", "Suggested from the rough idea for review.")}
+
+proposal = {
+    "schema": "delivery-workbench-setup-proposal@1", "state": "draft",
+    "project": {"slug": "idea-project", "prefix": "IP", "title": "Idea project",
+                "provenance": provenance("recommendation", "Editable browser suggestion.")},
+    "source_intent": {"idea": "Turn one rough idea into a checked weekly plan.", "mode": "build",
+                      "provenance": provenance("user-answer", "Typed in the Workbench.")},
+    "tracked_content": {"roadmap": {"phases": [{
+        "number": 1, "title": "First useful release", "goal": "Prove one useful path.",
+        "provenance": provenance("recommendation", "Editable first phase."),
+        "stories": [{"id_sketch": "IP-1-01", "title": "Deliver the useful path",
+            "problem": "The rough idea has no reviewable delivery path.",
+            "scope_in": [text("Build one bounded result.")],
+            "scope_out": [text("Starting later work stays out.")],
+            "acceptance_criteria": [text("A person can complete the useful path."), text("A focused check proves it.")],
+            "dependencies": [],
+            "provenance": provenance("recommendation", "Editable story suggestion.")}] }],
+        "exit_criteria": [text("The result is usable and checked.")]}, "policy": None},
+    "local_content": {"driver_bindings": {}}, "unresolved_questions": [],
+    "starts_work": False, "creates_grant": False, "certifies": False, "commits": False,
+}
+reviewed = copy.deepcopy(proposal); reviewed["state"] = "reviewed"
+changed = copy.deepcopy(reviewed); changed["tracked_content"]["roadmap"]["phases"][0]["stories"][0]["title"] = "Deliver the corrected useful path"
+for name, value in (("draft", proposal), ("reviewed", reviewed), ("changed", changed)):
+    (out / f"idea-{name}-request.json").write_text(json.dumps({"proposal": value}))
+PY
+
+IDEA_BEFORE="$(sum_tree)"
+curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$TMP_ROOT/idea-draft-request.json" \
+  "$BASE/api/setup/review" > "$TMP_ROOT/idea-review.json"
+python3 - "$TMP_ROOT/idea-review.json" <<'PY' \
+  || fail "browser draft review should return the complete inert proposal model"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["valid"] and d["review_only"]
+assert d["phases"][0]["stories"][0]["acceptance_criteria"][1]["text"] == "A focused check proves it."
+assert d["phases"][0]["stories"][0]["scope_in"][0]["text"] == "Build one bounded result."
+assert len(d["objection_items"]) >= 5
+assert not d["starts_work"] and not d["creates_grant"]
+PY
+[ "$IDEA_BEFORE" = "$(sum_tree)" ] || fail "rough idea drafting or review wrote project files"
+[ ! -d "$REPO/.git/pmo-setup-leases" ] || fail "draft review must not mint setup authority"
+
+[ "$(curl -s -o "$TMP_ROOT/idea-missing.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+  -d '{"proposal":"","expect":""}' "$BASE/api/setup/apply")" = "400" ] \
+  || fail "setup apply without its matching lease must be refused"
+[ "$IDEA_BEFORE" = "$(sum_tree)" ] || fail "missing setup lease refusal changed canonical files"
+
+curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$TMP_ROOT/idea-reviewed-request.json" \
+  "$BASE/api/setup/preview" > "$TMP_ROOT/idea-preview-a.json"
+curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$TMP_ROOT/idea-changed-request.json" \
+  "$BASE/api/setup/preview" > "$TMP_ROOT/idea-preview-b.json"
+python3 - "$TMP_ROOT/idea-preview-a.json" "$TMP_ROOT/idea-preview-b.json" "$TMP_ROOT/idea-mismatch-request.json" <<'PY' \
+  || fail "editing the draft should produce a distinct setup preview"
+import json, sys
+a = json.load(open(sys.argv[1]))["data"]
+b = json.load(open(sys.argv[2]))["data"]
+assert a["applicable"] and b["applicable"]
+assert a["proposal_id"] != b["proposal_id"] and a["expect"] != b["expect"]
+assert not a["starts_work"] and not a["creates_grant"]
+json.dump({"proposal": a["proposal_id"], "expect": b["expect"]}, open(sys.argv[3], "w"))
+PY
+[ "$IDEA_BEFORE" = "$(sum_tree)" ] || fail "setup preview wrote canonical files"
+[ "$(curl -s -o "$TMP_ROOT/idea-mismatch.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/idea-mismatch-request.json" "$BASE/api/setup/apply")" = "409" ] \
+  || fail "a lease from an edited draft must not apply the old plan"
+[ "$IDEA_BEFORE" = "$(sum_tree)" ] || fail "changed setup lease refusal changed canonical files"
+
+# Repository drift after preview makes that lease stale and consumes no setup target.
+cp "$PROJECT/README.md" "$TMP_ROOT/sample-readme-before-stale"
+printf '\nexternal drift\n' >> "$PROJECT/README.md"
+STALE_TREE="$(sum_tree)"
+python3 - "$TMP_ROOT/idea-preview-a.json" "$TMP_ROOT/idea-stale-request.json" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))["data"]
+json.dump({"proposal": p["proposal_id"], "expect": p["expect"]}, open(sys.argv[2], "w"))
+PY
+[ "$(curl -s -o "$TMP_ROOT/idea-stale.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/idea-stale-request.json" "$BASE/api/setup/apply")" = "409" ] \
+  || fail "stale setup lease must be refused"
+[ "$STALE_TREE" = "$(sum_tree)" ] || fail "stale setup refusal changed canonical files"
+mv "$TMP_ROOT/sample-readme-before-stale" "$PROJECT/README.md"
+
+# A fresh preview after the edit and drift refusals applies configuration only.
+curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$TMP_ROOT/idea-changed-request.json" \
+  "$BASE/api/setup/preview" > "$TMP_ROOT/idea-preview-fresh.json"
+python3 - "$TMP_ROOT/idea-preview-fresh.json" "$TMP_ROOT/idea-apply-request.json" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))["data"]
+json.dump({"proposal": p["proposal_id"], "expect": p["expect"]}, open(sys.argv[2], "w"))
+PY
+curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$TMP_ROOT/idea-apply-request.json" \
+  "$BASE/api/setup/apply" > "$TMP_ROOT/idea-applied.json"
+python3 - "$TMP_ROOT/idea-applied.json" <<'PY' \
+  || fail "fresh browser setup lease should apply configuration only"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["kind"] == "delivery-workbench-setup-apply"
+for key in ("starts_work", "creates_grant", "certifies", "commits"):
+    assert d[key] is False
+PY
+[ -f "$REPO/pm/roadmap/idea-project/README.md" ] || fail "setup apply did not create the planned project configuration"
+[ -f "$REPO/pm/roadmap/idea-project/phase-1-first-useful-release/story-01-deliver-the-corrected-useful-path.md" ] \
+  || fail "setup apply did not create the corrected planned story"
+[ ! -d "$REPO/.git/pmo-orchestration/runs" ] || fail "setup apply must not start a run"
+[ ! -d "$REPO/.git/pmo-orchestration/grants" ] || fail "setup apply must not create permission"
+[ "$(curl -s -o "$TMP_ROOT/idea-reused.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/idea-apply-request.json" "$BASE/api/setup/apply")" = "409" ] \
+  || fail "reused setup lease must be refused"
+
 # ── structured editor: mutation preview (WLA-5-06) ───────────────────
 PRE_EDIT="$(sum_tree)"
 curl -s -X POST -H 'Content-Type: application/json' \

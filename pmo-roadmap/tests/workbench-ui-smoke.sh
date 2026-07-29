@@ -161,16 +161,19 @@ for token in ("/api/delivery-setup", "What are you delivering?",
     assert token in setup, token
 for forbidden in ("postJson", "localStorage", "EventSource", "setInterval"):
     assert forbidden not in setup, forbidden
-for token in ("Review adoption proposal", "Unresolved assumptions",
+for token in ("Turn a rough idea into a phase plan", "Unresolved assumptions",
               "model.configuration.label", "Files this setup would save",
               "Accepted for preview", "Reject with corrections", "Correction packet",
-              "dw setup preview", "/api/setup/review", "Technical details",
-              "Review only.", "adoptionReviewMarks", "captureAppFocus"):
+              "dw setup preview", "/api/setup/review", "/api/setup/preview",
+              "/api/setup/apply", "Technical details", "Nothing is saved yet",
+              "adoptionReviewMarks", "IDEATION_STORAGE_KEY", "captureAppFocus",
+              "invalidateIdeationPreview", "one-use setup lease"):
     assert token in adoption, token
-for forbidden in ("postJson", "localStorage", "sessionStorage", "EventSource", "setInterval"):
+for forbidden in ("sessionStorage", "indexedDB", "EventSource", "setInterval", 'aria-live="'):
     assert forbidden not in adoption, forbidden
 for token in (".adoption-review", ".adoption-unresolved", ".adoption-configuration",
-              ".adoption-path-split", ".adoption-correction-form",
+              ".adoption-path-split", ".adoption-correction-form", ".ideation-flow",
+              ".ideation-steps", ".ideation-draft", ".ideation-preview-files",
               "@media (prefers-color-scheme: dark)", "@media (max-width: 600px)"):
     assert token in css, token
 for token in (".delivery-choice-grid", ".delivery-effect-grid",
@@ -500,6 +503,10 @@ shot "delivery-setup-review-mobile" 390,844 "$BASE/?snapshot=1&setupmode=program
 for state in greenfield existing unresolved-heavy invalid; do
   shot "adoption-review-$state-desktop" 1440,900 "$BASE/?snapshot=1&proposal=setup-review-fixtures/$state.json#/edit/adoption_review"
   shot "adoption-review-$state-mobile" 390,844 "$BASE/?snapshot=1&proposal=setup-review-fixtures/$state.json#/edit/adoption_review"
+done
+for state in idea draft review preview refusal applied; do
+  shot "ideation-$state-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&ideationstep=$state#/edit/adoption_review"
+  shot "ideation-$state-mobile" 390,844 "$BASE/?snapshot=1&project=sample&ideationstep=$state#/edit/adoption_review"
 done
 
 # Explicitly adopt rich tracked fixtures only after the empty-state capture.

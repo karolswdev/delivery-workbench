@@ -235,6 +235,7 @@ or provider argv.
 | `GET /api/delivery-setup?project=<slug>` | `delivery_setup.build_delivery_setup` | pure application view over status, delivery-plan inventory, and optional-program inventory: delivery scope, all three choices, effects, remaining permission, corrections, and technical sources |
 | `GET /api/step?project=<slug>` | `step.build_step` | the stamped pure preview in `data` |
 | `POST /api/step/apply` | `step.apply_step` | exact stamped result in `data`; 409 for a non-started refusal |
+| `POST /api/setup/review` | `workbench._setup_review_proposal` | read-only validation and adoption-review projection of a complete browser draft proposal; writes nothing, creates no pending record, mints no lease |
 | `POST /api/setup/preview` | `setup_lease.preview_setup` | canonical complete tracked/local change set and one typed setup lease in `data`; no tracked write or work start |
 | `POST /api/setup/apply` | `setup_lease.apply_setup` | exact proposal id plus setup token only; revalidated journaled all-or-nothing setup in `data` |
 | `GET /api/orchestration` | `orchestration.score_inventory` | contained score inventory with validity and hashes; pure |

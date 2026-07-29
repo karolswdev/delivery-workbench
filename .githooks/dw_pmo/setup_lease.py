@@ -451,11 +451,16 @@ def canonical_setup_preview(preview: dict[str, object]) -> str:
     return _canonical(preview)
 
 
-def preview_setup(root: Path, proposal_file: Path) -> dict[str, object]:
-    try:
-        proposal = load_proposal(proposal_file.read_bytes())
-    except OSError as exc:
-        raise DwError("setup proposal cannot be read: %s" % exc) from exc
+def preview_setup_proposal(
+    root: Path, proposal: dict[str, object]
+) -> dict[str, object]:
+    """Mint one setup lease from an already parsed proposal.
+
+    Browser and file-based transports meet here so neither transport can
+    invent a second plan or lease contract. Validation, reviewed-state checks,
+    and the complete write plan remain owned by ``build_setup_plan``.
+    """
+    proposal = validate_proposal(proposal)
     changes = build_setup_plan(root, proposal)
     preview = _preview_document(root, proposal, changes)
     storage = _lease_dir(root) / "pending"
@@ -474,6 +479,14 @@ def preview_setup(root: Path, proposal_file: Path) -> dict[str, object]:
     target = storage / (str(preview["proposal_id"]).removeprefix(_SETUP_ID_PREFIX) + ".json")
     _atomic_json(target, record)
     return preview
+
+
+def preview_setup(root: Path, proposal_file: Path) -> dict[str, object]:
+    try:
+        proposal = load_proposal(proposal_file.read_bytes())
+    except OSError as exc:
+        raise DwError("setup proposal cannot be read: %s" % exc) from exc
+    return preview_setup_proposal(root, proposal)
 
 
 def _atomic_json(path: Path, value: object) -> None:

@@ -158,12 +158,14 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 15,
-            "only deliberate-step, guarded setup/roadmap/score/Studio edits, run "
-            "preview/start, program grant preview/start/plan, and the receipted "
-            "notification ack use direct POST equality routes; "
+            len(post_routes), 16,
+            "only deliberate-step, the read-only setup review projection, guarded "
+            "setup/roadmap/score/Studio edits, run preview/start, program grant "
+            "preview/start/plan, and the receipted notification ack use direct "
+            "POST equality routes; "
             f"found: {post_routes}",
         )
+        self.assertTrue(any('/api/setup/review' in line for line in post_routes))
         self.assertTrue(any('/api/step/apply' in line for line in post_routes))
         self.assertTrue(any('/api/setup/preview' in line for line in post_routes))
         self.assertTrue(any('/api/setup/apply' in line for line in post_routes))
@@ -1674,6 +1676,7 @@ class DwCoreTest(unittest.TestCase):
             post_routes,
             {
                 "/api/step/apply",
+                "/api/setup/review",
                 "/api/setup/preview", "/api/setup/apply",
                 "/api/mutations/preview", "/api/mutations/apply",
                 "/api/orchestration/preview", "/api/orchestration/apply",
@@ -9384,6 +9387,33 @@ class WorkbenchAccessibilityContractTest(unittest.TestCase):
         ):
             self.assertIn(marker, self.css)
         self.assertIn('setAttribute("aria-current", "page")', self.app)
+
+    def test_idea_to_phase_plan_keeps_focus_storage_and_authority_separate(self):
+        section = self.app[
+            self.app.index("const adoptionReviewMarks"):
+            self.app.index("const STATUS_VOCAB")
+        ]
+        for marker in (
+            "IDEATION_STEPS", "Turn a rough idea into a phase plan",
+            "Nothing is saved yet", "data-draft-path", "acceptance_criteria",
+            "Source note", "localStorage", "accepted_items", "objections",
+            "invalidateIdeationPreview", 'postJson("/api/setup/review"',
+            'postJson("/api/setup/preview"', 'postJson("/api/setup/apply"',
+            "focusRegion", "data-return-review", "plainSetupRefusal",
+            "starts_work: false", "creates_grant: false",
+        ):
+            self.assertIn(marker, section)
+        for forbidden in (
+            "sessionStorage", "indexedDB", "EventSource", "setInterval",
+            'aria-live="', 'role="dialog"', "captureAppFocus() || captureAppFocus()",
+        ):
+            self.assertNotIn(forbidden, section)
+        for marker in (
+            ".ideation-flow", ".ideation-steps", ".ideation-draft",
+            ".ideation-preview-files", '[data-review-state="accepted"]',
+            '[data-review-state="rejected"]', "@media (max-width: 600px)",
+        ):
+            self.assertIn(marker, self.css)
 
     def test_review_matrix_covers_each_canonical_journey(self):
         accessibility = json.loads(

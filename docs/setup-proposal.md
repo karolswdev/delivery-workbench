@@ -277,33 +277,45 @@ defaults, truncates, selects, saves, or authorizes a proposal.
 
 ## Review in Workbench
 
-Open `?proposal=<repository-relative-file>#/edit/adoption_review` on the local
-Workbench URL to review a proposal inside the existing Roadmap changes
-workspace. The page explains the project idea, phase order, story dependencies,
-acceptance criteria, provenance, and unresolved questions. It also lists every
-path that setup would save. Tracked roadmap and policy files stay separate from
-the `.git`-local driver roster. The configuration section is labelled
-"configuration, not permission."
+Open `#/edit/adoption_review` under Plan to start with rough idea text. The
+browser builds the first proposal-shaped draft without writing a file. Project
+identity, phases, stories, scope, acceptance criteria, and source notes remain
+editable. The same route also opens an existing proposal when the URL includes
+`?proposal=<repository-relative-file>`.
+
+Review stays inside the Roadmap changes workspace. The page explains the project
+idea, phase order, story dependencies, acceptance criteria, provenance, and
+unresolved questions. It also lists every path that setup would save. Tracked
+roadmap and policy files stay separate from the `.git`-local driver roster. The
+configuration section is labelled "configuration, not permission."
 
 Technical details contain the exact proposal JSON, proposal fingerprint, path
 fingerprints, and any pending preview that already exists. Unresolved questions
 stay visible even when the list is empty. A contract refusal appears verbatim
 instead of a partial or repaired proposal.
 
-The reviewer can mark the draft "Accepted for preview" or "Reject with
-corrections." A rejection produces item-level objections plus an overall note
-for the setup conversation. These marks live only in the current browser page.
-Reloading the page loses them. Workbench does not write a review note,
-repository file, roadmap, policy, driver roster, grant, or run record.
+The reviewer can mark each item accepted or request a correction. A rejection
+produces item-level objections plus an overall note. Browser storage keeps those
+marks across draft, review, and reload. Correcting or removing a rejected item
+clears its objection; preview stays blocked until every current item is
+accepted. Review writes no review note, repository file, roadmap, policy,
+driver roster, grant, or run record.
 
-Review ends with one terminal handoff:
+The browser review has one next step: preview the setup. It sends the reviewed
+proposal to `POST /api/setup/preview`, then shows the exact paths and hashes
+before apply. Editing the draft removes that preview from the page and requires
+a fresh one. `POST /api/setup/apply` accepts only the matching proposal ID and
+one-use token.
+
+Technical details keep the exact proposal JSON and the terminal fallback:
 
 ```text
 dw setup preview <proposal-file>
+dw setup apply --proposal <setup:id> --expect <setup-sha256:token>
 ```
 
-That command is the next act, not something the browser runs. It validates the
-proposal again and creates the separate setup preview described below.
+Both paths validate the proposal again and create the separate setup preview
+described below.
 
 ## Guarded setup lease
 
@@ -345,8 +357,11 @@ The transport signatures mirror the same core:
 
 - MCP `dw_setup_preview({"proposal_file": "..."})` and
   `dw_setup_apply({"proposal": "setup:...", "expect": "setup-sha256:..."})`;
-- HTTP `POST /api/setup/preview` with only `proposal_file`, and
-  `POST /api/setup/apply` with only `proposal` and `expect`.
+- HTTP `POST /api/setup/preview` with exactly one of `proposal_file` or the
+  complete `proposal` object, and `POST /api/setup/apply` with only `proposal`
+  and `expect`. `POST /api/setup/review` accepts only a proposal object and is a
+  read-only presentation adapter; it cannot mint the pending record used by
+  apply.
 
 The older `dw setup [project] [--technical]` delivery-choice view remains
 read-only. `preview` and `apply` are reserved setup subverbs and cannot be

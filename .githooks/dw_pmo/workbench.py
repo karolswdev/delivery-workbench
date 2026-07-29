@@ -106,7 +106,10 @@ def _error(status: int, message: str) -> tuple[int, dict[str, object]]:
 def _run_error(err: DwError) -> tuple[int, dict[str, object]]:
     conflict = any(
         token in err.message
-        for token in ("stale", "altered", "already consumed", "not applicable")
+        for token in (
+            "stale", "altered", "already consumed", "already used",
+            "does not match", "changed", "not applicable",
+        )
     )
     return _error(409 if conflict else 400, err.message)
 
@@ -280,6 +283,32 @@ def _setup_review(root: Path, query: dict[str, list[str]]) -> dict[str, object]:
         )
     except DwError as err:
         return invalid_setup_review_presentation(err.message, proposal_file=display_file)
+
+
+def _setup_review_proposal(
+    root: Path, proposal: object
+) -> dict[str, object]:
+    """Project an in-browser draft for review without saving or minting a lease."""
+    from .presentation import (
+        invalid_setup_review_presentation,
+        setup_review_presentation,
+    )
+    from .setup_lease import build_setup_plan, setup_plan_facts
+    from .setup_proposal import validate_proposal
+
+    try:
+        validated = validate_proposal(proposal)
+        facts = setup_plan_facts(
+            validated,
+            build_setup_plan(root, validated, require_reviewed=False),
+        )
+        return setup_review_presentation(
+            validated,
+            facts,
+            proposal_file="",
+        )
+    except DwError as err:
+        return invalid_setup_review_presentation(err.message, proposal_file="")
 
 
 def _studio_bundle_review(root: Path, query: dict[str, list[str]]) -> dict[str, object]:
@@ -619,7 +648,11 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
         if parts == ["api", "projects"]:
             summaries = [_project_summary(p, root) for p in discover_projects(root)]
-            return 200, envelope({"projects": summaries})
+            return 200, envelope({
+                "projects": summaries,
+                "project_count": len(summaries),
+                "selection_required": len(summaries) > 1,
+            })
 
         if len(parts) == 3 and parts[:2] == ["api", "projects"]:
             project = get_project(root, parts[2])
@@ -895,17 +928,38 @@ def _program_http_integer(
 def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
     """POST routes: deliberate step, roadmap edits, and score content edits."""
     route = path.rstrip("/")
+    if route == "/api/setup/review":
+        unknown = sorted(set(body) - {"proposal"})
+        if unknown:
+            return _error(400, "unknown setup review parameter(s): %s" % ", ".join(unknown))
+        if set(body) != {"proposal"}:
+            return _error(400, "setup review requires proposal")
+        # This adapter is deliberately read-only. It validates and projects the
+        # browser draft, but cannot create the pending record used by apply.
+        return 200, envelope(_setup_review_proposal(root, body["proposal"]))
+
     if route == "/api/setup/preview":
-        unknown = sorted(set(body) - {"proposal_file"})
+        unknown = sorted(set(body) - {"proposal_file", "proposal"})
         if unknown:
             return _error(400, "unknown setup preview parameter(s): %s" % ", ".join(unknown))
         try:
             proposal_file = body.get("proposal_file")
-            if not isinstance(proposal_file, str) or not proposal_file:
-                raise DwError("setup preview requires proposal_file")
-            from .setup_lease import preview_setup
+            proposal = body.get("proposal")
+            if bool(proposal_file) == (proposal is not None):
+                raise DwError("setup preview requires exactly one of proposal_file or proposal")
+            if proposal_file:
+                if not isinstance(proposal_file, str):
+                    raise DwError("setup preview proposal_file must be a string")
+                from .setup_lease import preview_setup
 
-            return 200, envelope(preview_setup(root, Path(proposal_file)))
+                result = preview_setup(root, Path(proposal_file))
+            else:
+                if not isinstance(proposal, dict):
+                    raise DwError("setup preview proposal must be an object")
+                from .setup_lease import preview_setup_proposal
+
+                result = preview_setup_proposal(root, proposal)
+            return 200, envelope(result)
         except DwError as err:
             return _run_error(err)
 

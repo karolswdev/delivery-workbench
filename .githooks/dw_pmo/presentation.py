@@ -428,20 +428,39 @@ def setup_review_presentation(
             objection_items.append({"id": story_id, "label": "Story %s: %s" % (
                 story["id_sketch"], story["title"],
             )})
+            criteria = []
+            for criterion_index, item in enumerate(story["acceptance_criteria"], 1):
+                criterion_id = "%s-criterion-%s" % (story_id, criterion_index)
+                objection_items.append({
+                    "id": criterion_id,
+                    "label": "Acceptance criterion %s for %s" % (
+                        criterion_index, story["id_sketch"],
+                    ),
+                })
+                criteria.append({
+                    "item_id": criterion_id,
+                    "text": item["text"],
+                    "provenance": _setup_provenance(item["provenance"]),
+                })
             stories.append({
                 "item_id": story_id,
                 "id_sketch": story["id_sketch"],
                 "title": story["title"],
                 "purpose": story["problem"],
+                "scope_in": [{
+                    "text": item["text"],
+                    "provenance": _setup_provenance(item["provenance"]),
+                } for item in story["scope_in"]],
+                "scope_out": [{
+                    "text": item["text"],
+                    "provenance": _setup_provenance(item["provenance"]),
+                } for item in story["scope_out"]],
                 "dependencies": [{
                     "id_sketch": item["id_sketch"],
                     "sentence": "This story follows %s." % item["id_sketch"],
                     "provenance": _setup_provenance(item["provenance"]),
                 } for item in story["dependencies"]],
-                "acceptance_criteria": [{
-                    "text": item["text"],
-                    "provenance": _setup_provenance(item["provenance"]),
-                } for item in story["acceptance_criteria"]],
+                "acceptance_criteria": criteria,
                 "provenance": _setup_provenance(story["provenance"]),
             })
         phases.append({
@@ -488,13 +507,25 @@ def setup_review_presentation(
         ),
         "provenance": _setup_provenance(item["provenance"]),
     } for name, item in sorted(bindings.items())]
+    exit_criteria = []
+    for index, item in enumerate(roadmap["exit_criteria"], 1):
+        item_id = "exit-criterion-%s" % index
+        objection_items.append({
+            "id": item_id,
+            "label": "Roadmap result %s" % index,
+        })
+        exit_criteria.append({
+            "item_id": item_id,
+            "text": item["text"],
+            "provenance": _setup_provenance(item["provenance"]),
+        })
     command_file = proposal_file or "<proposal-file>"
     return {
         "kind": "delivery-workbench-setup-review",
         "schema_version": 1,
         "valid": True,
         "review_only": True,
-        "marks_persist": "Review marks live only in this browser page and are lost when it closes or reloads.",
+        "marks_persist": "Review marks stay in this browser until they are abandoned or the draft is removed.",
         "project": {
             "title": project["title"],
             "identity": "%s uses the %s story prefix." % (project["title"], project["prefix"]),
@@ -508,10 +539,7 @@ def setup_review_presentation(
             "provenance": _setup_provenance(project["provenance"]),
         },
         "phases": phases,
-        "exit_criteria": [{
-            "text": item["text"],
-            "provenance": _setup_provenance(item["provenance"]),
-        } for item in roadmap["exit_criteria"]],
+        "exit_criteria": exit_criteria,
         "unresolved_questions": {
             "summary": (
                 "%s assumption%s still need an answer."

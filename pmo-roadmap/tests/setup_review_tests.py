@@ -220,12 +220,22 @@ class SetupReviewTest(unittest.TestCase):
         self.assertEqual(model["technical_details"]["pending_preview"], preview)
         self.assertEqual(model["changes"]["paths"], [item["path"] for item in preview["changes"]])
 
-    def test_open_refresh_mark_and_abandon_surface_has_no_write_transport(self):
-        path = self.write(proposal_fixture())
+    def test_browser_review_adapter_is_pure_and_marks_persist_locally(self):
+        proposal = proposal_fixture()
+        proposal["state"] = "draft"
         before = tree_snapshot(self.root)
-        first = self.review(path)
-        second = self.review(path)
-        self.assertEqual(first, second)
+        status, response = handle_api(
+            self.root, "/api/setup/review", {},
+        )
+        self.assertEqual(status, 200)  # GET selection remains a read-only refusal model.
+        self.assertFalse(response["data"]["valid"])
+        from dw_pmo.workbench import handle_mutation
+        status, response = handle_mutation(
+            self.root, "/api/setup/review", {"proposal": proposal},
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(response["data"]["valid"])
+        self.assertTrue(response["data"]["review_only"])
         self.assertEqual(tree_snapshot(self.root), before)
         self.assertFalse((self.root / ".git" / "pmo-setup-leases").exists())
 
@@ -234,11 +244,43 @@ class SetupReviewTest(unittest.TestCase):
             app_source.index("const adoptionReviewMarks"):
             app_source.index("const STATUS_VOCAB")
         ]
-        for forbidden in ("postJson", "localStorage", "sessionStorage", "indexedDB"):
-            self.assertNotIn(forbidden, review_source)
-        for required in ("adoptionReviewMarks", "Accepted for preview", "Reject with corrections", "Abandon this mark"):
+        for required in (
+            "adoptionReviewMarks", "Accepted for preview", "Reject with corrections",
+            "Abandon these marks", "localStorage", "IDEATION_STORAGE_KEY",
+            'postJson("/api/setup/review"', 'postJson("/api/setup/preview"',
+            'postJson("/api/setup/apply"', "Nothing is saved yet",
+        ):
             self.assertIn(required, review_source)
-        self.assertIn("browser page only", review_source)
+        for forbidden in ("sessionStorage", "indexedDB", "EventSource", "setInterval"):
+            self.assertNotIn(forbidden, review_source)
+
+    def test_browser_proposal_preview_uses_the_same_one_use_lease(self):
+        from dw_pmo.workbench import handle_mutation
+
+        proposal = proposal_fixture("browser-project", "BP")
+        before = tree_snapshot(self.root / "pm")
+        status, response = handle_mutation(
+            self.root, "/api/setup/preview", {"proposal": proposal},
+        )
+        self.assertEqual(status, 200)
+        preview = response["data"]
+        self.assertTrue(preview["applicable"])
+        self.assertFalse(preview["starts_work"])
+        self.assertEqual(tree_snapshot(self.root / "pm"), before)
+        status, applied = handle_mutation(
+            self.root, "/api/setup/apply", {
+                "proposal": preview["proposal_id"], "expect": preview["expect"],
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertFalse(applied["data"]["starts_work"])
+        status, reused = handle_mutation(
+            self.root, "/api/setup/apply", {
+                "proposal": preview["proposal_id"], "expect": preview["expect"],
+            },
+        )
+        self.assertEqual(status, 409)
+        self.assertIn("already used", reused["data"]["error"])
 
     def test_route_is_contextual_and_does_not_add_primary_navigation(self):
         index = (PMO_ROOT / "workbench" / "index.html").read_text(encoding="utf-8")

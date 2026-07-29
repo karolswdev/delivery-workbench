@@ -1104,6 +1104,158 @@ class WorkbenchExam:
         )
         self.assertions += 5
 
+    def test_ideation_keyboard_journey(self, label: str) -> None:
+        route = f"/?ideationexam={label}#/edit/adoption_review"
+        self.navigate(route, ".ideation-flow")
+        self.driver.execute(
+            "localStorage.removeItem('delivery-workbench.ideation-plan.v1');"
+        )
+        # Change the query to force a document reload so module-level browser
+        # state is rebuilt from the now-empty storage record.
+        route = f"/?ideationexam={label}&reset=1#/edit/adoption_review"
+        self.navigate(route, ".ideation-idea")
+        if label == "narrow":
+            self.driver.set_content_zoom(1.5)
+            self.wait(
+                lambda: int(self.driver.execute(
+                    "return document.documentElement.clientWidth;"
+                )) <= 390,
+                "ideation narrow viewport",
+            )
+        self.focus('#ideation-idea-form textarea[name="idea"]')
+        self.driver.type_text(
+            f"Keyboard {label} plan turns requests into a weekly delivery view"
+        )
+        self.focus('#ideation-idea-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#ideation-draft-form")
+            and self.active_matches("#ideation-draft-title"),
+            f"{label} idea to become a focused editable draft",
+        )
+
+        phase_title = '[data-draft-path="tracked_content.roadmap.phases.0.title"]'
+        self.focus(phase_title)
+        self.driver.type_text(" by keyboard")
+        self.focus('#ideation-draft-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".ideation-review")
+            and self.active_matches(".ideation-review h1"),
+            f"{label} draft to move focus into review",
+        )
+
+        # Reject one item, record a correction, and prove Technical details has
+        # a keyboard return path to the same disclosure.
+        first_reject = '[data-adoption-item-reject="phase-1"]'
+        self.focus(first_reject)
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#adoption-correction-form")
+            and self.active_matches('#adoption-correction-form textarea[name="correction"]'),
+            f"{label} item rejection to open the correction form",
+        )
+        self.driver.type_text("Make the phase title explicit")
+        self.focus('#adoption-correction-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".adoption-review-blocked")
+            and self.active_matches('[data-adoption-objection="add"]'),
+            f"{label} rejection to block preview with text, not color alone",
+        )
+        self.focus(".adoption-technical summary")
+        self.driver.press("enter")
+        self.focus("[data-return-review]")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.active_matches(".adoption-technical summary")
+            and not bool(self.driver.execute(
+                "return document.querySelector('.adoption-technical')?.open;"
+            )),
+            f"{label} Technical details return to its summary",
+        )
+
+        self.focus('[data-edit-rejected="phase-1"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#ideation-draft-form")
+            and self.active_matches("#ideation-draft-title"),
+            f"{label} correction to return to the draft",
+        )
+        self.focus(phase_title)
+        self.driver.type_text(" corrected")
+        self.focus('#ideation-draft-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".ideation-review")
+            and not self.selector_exists(".adoption-review-blocked"),
+            f"{label} corrected rejection to clear the preview block",
+        )
+        self.focus('[data-adoption-mark="accept"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#ideation-preview-button:not([disabled])")
+            and self.active_matches('[data-adoption-mark="accept"]'),
+            f"{label} review acceptance to enable the one canonical preview",
+        )
+
+        # Reload keeps the review decisions and the exact position in the flow.
+        self.focus("#refresh-btn")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#ideation-preview-button:not([disabled])")
+            and self.active_matches("#refresh-btn"),
+            f"{label} accepted decisions to survive reload",
+        )
+        self.focus("#ideation-preview-button")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#ideation-apply")
+            and self.active_matches("#ideation-preview-title"),
+            f"{label} exact setup preview to receive focus",
+        )
+
+        # Editing after preview removes the apply control. The corrected draft
+        # must be accepted and previewed again before the one-use apply.
+        self.focus("[data-edit-after-preview]")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#ideation-draft-form")
+            and not self.selector_exists("#ideation-apply")
+            and self.active_matches("#ideation-draft-title"),
+            f"{label} preview edit to invalidate the old apply control",
+        )
+        story_title = '[data-draft-path="tracked_content.roadmap.phases.0.stories.0.title"]'
+        self.focus(story_title)
+        self.driver.type_text(" revised")
+        self.focus('#ideation-draft-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".ideation-review"),
+            f"{label} revised draft review",
+        )
+        self.focus('[data-adoption-mark="accept"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#ideation-preview-button:not([disabled])"),
+            f"{label} revised review acceptance",
+        )
+        self.focus("#ideation-preview-button")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#ideation-apply"),
+            f"{label} fresh preview after revision",
+        )
+        self.focus("#ideation-apply")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".ideation-applied")
+            and self.active_matches("#ideation-applied-title"),
+            f"{label} configuration-only apply to complete",
+        )
+        self.audit_page(f"ideation-{label}", label)
+        self.assertions += 15
+
     def test_program_interactions(self) -> None:
         # The program fixture has two roadmap projects. Enter the selector
         # without a query override, choose the other project by keyboard, and
@@ -1284,6 +1436,7 @@ def main() -> int:
                 "adoption review narrow viewport",
             )
             exam.audit_page("adoption-review", "narrow")
+            exam.test_ideation_keyboard_journey("narrow")
         driver.set_window(*WIDE)
         driver.set_content_zoom(1)
         exam.wait(
@@ -1301,6 +1454,7 @@ def main() -> int:
                 ".adoption-review h1",
             )
             exam.audit_page("adoption-review", "wide")
+            exam.test_ideation_keyboard_journey("wide")
         if args.suite in {"core", "all"}:
             exam.test_core_interactions()
         if args.suite in {"program", "all"}:
