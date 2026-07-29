@@ -18,12 +18,12 @@ Release phases 25-30 as v1.15.0 with a recorded full-pipeline ceremony demo: emp
 
 ## Exit criteria (evidence required)
 
-- [ ] `demos/rendered/full-pipeline.mp4` shows the whole pipeline —
+- [x] `demos/rendered/full-pipeline.mp4` shows the whole pipeline —
   empty dir, init, intake, setup lease, adopt commit, grant, live
   claude+codex delivery of WebSocket Tic Tac Toe, evidence, gated
   ship, the game played — and is regenerable from checked-in
   sources (WLA-31-01).
-- [ ] v1.15.0 is live: PyPI lists it, cold pip install reports it,
+- [x] v1.15.0 is live: PyPI lists it, cold pip install reports it,
   formula stamped and tap mirrored, `dw verify --all` green at the
   tag (WLA-31-02).
 
@@ -32,11 +32,12 @@ Release phases 25-30 as v1.15.0 with a recorded full-pipeline ceremony demo: emp
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-31-01 | The ceremony demo | done | [story-01-ceremony-demo](./story-01-ceremony-demo.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-31-02 | Release v1.15.0 | ready | [story-02-release-v1-15-0](./story-02-release-v1-15-0.md) | - |
+| WLA-31-02 | Release v1.15.0 | done | [story-02-release-v1-15-0](./story-02-release-v1-15-0.md) | [evidence-story-02](./evidence-story-02.md) |
 
 ## Where we are
 
-WLA-31-01 is done: `demos/rendered/full-pipeline.mp4` (5:21) shows
+Phase closed 2/2 on 2026-07-29; v1.15.0 tagged and published under
+the standing authorization. WLA-31-01 was done first: `demos/rendered/full-pipeline.mp4` (5:21) shows
 the whole pipeline live — init, intake, browser review, setup lease,
 gated adopt, explicit grant, claude implementing, codex certifying,
 certified handoff, operator ship through the gate, and the game

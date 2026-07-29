@@ -7,285 +7,105 @@ holds the full story-by-story evidence trail, and the version below is
 single-sourced from `dw_pmo.__version__` (test-asserted against
 `dw --version`, the plugin manifest, and this file).
 
-## Unreleased
+## v1.15.0 — 2026-07-29
 
-Workbench can now review a setup proposal inside the existing Roadmap changes
-workspace. The adoption review explains the project, phases, story proofs,
-provenance, unresolved questions, tracked policy, local driver bindings, and the
-complete path list before setup. Policy and driver settings are labelled
-"configuration, not permission." Accepted-for-preview and structured correction
-marks stay in browser memory and write nothing. The page creates no setup token,
-permission, run, certification, or commit, and hands the next act to
-`dw setup preview <proposal-file>` in the terminal. `GET /api/setup/review`
-uses the same proposal and setup-plan cores as the CLI preview.
-Program Studio now reviews a scaffolded setup proposal as one linked bundle at
-`#/program-studio/bundle`. The read-only overview covers roadmap scope,
-workflow, team seats and verifier independence, rubric criteria and their
-producing checks, requested capabilities, budgets, stops, certified handoff,
-and local driver availability. `GET /api/setup/bundle` reuses whole-bundle
-`validate_program` diagnostics with source pointers and returns the same pure
-scaffold simulation used by the terminal core. Tracked policy and `.git`-local
-bindings stay separate under "configuration, not permission." The route accepts
-no setup or program token, writes nothing, and hands the next act to
-`.githooks/dw program plan <program-slug>` after setup apply.
+The autonomy layer lands whole. This release brings together everything built
+since v1.14.0, phases 22 through 31, from the first deterministic briefing to a
+full live delivery and its release ceremony.
 
-`dw program scaffold --answers <file>` now compiles a closed set of typed setup
-answers into one complete, inert setup proposal. The generated program,
-workflow, two-seat cross-provider organization, check-bound rubrics, one finite
-repair route, certified handoff, local profile bindings, and every finite budget
-are deterministic and validated together before output. Checkpointed mode is
-the default; commit, push, integration, certification, release, deploy, publish,
-arbitrary shell, and arbitrary network authority are excluded. The command
-writes no policy, roster, grant, run, or roadmap state.
+Phase 22 gives every operator and agent one answer before acting. The stamped
+`delivery-workbench-status@1` briefing composes doctor, roadmap, workspace,
+contract, gate, current-work, and holds facts into a deterministic verdict and
+one exact next action across CLI, MCP, HTTP, Workbench, and every generated
+rider. Reads stay pure, ambiguous projects are never guessed, and certification
+and commit remain manual. A fresh-wheel exam follows the recommendations through
+a real evidence-backed, trailered, contract-archived commit. Full detail:
+[Phase 22](./pmo-roadmap/pm/roadmap/work-log-automation/phase-22-agent-briefing/final-summary.md).
 
-`/dw-scope` now holds one build-or-maintain scope conversation and writes one
-inert, provenance-traced draft to `.tmp/setup-proposal.json`. Build mode starts
-with a rails-ready repository and an idea; maintain mode reads the codebase and
-roadmap first. Ambiguity stays visible as unresolved questions, revisions keep
-unchanged sections byte-stable, and the command ends at Workbench review plus
-the separate `dw setup preview .tmp/setup-proposal.json` handoff. It cannot
-write canon, apply setup, start work, grant authority, certify, or commit.
-
-Setup is now one deliberate act. `dw setup preview <proposal-file>` returns a
-canonical complete write set and an exact `setup-sha256:` lease bound to the
-repository, branch, HEAD, index, roadmap, policy, driver roster, proposal, and
-every before/after hash. `dw setup apply --proposal <id> --expect <token>`
-revalidates those facts, consumes the token once, and lands roadmap, program
-policy, and local driver bindings through a journaled transaction that rolls
-back every byte on failure. MCP and localhost HTTP expose the same core preview
-and apply documents. Setup still starts no work and creates no grant,
-certification, or commit; setup and program tokens are typed separately.
-Public `dw adopt --apply` is retired as the old unleased multi-file side door,
-while the existing read-only `dw setup [project]` view and single-file
-phase/story conveniences remain.
-
-Program validation now preflights the complete linked bundle before grant
-planning. It cross-checks rubric mechanical facts against reachable workflow
-producers, team and verifier requirements against finite budgets, compiler node
-kinds against conductor support, complete green routes through the existing
-workflow simulation graph, and provider diversity against the local driver
-roster. Roster-absent hosts receive a typed unverifiable-local finding; present
-rosters expose only closed non-secret capability diagnostics. Tracked
-executables, argv, environment, and driver flags refuse with source JSON
-pointers. CLI, MCP, and localhost HTTP validation share one pure canonical core.
-
-`dw init <path>` now takes an empty directory or empty Git repository to
-healthy vendored rails. It composes `git init` with the packaged
-`install.sh --skip-bootstrap`, refuses accidental nested repositories, and
-leaves project creation to the intake conversation. Re-running reports the
-components already present without changing them. Repositories with healthy
-rails but no roadmap project now receive a `setup-project` next action from
-`dw status` instead of treating that state as corruption.
-
-Checkpointed no-commit programs may now request the narrow
-`knowledge:lesson-writeback` capability. At the exact certified handoff it
-spends one finite `max_lesson_writebacks` unit and appends bounded lessons labeled
-`certified-not-integrated`, with run, story, candidate, adapter/profile, verdict,
-and deterministic receipt provenance. Replay neither duplicates a record nor
-spends another unit. A later exact delivery commit appends `confirmed`; a
-superseding integration appends `superseded`. Knowledge packets keep the label
-visible, and authority paths still cannot use any lesson as proof.
-
-One answer before agents act: Phase 22 adds the stamped, deterministic
-`delivery-workbench-status@1` briefing across `dw status`, MCP
-`dw_status`, `GET /api/status`, the workbench overview, and every generated
-agent rider. The object composes the existing doctor, roadmap, Git,
-contract, gate, current-work, and holds authorities; adapters carry no
-decision logic, reads emit no events, ambiguous projects are never guessed,
-manual certification stays manual, and `commit` appears only when a live
-side-effect-free gate inspection passes. A packaged fresh-consumer exit exam
-now asserts byte-equal CLI/MCP/HTTP recommendations through install, update,
-evidence, the specialized guarded `finish-story` transition, staging,
-contract staleness, certification, trailers, archived contract, verified
-commit, and the next clean story. Full detail: [Phase 22](./pmo-roadmap/pm/roadmap/work-log-automation/phase-22-agent-briefing/current-phase-status.md).
-
-Phase 23 closes the read→act gap: `dw step` keeps `dw status` pure while
-turning one reviewed recommendation into a state-bound act. Its stamped
-`delivery-workbench-step@1` preview hashes the complete current briefing;
-apply requires that token, re-reads state, admits only an action id plus
-entire argv shape from a second closed table, starts at most one child, and
-stops. Same-action stale state, unknown or modified argv, manual choices,
-certification, and commit all refuse before process start. That core/CLI slice
-is the foundation of the completed
+Phase 23 closes the read-to-act gap without turning a recommendation into open
+execution. `delivery-workbench-step@1` binds one reviewed action to the complete
+current briefing; apply re-reads state, requires the exact single-use token and
+closed argv shape, starts at most one child, returns a bounded receipt, and
+stops. CLI, MCP, HTTP, Workbench, and generated riders all use the same handrail,
+while stale state, replay, manual choices, certification, and commit refuse
+before process start. Full detail:
 [Phase 23](./pmo-roadmap/pm/roadmap/work-log-automation/phase-23-deliberate-step/final-summary.md).
-Apply now returns a bounded `delivery-workbench-step-result@1` for success,
-failure, interruption, spawn failure, and non-started refusal. Atomic local
-claims prevent replay even for read-only actions, and exactly one content-
-safe `step_execution` event correlates every started child without recording
-argv or output.
-The handrail is now transport-complete: MCP adds pure `dw_step` and exact-token
-`dw_step_apply`; the local HTTP API adds `GET /api/step` and
-`POST /api/step/apply`. All three adapters return byte-equal preview/result
-core documents, accept no caller-supplied argv, refuse replay without another
-child, and keep certification and commit outside the capability. A freshly
-installed fixture proves the contract end to end and CI pins the new tool and
-route inventories.
-The browser now makes that trust boundary visible: an applicable overview
-action opens a separate review panel with the state token, authorized argv,
-and exact CLI fallback; a second control applies one lease, refreshes, and
-stops. Stale confirmation says nothing started; prohibited/manual,
-certification, and commit states have no apply control. The canonical rider
-brief and generated Claude/Codex/pi/plugin copies teach the same fresh-token,
-exact-command, stop-after-one discipline and mechanically drift-check it.
-The packaged closeout now proves the whole handrail rather than its imports:
-a wheel-installed consumer compares CLI/MCP/HTTP before every authorization,
-rotates seven one-step applies without reconstructing the underlying argv,
-and reaches an evidence-backed, trailered, contract-archived, history-verified
-commit. A workspace change leaves `continue-story` as the action but expires
-the old token; all three adapters report `started: false` and add zero step
-events. Certification and both commits refuse through every step surface and
-are performed only by the fixture operator.
-The closeout matrix passes on Python 3.9 and the local interpreter, renders 20
-browser viewports, exercises every agent and distribution surface, and runs
-the provisioned Telegram and pinned HoldSpeak hosts. Homebrew remains an
-explicit local abstention because its smoke will not uninstall the operator's
-existing formula; clean-machine macOS CI owns that proof.
 
-Phase 24 now has its orchestration architecture, pure compiler, and rich
-authoring surface. Delivery Workbench **can coordinate** from an exact, visually authored
-score: research/synthesis/implementation/review/repair agents, dependencies
-and concurrency, prompts/context, typed output conventions, deterministic
-checks, fail routes, retries, budgets, approvals, and terminal meanings. The
-stdlib-only `dw_pmo.orchestration` core owns the closed schema, normalization,
-JSON-pointer diagnostics, semantic/document hashes, graph/capability/path/
-bound checks, and a pure scheduling simulation. `dw orchestration
-list|show|validate|simulate` and an ordinary installed reference preset prove
-the same behavior from a wheel while starting no work and writing no events.
-The delivered Workbench editor renders the whole typed score as an accessible
-SVG graph with a complete property inspector, live compiler diagnostics,
-capability/output lineage and scheduling simulation, plus lossless JSON. Save
-and delete use a contained, stale-safe preview→diff→atomic-apply boundary with
-rollback; Firefox desktop/mobile and the installed server exercise it. A
-tracked score starts nothing—a separate, expiring and revocable grant over
-its compiled hash is now the delivered authority boundary. `dw run plan` is a
-pure binding over the exact compiled score, local repository/HEAD/status/story
-facts, profiles/capabilities/workspaces, every finite budget, expiry, and
-permanent exclusions. `dw run start` requires that complete fresh plan, its
-single-use token, explicit approval, and an operator identity before atomically
-publishing immutable plan/score/grant documents and the first hash-chained
-ledger event. Ledger replay ignores its disposable projection cache and fails
-closed on truncation, corruption, or forks; cross-process locks, ledger-head
-tokens, node-attempt/idempotency claims, budget counters, and immediate
-pause/resume/revoke/cancel transitions prevent replay or dispatch after
-authority changes. No provider work is dispatched by this authorization slice.
-The provider-neutral driver slice now turns an active node claim into a closed,
-hash-bound work packet with bounded prompt/context, validated artifact inputs,
-exact output conventions, a capability request, workspace identity, deadline,
-and permanent exclusions—never provider argv or credentials. Operator-local
-profiles truthfully advertise adapter-owned sandbox/network/interrupt support;
-unsupported requests refuse before launch. The deterministic fixture driver
-proves concurrent read-only research, schema/citation/section validation,
-synthesis fan-in, restart-safe idempotency, timeout/nonzero/lost/cancel/oversize
-states, separate writer worktrees, resource locks, diff-scope refusal, and no
-implicit integration. An authenticated installed `codex exec` smoke separately
-proves the real read-only adapter with explicit sandbox/no-approval/ephemeral/
-bounded-stream controls and records only a receipt plus artifact hash. The
-deterministic conductor now makes those components an orchestration runtime.
-One pure scheduling decision and one idempotent `dw run tick` reconcile
-existing claims before dispatch, order eligible nodes by the immutable score,
-enforce concurrency/resource/start/time/artifact budgets, and record every
-receipt and finite retry/repair/approval/pause/abort route. Exact command
-checks run without a shell or host-secret environment in contained check or
-writer worktrees with timeout, stream and write-snapshot bounds; file/schema/
-diff/rail built-ins use the same persistent receipt seam. Restart after claim,
-driver start, artifact collection, or check completion polls persisted work
-instead of duplicating it. Cancellation lands before interruption, stale rail
-leases never start, external commits are observed without a shipped claim,
-and all green paths stop at `awaiting-certification`. Bounded `run supervise`
-is only repetition over the same tick, while exact checkpoint decisions remain
-fresh-ledger-head acts.
+Phase 24 adds bounded multi-agent coordination through a visually authored
+score. One stdlib-only compiler owns the graph, typed artifacts, checks, failure
+routes, retries, budgets, concurrency, and human checkpoints; Workbench edits
+and simulates that same contract rather than inventing browser policy. A
+separate expiring grant binds the score to repository facts before the
+restart-safe conductor can dispatch read-only research or isolated writer
+worktrees. The packaged exam proves parallel research, synthesis, one planted
+repair route, crash recovery without duplicate starts, and equal CLI, MCP, HTTP,
+and Run views, then stops at `awaiting-certification` for a person to review.
+Full detail:
+[Phase 24](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/final-summary.md).
 
-The run is now a first-class interoperable product surface. CLI JSON, MCP
-`structuredContent`, and HTTP `data` carry byte-equivalent plans, projections,
-views, previews, receipts, and bounded streams. Applying adapters accept only
-identifiers, bounded decisions/reasons, and fresh tokens—not prompts, score
-semantics, provider configuration, or check argv. The Workbench Run tab
-replays the authoritative graph with attempts, parallel agent/check sessions,
-typed artifact lineage, budgets, fail/repair routes, checkpoints, hash-chain
-timeline, and explicit pause/resume/revoke/cancel controls. It refreshes and
-opens streams only on request and exposes no generic terminal, retry override,
-elevation, certification, or commit shortcut.
-
-The packaged closeout proves the entire framework from a Python-3.9-built
-wheel in a fresh consumer. Two research agents start concurrently; a planted
-crash recovers with zero duplicate dispatch; typed and citation-bound outputs
-fan into synthesis; implementation runs in its own worktree; a planted check
-failure follows exactly one configured repair route and passes recheck; six
-compiler and five runtime red cases refuse; CLI/MCP/HTTP/Run-view documents
-stay equal; and the conductor stops at `awaiting-certification`. Only the
-fixture operator reviews, certifies, and commits, after which `dw verify --all`
-and `dw check` pass. A separately provisioned authenticated Codex specimen
-proves the real driver seam without turning model output into the CI oracle.
-The full 297-test dual-Python, 32-render browser, distribution, optional-host,
-agent, docs, and history matrix is recorded in the
-[Phase 24 final summary](./pmo-roadmap/pm/roadmap/work-log-automation/phase-24-bounded-orchestration/final-summary.md).
-
-Phase 25 closes the outward loop without widening authority. Content-excluded,
-hash-chained SCM facts, honest driver activity, score-and-grant-bounded
-at-most-once nudges, cursor-replay ledger/signal streams, durable operator
-notifications, typed checkpoint survival, and a least-privilege Claude Code
-adapter all compose over the same run ledger. The wheel-installed exit exam
-walks red CI through repair, review, restart, checkpoint, notification, and
-operator-only certification while the no-authority observer and every refusal
-remain explicit. Full detail:
+Phase 25 lets a bounded run hear what happened outside
+it without confusing observation with authority: content-safe SCM and driver
+facts, replayable streams, durable notifications and human requests, and finite,
+at-most-once nudges that wake only a declared, receptive agent. A
+least-privilege Claude Code adapter proved the real driver and nudge round-trip;
+certification and integration stayed with the operator. Full detail:
 [Phase 25](./pmo-roadmap/pm/roadmap/work-log-automation/phase-25-outward-signals/final-summary.md).
 
-Phase 26 is complete and remains separately opt-in. Its delivered slices compile
-multi-phase scope, finite hierarchical workflows, separated delivery
-organizations, bounded councils, governed verdicts, lossless Program Studio
-policy, and an exact finite program grant over the resolved
-provider/model/auth roster. WLA-26-09 adds an embedded replay-first conductor:
-one tick reconciles before retry, claims at most one exact act, and conducts
-implementer/check/repair, independent verification, council/meta/obligation,
-typed structural loops, and final-story master-architect boundaries with
-crash-safe immutable receipts. It also consumes already-observed Phase 25 SCM
-facts through content-safe hashes, delivers finite program-declared nudges only
-to an already-run agent, reruns causally stale verification, freezes every
-scope-reachable seat/port, carries non-blocking obligations across exact
-story/phase selection, blocks on blocking obligations, and completes only
-through one claim-bound proof of the pure planner's full-scope result.
-WLA-26-10 adds the separate exact delivery adapter: a pure preview over the
-certified patch/proof/repository/roadmap/remote facts; independent claims and
-receipts for integration, evidence, canonical story/phase transitions,
-contract generation, objective and governed machine attestation, gated commit,
-range verification, and optional no-force fast-forward push; all-old/exact-new
-crash reconciliation; and deduplicated obligation materialization plus
-accountable disposition. A two-story bare-remote fixture plants crashes after
-every effect and receipt while proving one phase transition and zero duplicate
-commits or pushes. WLA-26-11 adds the canonical content-safe program surface:
-byte-equivalent CLI/MCP/HTTP/Workbench inventory and control-room views,
-verified ledger tail and explicit bounded streams, read-only SSE cursor replay,
-preview-bound grant/tick/supervision/request/control acts, resolved
-organization/execution/diversity projections, and typed intervention,
-disagreement, loss, obligation, budget, integration, and completion
-notifications. Supervision is an explicit finite invocation returning every
-tick; no read, Workbench open, or SSE connection starts a program or confers
-authority. The Python-floor fresh-wheel exit exam now runs three stories over
-two phases after one continuous grant, including independent fail/repair/pass,
-a dissent-preserving council, meta-audit, architect gates, exact
-evidence/integration/certification/commit/push rails, planted crash recovery,
-ledger/SSE parity, and the complete refusal matrix. A separate fresh consumer
-proves ordinary and bounded-run behavior with no ambient program machinery.
-The deterministic Claude/Sonnet-like and pi/OpenRouter/Kimi-like fixtures use
-no credentials; the optional live-agent specimen remains honestly not run.
+Phase 26 turns one bounded run into an optional delivery program across stories
+and phases. Reusable workflows assign implementers, independent verifiers,
+councils, meta-reviewers, and architects under one expiring, revocable grant;
+the restart-safe conductor replays before every act, and exact delivery claims
+separately guard evidence, integration, certification, commit, push, and roadmap
+movement. The fresh-wheel exam used one continuous grant to deliver three
+stories across two phases, including repair, dissent, architect gates, planted
+crashes, and three exact commits and pushes. Ordinary Delivery Workbench still
+starts no program unless one is configured and granted. Full detail:
+[Phase 26](./pmo-roadmap/pm/roadmap/work-log-automation/phase-26-autonomous-delivery-programs/final-summary.md).
+
+Phase 27 makes that machinery usable without asking people to speak its protocol
+vocabulary. Workbench, human CLI output, notifications, help, onboarding, and
+errors now describe the delivery plan, team, work, review, decisions, blockers,
+permission, progress, cost, and next step in plain language, with exact records
+one explicit Technical details step away. The usability exam drives thirteen
+whole journeys on one fresh consumer at desktop and phone widths, with real
+keyboard and focus checks, safe refusals, crash replay, independent repair, and
+lossless return to the audit view. Full detail:
+[Phase 27](./pmo-roadmap/pm/roadmap/work-log-automation/phase-27-usability-improvements/final-summary.md).
+
+Phase 28 cuts the cost of proving all of this. One repository-facts boundary
+removes private Git-directory guesses and repeated `rev-parse --git-dir` calls;
+changing facts are still read once per derivation, so every fail-closed refusal
+keeps firing. A stdlib-only shard runner uses the cores that were already idle,
+and an executable spawn budget catches regressions. The core suite went from
+814 seconds to 92.9 seconds, an 8.8x speedup while growing from 499 to 526 tests,
+and the work found two real linked-worktree bugs along the way. Full detail:
+[Phase 28](./pmo-roadmap/pm/roadmap/work-log-automation/phase-28-faster-proof/final-summary.md).
+
+Phase 29 gives autonomous work repository memory, then uses the program on
+itself for the first time. A deterministic symbol map, grounded story hints,
+bounded knowledge packets, introduced-failure detection, provider-family
+diversity, and provenance-stamped delivery lessons inform later work without
+ever authorizing it. The real exam needed thirteen finite grants and exposed
+seven machinery and configuration defect classes that fixture tests had missed;
+each failure stopped safely and was fixed through the gate. It finished with
+live claude implementing from a knowledge packet, live codex independently
+certifying all four rubric criteria, and the operator integrating the result.
 Full detail:
-[Phase 26](./pmo-roadmap/pm/roadmap/work-log-automation/phase-26-autonomous-delivery-programs/final-summary.md)
-and the [program contract](./docs/programs.md).
+[Phase 29](./pmo-roadmap/pm/roadmap/work-log-automation/phase-29-serving-ourselves/final-summary.md).
 
-Phase 30 starts by fixing the front-door vocabulary before adding a producer or
-apply surface. `delivery-workbench-setup-proposal@1` is a closed, bounded,
-canonical contract for project intent, a provenance-traced roadmap draft,
-optional opaque program policy, local non-secret driver bindings, and explicit
-unresolved questions. Its six journey states permit only named adjacent moves
-plus reviewed-to-draft revision; every proposal and proposal-shaped preview
-refuses unless all four authority exclusions are false. Parsing, validation,
-serialization, and transition checks are pure and create no file, process,
-grant, certification, or commit. Full detail: [setup proposal
-contract](./docs/setup-proposal.md).
+Phase 30 builds the front door the autonomy layer was missing: empty directory
+to granted program through one command, one scope conversation, and three
+approvals. `dw init`, `/dw-scope`, deterministic program scaffolding, whole-bundle
+validation, read-only Workbench reviews, and one atomic `setup-sha256:` lease
+land a complete setup without starting work. The live claude and codex exam took
+URL Sentinel's first story to a certified handoff with one clean grant, kept
+commit as a human command, carried one bounded lesson into the next grounded
+packet, and repeated from a cold install in a second directory. Full detail:
+[Phase 30](./pmo-roadmap/pm/roadmap/work-log-automation/phase-30-the-front-door/final-summary.md).
 
-This section is release-ready input, not a publication claim: the package
-remains v1.14.0 and no version bump, tag, release, PyPI upload, or formula
-change has been performed.
+Phase 31 records the ceremony as a full-pipeline demo: an empty directory becomes
+a delivered WebSocket Tic Tac Toe under live claude and codex riders in
+[full-pipeline.mp4](./demos/rendered/full-pipeline.mp4).
 
 ## v1.14.0 — 2026-07-11
 

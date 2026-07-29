@@ -239,7 +239,7 @@ done
   | grep -q '"healthy": true.*"programs": \[\].*"starts_work": false' \
   || fail "packaged no-program inventory was not healthy and pure"
 (cd "$FIXTURE" && ./.githooks/dw program --help) \
-  | grep -q 'list,validate,simulate,plan,start,show,preview,pause,resume,revoke,cancel,tick,supervise,request,stream,tail' \
+  | grep -q 'list,scaffold,validate,simulate,plan,start,show,preview,pause,resume,revoke,cancel,tick,supervise,request,stream,tail' \
   || fail "packaged program CLI is incomplete"
 (cd "$FIXTURE" && ./.githooks/dw run --help) | grep -q 'plan,start,list,show,view,preview,pause,resume,revoke,cancel,tick,supervise,checkpoint,request,stream' \
   || fail "packaged run authority CLI is incomplete"
@@ -247,9 +247,14 @@ set +e
 (cd "$FIXTURE" && ./.githooks/dw status --json) > "$TMP_ROOT/status.json"
 STATUS_CODE=$?
 set -e
-[ "$STATUS_CODE" -eq 1 ] || fail "empty packaged consumer should return attention"
+# Since the Phase 30 front door, a rails-ready consumer with no roadmap
+# project is a healthy state: ready verdict (exit 0) with a non-blocking
+# setup-project recommendation, not a blocking attention repair.
+[ "$STATUS_CODE" -eq 0 ] || fail "empty packaged consumer should be ready (rails-ready is healthy)"
 grep -q '"kind": "delivery-workbench-status"' "$TMP_ROOT/status.json" \
   || fail "packaged status CLI did not return the stamped model"
+grep -q '"id": "setup-project"' "$TMP_ROOT/status.json" \
+  || fail "empty packaged consumer should recommend setup-project"
 
 # ── guided status loop ─────────────────────────────────────────────
 # Reuse this exact installed wheel entry point. The exam creates its own

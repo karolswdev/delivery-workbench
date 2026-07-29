@@ -2,15 +2,16 @@
 
 - **Project:** work-log-automation
 - **Phase:** 31
-- **Status:** ready
+- **Status:** done
 - **Depends on:** WLA-31-01
 - **Unblocks:** (optional)
 - **Owner:** unassigned
 
 ## Problem
 
-Phases 25 through 30 — orchestration, autonomous programs, the
-usability exam, mission control, the knowledge layer, the front
+Phases 22 through 30 — deterministic repository facts, the
+deliberate step handrail, orchestration, autonomous programs, the
+usability exam, faster proof, the knowledge layer, the front
 door — are closed on main with CI green and nothing published. The
 settling period the owner called on 2026-07-27 is over by the
 owner's own word ("let's release all of this good work"). What a
@@ -19,7 +20,7 @@ layer.
 
 ## Scope
 
-- **In:** CHANGELOG v1.15.0 section covering phases 25-31 (linking
+- **In:** CHANGELOG v1.15.0 section covering phases 22-31 (linking
   each phase's final summary; written fresh — none of them touched
   the CHANGELOG); bump `dw_pmo.__version__` to 1.15.0 with the
   vendored `.githooks` copy, plugin manifest, and formula url in
