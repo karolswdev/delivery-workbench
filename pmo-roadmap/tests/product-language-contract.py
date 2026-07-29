@@ -1055,7 +1055,7 @@ def validate_runtime_wiring(errors: list[str]) -> None:
             'help_text("cli")',
         ],
         "pmo-roadmap/workbench/app.js": [
-            'api("/api/presentation/status")',
+            'api(`/api/presentation/status${projectQuery}`)',
             'api("/api/presentation")',
             "data-presentation-copy",
         ],

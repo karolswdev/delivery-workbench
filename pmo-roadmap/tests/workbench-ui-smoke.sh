@@ -45,6 +45,9 @@ controls = app[app.index("function stepControlHtml"):app.index("function statusP
 apply = app[app.index("async function applyReviewedStep"):app.index("function wireStepControl")]
 panel = app[app.index("function statusPanel"):app.index("/* ── mission control")]
 overview = app[app.index("async function viewOverview"):app.index("async function viewProject")]
+board = app[app.index("const BOARD_STATUSES"):app.index("/* ── structured editor")]
+board_wiring = board[board.index("function wireBoardMoves"):]
+router = app[app.index("/* ── router"):]
 preflight = app[app.index("function validateView"):app.index("function jsonView")]
 run = app[app.index("function runStateBadge"):app.index("/* ── optional Program / Workflow Studio")]
 program = app[app.index("/* ── autonomous program control room"):app.index("/* ── optional Program / Workflow Studio")]
@@ -68,7 +71,7 @@ assert "<input" not in controls and "setInterval" not in controls
 assert 'postJson("/api/step/apply"' in apply
 assert "project: step.project" in apply and "expect: step.token" in apply
 assert "status === 409" in apply and "nothing started" in apply
-assert "viewOverview" in apply and "setInterval" not in apply
+assert "viewBoard" in apply and "setInterval" not in apply
 for forbidden in ('command:', 'argv:', 'git commit', 'certif'):
     assert forbidden not in apply, forbidden
 for token in ("data-verdict", "project", "workspace", "contract", "gate"):
@@ -77,6 +80,21 @@ assert '/api/status' in overview and '/api/step' in overview
 assert '/api/delivery-setup' in overview and "Promise.all" in overview
 assert '/api/presentation/status' in overview
 assert 'presentationBody.data' in overview
+assert "else if (!parts.length) await viewBoard(selectedProject)" in router
+for token in ("boardOverviewStrip", "Needs attention", "Next step", "Phase lanes",
+              "openCreatePanel", "openMovePanel", "openPhasePanel",
+              'kind: "create_story"', 'kind: "update_story_status"',
+              '"pause_phase"', '"resume_phase"',
+              "Cross-phase moves are not supported",
+              'postJson("/api/mutations/preview"',
+              '"/api/mutations/apply"'):
+    assert token in board, token
+assert board_wiring.index("column.dataset.phase !== from.phase") < board_wiring.index("openMovePanel(slug")
+assert "Parking on-hold requires a reason" in board
+assert "Preview refused. Nothing changed." in board
+for token in (".board-overview-strip", ".board-action-panel", ".board-preview",
+              ".bcard-status", "@media (max-width: 700px)"):
+    assert token in css, token
 assert "overflow-wrap: anywhere" in css
 for token in ("--font-sans", "--text-md", "--space-4", "--color-canvas",
               "--color-positive", "--radius-md", "--elevation-card"):
@@ -597,7 +615,7 @@ for path, document in documents.items():
     path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 PY
 
-VIEWS="overview:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-stale:#/orchestration/research-build-review orchestration-run-technical:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-team-review:#/program-studio/organization/autonomous-story-cell studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-team-technical:#/program-studio/organization/autonomous-story-cell"
+VIEWS="board-home:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board-route:#/board/sample board-create:#/board/sample board-park-refusal:#/board/sample board-done-refusal:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-stale:#/orchestration/research-build-review orchestration-run-technical:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-team-review:#/program-studio/organization/autonomous-story-cell studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-team-technical:#/program-studio/organization/autonomous-story-cell"
 for spec in $VIEWS; do
   name="${spec%%:*}"
   route="${spec#*:}"
@@ -605,6 +623,9 @@ for spec in $VIEWS; do
   case "$name" in
     preview) extra="&autopreview=1" ;;
     step-confirm) extra="&confirmstep=1" ;;
+    board-create) extra="&autocreate=Draft%20board%20task&createstatus=ready" ;;
+    board-park-refusal) extra="&automove=SMP-0-02:on-hold&autopreview=1" ;;
+    board-done-refusal) extra="&automove=SMP-0-02:done&autopreview=1" ;;
     orchestration-validate) extra="&orchview=validate" ;;
     orchestration-json) extra="&orchview=json" ;;
     orchestration-run-stale) extra="&orchview=run&liveconnection=stale" ;;
@@ -650,15 +671,15 @@ python3 "$SCRIPT_DIR/workbench-accessibility.py" \
 # Red-path prominence: the same overview must render a broken rail as
 # attention while keeping execution behind deliberate-step review.
 mv "$REPO/.githooks/pre-commit" "$REPO/.githooks/pre-commit.off"
-shot "overview-attention-desktop" 1440,900 "$BASE/?snapshot=1#/"
-shot "overview-attention-mobile" 390,844 "$BASE/?snapshot=1#/"
+shot "board-attention-desktop" 1440,900 "$BASE/?snapshot=1#/"
+shot "board-attention-mobile" 390,844 "$BASE/?snapshot=1#/"
 mv "$REPO/.githooks/pre-commit.off" "$REPO/.githooks/pre-commit"
 
 # Ambiguity prominence: two healthy projects yield the manual
 # select-project action; the briefing must not guess one.
 "$PMO_DIR/bootstrap/new-project.sh" "$REPO" other "Other" OTH >/dev/null
-shot "overview-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
-shot "overview-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
+shot "project-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
+shot "project-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
 shot "project-selected-desktop" 1440,900 "$BASE/?snapshot=1&project=other#/board"
 shot "project-selected-mobile" 390,844 "$BASE/?snapshot=1&project=other#/board"
 

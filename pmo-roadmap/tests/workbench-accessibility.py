@@ -30,6 +30,7 @@ KEYS = {
     "shift": "\ue008",
     "escape": "\ue00c",
     "space": "\ue00d",
+    "end": "\ue010",
     "home": "\ue011",
     "left": "\ue012",
     "up": "\ue013",
@@ -41,7 +42,7 @@ JOURNEY_CASES = {
     "healthy-first-arrival": {
         "suite": "core",
         "route": "/#/",
-        "selector": ".arrival-panel h1",
+        "selector": ".board-overview h1",
     },
     "deliberate-capability-choice": {
         "suite": "core",
@@ -742,7 +743,7 @@ class WorkbenchExam:
 
     def test_core_interactions(self) -> None:
         self.driver.set_window(*WIDE)
-        self.navigate("/#/", ".arrival-panel h1")
+        self.navigate("/#/", ".board-overview h1")
 
         self.driver.press("tab")
         self.check(
@@ -755,6 +756,139 @@ class WorkbenchExam:
             "skip control to focus main content",
         )
         self.assertions += 1
+
+        # The selected-project board is the home surface. Exercise its common
+        # acts from the keyboard, including client and server refusals. Only the
+        # pause/resume pair is applied, and resume restores the fixture state.
+        create_trigger = '[data-board-create][data-phase="0"]'
+        self.focus(create_trigger)
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#board-create-form")
+            and self.active_matches(".board-action-panel"),
+            "keyboard create panel",
+        )
+        self.focus('#board-create-form input[name="title"]')
+        self.driver.type_text("Keyboard board task")
+        self.focus('#board-create-form select[name="status"]')
+        self.driver.press("down")
+        self.focus('#board-create-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".board-preview")
+            and "Keyboard board task" in str(self.driver.execute(
+                "return document.querySelector('.board-preview h2')?.textContent || '';"
+            )),
+            "keyboard create preview",
+        )
+        self.check(
+            not bool(self.driver.execute(
+                "return [...document.querySelectorAll('.bcard-title')].some(card => card.textContent.includes('Keyboard board task'));"
+            )),
+            "create preview changed the board before apply",
+        )
+        self.driver.press("escape")
+        self.wait(
+            lambda: not self.selector_exists(".board-action-panel")
+            and self.active_matches(create_trigger),
+            "create preview dismissal to restore its lane control",
+        )
+
+        story = '.bcard[data-story="SMP-0-02"]'
+        move_trigger = story + " [data-board-move]"
+        self.focus(move_trigger)
+        self.driver.press("enter")
+        self.wait(lambda: self.selector_exists("#move-form"), "keyboard move panel")
+        self.focus('#move-form select[name="status"]')
+        self.driver.press("home")
+        self.focus('#move-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".board-preview"),
+            "keyboard move exact-diff preview",
+        )
+        self.check(
+            self.selector_exists(story + '[data-status="in-progress"]'),
+            "move preview changed the card before apply",
+        )
+        self.driver.press("escape")
+        self.wait(
+            lambda: not self.selector_exists(".board-action-panel")
+            and self.active_matches(move_trigger),
+            "move preview dismissal to restore its card control",
+        )
+
+        park_trigger = story + " [data-board-park]"
+        self.focus(park_trigger)
+        self.driver.press("enter")
+        self.wait(lambda: self.selector_exists("#move-form"), "keyboard park panel")
+        self.focus('#move-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#move-out .board-refusal"),
+            "reasonless park refusal announcement",
+        )
+        self.check(
+            not self.selector_exists("#move-out .board-preview")
+            and self.selector_exists(story + '[data-status="in-progress"]'),
+            "reasonless park reached preview or changed the board",
+        )
+        self.driver.press("escape")
+        self.wait(
+            lambda: not self.selector_exists(".board-action-panel")
+            and self.active_matches(park_trigger),
+            "park refusal dismissal to restore its card control",
+        )
+
+        # Done is offered, but the existing server authority refuses it because
+        # this story has no proof. The refusal stays focused and the card stays put.
+        self.focus(move_trigger)
+        self.driver.press("enter")
+        self.wait(lambda: self.selector_exists("#move-form"), "done move panel")
+        self.focus('#move-form select[name="status"]')
+        self.driver.press("end")
+        self.focus('#move-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists("#move-out .board-refusal"),
+            "missing-proof done refusal announcement",
+        )
+        self.check(
+            self.selector_exists(story + '[data-status="in-progress"]'),
+            "missing-proof done refusal changed the board",
+        )
+        self.driver.press("escape")
+        self.wait(lambda: not self.selector_exists(".board-action-panel"), "done refusal dismissal")
+
+        pause_trigger = '[data-board-phase-action="pause_phase"][data-phase="0"]'
+        self.focus(pause_trigger)
+        self.driver.press("enter")
+        self.wait(lambda: self.selector_exists("#board-phase-form"), "keyboard pause panel")
+        self.focus('#board-phase-form input[name="reason"]')
+        self.driver.type_text("Keyboard pause review")
+        self.focus('#board-phase-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(lambda: self.selector_exists(".board-preview"), "keyboard pause preview")
+        self.focus("#board-apply")
+        self.driver.press("enter")
+        resume_trigger = '[data-board-phase-action="resume_phase"][data-phase="0"]'
+        self.wait(
+            lambda: self.selector_exists(resume_trigger),
+            "applied pause to refresh as a paused lane",
+        )
+        self.focus(resume_trigger)
+        self.driver.press("enter")
+        self.wait(lambda: self.selector_exists("#board-phase-form"), "keyboard resume panel")
+        self.focus('#board-phase-form button[type="submit"]')
+        self.driver.press("enter")
+        self.wait(lambda: self.selector_exists(".board-preview"), "keyboard resume preview")
+        self.focus("#board-apply")
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(pause_trigger),
+            "applied resume to restore the active lane",
+        )
+        self.assertions += 14
 
         self.focus("#plan-link")
         self.driver.press("enter")

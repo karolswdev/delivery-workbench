@@ -786,12 +786,48 @@ class DwCoreTest(unittest.TestCase):
         self.assertIn("expect: step.token", apply)
         self.assertIn("status === 409", apply)
         self.assertIn("nothing started", apply)
-        self.assertIn("viewOverview", apply)
+        self.assertIn("viewBoard", apply)
         for forbidden in ("command:", "argv:", "git commit", "certif", "setInterval"):
             self.assertNotIn(forbidden, apply)
         self.assertIn(".step-confirmation", css)
         self.assertIn(".brief-step-unavailable", css)
         self.assertIn("@media (max-width: 430px)", css)
+
+    def test_board_is_home_and_keeps_every_act_on_canonical_mutations(self) -> None:
+        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
+        board = app[
+            app.index("const BOARD_STATUSES") : app.index("/* ── structured editor")
+        ]
+        router = app[app.index("/* ── router") :]
+        wiring = board[board.index("function wireBoardMoves") :]
+        self.assertIn("else if (!parts.length) await viewBoard(selectedProject)", router)
+        for token in (
+            "boardOverviewStrip", "Needs attention", "Next step", "Phase lanes",
+            "openCreatePanel", "openMovePanel", "openPhasePanel",
+            'kind: "create_story"', 'kind: "update_story_status"',
+            '"pause_phase"', '"resume_phase"',
+            'postJson("/api/mutations/preview"', '"/api/mutations/apply"',
+            "Single-use preview fingerprint", "Preview refused. Nothing changed.",
+        ):
+            self.assertIn(token, board)
+        cross_phase = wiring[
+            wiring.index("if (column.dataset.phase !== from.phase)") :
+            wiring.index("if (column.dataset.droppable")
+        ]
+        self.assertIn("Cross-phase moves are not supported", cross_phase)
+        self.assertNotIn("postJson", cross_phase)
+        self.assertNotIn("openMovePanel", cross_phase)
+        self.assertIn("Parking on-hold requires a reason", board)
+        self.assertLess(
+            wiring.index("if (column.dataset.phase !== from.phase)"),
+            wiring.index("openMovePanel(slug"),
+        )
+        for token in (
+            ".board-overview-strip", ".board-action-panel", ".board-preview",
+            ".bcard-status", "@media (max-width: 700px)",
+        ):
+            self.assertIn(token, css)
 
     # -- traceability timeline (WLA-5-05) --------------------------------------
 

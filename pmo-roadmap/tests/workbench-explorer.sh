@@ -182,6 +182,21 @@ for key in ("starts_work", "writes_policy", "writes_roadmap", "writes_run_state"
     assert d[key] is False, key
 PY
 
+curl -s "$BASE/api/projects/sample/board" > "$TMP_ROOT/board.json"
+python3 - "$TMP_ROOT/board.json" <<'PY' || fail "selected-project board payload wrong"
+import json, sys
+body = json.load(open(sys.argv[1]))
+assert body["kind"] == "delivery-workbench-workbench-response"
+assert body["ok"] is True
+board = body["data"]
+assert board["columns"] == ["backlog", "ready", "in-progress", "blocked", "on-hold", "done"]
+assert len(board["phases"]) == 1
+lane = board["phases"][0]
+assert lane["number"] == 0 and lane["paused"] is False
+assert [card["story_id"] for card in lane["columns"]["backlog"]] == ["SMP-0-02"]
+assert [card["story_id"] for card in lane["columns"]["done"]] == ["SMP-0-01"]
+PY
+
 curl -s "$BASE/api/projects/sample/phases/0" > "$TMP_ROOT/phase.json"
 python3 - "$TMP_ROOT/phase.json" <<'PY' || fail "phase payload wrong"
 import json, sys
@@ -218,6 +233,13 @@ for marker in 'id="project-switcher"' 'Choose a project' 'PROJECT_STORAGE_KEY' \
 done
 grep -q '#/orchestration' "$TMP_ROOT/index.html" || fail "app shell should link delivery planning"
 grep -q '#/program-studio' "$TMP_ROOT/index.html" || fail "app shell should link the plan destination"
+grep -q 'else if (!parts.length) await viewBoard(selectedProject)' "$TMP_ROOT/app.js" \
+  || fail "home route should open the selected project board"
+for marker in 'kind: "create_story"' 'kind: "update_story_status"' \
+  '"pause_phase"' '"resume_phase"' \
+  'Cross-phase moves are not supported. The story stays in its original lane.'; do
+  grep -q "$marker" "$TMP_ROOT/app.js" || fail "board controls are missing $marker"
+done
 curl -s "$BASE/api/file?path=pm/roadmap/sample/README.md" \
   | grep -q 'Sample - Roadmap' || fail "file endpoint should serve roadmap files"
 
@@ -238,6 +260,7 @@ for _ in 1 2 3; do
   curl -s "$BASE/api/context" >/dev/null
   curl -s "$BASE/api/projects" >/dev/null
   curl -s "$BASE/api/projects/sample" >/dev/null
+  curl -s "$BASE/api/projects/sample/board" >/dev/null
   curl -s "$BASE/api/projects/sample/phases/0" >/dev/null
   curl -s "$BASE/api/projects/sample/stories/SMP-0-01" >/dev/null
   curl -s "$BASE/api/delivery-setup?project=sample" >/dev/null
@@ -665,9 +688,63 @@ PY
 [ -f "$PHASE_DIR/story-03-applied-by-workflow.md" ] || fail "applied story file missing"
 "$DW" --root "$REPO" check sample >/dev/null || fail "post-apply dw check should pass"
 
-# stale refusal: same fingerprint again (tree changed underneath it)
-[ "$(mut "${REQ%\}}, \"fingerprint\":\"$FP\"}" apply)" = "409" ] || fail "stale fingerprint must be refused"
+# stale/reused refusal: same fingerprint again after the tree changed
+[ "$(mut "${REQ%\}}, \"fingerprint\":\"$FP\"}" apply)" = "409" ] || fail "reused stale fingerprint must be refused"
 grep -q "stale preview" "$TMP_ROOT/mut.json" || fail "refusal should name staleness"
+
+# board park: on-hold cannot reach preview without its reason
+PARK='{"kind":"update_story_status","project":"sample","phase":"0","story":"SMP-0-03","status":"on-hold"}'
+PARK_BEFORE="$(sum_tree)"
+[ "$(mut "$PARK" preview)" = "400" ] || fail "on-hold preview without a reason must be refused"
+grep -q "reason" "$TMP_ROOT/mut.json" || fail "on-hold refusal should ask for a reason"
+[ "$PARK_BEFORE" = "$(sum_tree)" ] || fail "refused park preview must leave the board unchanged"
+PARK='{"kind":"update_story_status","project":"sample","phase":"0","story":"SMP-0-03","status":"on-hold","reason":"waiting for review"}'
+[ "$(mut "$PARK" preview)" = "200" ] || fail "park preview with a reason failed"
+PARK_FP="$(fp_of)"
+# Altering the token or pairing it with a mismatched intent must not write.
+[ "$(mut "${PARK%\}}, \"fingerprint\":\"sha256:altered\"}" apply)" = "409" ] \
+  || fail "altered board preview fingerprint must be refused"
+[ "$PARK_BEFORE" = "$(sum_tree)" ] || fail "altered fingerprint changed the board"
+MISMATCH='{"kind":"update_story_status","project":"sample","phase":"0","story":"SMP-0-03","status":"ready"'
+[ "$(mut "$MISMATCH, \"fingerprint\":\"$PARK_FP\"}" apply)" = "409" ] \
+  || fail "mismatched board preview intent must be refused"
+[ "$PARK_BEFORE" = "$(sum_tree)" ] || fail "mismatched intent changed the board"
+[ "$(mut "${PARK%\}}, \"fingerprint\":\"$PARK_FP\"}" apply)" = "200" ] || fail "park apply failed"
+curl -s "$BASE/api/projects/sample/board" | python3 -c \
+  'import json,sys; lane=json.load(sys.stdin)["data"]["phases"][0]; card=lane["columns"]["on-hold"][0]; assert card["story_id"] == "SMP-0-03" and "waiting for review" in card["note"]' \
+  || fail "applied park should appear on the refreshed board with its reason"
+
+# board phase pause/resume use their existing guarded mutation kinds
+[ "$(mut '{"kind":"pause_phase","project":"sample","phase":"0"}' preview)" = "400" ] \
+  || fail "phase pause preview without a reason must be refused"
+PAUSE='{"kind":"pause_phase","project":"sample","phase":"0","reason":"reviewing the plan"}'
+[ "$(mut "$PAUSE" preview)" = "200" ] || fail "phase pause preview failed"
+PAUSE_FP="$(fp_of)"
+python3 - "$TMP_ROOT/mut.json" <<'PY' || fail "phase pause preview should name the exact phase action"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["kind"] == "phase-pause"
+assert d["summary"]["phase_number"] == 0
+PY
+[ "$(mut "${PAUSE%\}}, \"fingerprint\":\"$PAUSE_FP\"}" apply)" = "200" ] || fail "phase pause apply failed"
+curl -s "$BASE/api/projects/sample/board" | python3 -c \
+  'import json,sys; lane=json.load(sys.stdin)["data"]["phases"][0]; assert lane["paused"] and "reviewing the plan" in lane["pause_note"]' \
+  || fail "paused phase should appear paused on the refreshed board"
+[ "$(mut "${PAUSE%\}}, \"fingerprint\":\"$PAUSE_FP\"}" apply)" = "409" ] \
+  || fail "reused pause preview fingerprint must be refused"
+RESUME='{"kind":"resume_phase","project":"sample","phase":"0"}'
+[ "$(mut "$RESUME" preview)" = "200" ] || fail "phase resume preview failed"
+RESUME_FP="$(fp_of)"
+python3 - "$TMP_ROOT/mut.json" <<'PY' || fail "phase resume preview should name the exact phase action"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["kind"] == "phase-resume"
+assert d["summary"]["phase_number"] == 0
+PY
+[ "$(mut "${RESUME%\}}, \"fingerprint\":\"$RESUME_FP\"}" apply)" = "200" ] || fail "phase resume apply failed"
+curl -s "$BASE/api/projects/sample/board" | python3 -c \
+  'import json,sys; lane=json.load(sys.stdin)["data"]["phases"][0]; assert not lane["paused"]' \
+  || fail "resumed phase should return to an active board lane"
 
 # done-with-evidence cycle
 REQ='{"kind":"update_story_status","project":"sample","phase":"0","story":"SMP-0-02","status":"done","evidence_body":"- workflow proof."}'
