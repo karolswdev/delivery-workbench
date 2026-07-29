@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Workbench viewport smoke (WLA-5-10): renders every UI view at desktop
-# (1440x900) and mobile (390x844) via headless Firefox snapshot mode and
-# asserts a rendered screenshot was produced for each. Skips cleanly
+# Workbench viewport smoke (WLA-5-10, WLA-32-01): renders every UI view at
+# desktop (1440x900) and mobile (390x844), in light and dark themes, via
+# headless Firefox snapshot mode and asserts each screenshot was produced. Skips cleanly
 # (exit 0 with a SKIP notice) when no Firefox is available — CI covers
 # the API/server layer; this harness proves viewport rendering locally.
 
@@ -68,6 +68,10 @@ assert '/api/delivery-setup' in overview and "Promise.all" in overview
 assert '/api/presentation/status' in overview
 assert 'presentationBody.data' in overview
 assert "overflow-wrap: anywhere" in css
+for token in ("--font-sans", "--text-md", "--space-4", "--color-canvas",
+              "--color-positive", "--radius-md", "--elevation-card"):
+    assert token in css, token
+assert "@media (prefers-color-scheme: dark)" in css
 assert ".step-confirmation" in css and ".brief-step-unavailable" in css
 assert "@media (max-width: 430px)" in css
 for token in ("Delivery readiness", "delivery decision", "Affected decision",
@@ -139,7 +143,7 @@ for forbidden in ("postJson", "localStorage", "sessionStorage", "EventSource", "
     assert forbidden not in adoption, forbidden
 for token in (".adoption-review", ".adoption-unresolved", ".adoption-configuration",
               ".adoption-path-split", ".adoption-correction-form",
-              "@media (prefers-color-scheme: light)", "@media (max-width: 600px)"):
+              "@media (prefers-color-scheme: dark)", "@media (max-width: 600px)"):
     assert token in css, token
 for token in (".delivery-choice-grid", ".delivery-effect-grid",
               "scroll-snap-type: x mandatory", ".delivery-review-actions button:focus"):
@@ -417,32 +421,46 @@ shot() { # name geometry url
   if [ "$FAST_A11Y" = "1" ]; then
     return
   fi
-  out="$TMP_ROOT/$1.png"
-  profile="$(mktemp -d)"
-  "$FF" --headless --no-remote --profile "$profile" \
-    --screenshot "$out" --window-size="$2" "$3" >/dev/null 2>&1 &
-  ffpid=$!
-  waited=0
-  while [ ! -s "$out" ] && [ "$waited" -lt 30 ]; do sleep 1; waited=$((waited + 1)); done
-  sleep 1
-  kill "$ffpid" 2>/dev/null || true
-  wait "$ffpid" 2>/dev/null || true
-  rm -rf "$profile"
-  [ -s "$out" ] || fail "no screenshot produced for $1"
-  # a data-bearing render is markedly larger than the empty shell
-  size=$(wc -c < "$out" | tr -d ' ')
-  [ "$size" -gt 20000 ] || fail "$1 appears unrendered (only $size bytes)"
-  if [ -n "$CAPTURE_DIR" ] && [ -n "$CAPTURE_PATTERN" ]; then
-    # CAPTURE_PATTERN is deliberately an operator-supplied glob such as
-    # orchestration-run-*; quoting it would turn the capture filter literal.
-    # shellcheck disable=SC2254
-    case "$1" in
-      $CAPTURE_PATTERN)
-        mkdir -p "$CAPTURE_DIR"
-        cp "$out" "$CAPTURE_DIR/$1.png"
-        ;;
-    esac
-  fi
+  for theme in light dark; do
+    out="$TMP_ROOT/$1-$theme.png"
+    profile="$(mktemp -d "$TMP_ROOT/firefox-$theme.XXXXXX")"
+    if [ "$theme" = "dark" ]; then
+      system_theme=1
+      content_theme=0
+    else
+      system_theme=0
+      content_theme=1
+    fi
+    cat > "$profile/user.js" <<EOF
+user_pref("ui.systemUsesDarkTheme", $system_theme);
+user_pref("layout.css.prefers-color-scheme.content-override", $content_theme);
+user_pref("browser.shell.checkDefaultBrowser", false);
+EOF
+    "$FF" --headless --no-remote --profile "$profile" \
+      --screenshot "$out" --window-size="$2" "$3" >/dev/null 2>&1 &
+    ffpid=$!
+    waited=0
+    while [ ! -s "$out" ] && [ "$waited" -lt 30 ]; do sleep 1; waited=$((waited + 1)); done
+    sleep 1
+    kill "$ffpid" 2>/dev/null || true
+    wait "$ffpid" 2>/dev/null || true
+    rm -rf "$profile"
+    [ -s "$out" ] || fail "no $theme screenshot produced for $1"
+    # a data-bearing render is markedly larger than the empty shell
+    size=$(wc -c < "$out" | tr -d ' ')
+    [ "$size" -gt 20000 ] || fail "$1-$theme appears unrendered (only $size bytes)"
+    if [ -n "$CAPTURE_DIR" ] && [ -n "$CAPTURE_PATTERN" ]; then
+      # CAPTURE_PATTERN is deliberately an operator-supplied glob such as
+      # orchestration-run-*; quoting it would turn the capture filter literal.
+      # shellcheck disable=SC2254
+      case "$1" in
+        $CAPTURE_PATTERN)
+          mkdir -p "$CAPTURE_DIR"
+          cp "$out" "$CAPTURE_DIR/$1-$theme.png"
+          ;;
+      esac
+    fi
+  done
 }
 
 # Golden first-arrival state: before adopting any Phase-26 policy, delivery
@@ -751,4 +769,4 @@ python3 "$SCRIPT_DIR/workbench-accessibility.py" \
   --program-certified "$PROGRAM_CERTIFIED" \
   || fail "program accessibility journey exam failed"
 
-echo "workbench-ui-smoke.sh: ok (96 viewport renders plus 13 keyboard, semantic, focus, and wide/narrow journey exams)"
+echo "workbench-ui-smoke.sh: ok (192 viewport renders: every view at two widths in light and dark, plus 13 keyboard, semantic, focus, and wide/narrow journey exams)"

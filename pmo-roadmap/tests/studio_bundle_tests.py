@@ -294,7 +294,8 @@ class StudioBundleTest(unittest.TestCase):
         self.assertIn(".bundle-config-cards .tracked", css)
         self.assertIn(".bundle-config-cards .git-local", css)
         self.assertIn("@media (max-width: 600px)", css)
-        self.assertIn("@media (prefers-color-scheme: light)", css)
+        self.assertIn("color-scheme: light", css)
+        self.assertIn("@media (prefers-color-scheme: dark)", css)
 
 
 if __name__ == "__main__":
