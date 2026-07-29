@@ -38,7 +38,14 @@ def file_snapshot(root: Path) -> dict[str, str]:
             git_index = path.parts.index(".git")
             if git_index + 1 < len(path.parts) and path.parts[git_index + 1] in ignored:
                 continue
-        result[str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
+        try:
+            result[str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
+        except FileNotFoundError:
+            # Transient .git files (e.g. objects/maintenance.lock from
+            # background git maintenance on CI runners) may vanish
+            # between the directory walk and the read; they are not
+            # repository content and cannot represent a lease write.
+            continue
     return result
 
 

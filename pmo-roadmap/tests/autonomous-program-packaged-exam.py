@@ -65,15 +65,16 @@ def write_json(path, document):
 
 
 def file_snapshot(root):
-    return {
-        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in root.rglob("*")
-        if (
-            path.is_file()
-            and "__pycache__" not in path.parts
-            and path.suffix != ".pyc"
-        )
-    }
+    result = {}
+    for path in root.rglob("*"):
+        if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        try:
+            result[str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
+        except FileNotFoundError:
+            # Transient .git maintenance files may vanish mid-walk on CI.
+            continue
+    return result
 
 
 def parse_sse(body):
