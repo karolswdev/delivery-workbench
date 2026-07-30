@@ -14,6 +14,12 @@ SERVER_PID=""
 CAPTURE_DIR="${DW_UI_CAPTURE_DIR:-}"
 CAPTURE_PATTERN="${DW_UI_CAPTURE_PATTERN:-}"
 FAST_A11Y="${DW_UI_FAST_A11Y:-}"
+REQUIRE_FIREFOX="${DW_UI_REQUIRE_FIREFOX:-0}"
+EXPECTED_RENDER_COUNT=304
+RENDER_DESKTOP_LIGHT=0
+RENDER_DESKTOP_DARK=0
+RENDER_MOBILE_LIGHT=0
+RENDER_MOBILE_DARK=0
 
 cleanup() {
   if [ -n "$SERVER_PID" ]; then
@@ -28,6 +34,19 @@ fail() {
   echo "workbench-ui-smoke.sh: $1" >&2
   exit 1
 }
+
+case "$REQUIRE_FIREFOX" in
+  0|1) ;;
+  *) fail "DW_UI_REQUIRE_FIREFOX must be 0 or 1" ;;
+esac
+if [ "$REQUIRE_FIREFOX" = "1" ] && [ "$FAST_A11Y" = "1" ]; then
+  fail "strict Firefox exam cannot skip required viewport renders"
+fi
+
+# Ordinary panel copy is checked before browser discovery, so a CI-less host
+# still enforces the explicit Technical details language boundary.
+/usr/bin/python3 "$SCRIPT_DIR/workbench-language-lint.py" \
+  || fail "ordinary-panel language lint failed"
 
 # Renderer contract runs even when no browser is installed. It keeps the
 # recommendation separate from the deliberate act boundary: argv stays
@@ -255,9 +274,14 @@ for candidate in \
   [ -n "$candidate" ] && [ -x "$candidate" ] && FF="$candidate" && break
 done
 if [ -z "$FF" ]; then
-  echo "workbench-ui-smoke.sh: SKIP (no Firefox available for headless rendering)"
+  if [ "$REQUIRE_FIREFOX" = "1" ]; then
+    fail "strict Firefox exam requires an executable Firefox"
+  fi
+  echo "workbench-ui-smoke.sh: SKIP (no Firefox available for headless rendering; set DW_UI_REQUIRE_FIREFOX=1 to refuse this skip)"
   exit 0
 fi
+FF_VERSION="$($FF --version 2>&1)" || fail "Firefox version check could not launch $FF"
+[ -n "$FF_VERSION" ] || fail "Firefox version check returned no version"
 
 # ── fixture with data for every view ─────────────────────────────────
 REPO="$TMP_ROOT/repo"
@@ -523,7 +547,10 @@ EOF
     ffpid=$!
     waited=0
     while [ ! -s "$out" ] && [ "$waited" -lt 30 ]; do sleep 1; waited=$((waited + 1)); done
-    sleep 1
+    # The file is already non-empty; allow Firefox one short flush interval
+    # before terminating the one-shot profile instead of adding a full second
+    # to every matrix cell.
+    sleep 0.2
     kill "$ffpid" 2>/dev/null || true
     wait "$ffpid" 2>/dev/null || true
     rm -rf "$profile"
@@ -531,6 +558,13 @@ EOF
     # a data-bearing render is markedly larger than the empty shell
     size=$(wc -c < "$out" | tr -d ' ')
     [ "$size" -gt 20000 ] || fail "$1-$theme appears unrendered (only $size bytes)"
+    case "$1-$theme" in
+      *-desktop-light) RENDER_DESKTOP_LIGHT=$((RENDER_DESKTOP_LIGHT + 1)) ;;
+      *-desktop-dark) RENDER_DESKTOP_DARK=$((RENDER_DESKTOP_DARK + 1)) ;;
+      *-mobile-light) RENDER_MOBILE_LIGHT=$((RENDER_MOBILE_LIGHT + 1)) ;;
+      *-mobile-dark) RENDER_MOBILE_DARK=$((RENDER_MOBILE_DARK + 1)) ;;
+      *) fail "screenshot name must identify desktop or mobile viewport: $1-$theme" ;;
+    esac
     if [ -n "$CAPTURE_DIR" ] && [ -n "$CAPTURE_PATTERN" ]; then
       # CAPTURE_PATTERN is deliberately an operator-supplied glob such as
       # orchestration-run-*; quoting it would turn the capture filter literal.
@@ -556,8 +590,10 @@ for state in greenfield existing unresolved-heavy invalid; do
   shot "adoption-review-$state-mobile" 390,844 "$BASE/?snapshot=1&proposal=setup-review-fixtures/$state.json#/edit/adoption_review"
 done
 for state in idea draft review preview refusal applied; do
-  shot "ideation-$state-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&ideationstep=$state#/edit/adoption_review"
-  shot "ideation-$state-mobile" 390,844 "$BASE/?snapshot=1&project=sample&ideationstep=$state#/edit/adoption_review"
+  capture_state="$state"
+  [ "$state" = "idea" ] && capture_state="empty"
+  shot "ideation-$capture_state-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&ideationstep=$state#/edit/adoption_review"
+  shot "ideation-$capture_state-mobile" 390,844 "$BASE/?snapshot=1&project=sample&ideationstep=$state#/edit/adoption_review"
 done
 
 # Explicitly adopt rich tracked fixtures only after the empty-state capture.
@@ -754,7 +790,7 @@ done
 
 # WLA-32-07 mission control: one combined inventory at both widths and themes
 # for every authority state a person must distinguish at a glance.
-for state in active awaiting-decision paused revoked cancelled complete; do
+for state in empty active awaiting-decision paused revoked cancelled complete; do
   shot "live-$state-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&livescenario=$state#/live"
   shot "live-$state-mobile" 390,844 "$BASE/?snapshot=1&project=sample&livescenario=$state#/live"
 done
@@ -813,6 +849,10 @@ shot "project-ambiguous-desktop" 1440,900 "$BASE/?snapshot=1#/"
 shot "project-ambiguous-mobile" 390,844 "$BASE/?snapshot=1#/"
 shot "project-selected-desktop" 1440,900 "$BASE/?snapshot=1&project=other#/board"
 shot "project-selected-mobile" 390,844 "$BASE/?snapshot=1&project=other#/board"
+# The newly selected project has no phases or cards, so keep an explicitly
+# named board-home empty-state pair in the Phase-32 route/state matrix.
+shot "board-empty-desktop" 1440,900 "$BASE/?snapshot=1&project=other#/board"
+shot "board-empty-mobile" 390,844 "$BASE/?snapshot=1&project=other#/board"
 
 # A second exact fixture exercises the live control-room projection in an
 # active nested-program state, a council-certified checkpoint with preserved
@@ -936,4 +976,14 @@ python3 "$SCRIPT_DIR/workbench-accessibility.py" \
   --project "$PROGRAM_PROJECT" \
   || fail "program accessibility journey exam failed"
 
-echo "workbench-ui-smoke.sh: ok (224 viewport renders: every view at two widths in light and dark, including seven Live mission-control states, plus the project front door and 16 keyboard, semantic, focus, and wide/narrow journey exams)"
+RENDER_TOTAL=$((RENDER_DESKTOP_LIGHT + RENDER_DESKTOP_DARK + RENDER_MOBILE_LIGHT + RENDER_MOBILE_DARK))
+if [ "$FAST_A11Y" = "1" ]; then
+  echo "workbench-ui-smoke.sh: ok (fast accessibility-only mode; firefox-version='$FF_VERSION'; screenshots skipped by request)"
+else
+  [ "$RENDER_TOTAL" -eq "$EXPECTED_RENDER_COUNT" ] \
+    || fail "required route/state matrix incomplete: expected $EXPECTED_RENDER_COUNT screenshots, produced $RENDER_TOTAL"
+  for count in "$RENDER_DESKTOP_LIGHT" "$RENDER_DESKTOP_DARK" "$RENDER_MOBILE_LIGHT" "$RENDER_MOBILE_DARK"; do
+    [ "$count" -gt 0 ] || fail "required viewport/theme screenshot bucket is empty"
+  done
+  echo "workbench-ui-smoke.sh: ok (firefox-version='$FF_VERSION'; $RENDER_TOTAL viewport renders; desktop-light=$RENDER_DESKTOP_LIGHT desktop-dark=$RENDER_DESKTOP_DARK mobile-light=$RENDER_MOBILE_LIGHT mobile-dark=$RENDER_MOBILE_DARK; board home, ideation, bounded-run consent, program consent, and eight-state Live matrix; 16 journey 6-13 wide/narrow keyboard/focus exams)"
+fi

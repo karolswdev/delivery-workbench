@@ -1,6 +1,6 @@
 # Phase 32 - One workbench
 
-**Last updated:** 2026-07-29.
+**Last updated:** 2026-07-30 (phase closed 8/8).
 
 ## Goal
 
@@ -25,14 +25,14 @@ The browser stays a client of the canonical preview/apply functions — never a 
 
 ## Exit criteria (evidence required)
 
-- [ ] A design-token layer exists and every route renders through it, proven by the refreshed wide + 390px screenshot matrix (WLA-32-01).
-- [ ] The navigation is at most five plain-language destinations with a working project selector, and no product-language-contract technical term appears outside a Technical details fold on the ordinary panels (WLA-32-02, WLA-32-08).
-- [ ] The board is the home route and supports create, move, park-with-reason, and phase pause/resume without leaving it (WLA-32-03).
-- [ ] A rough idea can become a previewed, applied phase plan entirely in the browser through the existing setup preview/apply boundary (WLA-32-04).
-- [ ] Program Studio leads with task-shaped plain-language forms; graph and JSON live under Technical details (WLA-32-05).
-- [ ] Run and program start panels present capabilities, budgets, expiry, stop conditions, push destination, and permanent exclusions as headline consent material, and `/api/runs/start` accepts the standing-nudge fields it reads (WLA-32-06).
-- [ ] One live-work view lists every run and program with its next step, outstanding decisions, and visually distinct pause/revoke/cancel controls, including finite preview-bound supervision for bounded runs (WLA-32-07).
-- [ ] The UI smoke, accessibility, and new language-lint suites pass and are captured as evidence (WLA-32-08).
+- [x] A design-token layer exists and every route renders through it, proven by the refreshed wide + 390px screenshot matrix (WLA-32-01).
+- [x] The navigation is at most five plain-language destinations with a working project selector, and no product-language-contract technical term appears outside a Technical details fold on the ordinary panels (WLA-32-02, WLA-32-08).
+- [x] The board is the home route and supports create, move, park-with-reason, and phase pause/resume without leaving it (WLA-32-03).
+- [x] A rough idea can become a previewed, applied phase plan entirely in the browser through the existing setup preview/apply boundary (WLA-32-04).
+- [x] Program Studio leads with task-shaped plain-language forms; graph and JSON live under Technical details (WLA-32-05).
+- [x] Run and program start panels present capabilities, budgets, expiry, stop conditions, push destination, and permanent exclusions as headline consent material, and `/api/runs/start` accepts the standing-nudge fields it reads (WLA-32-06).
+- [x] One live-work view lists every run and program with its next step, outstanding decisions, and visually distinct pause/revoke/cancel controls, including finite preview-bound supervision for bounded runs (WLA-32-07).
+- [x] The UI smoke, accessibility, and new language-lint suites pass and are captured as evidence (WLA-32-08).
 
 ## Story status
 
@@ -45,7 +45,7 @@ The browser stays a client of the canonical preview/apply functions — never a 
 | WLA-32-05 | Declare automation in plain words | done | [story-05-declare-automation-plainly](./story-05-declare-automation-plainly.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-32-06 | Consent you can read | done | [story-06-consent-you-can-read](./story-06-consent-you-can-read.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-32-07 | Mission control for live work | done | [story-07-mission-control-live-work](./story-07-mission-control-live-work.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-32-08 | Prove it reads and looks right | backlog | [story-08-prove-it-reads-and-looks-right](./story-08-prove-it-reads-and-looks-right.md) | - |
+| WLA-32-08 | Prove it reads and looks right | done | [story-08-prove-it-reads-and-looks-right](./story-08-prove-it-reads-and-looks-right.md) | [evidence-story-08](./evidence-story-08.md) |
 
 ## Sequencing
 
@@ -53,7 +53,7 @@ Foundation first: WLA-32-01 (design tokens) and WLA-32-02 (information architect
 
 ## Where we are
 
-Phase scaffolded 2026-07-29 from four grounding surveys: the web-layer map (routes, seams, jargon inventory), the full CLI/MCP capability surface and its web gaps, the phase-authoring conventions, and a deep-dive of the runs/programs execution layer with its safety rails. All eight stories are backlog; WLA-32-01 is first up. No blockers.
+Phase closed 2026-07-30 at 8/8. Every exit criterion is met and captured as evidence: the token layer and two-theme matrix, the five-word front door with a real project selector, the board as home with guarded create/move/park/pause/resume, the in-browser idea-to-plan flow over the setup lease, task-shaped Program Studio, consent-first start panels with the /api/runs/start property fix, one Live mission-control view with the finite preview-bound bounded-run supervision contract, and the strict 304-shot exam with the new language lint. See final-summary.md.
 
 ## Active risks
 

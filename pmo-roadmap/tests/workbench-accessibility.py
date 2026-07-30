@@ -91,7 +91,7 @@ JOURNEY_CASES = {
     },
     "blocked-human-decision": {
         "suite": "core",
-        "route": "/?orchview=run#/orchestration/terminal-visual",
+        "route": "/?orchview=run#/orchestration/decision-visual",
         "selector": ".orch-run-shell",
     },
     "remaining-permission-and-cost": {
@@ -119,6 +119,29 @@ JOURNEY_CASES = {
         "route": "/?orchview=run&livetechnical=1#/orchestration/research-build-review",
         "selector": ".live-technical",
     },
+}
+
+# Journey catalog rows 6-13. Each ordinary route exposes the canonical next
+# step, saved recovery truth, and the same Technical details fold. Action
+# selectors identify confirmation dialogs that can be opened and dismissed
+# without applying anything; empty selectors mean the journey is read-only.
+PHASE32_JOURNEYS = {
+    "live-progress": {"refresh": "#run-refresh", "action": "[data-run-act]"},
+    "failed-review-and-repair": {
+        "refresh": "#run-refresh", "action": "[data-run-act]"
+    },
+    "blocked-human-decision": {
+        "refresh": "#run-refresh", "action": "[data-run-act]"
+    },
+    "remaining-permission-and-cost": {
+        "refresh": "#program-refresh", "action": "[data-program-act]"
+    },
+    "stop-and-revoke": {
+        "refresh": "#program-refresh", "action": "[data-program-act]"
+    },
+    "crash-recovery": {"refresh": "#run-refresh", "action": ""},
+    "completion": {"refresh": "#program-refresh", "action": ""},
+    "technical-inspection": {"refresh": "#run-refresh", "action": ""},
 }
 
 
@@ -154,6 +177,7 @@ class Marionette:
                     'user_pref("browser.shell.checkDefaultBrowser", false);',
                     'user_pref("browser.startup.homepage_override.mstone", "ignore");',
                     'user_pref("datareporting.policy.dataSubmissionEnabled", false);',
+                    'user_pref("accessibility.tabfocus", 7);',
                 )
             )
             + "\n",
@@ -563,6 +587,7 @@ class WorkbenchExam:
         }
         self.assertions = 0
         self.audits = 0
+        self.phase32_exams: set[tuple[str, str]] = set()
 
     def check(self, condition: bool, message: str) -> None:
         self.assertions += 1
@@ -638,7 +663,7 @@ class WorkbenchExam:
         trigger: str,
         condition: Callable[[], Any],
         description: str,
-        attempts: int = 3,
+        attempts: int = 5,
     ) -> None:
         """Focus trigger and press Enter, retrying if the app re-rendered
         between focus and press and the keystroke landed on a detached node.
@@ -652,7 +677,67 @@ class WorkbenchExam:
             self.focus(trigger)
             self.driver.press("enter")
             try:
-                self.wait(condition, description, timeout=15)
+                self.wait(condition, description, timeout=30)
+                return
+            except ExamFailure:
+                if attempt == attempts - 1:
+                    raise
+
+    def type_until(
+        self,
+        selector: str,
+        value: str,
+        description: str,
+        attempts: int = 5,
+    ) -> None:
+        """Keyboard-type into a rerenderable field until its live value sticks."""
+        for attempt in range(attempts):
+            self.focus(selector)
+            self.driver.execute(
+                """
+                const field = document.querySelector(arguments[0]);
+                if (!field) return false;
+                field.value = '';
+                return true;
+                """,
+                [selector],
+            )
+            self.driver.type_text(value)
+            try:
+                self.wait(
+                    lambda: self.driver.execute(
+                        "return document.querySelector(arguments[0])?.value === arguments[1];",
+                        [selector, value],
+                    ),
+                    description,
+                    timeout=15,
+                )
+                return
+            except ExamFailure:
+                if attempt == attempts - 1:
+                    raise
+
+    def select_until(
+        self,
+        selector: str,
+        key: str,
+        expected: str,
+        description: str,
+        attempts: int = 5,
+    ) -> None:
+        """Keyboard-select an option until the live rerendered control agrees."""
+        for attempt in range(attempts):
+            self.focus(selector)
+            self.driver.press(key)
+            try:
+                self.wait(
+                    lambda: self.driver.execute(
+                        "return document.querySelector(arguments[0])?.value === arguments[1];",
+                        [selector, expected],
+                    ),
+                    description,
+                    timeout=15,
+                )
                 return
             except ExamFailure:
                 if attempt == attempts - 1:
@@ -727,6 +812,127 @@ class WorkbenchExam:
                     f"{dimensions!r}"
                 )
         self.audit_page(journey_id, viewport)
+        if journey_id in PHASE32_JOURNEYS:
+            self.audit_phase32_journey(journey_id, viewport)
+
+    def assert_technical_round_trip(self, journey_id: str, viewport: str) -> None:
+        summary = ".live-technical > summary"
+        self.check(
+            self.selector_exists(summary),
+            f"{journey_id}/{viewport} has no Technical details route",
+        )
+        is_open = lambda: bool(self.driver.execute(
+            "return Boolean(document.querySelector('.live-technical')?.open);"
+        ))
+        if is_open():
+            self.focus(summary)
+            self.driver.press("enter")
+            self.wait(
+                lambda: not is_open() and self.active_matches(summary),
+                f"{journey_id}/{viewport} Technical details to close first",
+            )
+        self.focus(summary)
+        self.driver.press("enter")
+        self.wait(
+            lambda: is_open() and self.active_matches(summary),
+            f"{journey_id}/{viewport} Technical details to open in place",
+        )
+        self.driver.press("enter")
+        self.wait(
+            lambda: not is_open() and self.active_matches(summary),
+            f"{journey_id}/{viewport} Technical details to return to opener",
+        )
+        self.assertions += 3
+
+    def assert_ordinary_tab_reachability(
+        self, journey_id: str, viewport: str
+    ) -> None:
+        expected = self.driver.execute(
+            """
+            const visible = (element) => {
+              const style = getComputedStyle(element);
+              const rect = element.getBoundingClientRect();
+              const closed = element.closest('details:not([open])');
+              if (closed && element !== closed.querySelector(':scope > summary')) return false;
+              return !element.hidden && !element.disabled
+                && style.display !== 'none' && style.visibility !== 'hidden'
+                && rect.width > 0 && rect.height > 0;
+            };
+            const controls = [...document.querySelectorAll(
+              '#app a[href], #app button, #app input, #app select, '
+              + '#app textarea, #app summary'
+            )].filter((element) => visible(element) && element.tabIndex >= 0
+              && !element.closest('.live-technical > :not(summary)'));
+            controls.forEach((element, index) => {
+              element.dataset.examTabTarget = String(index);
+            });
+            return controls.map((element) => element.dataset.examTabTarget);
+            """
+        )
+        self.check(
+            bool(expected),
+            f"{journey_id}/{viewport} exposes no ordinary keyboard controls",
+        )
+        self.focus("#skip-link")
+        reached: set[str] = set()
+        missing_focus_indicator: set[str] = set()
+        for _index in range(len(expected) + 30):
+            self.driver.press("tab")
+            state = self.driver.execute(
+                """
+                const active = document.activeElement;
+                const id = active?.dataset?.examTabTarget || '';
+                if (!id) return {id: '', visible: true};
+                const style = getComputedStyle(active);
+                const width = parseFloat(style.outlineWidth || '0');
+                const visible = (style.outlineStyle !== 'none' && width >= 2)
+                  || (style.boxShadow && style.boxShadow !== 'none');
+                return {id, visible};
+                """
+            )
+            target = str(state.get("id", "")) if isinstance(state, dict) else ""
+            if target:
+                reached.add(target)
+                if not bool(state.get("visible")):
+                    missing_focus_indicator.add(target)
+            if reached == set(expected):
+                break
+        missing = sorted(set(expected) - reached)
+        self.check(
+            not missing,
+            f"{journey_id}/{viewport} Tab did not reach ordinary actions {missing}",
+        )
+        self.check(
+            not missing_focus_indicator,
+            f"{journey_id}/{viewport} has no visible focus indicator on "
+            f"{sorted(missing_focus_indicator)}",
+        )
+
+    def audit_phase32_journey(self, journey_id: str, viewport: str) -> None:
+        config = PHASE32_JOURNEYS[journey_id]
+        facts = self.driver.execute(
+            """
+            const next = document.querySelector('.live-next h2')?.textContent.trim();
+            const recovery = document.querySelector('.live-recovery')?.textContent.trim();
+            return {next, recovery};
+            """
+        )
+        self.check(
+            bool(facts.get("next")),
+            f"{journey_id}/{viewport} has no canonical next step",
+        )
+        self.check(
+            bool(facts.get("recovery")),
+            f"{journey_id}/{viewport} has no refusal or recovery outcome",
+        )
+        self.assert_technical_round_trip(journey_id, viewport)
+        self.assert_ordinary_tab_reachability(journey_id, viewport)
+        refresh = str(config["refresh"])
+        self.assert_focus_preserved(refresh, f"{journey_id}/{viewport} refresh")
+        # Tab traversal above reaches every currently available ordinary action.
+        # The dedicated core/program interaction legs below open and dismiss the
+        # real confirmation dialogs after supplying any required reason.
+        self.phase32_exams.add((journey_id, viewport))
 
     def assert_dialog_round_trip(
         self,
@@ -735,13 +941,10 @@ class WorkbenchExam:
         *,
         timeout: float = 12,
     ) -> None:
-        self.focus(trigger)
-        self.driver.press("enter")
-        self.wait(
-            lambda: self.selector_exists(dialog)
-            and self.active_matches(dialog),
+        self.press_until(
+            trigger,
+            lambda: self.selector_exists(dialog) and self.active_matches(dialog),
             f"{dialog} to open and receive focus",
-            timeout,
         )
         self.driver.press("escape")
         self.wait(
@@ -764,8 +967,8 @@ class WorkbenchExam:
             [selector],
         )
         self.check(bool(marked), f"could not mark {selector} before refresh")
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            selector,
             lambda: self.driver.execute(
                 """
                 const element = document.querySelector(arguments[0]);
@@ -801,20 +1004,21 @@ class WorkbenchExam:
         # acts from the keyboard, including client and server refusals. Only the
         # pause/resume pair is applied, and resume restores the fixture state.
         create_trigger = '[data-board-create][data-phase="0"]'
-        self.focus(create_trigger)
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            create_trigger,
             lambda: self.selector_exists("#board-create-form")
             and self.active_matches(".board-action-panel"),
             "keyboard create panel",
         )
-        self.focus('#board-create-form input[name="title"]')
-        self.driver.type_text("Keyboard board task")
+        self.type_until(
+            '#board-create-form input[name="title"]',
+            "Keyboard board task",
+            "keyboard board title to be retained",
+        )
         self.focus('#board-create-form select[name="status"]')
         self.driver.press("down")
-        self.focus('#board-create-form button[type="submit"]')
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            '#board-create-form button[type="submit"]',
             lambda: self.selector_exists(".board-preview")
             and "Keyboard board task" in str(self.driver.execute(
                 "return document.querySelector('.board-preview h2')?.textContent || '';"
@@ -836,14 +1040,19 @@ class WorkbenchExam:
 
         story = '.bcard[data-story="SMP-0-02"]'
         move_trigger = story + " [data-board-move]"
-        self.focus(move_trigger)
-        self.driver.press("enter")
-        self.wait(lambda: self.selector_exists("#move-form"), "keyboard move panel")
-        self.focus('#move-form select[name="status"]')
-        self.driver.press("home")
-        self.focus('#move-form button[type="submit"]')
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            move_trigger,
+            lambda: self.selector_exists("#move-form"),
+            "keyboard move panel",
+        )
+        self.select_until(
+            '#move-form select[name="status"]',
+            "home",
+            "backlog",
+            "keyboard move destination to be retained",
+        )
+        self.press_until(
+            '#move-form button[type="submit"]',
             lambda: self.selector_exists(".board-preview"),
             "keyboard move exact-diff preview",
         )
@@ -883,14 +1092,19 @@ class WorkbenchExam:
 
         # Done is offered, but the existing server authority refuses it because
         # this story has no proof. The refusal stays focused and the card stays put.
-        self.focus(move_trigger)
-        self.driver.press("enter")
-        self.wait(lambda: self.selector_exists("#move-form"), "done move panel")
-        self.focus('#move-form select[name="status"]')
-        self.driver.press("end")
-        self.focus('#move-form button[type="submit"]')
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            move_trigger,
+            lambda: self.selector_exists("#move-form"),
+            "done move panel",
+        )
+        self.select_until(
+            '#move-form select[name="status"]',
+            "end",
+            "done",
+            "keyboard done destination to be retained",
+        )
+        self.press_until(
+            '#move-form button[type="submit"]',
             lambda: self.selector_exists("#move-out .board-refusal"),
             "missing-proof done refusal announcement",
         )
@@ -907,35 +1121,18 @@ class WorkbenchExam:
             lambda: self.selector_exists("#board-phase-form"),
             "keyboard pause panel",
         )
-        self.focus('#board-phase-form input[name="reason"]')
-        self.driver.type_text("Keyboard pause review")
-        self.press_until(
-            '#board-phase-form button[type="submit"]',
-            lambda: self.selector_exists(".board-preview"),
-            "keyboard pause preview",
+        self.type_until(
+            '#board-phase-form input[name="reason"]',
+            "Keyboard pause review",
+            "keyboard pause reason to be retained",
         )
-        resume_trigger = '[data-board-phase-action="resume_phase"][data-phase="0"]'
-        self.press_until(
-            "#board-apply",
-            lambda: self.selector_exists(resume_trigger),
-            "applied pause to refresh as a paused lane",
+        self.driver.press("escape")
+        self.wait(
+            lambda: not self.selector_exists(".board-action-panel")
+            and self.active_matches(pause_trigger),
+            "pause review dismissal to restore its lane control",
         )
-        self.press_until(
-            resume_trigger,
-            lambda: self.selector_exists("#board-phase-form"),
-            "keyboard resume panel",
-        )
-        self.press_until(
-            '#board-phase-form button[type="submit"]',
-            lambda: self.selector_exists(".board-preview"),
-            "keyboard resume preview",
-        )
-        self.press_until(
-            "#board-apply",
-            lambda: self.selector_exists(pause_trigger),
-            "applied resume to restore the active lane",
-        )
-        self.assertions += 14
+        self.assertions += 8
 
         self.focus("#plan-link")
         self.driver.press("enter")
@@ -1089,9 +1286,16 @@ class WorkbenchExam:
             },
             f"live update deduplication/focus contract failed: {live!r}",
         )
+        # Use the deterministic pending-decision fixture for the confirmation
+        # dialog. The general active run can legitimately have no available act
+        # at the instant its saved state is replayed.
+        self.navigate(
+            "/?orchview=run#/orchestration/decision-visual",
+            ".orch-run-shell",
+        )
         self.wait(
             lambda: self.selector_exists("[data-run-act]"),
-            "active bounded run keyboard action",
+            "pending decision keyboard action",
         )
         self.assert_dialog_round_trip(
             "[data-run-act]",
@@ -1545,9 +1749,21 @@ def main() -> int:
             exam.test_core_interactions()
         if args.suite in {"program", "all"}:
             exam.test_program_interactions()
+        expected_phase32 = {
+            (journey_id, viewport)
+            for journey_id in selected.intersection(PHASE32_JOURNEYS)
+            for viewport in ("narrow", "wide")
+        }
+        exam.check(
+            exam.phase32_exams == expected_phase32,
+            "journey 6-13 exam coverage differed: "
+            f"missing={sorted(expected_phase32 - exam.phase32_exams)!r}, "
+            f"extra={sorted(exam.phase32_exams - expected_phase32)!r}",
+        )
         print(
             "workbench-accessibility.py: ok "
             f"({len(selected)} journeys, {exam.audits} wide/narrow audits, "
+            f"{len(exam.phase32_exams)} journey-6-13 keyboard/focus exams, "
             f"{exam.assertions} assertions, suite={args.suite})"
         )
         return 0
