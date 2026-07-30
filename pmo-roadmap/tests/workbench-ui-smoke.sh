@@ -185,6 +185,9 @@ for token in ("plan", "simulate", "validate", "technical", "authority",
               "candidate-assignment", "debate-active", "verifier-failed",
               "budget-exhausted", "phase-transition", "complete",
               "Delivery decisions", "data-plan-section",
+              "What will be delivered?", "Who will do the work?",
+              "Who will review the work independently?", "Repair path",
+              "How much time, spending, and work may this delivery use?",
               "data-plan-correction", "Review before save",
               "Make ownership, independence, and decisions understandable",
               "Team & review", "Independent review",
@@ -195,6 +198,8 @@ for token in ("plan", "simulate", "validate", "technical", "authority",
               "data-team-role-field", "data-team-council-field",
               "Advanced flow building blocks",
               "Technical details", "Lossless configuration",
+              "What reviewers will check", "data-studio-return-plain",
+              "Review the change again to get a fresh preview",
               "starts no work"):
     assert token in studio, token
 assert "setInterval" not in studio and "EventSource" not in studio
@@ -215,6 +220,7 @@ for token in (".studio-node.type-loop", ".studio-node.type-debate",
               ".studio-node.type-master-architect", ".studio-lane",
               ".studio-plan-shell", ".studio-plan-sections",
               ".studio-plan-review", ".studio-technical-view",
+              ".studio-form-technical", ".studio-review-criteria",
               ".studio-team-card-grid", ".studio-quality-constraints",
               ".studio-team-honesty", ".program-team-answers",
               "@media (max-width: 600px)"):
@@ -616,13 +622,23 @@ documents = {
 for slug, title in rubrics.items():
     documents[root / f"pm/rubrics/{slug}.json"] = {
         "kind": "delivery-workbench-rubric", "schema_version": 1,
-        "slug": slug, "title": title, "version": "1.0.0", "criteria": [],
+        "slug": slug, "title": title,
+        "description": "Calm, source-backed questions for independent review.",
+        "version": "1.0.0", "subject_type": "diff",
+        "criteria": [{
+            "id": "intent-and-evidence",
+            "question": "Does the delivered change match the plan and include trustworthy evidence?",
+            "evaluation": {"kind": "agent-judgment", "fact": None},
+            "required_evidence_kinds": ["git-diff"], "min_citations": 2,
+            "allowed_results": ["pass", "fail", "needs-repair"],
+            "veto": True,
+        }],
     }
 for path, document in documents.items():
     path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 PY
 
-VIEWS="board-home:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board-route:#/board/sample board-create:#/board/sample board-park-refusal:#/board/sample board-done-refusal:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-stale:#/orchestration/research-build-review orchestration-run-technical:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-team-review:#/program-studio/organization/autonomous-story-cell studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-team-technical:#/program-studio/organization/autonomous-story-cell"
+VIEWS="board-home:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board-route:#/board/sample board-create:#/board/sample board-park-refusal:#/board/sample board-done-refusal:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-stale:#/orchestration/research-build-review orchestration-run-technical:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program program-studio-plain-delivery:#/program-studio/program/studio-program program-studio-plain-review:#/program-studio/program/studio-program program-studio-plain-technical:#/program-studio/workflow/studio-story-flow studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-team-review:#/program-studio/organization/autonomous-story-cell studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-team-technical:#/program-studio/organization/autonomous-story-cell"
 for spec in $VIEWS; do
   name="${spec%%:*}"
   route="${spec#*:}"
@@ -638,6 +654,9 @@ for spec in $VIEWS; do
     orchestration-run-stale) extra="&orchview=run&liveconnection=stale" ;;
     orchestration-run-technical) extra="&orchview=run&livetechnical=1" ;;
     orchestration-run-*) extra="&orchview=run" ;;
+    program-studio-plain-delivery) extra="&studiosection=scope" ;;
+    program-studio-plain-review) extra="&studiosection=quality" ;;
+    program-studio-plain-technical) extra="&studiosection=decisions&studiofold=1&studiotechnical=config&studiofocus=technical" ;;
     studio-debate-active) extra="&studioview=simulate&studioscenario=debate-active" ;;
     studio-budget-exhausted) extra="&studioview=simulate&studioscenario=budget-exhausted" ;;
     studio-verifier-failed) extra="&studioview=simulate&studioscenario=verifier-failed" ;;

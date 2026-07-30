@@ -2306,6 +2306,57 @@ details.blane.closed summary, .board-closed > summary { cursor: pointer; color: 
 }
 .studio-plan-advanced summary { cursor: pointer; color: #d3a2f5; }
 .studio-plan-advanced p { color: var(--color-text-muted); }
+.studio-review-criteria {
+  display: grid; gap: 10px; margin: 14px 0; padding: 12px;
+  border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-link) 4%, var(--color-surface));
+}
+.studio-review-criteria > header span {
+  color: var(--color-link); font: var(--text-2xs)/1.2 var(--font-mono);
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.studio-review-criteria > header h3 { margin: 4px 0; font-size: 16px; }
+.studio-review-criteria > header p,
+.studio-review-criteria article > p,
+.studio-review-criteria article > small { color: var(--color-text-muted); }
+.studio-review-criteria-list { display: grid; gap: 9px; }
+.studio-review-criteria article {
+  min-width: 0; padding: 11px; border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-positive); border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.studio-review-criteria article.missing { border-left-color: var(--color-danger); }
+.studio-review-criteria article > div:first-child {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+}
+.studio-review-criteria ol { display: grid; gap: 8px; padding-left: 22px; }
+.studio-review-criteria li { padding-left: 2px; }
+.studio-review-criteria li dl {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 10px; margin: 7px 0 0;
+}
+.studio-review-criteria li dl > div { min-width: 0; }
+.studio-review-criteria dt {
+  color: var(--color-text-muted); font: var(--text-2xs)/1.2 var(--font-mono);
+  text-transform: uppercase;
+}
+.studio-review-criteria dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.studio-review-criteria details { margin-top: 9px; }
+.studio-review-criteria details summary { cursor: pointer; color: var(--color-link); }
+.studio-review-criteria details code { overflow-wrap: anywhere; }
+.studio-review-criteria details dl { margin-bottom: 0; }
+.studio-form-technical {
+  margin-top: 16px; border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); background: var(--color-surface-muted);
+}
+.studio-form-technical > summary {
+  padding: 11px 12px; cursor: pointer; color: var(--color-link); font-weight: 700;
+}
+.studio-form-technical[open] > summary { border-bottom: 1px solid var(--color-border); }
+.studio-form-technical-body > p { margin: 0; padding: 11px 12px; color: var(--color-text-muted); }
+.studio-form-technical-body > button { margin: 10px 12px 12px; border-color: var(--color-link); color: var(--color-link); }
+.studio-embedded-graph { min-width: 0; overflow: auto; background: var(--color-graph-canvas); }
+.studio-embedded-graph > p { margin: 0; padding: 9px 12px; color: var(--color-text-muted); background: var(--color-surface-muted); }
 
 /* ── understandable teams and review rules (WLA-27-05) ────────── */
 .studio-team-editor { min-width: 0; }
@@ -2460,6 +2511,9 @@ details.blane.closed summary, .board-closed > summary { cursor: pointer; color: 
 .studio-technical-view {
   min-height: 650px; border: 1px solid var(--color-border); border-top: 0; background: var(--color-surface);
 }
+.studio-technical-return {
+  margin: 10px 12px 2px; border-color: var(--color-link); color: var(--color-link);
+}
 .studio-technical-tabs {
   display: flex; gap: 5px; padding: 8px 12px; border-bottom: 1px solid var(--color-border);
 }
@@ -2529,8 +2583,9 @@ details.blane.closed summary, .board-closed > summary { cursor: pointer; color: 
   .studio-plan-form-grid, .studio-plan-checks, .studio-plan-examples > div,
   .studio-plan-review dl, .studio-team-rule-grid,
   .studio-team-coverage { grid-template-columns: 1fr; }
-  .studio-plan-items article > div { align-items: flex-start; flex-direction: column; }
-  .studio-plan-outcomes li { grid-template-columns: 1fr; }
+  .studio-plan-items article > div,
+  .studio-review-criteria article > div:first-child { align-items: flex-start; flex-direction: column; }
+  .studio-plan-outcomes li, .studio-review-criteria li dl { grid-template-columns: 1fr; }
   .studio-decision-diagnostics li { grid-template-columns: 1fr; }
   .studio-decision-diagnostics button { width: 100%; }
   .studio-plan-review { margin: 0 8px 8px; }

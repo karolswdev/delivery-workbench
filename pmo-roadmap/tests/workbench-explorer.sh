@@ -295,7 +295,9 @@ import json, sys
 document = {
     "kind": "delivery-workbench-workflow", "schema_version": 1,
     "slug": "studio-fixture", "title": "Studio fixture", "version": "1.0.0",
-    "parameters": [], "defaults": {},
+    "parameters": [{"id": "delivery-note", "type": "string", "required": False,
+                    "max_bytes": 777}],
+    "defaults": {"delivery-note": "keep this exact default"},
     "nodes": [{
         "id": "review", "type": "checkpoint", "prompt_id": "review",
         "prompt": "Review this fixture.", "expires_seconds": 3600,
@@ -349,6 +351,19 @@ json.dump(request, open(sys.argv[2], "w"))
 PY
 [ ! -e "$REPO/pm/workflows/studio-fixture.json" ] \
   || fail "Program Studio preview must not write policy"
+python3 - "$TMP_ROOT/studio-apply.json" "$TMP_ROOT/studio-mismatched-apply.json" <<'PY'
+import json, sys
+request = json.load(open(sys.argv[1]))
+request["document"]["title"] = "A different unreviewed title"
+json.dump(request, open(sys.argv[2], "w"))
+PY
+[ "$(curl -s -o "$TMP_ROOT/studio-mismatched-result.json" -w '%{http_code}' \
+  -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/studio-mismatched-apply.json" \
+  "$BASE/api/program-studio/apply")" = "409" ] \
+  || fail "mismatched Program Studio fingerprint must be refused"
+[ ! -e "$REPO/pm/workflows/studio-fixture.json" ] \
+  || fail "mismatched Program Studio apply must leave policy unchanged"
 curl -s -X POST -H 'Content-Type: application/json' --data-binary @"$TMP_ROOT/studio-apply.json" \
   "$BASE/api/program-studio/apply" > "$TMP_ROOT/studio-result.json"
 python3 - "$TMP_ROOT/studio-result.json" <<'PY' \
@@ -370,6 +385,10 @@ python3 - "$TMP_ROOT/studio-detail.json" <<'PY' \
 import json, sys
 d = json.load(open(sys.argv[1]))["data"]
 assert d["raw"]["slug"] == "studio-fixture" and d["validation"]["valid"]
+assert d["raw"]["parameters"][0]["max_bytes"] == 777
+assert d["raw"]["defaults"]["delivery-note"] == "keep this exact default"
+assert d["raw"]["nodes"][0]["options"][1]["route"] == {"kind": "action", "target": "block"}
+assert d["raw"]["layout"]["viewport"] == {"x": 0, "y": 0, "zoom": 1}
 assert d["compiled"]["semantic_hash"] == d["round_trip"]["hashes_before"]["semantic"]
 assert d["graph"]["config"] == d["raw"]
 assert d["simulation"]["starts_work"] is False
@@ -378,6 +397,79 @@ assert d["authoring"]["status"] == "ready-to-review"
 assert d["authoring"]["edit_safety"]["targeted_edits_preserve_unedited_fields"]
 assert d["authoring"]["edit_safety"]["exact_export_available"]
 PY
+python3 - "$TMP_ROOT/studio-detail.json" "$TMP_ROOT/studio-plain-edit.json" <<'PY'
+import json, sys
+raw = json.load(open(sys.argv[1]))["data"]["raw"]
+raw["title"] = "Studio fixture renamed in the plain form"
+json.dump({"family": "workflow", "action": "save", "name": "studio-fixture",
+           "document": raw}, open(sys.argv[2], "w"))
+PY
+curl -s -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/studio-plain-edit.json" \
+  "$BASE/api/program-studio/preview" > "$TMP_ROOT/studio-plain-preview.json"
+python3 - "$TMP_ROOT/studio-plain-edit.json" "$TMP_ROOT/studio-plain-preview.json" \
+  "$TMP_ROOT/studio-plain-apply.json" <<'PY' \
+  || fail "plain-form preview should retain every unowned declaration field"
+import json, sys
+request = json.load(open(sys.argv[1]))
+preview = json.load(open(sys.argv[2]))["data"]
+raw = preview["studio"]["raw"]
+assert preview["applicable"] and preview["studio"]["round_trip"]["lossless"]
+assert raw["parameters"][0]["max_bytes"] == 777
+assert raw["defaults"]["delivery-note"] == "keep this exact default"
+assert raw["nodes"][0]["options"][1]["route"]["target"] == "block"
+assert raw["layout"]["viewport"]["zoom"] == 1
+request["fingerprint"] = preview["fingerprint"]
+json.dump(request, open(sys.argv[3], "w"))
+PY
+curl -s -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/studio-plain-apply.json" \
+  "$BASE/api/program-studio/apply" > "$TMP_ROOT/studio-plain-result.json"
+curl -s "$BASE/api/program-studio/workflow/studio-fixture" \
+  > "$TMP_ROOT/studio-plain-detail.json"
+python3 - "$TMP_ROOT/studio-plain-result.json" "$TMP_ROOT/studio-plain-detail.json" <<'PY' \
+  || fail "plain-form apply should preserve exact advanced declaration fields"
+import json, sys
+result = json.load(open(sys.argv[1]))["data"]
+raw = json.load(open(sys.argv[2]))["data"]["raw"]
+assert result["applied"] and result["changed"]
+assert raw["title"] == "Studio fixture renamed in the plain form"
+assert raw["parameters"][0]["max_bytes"] == 777
+assert raw["defaults"]["delivery-note"] == "keep this exact default"
+assert raw["nodes"][0]["options"][1]["route"]["target"] == "block"
+assert raw["layout"]["viewport"] == {"x": 0, "y": 0, "zoom": 1}
+PY
+# A source change after preview makes the lease stale and must preserve those newer bytes.
+python3 - "$TMP_ROOT/studio-plain-detail.json" "$TMP_ROOT/studio-stale-edit.json" <<'PY'
+import json, sys
+raw = json.load(open(sys.argv[1]))["data"]["raw"]
+raw["title"] = "A preview that will become stale"
+json.dump({"family": "workflow", "action": "save", "name": "studio-fixture",
+           "document": raw}, open(sys.argv[2], "w"))
+PY
+curl -s -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/studio-stale-edit.json" \
+  "$BASE/api/program-studio/preview" > "$TMP_ROOT/studio-stale-preview.json"
+python3 - "$TMP_ROOT/studio-stale-edit.json" "$TMP_ROOT/studio-stale-preview.json" \
+  "$TMP_ROOT/studio-stale-apply.json" "$REPO/pm/workflows/studio-fixture.json" <<'PY'
+import json, sys
+request = json.load(open(sys.argv[1]))
+request["fingerprint"] = json.load(open(sys.argv[2]))["data"]["fingerprint"]
+json.dump(request, open(sys.argv[3], "w"))
+current = json.load(open(sys.argv[4]))
+current["description"] = "A newer file change that must survive stale apply"
+with open(sys.argv[4], "w") as handle:
+    json.dump(current, handle, indent=2)
+    handle.write("\n")
+PY
+STALE_BEFORE="$(cksum "$REPO/pm/workflows/studio-fixture.json")"
+[ "$(curl -s -o "$TMP_ROOT/studio-stale-result.json" -w '%{http_code}' \
+  -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/studio-stale-apply.json" \
+  "$BASE/api/program-studio/apply")" = "409" ] \
+  || fail "stale Program Studio fingerprint must be refused"
+[ "$STALE_BEFORE" = "$(cksum "$REPO/pm/workflows/studio-fixture.json")" ] \
+  || fail "stale Program Studio apply must leave newer policy bytes unchanged"
 mkdir -p "$REPO/pm/organizations"
 cp "$PMO_DIR/templates/organizations/autonomous-story-cell.json" \
   "$REPO/pm/organizations/autonomous-story-cell.json"
@@ -414,10 +506,58 @@ for key in ("starts_work", "writes_policy", "writes_roadmap",
             "starts_observer", "sends_notification", "uses_network"):
     assert team[key] is False, key
 PY
+mkdir -p "$REPO/pm/rubrics" "$REPO/pm/programs"
+cp "$PMO_DIR/templates/rubrics/autonomous-story-quality.json" \
+  "$REPO/pm/rubrics/autonomous-story-quality.json"
+python3 - "$REPO/pm/programs/studio-program.json" <<'PY'
+import json, sys
+program = {
+    "kind": "delivery-workbench-program", "schema_version": 1,
+    "slug": "studio-program", "title": "Plain delivery planning fixture",
+    "scope": {"project": "sample", "phases": {"from": 0, "through": 0},
+              "stories": "all", "selection": "roadmap-frontier-v1",
+              "blocked_policy": "stop"},
+    "organization": "autonomous-story-cell",
+    "bindings": [{"id": "sample-work", "priority": 10,
+                  "match": {"phase_from": 0, "phase_through": 0},
+                  "workflow": "studio-fixture", "with": {}, "team": "story-cell",
+                  "rubrics": ["autonomous-story-quality", "missing-review-file"]}],
+    "phase_gates": [], "mode_ceiling": "advisory",
+    "requested_capabilities": [],
+    "budgets": {"max_phases": 1, "max_stories": 2},
+    "stop_conditions": ["scope-complete", "blocked-frontier", "budget-exhausted"],
+    "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+}
+with open(sys.argv[1], "w") as handle:
+    json.dump(program, handle, indent=2)
+    handle.write("\n")
+PY
+RUBRIC_READ_BEFORE="$(sum_tree)"
+curl -s "$BASE/api/program-studio/program/studio-program" \
+  > "$TMP_ROOT/studio-program-criteria.json"
+python3 - "$TMP_ROOT/studio-program-criteria.json" <<'PY' \
+  || fail "Program Studio should show referenced and missing review criteria read only"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+criteria = {item["reference"]: item for item in d["review_criteria"]}
+available = criteria["autonomous-story-quality"]
+missing = criteria["missing-review-file"]
+assert available["status"] == "available" and available["read_only"]
+assert available["title"] and available["criteria"]
+assert all(item["question"] and item["checked_by"] for item in available["criteria"])
+assert available["path"] == "pm/rubrics/autonomous-story-quality.json"
+assert missing["status"] == "missing" and missing["read_only"]
+assert "missing-review-file" in missing["message"]
+assert "author" in missing["next_step"] and "fresh plan check" in missing["next_step"]
+assert d["starts_work"] is False and d["writes_policy"] is False
+PY
+[ "$RUBRIC_READ_BEFORE" = "$(sum_tree)" ] \
+  || fail "reading review criteria in Program Studio must not modify files"
 STUDIO_READ_BEFORE="$(sum_tree)"
 for _ in 1 2 3; do
   curl -s "$BASE/api/program-studio/workflow/studio-fixture" >/dev/null
   curl -s "$BASE/api/program-studio/organization/autonomous-story-cell" >/dev/null
+  curl -s "$BASE/api/program-studio/program/studio-program" >/dev/null
 done
 STUDIO_READ_AFTER="$(sum_tree)"
 [ "$STUDIO_READ_BEFORE" = "$STUDIO_READ_AFTER" ] \

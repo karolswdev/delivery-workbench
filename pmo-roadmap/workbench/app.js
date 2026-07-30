@@ -4666,6 +4666,7 @@ let studioState = {
   selected: "", jsonDraft: "", validationTimer: null,
   scenario: "candidate-assignment", error: "", jsonPointer: "",
   setupContext: null, planSection: "scope", technicalMode: "graph",
+  technicalExpanded: false,
 };
 
 function studioFamilyModel(family = studioState.family) {
@@ -5124,12 +5125,43 @@ function studioTeamReviewEditor(section) {
   return studioTeamAuditEditor();
 }
 
+const STUDIO_PLAIN_SECTION_COPY = {
+  scope: { label: "The delivery", question: "What will be delivered?", guidance: "Name the roadmap work and the boundary this delivery may cover." },
+  flow: { label: "The team and work", question: "Who will do the work?", guidance: "Choose the team, work owners, inputs, and route from ready work to completion." },
+  quality: { label: "Independent review", question: "Who will review the work independently?", guidance: "Choose what reviewers check and keep review separate from the work it judges." },
+  decisions: { label: "Decision points", question: "When should a person decide?", guidance: "Name the closed choices that can pause, redirect, or stop work." },
+  recovery: { label: "Repair path", question: "What happens when work does not pass?", guidance: "Make repair, help, and blocked-work routes visible before delivery." },
+  stops: { label: "Stop conditions", question: "When must delivery stop?", guidance: "State completion and safety stops explicitly." },
+  limits: { label: "Finite limits", question: "How much time, spending, and work may this delivery use?", guidance: "Keep time, attempts, work, and cost finite and reviewable." },
+};
+
+function studioPlainSection(section) {
+  if (studioState.family === "organization") return section;
+  return { ...section, ...(STUDIO_PLAIN_SECTION_COPY[section?.id] || {}) };
+}
+
+function studioReviewCriteriaHtml() {
+  const references = studioState.model?.review_criteria || [];
+  if (!references.length) return `<section class="studio-review-criteria empty"><header><span>Independent review</span><h3>No saved review criteria are referenced yet</h3></header><p>Choose readable review criteria for each work route that needs an independent judgment.</p></section>`;
+  return `<section class="studio-review-criteria" aria-labelledby="studio-review-criteria-title"><header><span>Independent review</span><h3 id="studio-review-criteria-title">What reviewers will check</h3><p>These criteria are read only here. Their source stays in repository files.</p></header><div class="studio-review-criteria-list">${references.map((reference) => {
+    if (reference.status !== "available") return `<article class="missing"><div><strong>${esc(reference.reference)}</strong>${badge("reference missing", "issue")}</div><p>${esc(reference.message)}</p><small>${esc(reference.next_step)}</small><details><summary>Technical details</summary><code>${esc(reference.path)}</code></details></article>`;
+    return `<article class="available"><div><strong>${esc(reference.title)}</strong>${badge(`${reference.criteria?.length || 0} check${reference.criteria?.length === 1 ? "" : "s"}`, "ok")}</div>${reference.description ? `<p>${esc(reference.description)}</p>` : ""}<ol>${(reference.criteria || []).map((criterion) => `<li><strong>${esc(criterion.question)}</strong><dl><div><dt>Checked by</dt><dd>${esc(criterion.checked_by)}</dd></div><div><dt>Evidence</dt><dd>${esc(criterion.required_evidence?.join(", ") || "No separate evidence kind")}</dd></div><div><dt>Citations</dt><dd>${esc(criterion.minimum_citations || "None required")}</dd></div><div><dt>Must pass</dt><dd>${criterion.required_to_pass ? "Yes" : "Contributes to the full review"}</dd></div></dl></li>`).join("") || "<li>No individual review question was provided.</li>"}</ol><details><summary>Technical details</summary><code>${esc(reference.path)}</code><dl><div><dt>kind</dt><dd><code>${esc(reference.technical_details?.kind || "unknown")}</code></dd></div><div><dt>schema_version</dt><dd><code>${esc(reference.technical_details?.schema_version ?? "unknown")}</code></dd></div><div><dt>version</dt><dd><code>${esc(reference.technical_details?.version || "unknown")}</code></dd></div></dl></details></article>`;
+  }).join("")}</div></section>`;
+}
+
+function studioTechnicalDisclosure(section) {
+  const technical = studioState.technicalMode === "config"
+    ? studioJsonView()
+    : `<div class="studio-embedded-graph"><p>The exact graph keeps every saved step and route. Exact field editors remain available in the dedicated Technical details tab.</p>${studioGraphHtml()}</div>`;
+  return `<details class="studio-form-technical"${studioState.technicalExpanded ? " open" : ""}><summary>Technical details</summary><div class="studio-form-technical-body"><p>The exact graph and lossless configuration edit this same draft. Closing these details returns to <strong>${esc(section.question)}</strong> without discarding edits.</p><div class="studio-technical-tabs" role="tablist" aria-label="Technical editor mode"><button type="button" id="studio-technical-tab-graph" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "graph"}" tabindex="${studioState.technicalMode === "graph" ? "0" : "-1"}" data-studio-technical="graph" class="${studioState.technicalMode === "graph" ? "active" : ""}">Exact graph</button><button type="button" id="studio-technical-tab-config" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "config"}" tabindex="${studioState.technicalMode === "config" ? "0" : "-1"}" data-studio-technical="config" class="${studioState.technicalMode === "config" ? "active" : ""}">Raw JSON</button></div><div id="studio-technical-panel" role="tabpanel" aria-labelledby="studio-technical-tab-${esc(studioState.technicalMode)}">${technical}</div><button type="button" data-studio-return-plain>Return to ${esc(section.label)}</button></div></details>`;
+}
+
 function studioPlanReview() {
   const authoring = studioAuthoring();
   const review = authoring?.review_sections || [];
   const team = studioState.family === "organization";
   return `<aside class="studio-plan-review" aria-label="${team ? "Readable team and review summary" : "Readable plan summary"}"><div><span>Review before save</span><strong>${esc(authoring?.status === "ready-to-review" ? "Ready to review" : "Needs attention")}</strong>${badge(authoring?.status === "ready-to-review" ? "nothing starts" : `${authoring?.corrections?.length || 0} corrections`, authoring?.status === "ready-to-review" ? "ok" : "issue")}</div>
-    <dl>${review.map((item) => `<div><dt>${esc(item.label)}</dt><dd>${esc(item.answer)}</dd></div>`).join("")}</dl>
+    <dl>${review.map((item) => `<div><dt>${esc(studioPlainSection(item).label)}</dt><dd>${esc(item.answer)}</dd></div>`).join("")}</dl>
     ${team ? `<p>${esc(authoring?.runtime_independence?.claim || "")}</p>` : ""}
     <p>Drafting, checking, and leaving make no change. Saving still requires a separate review of the exact file change and starts no work.</p>
     <button type="button" id="studio-review-save"${authoring?.status === "ready-to-review" ? "" : " disabled"}>Review this save</button>
@@ -5142,6 +5174,7 @@ function studioPlanView() {
   if (!authoring.applicable) return stateHtml("This delivery design has no ordinary authoring view.");
   const section = studioPlanSection() || authoring.sections[0];
   if (section) studioState.planSection = section.id;
+  const plainSection = studioPlainSection(section);
   const editor = studioState.family === "program"
     ? studioProgramPlanEditor(section)
     : studioState.family === "workflow"
@@ -5151,9 +5184,9 @@ function studioPlanView() {
   return `<div class="studio-plan" data-plan-status="${esc(authoring.status)}">
     <header><div><span>${team ? "Team and review" : "Delivery decisions"}</span><h2>${team ? "Make ownership, independence, and decisions understandable" : "Build the plan in the order people review it"}</h2><p>${esc(authoring.summary)}</p></div>${badge(authoring.status === "ready-to-review" ? "ready to review" : "needs attention", authoring.status === "ready-to-review" ? "ok" : "issue")}</header>
     <div class="studio-plan-shell">
-      <nav class="studio-plan-sections" aria-label="${team ? "Team and review sections" : "Delivery plan sections"}">${authoring.sections.map((item) => `<button type="button" data-plan-section="${esc(item.id)}" class="${item.id === section.id ? "active" : ""}" aria-current="${item.id === section.id ? "step" : "false"}"><span>${item.step}</span><strong>${esc(item.label)}</strong>${item.correction_count ? `<small>${item.correction_count} to fix</small>` : "<small>ready</small>"}</button>`).join("")}</nav>
-      <main class="studio-plan-section" id="studio-plan-section" tabindex="-1"><header><span>Step ${section.step} of ${authoring.sections.length}</span><h2>${esc(section.question)}</h2><p>${esc(section.guidance)}</p><strong>${esc(section.answer)}</strong></header>
-        ${studioPlanCorrections(section.id)}${editor}${section.id !== "limits" ? studioPlanFactList(section.facts) : ""}${studioPlanExamples()}
+      <nav class="studio-plan-sections" aria-label="${team ? "Team and review sections" : "Delivery plan sections"}">${authoring.sections.map((item) => { const plainItem = studioPlainSection(item); return `<button type="button" data-plan-section="${esc(item.id)}" class="${item.id === section.id ? "active" : ""}" aria-current="${item.id === section.id ? "step" : "false"}"><span>${item.step}</span><strong>${esc(plainItem.label)}</strong>${item.correction_count ? `<small>${item.correction_count} to fix</small>` : "<small>ready</small>"}</button>`; }).join("")}</nav>
+      <main class="studio-plan-section" id="studio-plan-section" tabindex="-1"><header><span>Step ${section.step} of ${authoring.sections.length}</span><h2>${esc(plainSection.question)}</h2><p>${esc(plainSection.guidance)}</p><strong>${esc(section.answer)}</strong></header>
+        ${studioPlanCorrections(section.id)}${editor}${section.id !== "limits" ? studioPlanFactList(section.facts) : ""}${section.id === "quality" ? studioReviewCriteriaHtml() : ""}${studioPlanExamples()}${studioTechnicalDisclosure(plainSection)}
       </main>
       ${studioPlanReview()}
     </div>
@@ -5162,7 +5195,9 @@ function studioPlanView() {
 
 function studioTechnicalView() {
   const team = studioState.family === "organization";
+  const section = studioPlainSection(studioPlanSection());
   return `<div class="studio-technical-view"><header><div><span class="orch-eyebrow">Technical details</span><h2>${team ? "Exact responsibilities, provenance, and configuration" : "Exact graph, fields, and configuration"}</h2><p>${team ? "Inspect stable role IDs, candidate profiles, provider and model resolution, auth and principal fingerprints, work areas, sessions, packet bounds, decision rules, and the lossless source." : "Use this view for hierarchical flows, bounded loops, discussion cells, exact conditions, raw import/export, and source-level diagnostics."}</p></div>${badge("same source document", "ok")}</header>
+    <button type="button" class="studio-technical-return" data-studio-return-plain>Return to ${esc(section?.label || (team ? "team and review" : "plain plan"))}</button>
     <div class="studio-technical-tabs" role="tablist" aria-label="Technical editor mode"><button type="button" id="studio-technical-tab-graph" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "graph"}" tabindex="${studioState.technicalMode === "graph" ? "0" : "-1"}" data-studio-technical="graph" class="${studioState.technicalMode === "graph" ? "active" : ""}">Graph and fields</button><button type="button" id="studio-technical-tab-config" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "config"}" tabindex="${studioState.technicalMode === "config" ? "0" : "-1"}" data-studio-technical="config" class="${studioState.technicalMode === "config" ? "active" : ""}">Lossless configuration</button></div>
     <div id="studio-technical-panel" role="tabpanel" aria-labelledby="studio-technical-tab-${esc(studioState.technicalMode)}">${studioState.technicalMode === "config" ? studioJsonView() : studioDesignView()}</div>
   </div>`;
@@ -5524,7 +5559,7 @@ async function previewStudioAction(action, trigger = document.activeElement) {
 async function applyStudioAction(preview, request) {
   const button = document.getElementById("studio-confirm-apply"); if (button) { button.disabled = true; button.textContent = "applying exact policy…"; }
   const { status, body } = await postJson("/api/program-studio/apply", { ...request, fingerprint: preview.fingerprint });
-  if (status === 409) { studioState.error = "Stale Program Studio preview refused; policy bytes or desired content changed. Nothing was written."; renderProgramStudio(); return; }
+  if (status === 409) { studioState.error = "This save review is no longer current. Nothing was written. Review the change again to get a fresh preview before saving."; renderProgramStudio(); return; }
   if (status >= 400 || body.ok === false) { studioState.error = (body.issues && body.issues[0]) || `apply failed (${status})`; renderProgramStudio(); return; }
   const family = studioState.family;
   if (request.action === "delete") { location.hash = `#/program-studio/${family}`; await viewProgramStudio(family); return; }
@@ -5848,7 +5883,14 @@ function updateStudioCouncilMember(index) {
 
 function wireProgramStudio() {
   document.querySelectorAll("[data-studio-view]").forEach((button) => button.addEventListener("click", () => { studioState.view = button.dataset.studioView; renderProgramStudio(); }));
-  document.querySelectorAll("[data-studio-technical]").forEach((button) => button.addEventListener("click", () => { studioState.technicalMode = button.dataset.studioTechnical; renderProgramStudio(); }));
+  document.querySelector(".studio-form-technical")?.addEventListener("toggle", (event) => { studioState.technicalExpanded = event.currentTarget.open; });
+  document.querySelectorAll("[data-studio-technical]").forEach((button) => button.addEventListener("click", () => { studioState.technicalMode = button.dataset.studioTechnical; studioState.technicalExpanded = studioState.view === "plan"; renderProgramStudio(); }));
+  document.querySelectorAll("[data-studio-return-plain]").forEach((button) => button.addEventListener("click", () => {
+    studioState.view = "plan";
+    studioState.technicalExpanded = false;
+    renderProgramStudio();
+    requestAnimationFrame(() => document.getElementById("studio-plan-section")?.focus());
+  }));
   document.querySelectorAll("[data-plan-section]").forEach((button) => button.addEventListener("click", () => {
     studioState.planSection = button.dataset.planSection;
     studioState.selected = "";
@@ -5993,6 +6035,7 @@ async function viewProgramStudio(family = "program", name) {
   studioState.view = "plan";
   studioState.planSection = family === "organization" ? "responsibilities" : "scope";
   studioState.technicalMode = "graph";
+  studioState.technicalExpanded = false;
   const familyModel = studioFamilyModel(family);
   const chosen = (!name && family === "program" && pendingProgramSetup)
     ? null
@@ -6016,13 +6059,22 @@ async function viewProgramStudio(family = "program", name) {
     }
   }
   if (chosen) studioState.setupContext = null;
-  const requestedView = new URLSearchParams(location.search).get("studioview");
+  const studioParams = new URLSearchParams(location.search);
+  const requestedView = studioParams.get("studioview");
   if (STUDIO_VIEWS.includes(requestedView)) studioState.view = requestedView;
-  const requestedTechnical = new URLSearchParams(location.search).get("studiotechnical");
+  const requestedSection = studioParams.get("studiosection");
+  if ((studioAuthoring()?.sections || []).some((section) => section.id === requestedSection)) studioState.planSection = requestedSection;
+  studioState.technicalExpanded = studioParams.get("studiofold") === "1";
+  const requestedTechnical = studioParams.get("studiotechnical");
   if (["graph", "config"].includes(requestedTechnical)) studioState.technicalMode = requestedTechnical;
   const requestedScenario = new URLSearchParams(location.search).get("studioscenario");
   if (requestedScenario) studioState.scenario = requestedScenario;
   if (studioState.model) renderProgramStudio(); else { renderProgramStudio(); await refreshStudioModel(); }
+  if (studioParams.get("studiofocus") === "technical") {
+    requestAnimationFrame(() => requestAnimationFrame(() => (
+      document.querySelector(".studio-form-technical")?.scrollIntoView({ block: "start" })
+    )));
+  }
 }
 
 /* ── router ─────────────────────────────────────────────────────────── */

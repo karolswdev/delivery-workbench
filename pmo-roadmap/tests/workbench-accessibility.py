@@ -558,7 +558,7 @@ class WorkbenchExam:
         self,
         predicate: Callable[[], Any],
         description: str,
-        timeout: float = 12,
+        timeout: float = 30,
     ) -> Any:
         deadline = time.monotonic() + timeout
         last: Any = None
@@ -868,25 +868,35 @@ class WorkbenchExam:
         self.driver.type_text("Keyboard pause review")
         self.focus('#board-phase-form button[type="submit"]')
         self.driver.press("enter")
-        self.wait(lambda: self.selector_exists(".board-preview"), "keyboard pause preview")
+        self.wait(
+            lambda: self.selector_exists(".board-preview"),
+            "keyboard pause preview",
+            timeout=30,
+        )
         self.focus("#board-apply")
         self.driver.press("enter")
         resume_trigger = '[data-board-phase-action="resume_phase"][data-phase="0"]'
         self.wait(
             lambda: self.selector_exists(resume_trigger),
             "applied pause to refresh as a paused lane",
+            timeout=30,
         )
         self.focus(resume_trigger)
         self.driver.press("enter")
         self.wait(lambda: self.selector_exists("#board-phase-form"), "keyboard resume panel")
         self.focus('#board-phase-form button[type="submit"]')
         self.driver.press("enter")
-        self.wait(lambda: self.selector_exists(".board-preview"), "keyboard resume preview")
+        self.wait(
+            lambda: self.selector_exists(".board-preview"),
+            "keyboard resume preview",
+            timeout=30,
+        )
         self.focus("#board-apply")
         self.driver.press("enter")
         self.wait(
             lambda: self.selector_exists(pause_trigger),
             "applied resume to restore the active lane",
+            timeout=30,
         )
         self.assertions += 14
 

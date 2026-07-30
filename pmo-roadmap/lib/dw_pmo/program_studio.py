@@ -1057,6 +1057,131 @@ def _simulation_scenarios(family: str, graph: dict[str, object]) -> list[dict[st
     ]
 
 
+def _rubric_references(
+    family: str, document: dict[str, object]
+) -> list[str]:
+    """Return rubric slugs in first-use order without interpreting them."""
+    references: list[str] = []
+
+    def add(value: object) -> None:
+        if isinstance(value, str) and value and value not in references:
+            references.append(value)
+
+    if family == "program":
+        bindings = document.get("bindings")
+        for binding in bindings if isinstance(bindings, list) else []:
+            if not isinstance(binding, dict):
+                continue
+            rubrics = binding.get("rubrics")
+            for value in rubrics if isinstance(rubrics, list) else []:
+                add(value)
+        gates = document.get("phase_gates")
+        for gate in gates if isinstance(gates, list) else []:
+            if isinstance(gate, dict):
+                add(gate.get("rubric"))
+    elif family == "workflow":
+        pending = list(document.get("nodes") or [])
+        while pending:
+            value = pending.pop(0)
+            if isinstance(value, dict):
+                add(value.get("rubric"))
+                pending.extend(value.values())
+            elif isinstance(value, list):
+                pending.extend(value)
+    return references
+
+
+def _readable_review_criteria(
+    root: Path, family: str, document: dict[str, object]
+) -> list[dict[str, object]]:
+    """Project referenced rubric files into a safe, read-only browser model."""
+    result: list[dict[str, object]] = []
+    for reference in _rubric_references(family, document):
+        relative = f"pm/rubrics/{reference}.json"
+        missing = {
+            "reference": reference,
+            "path": relative,
+            "status": "missing",
+            "message": f"Review criteria {reference!r} could not be found.",
+            "next_step": (
+                f"Check the reference, or author {relative} in the repository files, "
+                "then request a fresh plan check."
+            ),
+            "read_only": True,
+        }
+        if not _SAFE_ID_RE.fullmatch(reference):
+            result.append(missing)
+            continue
+        path = (root / relative).resolve()
+        if path.parent != (root / "pm" / "rubrics").resolve() or not path.is_file():
+            result.append(missing)
+            continue
+        try:
+            rubric = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            result.append({
+                **missing,
+                "status": "unreadable",
+                "message": f"Review criteria {reference!r} could not be read safely.",
+            })
+            continue
+        if not isinstance(rubric, dict):
+            result.append({
+                **missing,
+                "status": "unreadable",
+                "message": f"Review criteria {reference!r} is not a readable document.",
+            })
+            continue
+        criteria = []
+        rubric_criteria = rubric.get("criteria")
+        for index, criterion in enumerate(
+            rubric_criteria if isinstance(rubric_criteria, list) else []
+        ):
+            if not isinstance(criterion, dict):
+                continue
+            evaluation = criterion.get("evaluation")
+            evaluation = evaluation if isinstance(evaluation, dict) else {}
+            evidence = criterion.get("required_evidence_kinds")
+            outcomes = criterion.get("allowed_results")
+            criteria.append({
+                "id": str(criterion.get("id") or f"criterion-{index + 1}"),
+                "question": str(criterion.get("question") or "No review question was provided."),
+                "checked_by": (
+                    "An exact saved check"
+                    if evaluation.get("kind") == "mechanical-fact"
+                    else "Independent reviewer judgment"
+                ),
+                "required_evidence": [
+                    str(item).replace("-", " ")
+                    for item in (evidence if isinstance(evidence, list) else [])
+                    if isinstance(item, str)
+                ],
+                "minimum_citations": criterion.get("min_citations", 0),
+                "required_to_pass": bool(criterion.get("veto")),
+                "allowed_outcomes": [
+                    str(item).replace("-", " ")
+                    for item in (outcomes if isinstance(outcomes, list) else [])
+                    if isinstance(item, str)
+                ],
+            })
+        result.append({
+            "reference": reference,
+            "path": relative,
+            "status": "available",
+            "title": str(rubric.get("title") or reference.replace("-", " ")),
+            "description": str(rubric.get("description") or ""),
+            "criteria": criteria,
+            "read_only": True,
+            "technical_details": {
+                "kind": rubric.get("kind"),
+                "schema_version": rubric.get("schema_version"),
+                "version": rubric.get("version"),
+                "subject_type": rubric.get("subject_type"),
+            },
+        })
+    return result
+
+
 def build_studio_document(root: Path, family: str, selector: str) -> dict[str, object]:
     spec = _family(family)
     path = spec.finder(root, selector)
@@ -1089,6 +1214,7 @@ def build_studio_document(root: Path, family: str, selector: str) -> dict[str, o
         "authoring": build_delivery_plan_authoring(
             family, document, presented_validation, graph, round_trip
         ),
+        "review_criteria": _readable_review_criteria(root, family, document),
         "team_review": (
             build_team_review(
                 document,
@@ -1795,6 +1921,9 @@ def studio_mutation_preview(plan: StudioMutationPlan) -> dict[str, object]:
                 presented_validation,
                 graph,
                 round_trip,
+            ),
+            "review_criteria": _readable_review_criteria(
+                plan.root, plan.family, plan.document,
             ),
             "team_review": (
                 build_team_review(
