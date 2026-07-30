@@ -375,7 +375,7 @@ def _action_semantics(
         return {
             "label": "Continue within reviewed ceilings",
             "effect": (
-                "May start successive canonical program steps only until the "
+                f"May start successive canonical {subject} steps only until the "
                 "reviewed tick, time, checkpoint, stop, or terminal ceiling."
             ),
             "unchanged": (
@@ -428,17 +428,18 @@ def _action_semantics(
         }
     if action == "cancel":
         return {
-            "label": f"Cancel this bounded {subject}",
+            "label": f"Cancel and interrupt this bounded {subject}",
             "effect": (
-                f"Ends this {subject} as cancelled and expires its outstanding requests."
+                f"Permanently revokes this {subject} permission, marks it cancelled, "
+                "expires its outstanding requests, and interrupts recorded active work within its bounded process boundary."
             ),
             "unchanged": (
                 "Completed effects and exact history remain; cancellation does "
                 "not certify, merge, release, or revoke any separate authority."
             ),
             "after": (
-                "The cancelled delivery cannot resume. Program cancellation also "
-                "interrupts its recorded active claims."
+                "The cancelled delivery cannot resume. Any interruption is bounded "
+                "to work recorded under this permission."
             ),
             "severity": "danger",
             "permanent": True,

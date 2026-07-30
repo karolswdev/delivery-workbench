@@ -586,6 +586,11 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
         ):
             from .orchestration_surface import build_run_act_preview
 
+            try:
+                max_ticks = int(query.get("max_ticks", ["100"])[0])
+                max_seconds = int(query.get("max_seconds", ["300"])[0])
+            except ValueError as exc:
+                raise DwError("run preview ceilings must be integers") from exc
             return 200, envelope(build_run_act_preview(
                 root,
                 parts[2],
@@ -593,6 +598,8 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
                 reason=query.get("reason", [""])[0],
                 decision=query.get("decision", [""])[0],
                 correlation_id=query.get("correlation_id", [""])[0],
+                max_ticks=max_ticks,
+                max_seconds=max_seconds,
             ))
 
         if (
@@ -925,6 +932,17 @@ def _program_http_integer(
     return value
 
 
+def _run_http_integer(
+    body: dict[str, object],
+    key: str,
+    default: int,
+) -> int:
+    value = body.get(key, default)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise DwError(f"run {key} must be an integer")
+    return value
+
+
 def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int, dict[str, object]]:
     """POST routes: deliberate step, roadmap edits, and score content edits."""
     route = path.rstrip("/")
@@ -1171,6 +1189,7 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
     if route == "/api/runs/preview":
         unknown = sorted(set(body) - {
             "run_id", "action", "reason", "decision", "correlation_id",
+            "max_ticks", "max_seconds",
         })
         if unknown:
             return _error(400, f"unknown run preview parameter(s): {', '.join(unknown)}")
@@ -1185,6 +1204,8 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
                 reason=str(body.get("reason", "") or ""),
                 decision=str(body.get("decision", "") or ""),
                 correlation_id=str(body.get("correlation_id", "") or ""),
+                max_ticks=_run_http_integer(body, "max_ticks", 100),
+                max_seconds=_run_http_integer(body, "max_seconds", 300),
             ))
         except DwError as err:
             return _run_error(err)
@@ -1222,10 +1243,34 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
         except DwError as err:
             return _run_error(err)
 
+    if route == "/api/runs/supervise":
+        unknown = sorted(set(body) - {
+            "run_id", "expect", "max_ticks", "max_seconds",
+        })
+        if unknown:
+            return _error(
+                400,
+                f"unknown run supervise parameter(s): {', '.join(unknown)}",
+            )
+        try:
+            run_id, expect = _require(body, "run_id", "expect")
+            from .orchestration_surface import apply_run_act
+
+            return 200, envelope(apply_run_act(
+                root,
+                run_id,
+                "supervise",
+                expect,
+                max_ticks=_run_http_integer(body, "max_ticks", 100),
+                max_seconds=_run_http_integer(body, "max_seconds", 300),
+            ))
+        except DwError as err:
+            return _run_error(err)
+
     if route in {
         "/api/runs/tick", "/api/runs/pause", "/api/runs/resume",
-        "/api/runs/revoke", "/api/runs/cancel", "/api/runs/checkpoint",
-        "/api/runs/request",
+        "/api/runs/revoke", "/api/runs/cancel",
+        "/api/runs/checkpoint", "/api/runs/request",
     }:
         action = route.rsplit("/", 1)[-1]
         allowed = {"run_id", "expect"}
@@ -1248,6 +1293,8 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
                 reason=str(body.get("reason", "") or ""),
                 decision=str(body.get("decision", "") or ""),
                 correlation_id=str(body.get("correlation_id", "") or ""),
+                max_ticks=_run_http_integer(body, "max_ticks", 100),
+                max_seconds=_run_http_integer(body, "max_seconds", 300),
             ))
         except DwError as err:
             return _run_error(err)

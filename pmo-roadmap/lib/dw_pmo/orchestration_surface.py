@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -42,10 +43,12 @@ RUN_ACT_PREVIEW_KIND = "delivery-workbench-run-act-preview"
 RUN_VIEW_KIND = "delivery-workbench-run-view"
 RUN_SUMMARY_KIND = "delivery-workbench-run-summary-list"
 RUN_STREAM_KIND = "delivery-workbench-run-stream"
+RUN_SUPERVISION_SURFACE_KIND = "delivery-workbench-run-surface-supervision"
 RUN_SURFACE_SCHEMA_VERSION = 1
 
 _ACTIONS = {
-    "tick", "pause", "resume", "revoke", "cancel", "checkpoint", "request",
+    "tick", "supervise", "pause", "resume", "revoke", "cancel",
+    "checkpoint", "request",
 }
 _SAFE_EXECUTION_ID = re.compile(r"^(?:session|check)-[A-Za-z0-9_.:-]{1,127}$")
 _MAX_STREAM_READ = 100_000
@@ -101,7 +104,7 @@ def _act_applicability(
         raise DwError(f"unsupported run act: {action}")
     if action in {"pause", "revoke", "cancel"} and not reason:
         issues.append(f"run {action} requires a reason")
-    if action in {"tick", "resume", "checkpoint", "request"} and reason:
+    if action in {"tick", "supervise", "resume", "checkpoint", "request"} and reason:
         issues.append(f"run {action} does not accept a reason")
     if len(reason) > 200 or "\n" in reason or "\0" in reason:
         issues.append("run act reason must be a bounded single line")
@@ -110,7 +113,7 @@ def _act_applicability(
     if action not in {"checkpoint", "request"} and correlation_id:
         issues.append(f"run {action} does not accept a request correlation id")
 
-    if action == "tick":
+    if action in {"tick", "supervise"}:
         if (
             state in TERMINAL_STATES
             and state != "awaiting-certification"
@@ -128,13 +131,13 @@ def _act_applicability(
                 root, str(projection["run_id"])
             )
             if not compiled["score"].get("nudges"):
-                issues.append(f"cannot tick a run in state {state}")
+                issues.append(f"cannot {action} a run in state {state}")
         elif state == "awaiting-approval" and projection["outstanding_requests"]:
             # A restart maintenance tick republishes/ages requests but cannot
             # dispatch while a human decision is outstanding.
             pass
         elif state != "active":
-            issues.append(f"cannot tick a run in state {state}")
+            issues.append(f"cannot {action} a run in state {state}")
         elif not projection["dispatch_allowed"]:
             issues.append("run grant does not currently permit dispatch")
     elif action == "pause":
@@ -196,12 +199,27 @@ def build_run_act_preview(
     reason: str = "",
     decision: str = "",
     correlation_id: str = "",
+    max_ticks: int = 100,
+    max_seconds: int = 300,
     now: datetime | None = None,
 ) -> dict[str, object]:
     """Build a pure action+parameter+ledger-bound confirmation document."""
     action = str(action or "").strip().lower()
     reason = str(reason or "").strip()
     decision = str(decision or "").strip().lower()
+    if action == "supervise":
+        if (
+            isinstance(max_ticks, bool)
+            or not isinstance(max_ticks, int)
+            or not 1 <= max_ticks <= 10_000
+        ):
+            raise DwError("run max_ticks must be between 1 and 10000")
+        if (
+            isinstance(max_seconds, bool)
+            or not isinstance(max_seconds, int)
+            or not 1 <= max_seconds <= 86_400
+        ):
+            raise DwError("run max_seconds must be between 1 and 86400")
     projection = replay_run(root, run_id, now=now)
     correlation_id = str(correlation_id or "").strip()
     if action == "checkpoint" and not correlation_id:
@@ -248,11 +266,14 @@ def build_run_act_preview(
         "applicable": not issues,
         "issues": issues,
         "state": projection["state"],
+        "generation": projection["control_generation"],
         "control_generation": projection["control_generation"],
         "ledger_head": projection["ledger_head"],
         "reason": reason,
         "decision": decision,
         "correlation_id": correlation_id,
+        "max_ticks": max_ticks,
+        "max_seconds": max_seconds,
         "pending_checkpoint": pending_summary,
         "outstanding_request": request_summary,
         "response_outcome": (
@@ -263,10 +284,94 @@ def build_run_act_preview(
             and decision not in request["response_schema"]["decision"]
             else "decision"
         ),
-        "starts_work": action == "tick" and projection["state"] == "active",
+        "starts_work": action in {"tick", "supervise"} and projection["state"] == "active",
         "writes_events": False,
     }
     return {**unsigned, "act_token": _sha(unsigned)}
+
+
+def _consume_run_supervision_token(
+    root: Path,
+    run_id: str,
+    preview: dict[str, object],
+) -> None:
+    """Atomically consume one supervision token even when its pass makes no progress."""
+    token = str(preview["act_token"])
+    directory = _run_dir(root, run_id) / "supervision-tokens"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    receipt = directory / f"{hashlib.sha256(token.encode('utf-8')).hexdigest()}.json"
+    document = {
+        "kind": "delivery-workbench-run-supervision-token-use",
+        "schema_version": RUN_SURFACE_SCHEMA_VERSION,
+        "run_id": run_id,
+        "action": preview["action"],
+        "ledger_head": preview["ledger_head"],
+        "generation": preview["generation"],
+        "max_ticks": preview["max_ticks"],
+        "max_seconds": preview["max_seconds"],
+        "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+    }
+    try:
+        with receipt.open("x", encoding="utf-8") as handle:
+            handle.write(canonical_json(document) + "\n")
+        receipt.chmod(0o600)
+    except FileExistsError as exc:
+        raise DwError(
+            "run supervision token already used; no work started and no event was appended"
+        ) from exc
+
+
+def _supervise_run_surface(
+    root: Path,
+    run_id: str,
+    *,
+    ledger_head: str,
+    max_ticks: int,
+    max_seconds: int,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Repeat only canonical run ticks inside one finite approved envelope."""
+    started = time.monotonic()
+    expected_head = ledger_head
+    ticks: list[dict[str, object]] = []
+    stop = "tick-ceiling"
+    for _index in range(max_ticks):
+        if time.monotonic() - started >= max_seconds:
+            stop = "time-ceiling"
+            break
+        tick = tick_run(root, run_id, expect=expected_head, now=now)
+        ticks.append(tick)
+        expected_head = str(tick["after_head"])
+        if tick["terminal"]:
+            stop = "terminal"
+            break
+        if tick["state"] in {"paused", "awaiting-approval"}:
+            stop = "checkpoint"
+            break
+        if not tick["progressed"]:
+            stop = "no-progress"
+            break
+    last = ticks[-1] if ticks else None
+    return {
+        "kind": RUN_SUPERVISION_SURFACE_KIND,
+        "schema_version": RUN_SURFACE_SCHEMA_VERSION,
+        "run_id": run_id,
+        "ticks": ticks,
+        "tick_count": len(ticks),
+        "stop": stop,
+        "state": last["state"] if last else "not-started",
+        "terminal": bool(last and last["terminal"]),
+        "checkpoint": bool(
+            last and last["state"] in {"paused", "awaiting-approval"}
+        ),
+        "progressed": any(bool(item["progressed"]) for item in ticks),
+        "before_head": ledger_head,
+        "after_head": expected_head,
+        "max_ticks": max_ticks,
+        "max_seconds": max_seconds,
+        "bounded": True,
+        "content_safe": True,
+    }
 
 
 def apply_run_act(
@@ -278,12 +383,15 @@ def apply_run_act(
     reason: str = "",
     decision: str = "",
     correlation_id: str = "",
+    max_ticks: int = 100,
+    max_seconds: int = 300,
     now: datetime | None = None,
 ) -> dict[str, object]:
     """Apply exactly the fresh preview; no caller-supplied runtime semantics."""
     preview = build_run_act_preview(
         root, run_id, action, reason=reason, decision=decision,
-        correlation_id=correlation_id, now=now
+        correlation_id=correlation_id, max_ticks=max_ticks,
+        max_seconds=max_seconds, now=now
     )
     if str(expect or "") != preview["act_token"]:
         raise DwError(
@@ -294,6 +402,16 @@ def apply_run_act(
     ledger_head = str(preview["ledger_head"])
     if action == "tick":
         return tick_run(root, run_id, expect=ledger_head, now=now)
+    if action == "supervise":
+        _consume_run_supervision_token(root, run_id, preview)
+        return _supervise_run_surface(
+            root,
+            run_id,
+            ledger_head=ledger_head,
+            max_ticks=max_ticks,
+            max_seconds=max_seconds,
+            now=now,
+        )
     if action == "checkpoint":
         if correlation_id:
             return decide_outstanding_request(
@@ -435,6 +553,7 @@ def _control_catalog(
     controls: list[dict[str, object]] = []
     candidates = [
         ("tick", False, "", True, ""),
+        ("supervise", False, "", True, ""),
         ("pause", True, "", False, ""),
         ("resume", False, "", False, ""),
         ("revoke", True, "", False, ""),

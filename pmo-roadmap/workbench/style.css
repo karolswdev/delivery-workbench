@@ -3237,7 +3237,96 @@ details.blane.closed summary, .board-closed > summary { cursor: pointer; color: 
 }
 .adoption-bundle-link { display: inline-block; margin-top: 10px; font-weight: 700; }
 
+/* Live mission control */
+.live-mission { display: grid; gap: var(--space-5); min-width: 0; }
+.live-mission-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--color-surface), var(--color-surface-muted));
+  padding: clamp(18px, 3vw, 34px);
+}
+.live-mission-head h1 { margin: 4px 0; font-size: clamp(2rem, 5vw, 3.6rem); }
+.live-mission-head p { max-width: 62ch; margin: 0; color: var(--color-text-muted); }
+.live-mission-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.live-mission-summary article {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-4);
+}
+.live-mission-summary strong { font-size: var(--text-2xl); }
+.live-mission-summary span { color: var(--color-text-muted); }
+.live-mission-group { display: grid; gap: var(--space-3); }
+.live-mission-group > header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); }
+.live-mission-group > header h2 { margin: 0; }
+.live-mission-group > header h2 small { color: var(--color-text-muted); }
+.live-mission-group > header p { max-width: 60ch; margin: 0; color: var(--color-text-muted); }
+.live-mission-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.live-mission-card {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-left: 6px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: var(--space-4);
+}
+.live-mission-card.group-attention { border-left-color: var(--color-warning); }
+.live-mission-card.group-moving { border-left-color: var(--color-positive); }
+.live-mission-card.group-paused { border-left-style: dashed; border-left-color: var(--color-warning); }
+.live-mission-card.group-finished { border-left-style: double; border-left-color: var(--color-text-muted); }
+.live-mission-card > header { display: flex; justify-content: space-between; gap: var(--space-3); }
+.live-mission-card h3 { margin: 3px 0 0; overflow-wrap: anywhere; }
+.live-kind { color: var(--color-text-muted); font-size: var(--text-xs); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.live-mission-facts { display: grid; gap: 0; margin: 0; }
+.live-mission-facts > div { display: grid; grid-template-columns: minmax(7.5rem, .8fr) minmax(0, 2fr); gap: var(--space-3); border-top: 1px solid var(--color-border); padding: 9px 0; }
+.live-mission-facts dt { color: var(--color-text-muted); font-weight: 700; }
+.live-mission-facts dd { display: grid; gap: 2px; margin: 0; min-width: 0; }
+.live-mission-facts dd span,
+.live-mission-facts dd small { color: var(--color-text-muted); overflow-wrap: anywhere; }
+.live-mission-attention { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.live-mission-attention li { display: grid; gap: 2px; border: 1px solid var(--color-warning); border-radius: var(--radius-md); background: var(--color-warning-soft); padding: 10px; }
+.live-mission-attention li > span { font-size: var(--text-xs); font-weight: 800; text-transform: uppercase; }
+.live-mission-attention small { color: var(--color-text-muted); }
+.live-open { justify-self: start; font-weight: 800; }
+.live-technical-return { position: sticky; top: 0; z-index: 1; background: var(--color-surface); padding: 8px 0; }
+
+/* Stop controls carry different words, icons, borders, and color. */
+.bounded-action-card .control-icon { display: inline-grid; place-items: center; width: 1.7rem; height: 1.7rem; margin-right: 8px; border: 2px solid currentColor; border-radius: 50%; font-size: .8rem; vertical-align: middle; }
+.bounded-action-card.action-pause { border-style: dashed; border-color: var(--color-warning); }
+.bounded-action-card.action-pause .control-icon::before { content: "II"; }
+.bounded-action-card.action-revoke { border-width: 2px; border-color: var(--color-danger); }
+.bounded-action-card.action-revoke .control-icon { border-radius: 4px; }
+.bounded-action-card.action-revoke .control-icon::before { content: "X"; font-weight: 900; }
+.bounded-action-card.action-cancel { border: 3px double var(--color-danger); background: var(--color-danger-soft); }
+.bounded-action-card.action-cancel .control-icon { border-width: 3px; }
+.bounded-action-card.action-cancel .control-icon::before { content: "STOP"; font-size: .45rem; font-weight: 900; }
+.bounded-action-card.action-resume .control-icon::before { content: ">"; font-weight: 900; }
+.bounded-action-card.action-supervise .control-icon::before { content: "+"; font-weight: 900; }
+
 @media (max-width: 600px) {
+  .live-mission-head,
+  .live-mission-group > header { display: grid; align-items: start; }
+  .live-mission-head > button { width: 100%; }
+  .live-mission-summary,
+  .live-mission-grid { grid-template-columns: 1fr; }
+  .live-mission-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .live-mission-summary article { padding: 10px 7px; }
+  .live-mission-summary strong { font-size: var(--text-xl); }
+  .live-mission-summary span { font-size: var(--text-2xs); overflow-wrap: anywhere; }
+  .live-mission-facts > div { grid-template-columns: 1fr; gap: 2px; }
+  .live-mission-card { padding: 13px; }
   .adoption-config-grid,
   .adoption-path-split,
   .adoption-scope,

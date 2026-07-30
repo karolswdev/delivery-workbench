@@ -433,6 +433,7 @@ from pathlib import Path
 import sys
 
 from dw_pmo import FixtureDriver, build_run_plan, start_run, tick_run
+from dw_pmo.orchestration_run import transition_run
 
 root = Path(sys.argv[1]).resolve()
 now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -451,6 +452,23 @@ def start(score, offset):
 
 
 start("research-build-review", 0)
+paused = start("research-build-review", 10)
+transition_run(
+    root, paused["run_id"], "pause", paused["ledger_head"],
+    reason="Viewport fixture pause is resumable.", now=now + timedelta(seconds=10),
+)
+revoked = start("research-build-review", 11)
+transition_run(
+    root, revoked["run_id"], "revoke", revoked["ledger_head"],
+    reason="Viewport fixture permission permanently revoked.",
+    now=now + timedelta(seconds=11),
+)
+cancelled = start("research-build-review", 12)
+transition_run(
+    root, cancelled["run_id"], "cancel", cancelled["ledger_head"],
+    reason="Viewport fixture cancellation revokes and interrupts bounded work.",
+    now=now + timedelta(seconds=12),
+)
 repair = start("repair-visual", 1)
 config = {
     "kind": "delivery-workbench-driver-config", "schema_version": 1,
@@ -734,6 +752,15 @@ for spec in $VIEWS; do
   shot "$name-mobile" 390,844 "$BASE/?snapshot=1$extra$route"
 done
 
+# WLA-32-07 mission control: one combined inventory at both widths and themes
+# for every authority state a person must distinguish at a glance.
+for state in active awaiting-decision paused revoked cancelled complete; do
+  shot "live-$state-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&livescenario=$state#/live"
+  shot "live-$state-mobile" 390,844 "$BASE/?snapshot=1&project=sample&livescenario=$state#/live"
+done
+shot "live-stale-disconnected-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&livescenario=stale&liveconnection=stale#/live"
+shot "live-stale-disconnected-mobile" 390,844 "$BASE/?snapshot=1&project=sample&livescenario=stale&liveconnection=stale#/live"
+
 # WLA-27-07 action journeys: focus the real canonical decision model, its
 # exact pure preview, and the structured stale refusal without applying an
 # action. Both viewport sizes start at the action context rather than the
@@ -909,4 +936,4 @@ python3 "$SCRIPT_DIR/workbench-accessibility.py" \
   --project "$PROGRAM_PROJECT" \
   || fail "program accessibility journey exam failed"
 
-echo "workbench-ui-smoke.sh: ok (196 viewport renders: every view at two widths in light and dark, plus the project front door and 13 keyboard, semantic, focus, and wide/narrow journey exams)"
+echo "workbench-ui-smoke.sh: ok (224 viewport renders: every view at two widths in light and dark, including seven Live mission-control states, plus the project front door and 16 keyboard, semantic, focus, and wide/narrow journey exams)"

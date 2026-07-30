@@ -44,7 +44,7 @@ The browser stays a client of the canonical preview/apply functions — never a 
 | WLA-32-04 | From rough idea to phase plan | done | [story-04-idea-to-phase-plan](./story-04-idea-to-phase-plan.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-32-05 | Declare automation in plain words | done | [story-05-declare-automation-plainly](./story-05-declare-automation-plainly.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-32-06 | Consent you can read | done | [story-06-consent-you-can-read](./story-06-consent-you-can-read.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-32-07 | Mission control for live work | backlog | [story-07-mission-control-live-work](./story-07-mission-control-live-work.md) | - |
+| WLA-32-07 | Mission control for live work | done | [story-07-mission-control-live-work](./story-07-mission-control-live-work.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-32-08 | Prove it reads and looks right | backlog | [story-08-prove-it-reads-and-looks-right](./story-08-prove-it-reads-and-looks-right.md) | - |
 
 ## Sequencing

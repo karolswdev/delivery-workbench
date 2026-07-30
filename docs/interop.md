@@ -270,9 +270,10 @@ or provider argv.
 | `GET /api/runs` | `orchestration_run.run_inventory` | authoritative local projections; no prompts, argv, source, transcripts, or artifact bytes |
 | `GET /api/runs/<run>` | `orchestration_run.replay_run` | byte-identical projection in `data` |
 | `GET /api/runs/<run>/view` | `orchestration_surface.build_run_view` | pure live-progress and bounded-actions explanation used by Workbench Run; exact consent remains a separate preview |
-| `GET /api/runs/<run>/act/<action>` / `POST /api/runs/preview` | `orchestration_surface.build_run_act_preview` | exact pure act preview; POST carries bounded reason/decision/correlation fields and keeps them out of the address bar |
+| `GET /api/runs/<run>/act/<action>` / `POST /api/runs/preview` | `orchestration_surface.build_run_act_preview` | exact pure act preview; POST carries bounded reason/decision/correlation fields and, for supervision, finite tick/time ceilings outside the address bar |
 | `POST /api/runs/start` | `orchestration_surface.start_run_by_id` | identifiers/timestamps/token/approval only; grant creation dispatches nothing |
 | `POST /api/runs/tick`, `POST /api/runs/pause`, `POST /api/runs/resume`, `POST /api/runs/revoke`, `POST /api/runs/cancel`, `POST /api/runs/request`, `POST /api/runs/checkpoint` | `orchestration_surface.apply_run_act` | exact preview token plus only its bound reason/decision/correlation; stale is HTTP 409; checkpoint is a compatibility alias |
+| `POST /api/runs/supervise` | `orchestration_surface.apply_run_act` | finite repetition under an atomically consumed exact preview token binding tick/time ceilings, ledger head, control generation, and action; stops at a ceiling, checkpoint, terminal state, or no-progress result |
 | `GET /api/runs/<run>/streams/<executor>/<execution>/<stream>` | `orchestration_surface.read_run_stream` | explicit bounded stdout/stderr; no packets, prompts, final message, or artifact content |
 | `GET /api/runs/<run>/events` (SSE) | `orchestration_surface.tail_run_events` | live hash-chained ledger tail; `Last-Event-ID`/`from` cursor replays the exact missed suffix; read-only — no token or mutation is reachable from the stream |
 | `GET /api/signals/events?remote=…&branch=…` (SSE) | `orchestration_surface.tail_signal_events` | live signal-chain tail with the same cursor-replay and no-authority posture |

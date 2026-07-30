@@ -58,7 +58,7 @@ function destinationNav(active, current = "") {
     work: [["Board", `#/board/${encodeURIComponent(selectedProject)}`], ["Project details", `#/p/${encodeURIComponent(selectedProject)}`]],
     plan: [["Delivery options", "#/program-studio"], ["Roadmap changes", "#/edit"]],
     delivery: [["Delivery plans", "#/orchestration"]],
-    live: [["Live delivery", "#/programs"], ["Activity", "#/mc"]],
+    live: [["Mission control", "#/live"], ["Activity", "#/mc"]],
     health: [["Repository health", "#/health"]],
   };
   const links = groups[active] || [];
@@ -380,7 +380,7 @@ function updatePrimaryNavigation(hash) {
   const activeId = !surface || surface === "board" || surface === "p" ? "work-link"
     : surface === "program-studio" || surface === "edit" ? "plan-link"
       : surface === "orchestration" ? "delivery-link"
-        : surface === "programs" || surface === "mc" ? "live-link"
+        : surface === "live" || surface === "programs" || surface === "mc" ? "live-link"
           : surface === "health" ? "health-link" : "";
   document.querySelectorAll(".primary-nav a").forEach((link) => {
     if (link.id === activeId) link.setAttribute("aria-current", "page");
@@ -402,6 +402,7 @@ const LIVE_TECHNICAL_OPEN = new URLSearchParams(location.search).has("livetechni
 const SNAPSHOT_BOUNDED_FOCUS = new URLSearchParams(location.search).get("boundedfocus");
 const SNAPSHOT_BOUNDED_PREVIEW = new URLSearchParams(location.search).get("boundedpreview");
 const SNAPSHOT_BOUNDED_ERROR = new URLSearchParams(location.search).get("boundederror");
+const SNAPSHOT_LIVE_SCENARIO = new URLSearchParams(location.search).get("livescenario") || "";
 const ADOPTION_PROPOSAL_FILE = new URLSearchParams(location.search).get("proposal") || "";
 const ADOPTION_PROPOSAL_ID = new URLSearchParams(location.search).get("setuppreview") || "";
 
@@ -2672,7 +2673,7 @@ let orchState = {
   runError: "", runPlan: null, runAct: null, runResult: null, runStream: null,
   runConnection: { status: SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "checking" },
   grantDraft: { project: "", story: "", operator: "", minutes: 60 },
-  controlReason: "",
+  controlReason: "", maxTicks: 100, maxSeconds: 300,
 };
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
@@ -3065,7 +3066,7 @@ function runControlsHtml(view) {
 function runActPreviewHtml(preview) {
   if (!preview) return "";
   return `<details class="bounded-exact-preview"><summary>Exact run preview</summary><div class="run-token"><span>state + intent token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.control_generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p>
-    ${preview.correlation_id ? `<p><strong>bound request:</strong> <code>${esc(preview.correlation_id)}</code> · ${esc(preview.response_outcome)}</p>` : ""}${preview.reason ? `<p><strong>bound reason:</strong> ${esc(preview.reason)}</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
+    ${preview.action === "supervise" ? `<p><strong>Bound supervision:</strong> at most ${esc(preview.max_ticks)} steps and ${esc(preview.max_seconds)} seconds. It stops sooner at a checkpoint, terminal state, or no-progress result.</p>` : ""}${preview.correlation_id ? `<p><strong>bound request:</strong> <code>${esc(preview.correlation_id)}</code> · ${esc(preview.response_outcome)}</p>` : ""}${preview.reason ? `<p><strong>bound reason:</strong> ${esc(preview.reason)}</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
 }
 
 function runStreamHtml(stream) {
@@ -3370,7 +3371,7 @@ function boundedPreviewHtml(model, preview, target) {
   const action = boundedActionMatch(model, preview, target);
   const consequences = action?.consequences || {};
   const applicable = Boolean(preview.applicable);
-  const exact = target === "run" ? runActPreviewHtml(preview) : `<details class="bounded-exact-preview"><summary>Exact program preview</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
+  const exact = target === "run" ? runActPreviewHtml(preview) : `<details class="bounded-exact-preview"><summary>Exact program preview</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${preview.action === "supervise" ? `<p><strong>Bound supervision:</strong> at most ${esc(preview.max_ticks)} steps and ${esc(preview.max_seconds)} seconds. It stops sooner at a checkpoint, terminal state, or no-progress result.</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
   const refusal = applicable ? "" : boundedFailureDetailsHtml({
     what_happened: (preview.issues || []).join("; ") || "The current saved state refused this preview.",
     what_stayed_unchanged: "Previewing changed no work, permission, cost, or saved event.",
@@ -3396,7 +3397,7 @@ function boundedActionButtonsHtml(model, target) {
     const attrs = target === "run"
       ? `data-run-act="${esc(item.action)}" data-run-decision="${esc(item.decision || "")}" data-run-correlation="${esc(item.correlation_id || "")}"`
       : `data-program-act="${esc(item.action)}" data-program-decision="${esc(item.decision || "")}" data-program-request="${esc(item.correlation_id || "")}"`;
-    return `<article class="bounded-action-card severity-${esc(item.severity)} ${item.available ? "" : "unavailable"}"><div><span>${esc(item.kind)}</span>${badge(item.available ? "available" : "unavailable", item.available ? "ok" : "warn")}</div><h4>${esc(item.label)}</h4><p>${esc(item.consequences?.effect)}</p><small><strong>Then:</strong> ${esc(item.consequences?.after)}</small>${item.available ? `<button type="button" ${attrs} class="${item.severity === "danger" ? "danger" : item.may_start_work ? "starts-work" : ""}">Review ${esc(item.label.toLowerCase())}</button>` : `<p class="bounded-action-issue">${esc(item.issue)}</p>`}</article>`;
+    return `<article class="bounded-action-card severity-${esc(item.severity)} action-${esc(item.action)} ${item.available ? "" : "unavailable"}" data-control-action="${esc(item.action)}"><div><span>${esc(item.kind)}</span>${badge(item.available ? "available" : "unavailable", item.available ? "ok" : "warn")}</div><h4><span class="control-icon" aria-hidden="true"></span>${esc(item.label)}</h4><p>${esc(item.consequences?.effect)}</p><small><strong>Then:</strong> ${esc(item.consequences?.after)}</small>${item.available ? `<button type="button" ${attrs} class="${item.severity === "danger" ? "danger" : item.may_start_work ? "starts-work" : ""}">Review ${esc(item.label.toLowerCase())}</button>` : `<p class="bounded-action-issue"><strong>Unavailable now.</strong> ${esc(item.issue)}</p>`}</article>`;
   };
   return `<div class="bounded-read-actions">${read.map((item) => `<button type="button" data-bounded-read="${esc(item.read_action)}"><strong>${esc(item.label)}</strong><span>${esc(item.consequences?.effect)}</span></button>`).join("")}</div><div class="bounded-action-grid">${controls.map(controlButton).join("")}</div>`;
 }
@@ -3410,7 +3411,7 @@ function boundedActionCenterHtml(model, preview, error, result, target) {
   return `<section class="bounded-action-center" aria-labelledby="${esc(target)}-bounded-actions"><div class="bounded-action-hero"><div><span>Actions and decisions</span><h2 id="${esc(target)}-bounded-actions">Understand the consequence, then review one exact action</h2><p>${esc(model.summary)}</p></div>${badge("nothing applies without confirmation", "warn")}</div>
     ${boundedInboxHtml(model)}
     ${boundedPermissionHtml(model)}
-    <section class="bounded-choices"><div class="bounded-section-head"><div><span>Available choices</span><h3>Pause, resume, stop, cancel, reject, and continue stay distinct</h3></div></div>${needsReason ? `<label class="run-reason">Why are you taking this action?<input id="${target === "run" ? "run" : "program"}-control-reason" maxlength="${target === "run" ? "200" : "1000"}" value="${esc(reason)}" placeholder="Required for stop and decision actions"></label>` : ""}${hasSupervise ? `<div class="program-ceilings"><label>maximum steps in this pass<input id="program-max-ticks" type="number" min="1" max="10000" value="${esc(programState.maxTicks)}"></label><label>maximum duration (seconds)<input id="program-max-seconds" type="number" min="1" max="86400" value="${esc(programState.maxSeconds)}"></label></div>` : ""}${boundedActionButtonsHtml(model, target)}</section>
+    <section class="bounded-choices"><div class="bounded-section-head"><div><span>Available choices</span><h3>Pause, resume, stop, cancel, reject, and continue stay distinct</h3></div></div>${needsReason ? `<label class="run-reason">Why are you taking this action?<input id="${target === "run" ? "run" : "program"}-control-reason" maxlength="${target === "run" ? "200" : "1000"}" value="${esc(reason)}" placeholder="Required for stop and decision actions"></label>` : ""}${hasSupervise ? `<div class="program-ceilings"><label>maximum steps in this pass<input id="${target}-max-ticks" type="number" min="1" max="10000" value="${esc(target === "run" ? orchState.maxTicks : programState.maxTicks)}"></label><label>maximum duration (seconds)<input id="${target}-max-seconds" type="number" min="1" max="86400" value="${esc(target === "run" ? orchState.maxSeconds : programState.maxSeconds)}"></label><p>Supervision stops at these finite ceilings, a checkpoint, a terminal state, or the first no-progress result.</p></div>` : ""}${boundedActionButtonsHtml(model, target)}</section>
     ${boundedErrorHtml(error)}
     ${boundedPreviewHtml(model, preview, target)}
     ${boundedReceiptsHtml(model, result)}
@@ -3523,14 +3524,23 @@ function focusBoundedSnapshot() {
   setTimeout(focus, 100);
 }
 
+function liveDetailRoute() {
+  const parts = decodeURIComponent(location.hash.replace(/^#\/?/, "")).split("/").filter(Boolean);
+  if (parts[0] !== "live" || !["run", "program"].includes(parts[1]) || !parts[2]) return null;
+  return { kind: parts[1], id: parts[2], section: parts[3] || "" };
+}
+
 function runViewHtml() {
   if (orchState.runLoading) return `<div class="orch-run-shell">${stateHtml("Replaying the authoritative run ledger…")}</div>`;
   const error = orchState.runError ? `<div class="guard run-error" role="alert">${esc(orchState.runError)}</div>` : "";
   if (!orchState.runs.length || !orchState.runView) return `<div class="orch-run-shell">${error}${runEmptyHtml()}</div>`;
   const view = orchState.runView;
   const actions = boundedActionCenterHtml(view.bounded_actions, orchState.runAct, orchState.runError, orchState.runResult, "run");
-  const toolbar = `<div class="live-toolbar"><label>delivery run<select id="run-select">${orchState.runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run.story?.id || item.run_id)} · ${esc(item.run.state)}</option>`).join("")}</select></label><button type="button" id="run-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
-  const technical = `<div class="run-summary"><div><span>exact state</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>ledger</span><strong>${esc(view.ledger_events)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>attempts</span><strong>${esc(view.attempts.active.length)} active · ${esc(view.attempts.completed.length)} complete</strong><small>generation ${esc(view.control_generation)}</small></div><div><span>authority</span><strong>${view.dispatch_allowed ? "dispatch permitted" : "dispatch stopped"}</strong><small>${view.expired ? "grant expired" : "grant fresh by time"}</small></div></div>
+  const liveRoute = liveDetailRoute();
+  const toolbar = liveRoute?.kind === "run"
+    ? `<div class="live-toolbar"><a href="#/live">Back to all live work</a><button type="button" id="run-refresh">Check for updates</button><a href="#/live/run/${encodeURIComponent(view.run_id)}/technical">Technical details</a></div>`
+    : `<div class="live-toolbar"><label>delivery run<select id="run-select">${orchState.runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run.story?.id || item.run_id)} · ${esc(item.run.state)}</option>`).join("")}</select></label><button type="button" id="run-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
+  const technical = `${liveRoute?.kind === "run" ? `<p class="live-technical-return"><a href="#/live/run/${encodeURIComponent(view.run_id)}">Return to the ordinary view</a></p>` : ""}<div class="run-summary"><div><span>exact state</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>ledger</span><strong>${esc(view.ledger_events)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>attempts</span><strong>${esc(view.attempts.active.length)} active · ${esc(view.attempts.completed.length)} complete</strong><small>generation ${esc(view.control_generation)}</small></div><div><span>authority</span><strong>${view.dispatch_allowed ? "dispatch permitted" : "dispatch stopped"}</strong><small>${view.expired ? "grant expired" : "grant fresh by time"}</small></div></div>
     ${runBudgetHtml(view.budgets)}
     <section class="run-panel"><div class="run-panel-head"><div><span>authoritative graph state</span><strong>Why every node is waiting, eligible, active, failed, or complete</strong></div>${badge("inspection is pure", "ok")}</div>${liveRunGraph(view)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>executors and fail checks</span><strong>Sessions expose receipts and bounded streams, never prompts or commands</strong></div></div>${runSessionsHtml(view)}${runStreamHtml(orchState.runStream)}</section>
@@ -3540,7 +3550,7 @@ function runViewHtml() {
     ${runControlsHtml(view)}
     <section class="run-panel"><div class="run-panel-head"><div><span>operator notifications</span><strong>Derived from the ledger and signal chains; ack is receipted</strong></div>${badge("previews, never tokens", "ok")}</div>${runNotificationsHtml(view)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>hash-chained receipts</span><strong>Run ledger timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${runTimelineHtml(view)}</section>`;
-  return `<div class="orch-run-shell" data-run-id="${esc(view.run_id)}">${liveProgressShell(view.live_progress, orchState.runConnection, toolbar, actions, technical, Boolean(orchState.runStream))}</div>`;
+  return `<div class="orch-run-shell" data-run-id="${esc(view.run_id)}">${liveProgressShell(view.live_progress, orchState.runConnection, toolbar, actions, technical, Boolean(orchState.runStream) || ["technical", "notifications"].includes(liveRoute?.section), liveRoute?.kind === "run" ? "h1" : "h2")}</div>`;
 }
 
 function runNotificationsHtml(view) {
@@ -3576,6 +3586,7 @@ function orchestrationBody() {
 }
 
 function renderOrchestration() {
+  if (liveDetailRoute()?.kind === "run") { renderLiveMission(); return; }
   const focus = captureAppFocus();
   const current = orchState.name || orchState.score.slug;
   app.innerHTML = `${destinationNav("delivery", "#/orchestration")}<div class="orchestration" data-score="${esc(current)}">
@@ -3838,7 +3849,8 @@ async function refreshRunData() {
   try {
     const inventory = await api("/api/runs");
     orchState.runInventory = inventory.data.runs || [];
-    selectScoreRuns();
+    if (liveDetailRoute()?.kind === "run") orchState.runs = orchState.runInventory.filter((item) => item.valid !== false);
+    else selectScoreRuns();
     orchState.runView = orchState.runId ? (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data : null;
     orchState.runConnection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
     try { orchState.notifications = (await api("/api/notifications")).data.notifications; }
@@ -3967,7 +3979,7 @@ async function previewRunAct(action, decision, correlation, trigger = document.a
   const control = (orchState.runView?.controls || []).find((item) => item.action === action && String(item.decision || "") === String(decision || "") && String(item.correlation_id || "") === String(correlation || ""));
   const reason = control?.reason_required ? orchState.controlReason.trim() : "";
   orchState.runAct = null; orchState.runError = ""; orchState.runResult = null; renderOrchestration();
-  const { status, body } = await postJson("/api/runs/preview", { run_id: orchState.runId, action, ...(reason ? { reason } : {}), ...(decision ? { decision } : {}), ...(correlation ? { correlation_id: correlation } : {}) });
+  const { status, body } = await postJson("/api/runs/preview", { run_id: orchState.runId, action, ...(reason ? { reason } : {}), ...(decision ? { decision } : {}), ...(correlation ? { correlation_id: correlation } : {}), ...(action === "supervise" ? { max_ticks: Number(orchState.maxTicks), max_seconds: Number(orchState.maxSeconds) } : {}) });
   if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run preview failed (${status})`; }
   else orchState.runAct = body.data;
   renderOrchestration();
@@ -3977,9 +3989,17 @@ async function previewRunAct(action, decision, correlation, trigger = document.a
 async function confirmRunAct() {
   const preview = orchState.runAct;
   if (!preview?.applicable) return;
-  const request = { run_id: preview.run_id, expect: preview.act_token, ...(preview.reason ? { reason: preview.reason } : {}), ...(preview.decision ? { decision: preview.decision } : {}), ...(preview.correlation_id ? { correlation_id: preview.correlation_id } : {}) };
+  const request = { run_id: preview.run_id, expect: preview.act_token, ...(preview.reason ? { reason: preview.reason } : {}), ...(preview.decision ? { decision: preview.decision } : {}), ...(preview.correlation_id ? { correlation_id: preview.correlation_id } : {}), ...(preview.action === "supervise" ? { max_ticks: preview.max_ticks, max_seconds: preview.max_seconds } : {}) };
   orchState.runLoading = true; renderOrchestration();
-  const { status, body } = await postJson(`/api/runs/${encodeURIComponent(preview.action)}`, request);
+  let response;
+  try {
+    response = await postJson(`/api/runs/${encodeURIComponent(preview.action)}`, request);
+  } catch (_err) {
+    orchState.runLoading = false; orchState.runAct = null;
+    orchState.runError = "The transport ended without a confirmed receipt. An effect may have occurred. Reload saved history before another action; this view will not retry automatically.";
+    renderOrchestration(); return;
+  }
+  const { status, body } = response;
   orchState.runLoading = false;
   if (status === 409) { orchState.runAct = null; orchState.runError = "Stale run act refused before work or ledger change. Refresh once and preview the current state."; renderOrchestration(); return; }
   if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run act failed (${status})`; renderOrchestration(); return; }
@@ -4010,6 +4030,8 @@ function wireRunView() {
   };
   document.getElementById("run-plan-close")?.addEventListener("click", closePlan);
   document.getElementById("run-control-reason")?.addEventListener("input", (event) => { orchState.controlReason = event.target.value; });
+  document.getElementById("run-max-ticks")?.addEventListener("input", (event) => { orchState.maxTicks = Number(event.target.value); });
+  document.getElementById("run-max-seconds")?.addEventListener("input", (event) => { orchState.maxSeconds = Number(event.target.value); });
   document.querySelectorAll("[data-run-act]").forEach((button) => button.addEventListener("click", () => previewRunAct(button.dataset.runAct, button.dataset.runDecision, button.dataset.runCorrelation, button)));
   document.getElementById("run-act-confirm")?.addEventListener("click", confirmRunAct);
   const closeAct = () => {
@@ -4336,7 +4358,7 @@ function programControlsHtml(view) {
 
 function programActHtml(preview) {
   if (!preview) return "";
-  return `<details class="bounded-exact-preview"><summary>Exact program preview</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
+  return `<details class="bounded-exact-preview"><summary>Exact program preview</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${preview.action === "supervise" ? `<p><strong>Bound supervision:</strong> at most ${esc(preview.max_ticks)} steps and ${esc(preview.max_seconds)} seconds. It stops sooner at a checkpoint, terminal state, or no-progress result.</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
 }
 
 function programTimelineHtml(view) {
@@ -4356,8 +4378,11 @@ function programRunHtml(view) {
   const runs = programState.inventory?.runs || [];
   const progress = view.phase_progress || {};
   const actions = boundedActionCenterHtml(view.bounded_actions, programState.act, programState.error, programState.result, "program");
-  const toolbar = `<div class="live-toolbar"><label>delivery run<select id="program-run-select">${runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(view.program?.title || item.program || "program")} · ${esc(item.state)}</option>`).join("")}</select></label><button type="button" id="program-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
-  const technical = `${programState.result ? `<div class="program-result" role="status"><strong>bounded operation completed</strong><span>${esc(programState.result.kind)} · ${esc(programState.result.stop || programState.result.state || programState.result.result || "recorded")}</span></div>` : ""}
+  const liveRoute = liveDetailRoute();
+  const toolbar = liveRoute?.kind === "program"
+    ? `<div class="live-toolbar"><a href="#/live">Back to all live work</a><button type="button" id="program-refresh">Check for updates</button><a href="#/live/program/${encodeURIComponent(view.run_id)}/technical">Technical details</a></div>`
+    : `<div class="live-toolbar"><label>delivery run<select id="program-run-select">${runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(view.program?.title || item.program || "program")} · ${esc(item.state)}</option>`).join("")}</select></label><button type="button" id="program-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
+  const technical = `${liveRoute?.kind === "program" ? `<p class="live-technical-return"><a href="#/live/program/${encodeURIComponent(view.run_id)}">Return to the ordinary view</a></p>` : ""}${programState.result ? `<div class="program-result" role="status"><strong>bounded operation completed</strong><span>${esc(programState.result.kind)} · ${esc(programState.result.stop || programState.result.state || programState.result.result || "recorded")}</span></div>` : ""}
     <div class="program-summary"><div><span>authority</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>operational frontier</span><strong>${esc(view.operational_state)}</strong><small>${esc(view.current?.stop || "ready")}</small></div><div><span>ledger</span><strong>${esc(view.event_count)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>scope progress</span><strong>${esc((progress.selected_stories || []).length)} selected</strong><small>${esc(programScalar(progress.scope_completion))}</small></div></div>
     ${programWhyHtml(view)}
     ${runBudgetHtml(view.budgets)}
@@ -4368,10 +4393,11 @@ function programRunHtml(view) {
     ${programControlsHtml(view)}
     <section class="program-panel"><div class="program-panel-head"><div><span>phase and authority boundary</span><strong>Granted scope, selected progress, capabilities, and permanent exclusions</strong></div></div><div class="program-boundary"><section><h3>phase progress</h3><pre>${esc(JSON.stringify(progress, null, 2))}</pre></section><section><h3>capabilities</h3><p>${(view.capabilities || []).map((item) => badge(item, "ok")).join(" ") || "none"}</p><h3>permanently excluded</h3><p>${(view.permanent_exclusions || []).map((item) => badge(item, "warn")).join(" ") || "none"}</p></section></div></section>
     <section class="program-panel"><div class="program-panel-head"><div><span>hash-chained receipts</span><strong>Program authority timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${programTimelineHtml(view)}</section>`;
-  return `<div class="program-room" data-program-run="${esc(view.run_id)}">${liveProgressShell(view.live_progress, programState.connection, toolbar, actions, technical, Boolean(programState.stream), "h1")}</div>`;
+  return `<div class="program-room" data-program-run="${esc(view.run_id)}">${liveProgressShell(view.live_progress, programState.connection, toolbar, actions, technical, Boolean(programState.stream) || ["technical", "notifications"].includes(liveRoute?.section), "h1")}</div>`;
 }
 
 function renderPrograms() {
+  if (liveDetailRoute()?.kind === "program") { renderLiveMission(); return; }
   const focus = captureAppFocus();
   if (programState.loading) {
     app.innerHTML = stateHtml("Replaying the authoritative program ledger…");
@@ -4631,7 +4657,15 @@ async function confirmProgramAct() {
     ...(preview.request_id ? { request_id: preview.request_id } : {}),
     ...(preview.action === "supervise" ? { max_ticks: preview.max_ticks, max_seconds: preview.max_seconds } : {}),
   };
-  const { status, body } = await postJson(`/api/programs/${encodeURIComponent(preview.action)}`, request);
+  let response;
+  try {
+    response = await postJson(`/api/programs/${encodeURIComponent(preview.action)}`, request);
+  } catch (_err) {
+    programState.act = null;
+    programState.error = "The transport ended without a confirmed receipt. An effect may have occurred. Reload saved history before another action; this view will not retry automatically.";
+    renderPrograms(); return;
+  }
+  const { status, body } = response;
   if (status >= 400 || body.ok === false) {
     programState.act = null;
     programState.error = status === 409
@@ -4779,6 +4813,198 @@ async function viewPrograms(runId = "") {
   if (consentSnapshot?.startsWith("program-") && programState.plan) focusConsentSnapshot(".program-consent");
   if (consentSnapshot === "program-refusal") focusConsentSnapshot(".consent-start-error");
   focusBoundedSnapshot();
+}
+
+/* ── Live mission control (WLA-32-07) ───────────────────────────────
+ * The combined inventory is a read-only composition of the canonical run and
+ * program views. Its groups are presentation only; exact ledger states remain
+ * visible and every act stays on the existing preview/confirm boundary. */
+
+let liveMissionState = {
+  runs: [], programs: [], notifications: [], error: "", loading: false,
+  detail: null,
+  connection: { status: SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "manual" },
+};
+
+function liveAttentionItems(kind, view) {
+  const inbox = view?.bounded_actions?.inbox || [];
+  const notificationPrefix = kind === "program" ? "program-" : "";
+  const unread = liveMissionState.notifications.filter((item) => (
+    item.run_id === view.run_id && item.unread
+    && (kind === "program" ? String(item.kind || "").startsWith(notificationPrefix) : !String(item.kind || "").startsWith("program-"))
+  ));
+  return [
+    ...inbox.map((item) => ({
+      kind: item.kind === "decision" ? "Decision" : item.kind === "refusal" ? "Refusal" : "Blocker",
+      label: item.affected_work || item.why || "Saved work needs attention",
+      detail: item.why || item.after_no_choice || "Review the canonical saved state.",
+      href: `#/live/${kind}/${encodeURIComponent(view.run_id)}/attention`,
+    })),
+    ...unread.map((item) => ({
+      kind: "Unread notification",
+      label: item.detail || item.kind,
+      detail: "Acknowledge it from this delivery's notification history.",
+      href: `#/live/${kind}/${encodeURIComponent(view.run_id)}/notifications`,
+    })),
+  ];
+}
+
+function liveMissionItem(kind, view) {
+  const progress = view.live_progress || {};
+  const exactState = String(view.state || view.operational_state || "unknown");
+  const attention = liveAttentionItems(kind, view);
+  const statusGroup = String(progress.status?.group || "waiting");
+  const group = attention.length ? "attention"
+    : statusGroup === "complete" || ["complete", "cancelled", "revoked"].includes(exactState) ? "finished"
+      : ["paused", "blocked", "stopped"].includes(exactState) ? "paused"
+        : "moving";
+  return {
+    kind, view, exactState, attention, group,
+    statusLabel: progress.status?.label || exactState,
+    statusMeaning: progress.status?.meaning || view.terminal_meaning || "Saved ledger state.",
+    next: progress.next_step || { label: "Inspect saved state", detail: "Open the canonical control room." },
+    title: progress.title || (kind === "program" ? view.program?.title : view.story?.title) || view.run_id,
+  };
+}
+
+function liveMissionCard(item) {
+  const view = item.view;
+  const detailHref = `#/live/${item.kind}/${encodeURIComponent(view.run_id)}`;
+  const kindLabel = item.kind === "run" ? "Bounded run" : "Multi-phase program";
+  return `<article class="live-mission-card group-${esc(item.group)}" data-live-kind="${esc(item.kind)}" data-live-state="${esc(item.exactState)}">
+    <header><div><span class="live-kind">${esc(kindLabel)}</span><h3><a href="${detailHref}">${esc(item.title)}</a></h3></div>${liveStateBadge(view.live_progress)}</header>
+    <dl class="live-mission-facts"><div><dt>Current status</dt><dd><strong>${esc(item.statusLabel)}</strong><span>Exact state: ${esc(item.exactState)}</span><small>${esc(item.statusMeaning)}</small></dd></div><div><dt>Canonical next step</dt><dd><strong>${esc(item.next.label || "Wait")}</strong><small>${esc(item.next.detail || "")}</small></dd></div><div><dt>Needs attention</dt><dd><strong>${item.attention.length ? `${esc(item.attention.length)} item${item.attention.length === 1 ? "" : "s"}` : "No"}</strong><small>${item.attention.length ? "Decision, blocker, refusal, or unread notice." : "No decision, blocker, refusal, or unread notice is visible."}</small></dd></div></dl>
+    ${item.attention.length ? `<ul class="live-mission-attention">${item.attention.map((attention) => `<li><span>${esc(attention.kind)}</span><a href="${attention.href}">${esc(attention.label)}</a><small>${esc(attention.detail)}</small></li>`).join("")}</ul>` : ""}
+    <a class="live-open" href="${detailHref}">Open exact control room</a>
+  </article>`;
+}
+
+function liveMissionInventoryHtml() {
+  let items = [
+    ...liveMissionState.runs.map((view) => liveMissionItem("run", view)),
+    ...liveMissionState.programs.map((view) => liveMissionItem("program", view)),
+  ];
+  if (SNAPSHOT_MODE && SNAPSHOT_LIVE_SCENARIO) {
+    const matches = {
+      active: (item) => item.exactState === "active" || item.exactState === "running",
+      "awaiting-decision": (item) => item.exactState === "awaiting-approval" || item.attention.some((attention) => attention.kind === "Decision"),
+      paused: (item) => item.exactState === "paused",
+      revoked: (item) => item.exactState === "revoked",
+      cancelled: (item) => item.exactState === "cancelled",
+      complete: (item) => item.exactState === "complete" || item.exactState === "awaiting-certification" || item.view.live_progress?.status?.group === "complete",
+      stale: () => true,
+    }[SNAPSHOT_LIVE_SCENARIO];
+    if (matches) items = items.filter(matches);
+  }
+  const groups = [
+    ["attention", "Needs you", "A decision, blocker, refusal, or unread notification is visible."],
+    ["moving", "Moving or ready", "Canonical state says this work can move or is waiting for its next reviewed act."],
+    ["paused", "Paused or blocked", "These exact states are not moving. Paused permission is resumable; blocked work needs recovery."],
+    ["finished", "Finished or permanently stopped", "Complete work is done. Revoked and cancelled permission cannot resume."],
+  ];
+  return `<section class="live-mission" aria-labelledby="live-mission-title">
+    <header class="live-mission-head"><div><span class="orch-eyebrow">Mission control</span><h1 id="live-mission-title">Live work</h1><p>One glance shows what is running, what happens next, and where you need to act. Opening this view starts no work.</p></div><button type="button" id="live-mission-refresh">Refresh all saved history</button></header>
+    ${liveMissionState.connection.status === "stale" ? liveConnectionHtml(liveMissionState.connection, {}) : ""}
+    <section class="live-mission-summary" aria-label="Live work summary"><article><strong>${esc(items.length)}</strong><span>saved runs and programs</span></article><article><strong>${esc(items.filter((item) => item.group === "attention").length)}</strong><span>need attention</span></article><article><strong>${esc(items.filter((item) => item.group === "moving").length)}</strong><span>moving or ready</span></article></section>
+    ${liveMissionState.error ? boundedErrorHtml(liveMissionState.error) : ""}
+    ${groups.map(([id, title, description]) => { const matching = items.filter((item) => item.group === id); return matching.length ? `<section class="live-mission-group group-${id}" aria-labelledby="live-group-${id}"><header><h2 id="live-group-${id}">${title} <small>${matching.length}</small></h2><p>${description}</p></header><div class="live-mission-grid">${matching.map(liveMissionCard).join("")}</div></section>` : ""; }).join("") || stateHtml("No bounded runs or programs have been saved. Opening Live does not create one.")}
+  </section>`;
+}
+
+function focusLiveDetailSection(section) {
+  if (!section) return;
+  const selector = section === "attention" ? ".bounded-inbox"
+    : section === "notifications" ? ".run-notifications"
+      : section === "technical" ? ".live-technical" : "";
+  if (!selector) return;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const target = document.querySelector(selector);
+    if (!target) return;
+    if (section === "notifications") target.closest(".live-technical")?.setAttribute("open", "");
+    target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start" });
+  }));
+}
+
+function renderLiveMission() {
+  const focus = captureAppFocus();
+  if (liveMissionState.loading && !liveMissionState.detail) {
+    app.innerHTML = `${destinationNav("live", "#/live")}${stateHtml("Replaying saved run and program history…")}`;
+  } else if (liveMissionState.detail?.kind === "run") {
+    app.innerHTML = `${destinationNav("live", "#/live")}${runViewHtml()}`;
+    wireRunView();
+  } else if (liveMissionState.detail?.kind === "program") {
+    app.innerHTML = `${destinationNav("live", "#/live")}${programRunHtml(programState.view)}`;
+    wirePrograms();
+  } else {
+    app.innerHTML = `${destinationNav("live", "#/live")}${liveMissionInventoryHtml()}`;
+    document.getElementById("live-mission-refresh")?.addEventListener("click", () => viewLive());
+  }
+  finishDynamicRender(focus);
+  focusLiveDetailSection(liveMissionState.detail?.section || "");
+}
+
+async function loadCanonicalLiveViews(inventory) {
+  const runIds = (inventory.runs || []).filter((item) => item.valid !== false).map((item) => item.run_id);
+  const programIds = (inventory.programs?.runs || []).map((item) => item.run_id);
+  const [runResults, programResults] = await Promise.all([
+    Promise.allSettled(runIds.map((id) => api(`/api/runs/${encodeURIComponent(id)}/view`))),
+    Promise.allSettled(programIds.map((id) => api(`/api/programs/${encodeURIComponent(id)}/view`))),
+  ]);
+  liveMissionState.runs = runResults.filter((result) => result.status === "fulfilled").map((result) => result.value.data);
+  liveMissionState.programs = programResults.filter((result) => result.status === "fulfilled").map((result) => result.value.data);
+  const refused = [...runResults, ...programResults].filter((result) => result.status === "rejected");
+  liveMissionState.error = refused.length ? `${refused.length} saved item${refused.length === 1 ? "" : "s"} could not be replayed. Refresh after inspecting repository health.` : "";
+}
+
+async function viewLive(kind = "", runId = "", section = "") {
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "live", href: "#/live" }, ...(kind && runId ? [{ label: `${kind} ${runId}` }] : [])]);
+  liveMissionState.loading = true;
+  liveMissionState.detail = kind && runId ? { kind, id: runId, section } : null;
+  let runsBody;
+  let programsBody;
+  let notificationsBody;
+  try {
+    [runsBody, programsBody, notificationsBody] = await Promise.all([
+      api("/api/runs"), api("/api/programs"), api("/api/notifications"),
+    ]);
+  } catch (err) {
+    liveMissionState.loading = false;
+    liveMissionState.error = `Saved history could not be refreshed. ${err.message}`;
+    liveMissionState.connection.status = "stale";
+    renderLiveMission();
+    announceLiveUpdate(
+      "mission-control",
+      `stale:${Date.now()}`,
+      "Live work could not be refreshed. The last verified list remains visible; use Refresh all saved history when you are ready.",
+    );
+    return;
+  }
+  liveMissionState.connection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "verified";
+  liveMissionState.error = "";
+  const inventory = { runs: runsBody.data.runs || [], programs: programsBody.data };
+  liveMissionState.notifications = notificationsBody.data.notifications || [];
+  orchState.runInventory = inventory.runs;
+  orchState.runs = inventory.runs.filter((item) => item.valid !== false);
+  programState.inventory = inventory.programs;
+  orchState.notifications = liveMissionState.notifications;
+  programState.notifications = liveMissionState.notifications;
+  if (kind === "run" && runId) {
+    orchState.view = "run"; orchState.runId = runId; orchState.runAct = null; orchState.runResult = null; orchState.runError = ""; orchState.runStream = null;
+    orchState.runView = (await api(`/api/runs/${encodeURIComponent(runId)}/view`)).data;
+    orchState.runConnection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
+  } else if (kind === "program" && runId) {
+    programState.runId = runId; programState.act = null; programState.result = null; programState.error = ""; programState.stream = null;
+    programState.view = (await api(`/api/programs/${encodeURIComponent(runId)}/view`)).data;
+    programState.connection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
+  } else {
+    await loadCanonicalLiveViews(inventory);
+  }
+  liveMissionState.loading = false;
+  renderLiveMission();
+  if (kind === "run") startRunLive();
+  if (kind === "program") startProgramLive();
 }
 
 /* ── delivery-shaped front door (WLA-27-03) ────────────────────────
@@ -6449,6 +6675,7 @@ async function route({ focusMain = false } = {}) {
     else if (parts[0] === "wl") await viewWorklog(parts.slice(1).join("/"));
     else if (parts[0] === "board") await viewBoard(parts[1]);
     else if (parts[0] === "orchestration") await viewOrchestration(parts[1]);
+    else if (parts[0] === "live") await viewLive(parts[1], parts[2], parts[3]);
     else if (parts[0] === "programs") await viewPrograms(parts[1]);
     else if (parts[0] === "program-studio" && parts.length === 1) await viewDeliverySetup();
     else if (parts[0] === "program-studio" && parts[1] === "bundle") await viewStudioBundle(parts[2]);

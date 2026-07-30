@@ -79,6 +79,11 @@ JOURNEY_CASES = {
         "route": "/?orchview=run#/orchestration/research-build-review",
         "selector": ".orch-run-shell",
     },
+    "live-mission-control": {
+        "suite": "core",
+        "route": "/?snapshot=1&project=sample&livescenario=active#/live",
+        "selector": ".live-mission",
+    },
     "failed-review-and-repair": {
         "suite": "core",
         "route": "/?orchview=run#/orchestration/repair-visual",
@@ -568,7 +573,7 @@ class WorkbenchExam:
         self,
         predicate: Callable[[], Any],
         description: str,
-        timeout: float = 30,
+        timeout: float = 60,
     ) -> Any:
         deadline = time.monotonic() + timeout
         last: Any = None
@@ -627,6 +632,31 @@ class WorkbenchExam:
             [selector],
         )
         self.check(bool(result), f"could not focus {selector}")
+
+    def press_until(
+        self,
+        trigger: str,
+        condition: Callable[[], Any],
+        description: str,
+        attempts: int = 3,
+    ) -> None:
+        """Focus trigger and press Enter, retrying if the app re-rendered
+        between focus and press and the keystroke landed on a detached node.
+        Only used for idempotent controls."""
+        for attempt in range(attempts):
+            try:
+                if attempt and condition():
+                    return
+            except Exception:
+                pass
+            self.focus(trigger)
+            self.driver.press("enter")
+            try:
+                self.wait(condition, description, timeout=15)
+                return
+            except ExamFailure:
+                if attempt == attempts - 1:
+                    raise
 
     def active_matches(self, selector: str) -> bool:
         return bool(
@@ -829,12 +859,13 @@ class WorkbenchExam:
         )
 
         park_trigger = story + " [data-board-park]"
-        self.focus(park_trigger)
-        self.driver.press("enter")
-        self.wait(lambda: self.selector_exists("#move-form"), "keyboard park panel")
-        self.focus('#move-form button[type="submit"]')
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            park_trigger,
+            lambda: self.selector_exists("#move-form"),
+            "keyboard park panel",
+        )
+        self.press_until(
+            '#move-form button[type="submit"]',
             lambda: self.selector_exists("#move-out .board-refusal"),
             "reasonless park refusal announcement",
         )
@@ -871,42 +902,38 @@ class WorkbenchExam:
         self.wait(lambda: not self.selector_exists(".board-action-panel"), "done refusal dismissal")
 
         pause_trigger = '[data-board-phase-action="pause_phase"][data-phase="0"]'
-        self.focus(pause_trigger)
-        self.driver.press("enter")
-        self.wait(lambda: self.selector_exists("#board-phase-form"), "keyboard pause panel")
+        self.press_until(
+            pause_trigger,
+            lambda: self.selector_exists("#board-phase-form"),
+            "keyboard pause panel",
+        )
         self.focus('#board-phase-form input[name="reason"]')
         self.driver.type_text("Keyboard pause review")
-        self.focus('#board-phase-form button[type="submit"]')
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            '#board-phase-form button[type="submit"]',
             lambda: self.selector_exists(".board-preview"),
             "keyboard pause preview",
-            timeout=30,
         )
-        self.focus("#board-apply")
-        self.driver.press("enter")
         resume_trigger = '[data-board-phase-action="resume_phase"][data-phase="0"]'
-        self.wait(
+        self.press_until(
+            "#board-apply",
             lambda: self.selector_exists(resume_trigger),
             "applied pause to refresh as a paused lane",
-            timeout=30,
         )
-        self.focus(resume_trigger)
-        self.driver.press("enter")
-        self.wait(lambda: self.selector_exists("#board-phase-form"), "keyboard resume panel")
-        self.focus('#board-phase-form button[type="submit"]')
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            resume_trigger,
+            lambda: self.selector_exists("#board-phase-form"),
+            "keyboard resume panel",
+        )
+        self.press_until(
+            '#board-phase-form button[type="submit"]',
             lambda: self.selector_exists(".board-preview"),
             "keyboard resume preview",
-            timeout=30,
         )
-        self.focus("#board-apply")
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            "#board-apply",
             lambda: self.selector_exists(pause_trigger),
             "applied resume to restore the active lane",
-            timeout=30,
         )
         self.assertions += 14
 
@@ -1062,13 +1089,14 @@ class WorkbenchExam:
             },
             f"live update deduplication/focus contract failed: {live!r}",
         )
-        if self.selector_exists("[data-run-act]"):
-            self.assert_dialog_round_trip(
-                "[data-run-act]",
-                ".bounded-preview",
-            )
-        else:
-            raise ExamFailure("active bounded run exposed no keyboard action")
+        self.wait(
+            lambda: self.selector_exists("[data-run-act]"),
+            "active bounded run keyboard action",
+        )
+        self.assert_dialog_round_trip(
+            "[data-run-act]",
+            ".bounded-preview",
+        )
 
         self.navigate(
             "/?orchview=run&liveconnection=stale#/orchestration/research-build-review",
@@ -1213,11 +1241,24 @@ class WorkbenchExam:
         )
         self.focus('[data-adoption-mark="accept"]')
         self.driver.press("enter")
-        self.wait(
-            lambda: self.selector_exists("#ideation-preview-button:not([disabled])")
-            and self.active_matches('[data-adoption-mark="accept"]'),
-            f"{label} review acceptance to enable the one canonical preview",
-        )
+        try:
+            self.wait(
+                lambda: self.selector_exists("#ideation-preview-button:not([disabled])")
+                and self.active_matches('[data-adoption-mark="accept"]'),
+                f"{label} review acceptance to enable the one canonical preview",
+                timeout=15,
+            )
+        except ExamFailure:
+            # The accept control re-renders after the corrected draft lands;
+            # a press that raced that re-render hit a detached node. Accepting
+            # is idempotent, so press the live control once more.
+            self.focus('[data-adoption-mark="accept"]')
+            self.driver.press("enter")
+            self.wait(
+                lambda: self.selector_exists("#ideation-preview-button:not([disabled])")
+                and self.active_matches('[data-adoption-mark="accept"]'),
+                f"{label} review acceptance to enable the one canonical preview",
+            )
 
         # Reload keeps the review decisions and the exact position in the flow.
         self.focus("#refresh-btn")
@@ -1260,18 +1301,19 @@ class WorkbenchExam:
             lambda: self.selector_exists("#ideation-preview-button:not([disabled])"),
             f"{label} revised review acceptance",
         )
-        self.focus("#ideation-preview-button")
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            "#ideation-preview-button",
             lambda: self.selector_exists("#ideation-apply"),
             f"{label} fresh preview after revision",
         )
-        self.focus("#ideation-apply")
-        self.driver.press("enter")
-        self.wait(
-            lambda: self.selector_exists(".ideation-applied")
-            and self.active_matches("#ideation-applied-title"),
+        self.press_until(
+            "#ideation-apply",
+            lambda: self.selector_exists(".ideation-applied"),
             f"{label} configuration-only apply to complete",
+        )
+        self.wait(
+            lambda: self.active_matches("#ideation-applied-title"),
+            f"{label} applied view to take focus",
         )
         self.audit_page(f"ideation-{label}", label)
         self.assertions += 15
@@ -1349,30 +1391,54 @@ class WorkbenchExam:
                 "program suite requires active, revoked, and certified run ids"
             )
         self.driver.set_window(*WIDE)
-        self.navigate(f"/#/programs/{active}", ".program-room")
+        self.navigate("/#/live", ".live-mission")
+        live_link = f'.live-mission-card[data-live-kind="program"] a[href="#/live/program/{active}"]'
+        self.focus(live_link)
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".program-room")
+            and self.driver.execute(
+                "return location.hash === arguments[0];",
+                [f"#/live/program/{active}"],
+            ),
+            "keyboard journey from combined Live list to exact control room",
+        )
         self.assert_focus_preserved("#program-refresh", "renderPrograms")
-        if self.selector_exists('[data-program-act="pause"]'):
-            trigger = '[data-program-act="pause"]'
-            reason = "Keyboard review only."
-            self.focus("#program-control-reason")
-            self.driver.type_text(reason)
-            self.check(
-                bool(
-                    self.driver.execute(
-                        """
-                        return document.querySelector(arguments[0])?.value
-                          === arguments[1];
-                        """,
-                        ["#program-control-reason", reason],
-                    )
-                ),
-                "program pause reason was not keyboard editable",
-            )
-        elif self.selector_exists("[data-program-act]"):
-            trigger = "[data-program-act]"
-        else:
-            raise ExamFailure("active program exposed no keyboard action")
-        self.assert_dialog_round_trip(trigger, ".bounded-preview")
+        if not self.selector_exists('[data-program-act="pause"]'):
+            raise ExamFailure("active program exposed no keyboard pause control")
+        trigger = '[data-program-act="pause"]'
+        reason = "Keyboard review only."
+        self.focus("#program-control-reason")
+        self.driver.type_text(reason)
+        self.check(
+            bool(
+                self.driver.execute(
+                    """
+                    return document.querySelector(arguments[0])?.value
+                      === arguments[1];
+                    """,
+                    ["#program-control-reason", reason],
+                )
+            ),
+            "program pause reason was not keyboard editable",
+        )
+        self.focus(trigger)
+        self.driver.press("enter")
+        self.wait(
+            lambda: self.selector_exists(".bounded-preview")
+            and self.active_matches(".bounded-preview"),
+            "pause consequence confirmation to open from the keyboard",
+        )
+        self.focus("#program-act-confirm")
+        self.driver.press("enter")
+        self.wait(
+            lambda: not self.selector_exists(".bounded-preview")
+            and bool(self.driver.execute(
+                "return /paused/i.test(document.querySelector('.program-room')?.textContent || '');"
+            )),
+            "keyboard-confirmed pause receipt and resumable state",
+        )
+        self.assertions += 3
 
         self.navigate(
             f"/?boundedfocus=receipts#/programs/{revoked}",

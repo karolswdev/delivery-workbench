@@ -158,11 +158,11 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 16,
+            len(post_routes), 17,
             "only deliberate-step, the read-only setup review projection, guarded "
-            "setup/roadmap/score/Studio edits, run preview/start, program grant "
-            "preview/start/plan, and the receipted notification ack use direct "
-            "POST equality routes; "
+            "setup/roadmap/score/Studio edits, run preview/start/finite supervision, "
+            "program grant preview/start/plan, and the receipted notification ack "
+            "use direct POST equality routes; "
             f"found: {post_routes}",
         )
         self.assertTrue(any('/api/setup/review' in line for line in post_routes))
@@ -177,6 +177,7 @@ class DwCoreTest(unittest.TestCase):
         self.assertTrue(any('/api/program-studio/apply' in line for line in post_routes))
         self.assertTrue(any('/api/runs/preview' in line for line in post_routes))
         self.assertTrue(any('/api/runs/start' in line for line in post_routes))
+        self.assertTrue(any('/api/runs/supervise' in line for line in post_routes))
         self.assertTrue(any('/api/programs/plan' in line for line in post_routes))
         self.assertTrue(any('/api/programs/preview' in line for line in post_routes))
         self.assertTrue(any('/api/programs/start' in line for line in post_routes))
@@ -1734,7 +1735,7 @@ class DwCoreTest(unittest.TestCase):
                 "/api/programs/pause", "/api/programs/resume",
                 "/api/programs/revoke", "/api/programs/cancel",
                 "/api/runs/preview", "/api/runs/start", "/api/runs/tick",
-                "/api/runs/pause", "/api/runs/resume", "/api/runs/revoke",
+                "/api/runs/supervise", "/api/runs/pause", "/api/runs/resume", "/api/runs/revoke",
                 "/api/runs/cancel", "/api/runs/checkpoint", "/api/runs/request",
                 "/api/notifications/ack",
             },
@@ -9154,6 +9155,131 @@ class OrchestrationConductorTest(unittest.TestCase):
         self.assertEqual(paused["state"], "paused")
         self.assertFalse((ledger.parent / "driver-sessions").exists())
 
+    def test_run_http_supervision_is_preview_bound_finite_and_stops_on_no_progress(self):
+        import dw_pmo.workbench as wb
+
+        projection = self._start()
+        run_id = projection["run_id"]
+        ledger = (
+            self.root / ".git" / "pmo-orchestration" / "runs" / run_id
+            / "ledger.jsonl"
+        )
+        before = ledger.read_bytes()
+
+        status, preview_body = wb.handle_mutation(
+            self.root,
+            "/api/runs/preview",
+            {
+                "run_id": run_id, "action": "supervise",
+                "max_ticks": 3, "max_seconds": 30,
+            },
+        )
+        self.assertEqual(status, 200, preview_body)
+        preview = preview_body["data"]
+        self.assertTrue(preview["applicable"], preview["issues"])
+        self.assertEqual(preview["action"], "supervise")
+        self.assertEqual(preview["max_ticks"], 3)
+        self.assertEqual(preview["max_seconds"], 30)
+        self.assertEqual(preview["ledger_head"], projection["ledger_head"])
+        self.assertEqual(preview["generation"], projection["control_generation"])
+        self.assertEqual(
+            preview["control_generation"], projection["control_generation"]
+        )
+        self.assertEqual(ledger.read_bytes(), before)
+
+        for payload, message in (
+            ({"run_id": run_id, "action": "supervise", "max_ticks": 0,
+              "max_seconds": 30}, "max_ticks"),
+            ({"run_id": run_id, "action": "supervise", "max_ticks": 1,
+              "max_seconds": 86401}, "max_seconds"),
+            ({"run_id": run_id, "action": "supervise", "max_ticks": True,
+              "max_seconds": 30}, "integer"),
+        ):
+            status, refused = wb.handle_mutation(
+                self.root, "/api/runs/preview", payload
+            )
+            self.assertEqual(status, 400, refused)
+            self.assertIn(message, refused["issues"][0])
+        status, refused = wb.handle_mutation(
+            self.root,
+            "/api/runs/supervise",
+            {
+                "run_id": run_id, "expect": preview["act_token"],
+                "max_ticks": 3, "max_seconds": 30, "argv": ["forbidden"],
+            },
+        )
+        self.assertEqual(status, 400, refused)
+        self.assertIn("unknown run supervise parameter", refused["issues"][0])
+        self.assertEqual(ledger.read_bytes(), before)
+
+        status, stale = wb.handle_mutation(
+            self.root,
+            "/api/runs/supervise",
+            {
+                "run_id": run_id, "expect": "sha256:" + "0" * 64,
+                "max_ticks": 3, "max_seconds": 30,
+            },
+        )
+        self.assertEqual(status, 409, stale)
+        self.assertIn("stale or altered", stale["issues"][0])
+        self.assertEqual(ledger.read_bytes(), before)
+
+        status, mismatch = wb.handle_mutation(
+            self.root,
+            "/api/runs/supervise",
+            {
+                "run_id": run_id, "expect": preview["act_token"],
+                "max_ticks": 2, "max_seconds": 30,
+            },
+        )
+        self.assertEqual(status, 409, mismatch)
+        self.assertEqual(ledger.read_bytes(), before)
+
+        no_progress_tick = {
+            "kind": "delivery-workbench-conductor-tick",
+            "schema_version": 1,
+            "run_id": run_id,
+            "before_head": projection["ledger_head"],
+            "after_head": projection["ledger_head"],
+            "state": "active",
+            "progressed": False,
+            "terminal": False,
+            "active_claims": 0,
+        }
+        with mock.patch(
+            "dw_pmo.orchestration_surface.tick_run",
+            return_value=no_progress_tick,
+        ) as tick:
+            status, applied = wb.handle_mutation(
+                self.root,
+                "/api/runs/supervise",
+                {
+                    "run_id": run_id, "expect": preview["act_token"],
+                    "max_ticks": 3, "max_seconds": 30,
+                },
+            )
+        self.assertEqual(status, 200, applied)
+        self.assertEqual(applied["data"]["stop"], "no-progress")
+        self.assertEqual(applied["data"]["tick_count"], 1)
+        self.assertEqual(applied["data"]["max_ticks"], 3)
+        self.assertEqual(applied["data"]["max_seconds"], 30)
+        self.assertTrue(applied["data"]["bounded"])
+        tick.assert_called_once_with(
+            self.root, run_id, expect=projection["ledger_head"], now=None
+        )
+        self.assertEqual(ledger.read_bytes(), before)
+        status, reused = wb.handle_mutation(
+            self.root,
+            "/api/runs/supervise",
+            {
+                "run_id": run_id, "expect": preview["act_token"],
+                "max_ticks": 3, "max_seconds": 30,
+            },
+        )
+        self.assertEqual(status, 409, reused)
+        self.assertIn("already used", reused["issues"][0])
+        self.assertEqual(ledger.read_bytes(), before)
+
     def test_run_view_is_pure_rich_and_excludes_private_semantics(self):
         import dw_pmo.orchestration_surface as surface
 
@@ -9422,6 +9548,43 @@ class WorkbenchAccessibilityContractTest(unittest.TestCase):
             self.assertIn(marker, self.app)
         self.assertEqual(self.app.count('aria-live="'), 0)
         self.assertNotIn('role="status" aria-label="Live update status"', self.app)
+
+    def test_live_mission_control_is_combined_keyboard_safe_and_event_inert(self):
+        mission = self.app[
+            self.app.index("/* ── Live mission control"):
+            self.app.index("/* ── delivery-shaped front door")
+        ]
+        for marker in (
+            "Live work", "Bounded run", "Multi-phase program",
+            "Canonical next step", "Needs attention", "Unread notification",
+            "Open exact control room", 'api("/api/runs")',
+            'api("/api/programs")', 'api("/api/notifications")',
+            "focusLiveDetailSection", "live-mission-refresh",
+        ):
+            self.assertIn(marker, mission)
+        self.assertNotIn("postJson", mission)
+        self.assertIn("Back to all live work", self.app)
+        self.assertIn("Return to the ordinary view", self.app)
+        for start, end in (
+            ("function startRunLive()", "async function previewRunGrant"),
+            ("function startProgramLive()", "async function requestProgramPermission"),
+        ):
+            event_source = self.app[self.app.index(start):self.app.index(end)]
+            self.assertIn("new EventSource", event_source)
+            self.assertIn("await api(", event_source)
+            for forbidden in (
+                "postJson", "confirmRun", "confirmProgram", "/preview",
+                "/tick", "/supervise", "/approve", "/retry",
+            ):
+                self.assertNotIn(forbidden, event_source)
+        for marker in (
+            ".live-mission-grid", ".live-mission-card",
+            ".bounded-action-card.action-pause",
+            ".bounded-action-card.action-revoke",
+            ".bounded-action-card.action-cancel",
+            "@media (max-width: 600px)",
+        ):
+            self.assertIn(marker, self.css)
 
     def test_visible_focus_motion_color_and_overflow_rules_are_present(self):
         for marker in (

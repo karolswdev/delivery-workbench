@@ -233,6 +233,18 @@ for marker in 'id="project-switcher"' 'Choose a project' 'PROJECT_STORAGE_KEY' \
 done
 grep -q '#/orchestration' "$TMP_ROOT/index.html" || fail "app shell should link delivery planning"
 grep -q '#/program-studio' "$TMP_ROOT/index.html" || fail "app shell should link the plan destination"
+grep -q '#/live' "$TMP_ROOT/index.html" || fail "app shell should link combined Live mission control"
+for marker in 'function liveMissionInventoryHtml' 'Bounded run' 'Multi-phase program' \
+  'Canonical next step' 'Needs attention' 'Unread notification' \
+  'Open exact control room' 'function viewLive' \
+  'else if (parts\[0\] === "live")'; do
+  grep -q "$marker" "$TMP_ROOT/app.js" || fail "combined Live view is missing $marker"
+done
+for marker in '/api/runs/${encodeURIComponent(preview.action)}' \
+  '/api/programs/${encodeURIComponent(preview.action)}' \
+  'max_ticks: preview.max_ticks' 'will not retry automatically'; do
+  grep -Fq "$marker" "$TMP_ROOT/app.js" || fail "run/program permission parity is missing $marker"
+done
 grep -q 'else if (!parts.length) await viewBoard(selectedProject)' "$TMP_ROOT/app.js" \
   || fail "home route should open the selected project board"
 for marker in 'kind: "create_story"' 'kind: "update_story_status"' \
@@ -727,7 +739,6 @@ curl -s -X POST -H 'Content-Type: application/json' -d "$BAD_ORCH" \
   || fail "invalid score preview wrote a file"
 [ ! -e "$REPO/.git/pmo-orchestration" ] \
   || fail "score authoring must not create run state"
-
 # ── health console (WLA-5-04): drift fixture renders all issue kinds ──
 DRIFT="$REPO/pm/roadmap/drifty"
 mkdir -p "$DRIFT/phase-0-open-a" "$DRIFT/phase-1-open-b"
@@ -1253,6 +1264,93 @@ assert setup["readiness"] == "ready"
 for choice in setup["choices"]:
     assert "{} — {}".format(choice["label"], choice["readiness"]) in setup_text
 assert "Technical details:" in setup_text
+PY
+
+# The installed server proves the finite run-supervision HTTP boundary against
+# healthy rails without disturbing the deliberately unwired explorer fixture.
+"$INSTALL_REPO/.githooks/dw" --root "$INSTALL_REPO" story status demo 0 DEMO-0-01 in-progress >/dev/null
+mkdir -p "$INSTALL_REPO/pm/orchestration"
+python3 - "$INSTALL_REPO/pm/orchestration/live-http.json" <<'PY'
+import json, sys
+json.dump({
+    "kind": "delivery-workbench-orchestration", "schema_version": 1,
+    "slug": "live-http", "title": "Live HTTP supervision",
+    "nodes": [{"id": "review", "type": "approval", "prompt": "Review this bounded pass."}],
+}, open(sys.argv[1], "w"), indent=2)
+PY
+"$INSTALL_REPO/.githooks/dw" --root "$INSTALL_REPO" rider docs >/dev/null
+git -C "$INSTALL_REPO" add .
+git -C "$INSTALL_REPO" -c core.hooksPath=/dev/null commit -q -m "Live HTTP supervision fixture"
+python3 - "http://127.0.0.1:$IPORT" <<'PY' \
+  || { kill $IPID 2>/dev/null; fail "run supervision preview/apply/refusal HTTP contract failed"; }
+from datetime import datetime, timedelta, timezone
+from urllib.error import HTTPError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+import json, sys
+
+base = sys.argv[1]
+def get(path):
+    with urlopen(base + path, timeout=10) as response:
+        return response.status, json.load(response)
+def post(path, body):
+    request = Request(base + path, data=json.dumps(body).encode(),
+                      headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urlopen(request, timeout=10) as response:
+            return response.status, json.load(response)
+    except HTTPError as error:
+        return error.code, json.load(error)
+
+issued = datetime.now(timezone.utc).replace(microsecond=0)
+query = urlencode({
+    "score": "live-http", "project": "demo", "story": "DEMO-0-01",
+    "issued_at": issued.isoformat(),
+    "expires_at": (issued + timedelta(hours=1)).isoformat(),
+})
+status, body = get("/api/run-plan?" + query)
+assert status == 200 and body["data"]["applicable"], body
+plan = body["data"]
+status, body = post("/api/runs/start", {
+    "score": "live-http", "project": "demo", "story": "DEMO-0-01",
+    "issued_at": plan["request"]["issued_at"],
+    "expires_at": plan["request"]["expires_at"],
+    "expect": plan["start_token"], "approve": True, "operator": "http-explorer",
+})
+assert status == 200 and body["ok"], body
+run_id = body["data"]["run_id"]
+status, body = post("/api/runs/preview", {
+    "run_id": run_id, "action": "supervise", "max_ticks": 2, "max_seconds": 30,
+})
+assert status == 200 and body["data"]["applicable"], body
+preview = body["data"]
+assert preview["action"] == "supervise"
+assert preview["max_ticks"] == 2 and preview["max_seconds"] == 30
+for key in ("ledger_head", "generation", "control_generation", "act_token"):
+    assert key in preview, key
+assert preview["ledger_head"] and preview["act_token"]
+apply = {"run_id": run_id, "expect": preview["act_token"],
+         "max_ticks": 2, "max_seconds": 30}
+status, refused = post("/api/runs/supervise", {**apply, "max_ticks": 1})
+assert status == 409 and not refused["ok"], refused
+status, view = get(f"/api/runs/{run_id}/view")
+assert view["data"]["ledger_head"] == preview["ledger_head"]
+status, refused = post("/api/runs/supervise", {**apply, "command": "forbidden"})
+assert status == 400 and "unknown run supervise parameter" in " ".join(refused["issues"])
+status, refused = post("/api/runs/preview", {
+    "run_id": run_id, "action": "supervise", "max_ticks": 10001,
+    "max_seconds": 30,
+})
+assert status == 400 and "max_ticks" in " ".join(refused["issues"])
+status, applied = post("/api/runs/supervise", apply)
+assert status == 200 and applied["ok"], applied
+result = applied["data"]
+assert result["bounded"] and result["tick_count"] <= 2
+assert result["stop"] in {"checkpoint", "terminal", "no-progress"}
+status, stale = post("/api/runs/supervise", apply)
+assert status == 409 and not stale["ok"], stale
+status, inventory = get("/api/runs")
+assert any(item["run_id"] == run_id for item in inventory["data"]["runs"])
 PY
 kill $IPID 2>/dev/null; wait $IPID 2>/dev/null || true
 
