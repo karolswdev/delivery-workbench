@@ -182,6 +182,53 @@ class DwCoreTest(unittest.TestCase):
         self.assertTrue(any('/api/programs/start' in line for line in post_routes))
         self.assertTrue(any('/api/notifications/ack' in line for line in post_routes))
 
+    def test_run_start_accepts_notification_fields_and_still_refuses_unknown_properties(self):
+        import dw_pmo.workbench as wb
+
+        request = {
+            "score": "research-build-review",
+            "project": "demo",
+            "story": "DM-1-02",
+            "issued_at": "2026-07-29T10:00:00Z",
+            "expires_at": "2026-07-29T11:00:00Z",
+            "expect": "exact-start-token",
+            "approve": True,
+            "operator": "careful-person",
+            "standing_nudges": ["ci-failed=repair"],
+            "signal_channel": "origin/feature-consent",
+        }
+        started = {"kind": "delivery-workbench-run", "run_id": "run-test"}
+        with mock.patch(
+            "dw_pmo.orchestration_surface.start_run_by_id",
+            return_value=started,
+        ) as start:
+            status, body = wb.handle_mutation(
+                self.root, "/api/runs/start", request
+            )
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["data"], started)
+        start.assert_called_once_with(
+            self.root,
+            "research-build-review",
+            "demo",
+            "DM-1-02",
+            "2026-07-29T10:00:00Z",
+            "2026-07-29T11:00:00Z",
+            "exact-start-token",
+            approved=True,
+            approved_by="careful-person",
+            standing_nudges=["ci-failed=repair"],
+            signal_channel="origin/feature-consent",
+        )
+
+        status, body = wb.handle_mutation(
+            self.root,
+            "/api/runs/start",
+            {**request, "unplanned_power": True},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("unknown run start parameter(s): unplanned_power", body["issues"])
+
     def test_missioncontrol_readonly_guard_catches_a_planted_write(self):
         # The guard must FAIL on a violation or it guards nothing:
         # feed it a planted dispatcher source and assert it sees the
@@ -9323,7 +9370,7 @@ class OrchestrationConductorTest(unittest.TestCase):
         for token in (
             "Live delivery", "Technical details", "fail checks", "Artifact metadata and lineage",
             "failure routes", "human checkpoints", "hash-chained receipts",
-            "preview exact grant", "Actions and decisions", "Before any action",
+            "fresh permission preview", "Actions and decisions", "Before any action",
             "Decision and blocker inbox", "Could an effect already have occurred?",
             "view.bounded_actions", "exact control catalog",
             "close explicit stream",

@@ -2,11 +2,11 @@
 
 Every response is derived live from the Markdown roadmap through the same
 ``dw_pmo`` functions the CLI uses — no second parser, cache, or database.
-Writes have only two explicit boundaries: the roadmap editor's guarded
-preview/apply pair and the deliberate step's exact-token apply route. Neither
-stages, certifies, or commits. The server binds 127.0.0.1 only and serves
-exactly the repo root it was started against; file and static endpoints are
-contained to their respective trees.
+Writes cross guarded preview/apply boundaries or an exact single-use token.
+Only a browser-confirmed program action may use pre-granted delivery permission;
+the browser adds no authority of its own. The server binds 127.0.0.1 only and
+serves exactly the repo root it was started against; file and static endpoints
+are contained to their respective trees.
 
 Route logic lives in :func:`handle_api` (pure: path + query in,
 status + envelope out) so view models are unit-testable without
@@ -1192,7 +1192,8 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
     if route == "/api/runs/start":
         allowed = {
             "score", "project", "story", "issued_at", "expires_at",
-            "expect", "approve", "operator",
+            "expect", "approve", "operator", "standing_nudges",
+            "signal_channel",
         }
         unknown = sorted(set(body) - allowed)
         if unknown:
@@ -1719,8 +1720,10 @@ def serve(root: Path, port: int = 8377, quiet: bool = False) -> None:
     print(f"dw-workbench: serving {root}")
     print(f"dw-workbench: http://127.0.0.1:{port}/ (localhost or your own .ts.net tailnet; Ctrl-C to stop)")
     print(
-        "dw-workbench: writes require a guarded preview→apply content boundary "
-        "or an exact step/run/program token; never stages, certifies, or commits"
+        "dw-workbench: writes require guarded preview→apply or an exact "
+        "single-use token; only a browser-confirmed program action may use "
+        "pre-granted delivery permission, and the browser adds no authority "
+        "of its own"
     )
 
     def _term(_sig, _frame):  # graceful SIGTERM

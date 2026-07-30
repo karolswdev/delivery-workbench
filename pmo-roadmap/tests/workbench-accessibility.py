@@ -64,6 +64,16 @@ JOURNEY_CASES = {
         "route": "/?orchview=validate#/orchestration/research-build-review",
         "selector": ".delivery-preflight",
     },
+    "bounded-run-permission": {
+        "suite": "core",
+        "route": "/?snapshot=1&orchview=run&consentpreview=run-narrowed#/orchestration/consent-visual",
+        "selector": ".run-consent .consent-summary",
+    },
+    "program-permission": {
+        "suite": "core",
+        "route": "/?snapshot=1&consentpreview=program-narrowed#/programs",
+        "selector": ".program-consent .consent-summary",
+    },
     "live-progress": {
         "suite": "core",
         "route": "/?orchview=run#/orchestration/research-build-review",

@@ -209,6 +209,13 @@ function focusRegion(selector) {
   });
 }
 
+function focusConsentSnapshot(selector) {
+  const region = document.querySelector(selector);
+  if (!region) return;
+  region.focus({ preventScroll: true });
+  region.scrollIntoView({ block: "start" });
+}
+
 function wireDismissibleRegion(selector, close, returnKey, fallback = "") {
   const region = document.querySelector(selector);
   if (!region) return;
@@ -3078,20 +3085,132 @@ function runRequestsHtml(view) {
   return `<div class="run-request-grid"><section><h3>outstanding requests</h3>${outstanding.map((request) => `<article class="run-request"><div><code>${esc(request.correlation_id)}</code>${badge(`${esc(request.age_seconds)}s old`, "warn")}</div><strong>${esc(request.kind)} · ${esc(request.origin_node || request.origin)}</strong><span>${esc(request.schema_summary)}</span><small>opened #${esc(request.opened_seq)} · expires ${esc(request.expires_at)} · republished generations ${(request.republished_generations || []).map(esc).join(", ") || "none"}</small></article>`).join("") || '<p class="hint">No human decision is outstanding.</p>'}</section><section><h3>checkpoint lineage · inspect only</h3><ol class="run-decision-tree">${(tree.roots || []).map((id) => renderDecision(id)).join("")}</ol>${!tree.roots?.length ? '<p class="hint">No decision point has been recorded.</p>' : ""}</section></div>`;
 }
 
+const CONSENT_NEVER = [
+  "Merge branches",
+  "Force-push",
+  "Release",
+  "Deploy",
+  "Run arbitrary commands",
+  "Raise its own authority",
+];
+
+const PROGRAM_CAPABILITY_LABELS = {
+  "program:select": "Choose work only from the planned roadmap scope",
+  "agent:dispatch": "Start assigned work agents",
+  "check:execute": "Run declared checks",
+  "workspace:write": "Write only in assigned work areas",
+  "verdict:issue": "Record review verdicts",
+  "council:decide": "Use the planned decision group",
+  "obligation:record": "Record follow-up obligations",
+  "obligation:materialize": "Save approved obligation material",
+  "obligation:disposition": "Close or defer recorded obligations",
+  "nudge:deliver": "Deliver declared standing nudges",
+  "notification:send": "Send declared notifications",
+  "evidence:materialize": "Save evidence for the selected work",
+  "knowledge:lesson-writeback": "Write reviewed delivery lessons",
+  "integration:apply": "Apply a reviewed integration",
+  "contract:generate": "Generate a delivery contract",
+  "certification:objective": "Record objective certification",
+  "certification:verdict": "Record a certification verdict",
+  "git:commit": "Create a contract-bound commit",
+  "git:push": "Push only to the exact destination shown here",
+  "roadmap:story-start": "Start the selected roadmap story",
+  "roadmap:story-complete": "Complete the selected roadmap story after proof",
+  "roadmap:phase-advance": "Advance the planned phase after its gates pass",
+};
+
+const PROGRAM_MODE_RANK = { advisory: 0, checkpointed: 1, continuous: 2 };
+const PROGRAM_MODE_LABELS = {
+  advisory: "Advice only",
+  checkpointed: "Pause at decisions",
+  continuous: "Continue within limits",
+};
+
+function consentBudgetLabel(name) {
+  const labels = {
+    max_phases: "phases", max_stories: "stories", max_child_runs: "bounded runs",
+    max_agent_starts: "agent starts", max_provider_starts: "provider starts",
+    max_model_starts: "model starts", max_check_starts: "check starts",
+    max_loop_rounds: "loop rounds", max_debate_rounds: "review rounds",
+    max_councils: "decision groups", max_repairs_per_story: "repairs per story",
+    max_verdicts: "verdicts", max_obligations: "follow-up obligations",
+    max_integrations: "integrations", max_commits: "commits", max_pushes: "pushes",
+    max_nudges: "nudges", max_artifact_bytes: "artifact bytes",
+    max_wall_seconds: "wall-clock seconds", max_concurrency: "concurrent tasks",
+  };
+  return labels[name] || name.replace(/^max_/, "").replaceAll("_", " ");
+}
+
+function consentBudgetListHtml(budgets, compact = false) {
+  const entries = Object.entries(budgets || {});
+  const primary = new Set([
+    "max_phases", "max_stories", "max_agent_starts", "max_check_starts",
+    "max_commits", "max_pushes", "max_tokens", "max_observed_cost_microunits",
+    "max_artifact_bytes", "max_wall_seconds",
+  ]);
+  const shown = compact ? entries.filter(([name]) => primary.has(name)) : entries;
+  return `<ul class="consent-budget-list">${shown.map(([name, value]) => `<li><strong>${esc(value)}</strong> ${esc(consentBudgetLabel(name))}</li>`).join("")}${compact && shown.length < entries.length ? `<li><strong>+${esc(entries.length - shown.length)}</strong> other finite counters below</li>` : ""}</ul>`;
+}
+
+function programAllowedWorkSummary(capabilities) {
+  const allowed = new Set(capabilities || []);
+  const parts = [];
+  if (allowed.has("program:select")) parts.push("Choose work only from the planned roadmap scope");
+  if (allowed.has("agent:dispatch")) parts.push(allowed.has("workspace:write") ? "Assigned agents may work in their own areas" : "Assigned agents may inspect work");
+  if (allowed.has("check:execute")) parts.push("Declared checks may run");
+  if (allowed.has("verdict:issue") || allowed.has("certification:verdict")) parts.push("Independent review may record a verdict");
+  if (allowed.has("evidence:materialize")) parts.push("Evidence may be saved");
+  if (allowed.has("git:commit")) parts.push("A contract-bound commit is possible after its gates pass");
+  if (allowed.has("git:push")) parts.push("A gated push is possible only to the destination shown here");
+  if (allowed.has("roadmap:story-start") || allowed.has("roadmap:story-complete") || allowed.has("roadmap:phase-advance")) parts.push("Roadmap changes remain limited to the selected work and its gates");
+  return parts.join(". ") || "No dispatch or mutation is allowed";
+}
+
+function consentNeverHtml() {
+  return `<section class="consent-never"><strong>Never allowed</strong><ul>${CONSENT_NEVER.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></section>`;
+}
+
+function responseIssueText(body) {
+  return (body?.issues || []).map((issue) => typeof issue === "object" ? issue.message || issue.code || "" : String(issue)).join(" ");
+}
+
+function startTokenWasRefused(status, body) {
+  return status === 409 || /stale|reuse|used|mismatch|token|exact preview/i.test(responseIssueText(body));
+}
+
 function grantPreviewHtml(plan) {
   if (!plan) return "";
-  return `<section class="run-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="run-plan-title" tabindex="-1"><div class="run-consent-head"><div><span>immutable grant preview</span><strong id="run-plan-title">${esc(plan.story.id)} · ${esc(plan.score.slug)}</strong></div>${badge("starts no work", "ok")}</div>
-    <div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div>
-    <div class="run-grant-facts"><div><span>repository</span><code>${esc(plan.repository.branch)} · ${esc(plan.repository.head)}</code></div><div><span>expiry</span><strong>${esc(plan.request.expires_at)}</strong></div><div><span>capabilities</span><strong>${esc(plan.authority.capabilities.join(", ") || "none")}</strong></div><div><span>profiles / workspaces</span><strong>${esc(plan.authority.profiles.join(", ") || "none")} · ${esc(plan.authority.workspace_modes.join(", ") || "none")}</strong></div></div>
-    ${runBudgetHtml(Object.fromEntries(Object.entries(plan.authority.budgets).map(([key, value]) => [key, { used: 0, limit: value }]))) }
-    ${(plan.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}
-    <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="run-start-confirm">grant authority and create run — dispatch nothing</button>' : ""}<button type="button" id="run-plan-close">close preview</button></div></section>`;
+  const minutes = Number(orchState.grantDraft.minutes || 60);
+  const narrowed = minutes < 60;
+  const work = `${plan.story.id}: ${plan.story.title || "the selected story"}, following ${plan.score.title || "the reviewed score"}`;
+  const stopCopy = "It stops when a finite budget is used, permission expires, a required decision blocks progress, the score finishes, or you pause, revoke, or cancel it.";
+  return `<section class="run-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="run-plan-title" tabindex="-1">
+    <header class="consent-head"><div><span>Permission</span><h2 id="run-plan-title">Approve this bounded run</h2><p>This preview starts nothing. Opening the page and receiving live updates also start nothing.</p></div>${badge(plan.applicable ? "ready to approve" : "refused", plan.applicable ? "ok" : "issue")}</header>
+    <section id="run-consent-summary" class="consent-summary" tabindex="-1">
+      <div class="consent-fact-grid">
+        <article><span>Allowed work</span><strong>${esc(work)}</strong><p>Only declared agent, check, and approval steps may run in their planned work areas.</p></article>
+        <article><span>Spend ceiling</span>${consentBudgetListHtml(plan.authority.budgets)}</article>
+        <article><span>Permission ends</span><strong>${esc(plan.request.expires_at)}</strong><p>${narrowed ? `You reduced the lifetime to ${esc(minutes)} minute${minutes === 1 ? "" : "s"}.` : "No limits were reduced. This preview keeps the planned permission."}</p></article>
+        <article><span>What makes it stop</span><strong>Budget, expiry, decision, completion, or your stop action</strong><p>${stopCopy}</p></article>
+        <article><span>Push destination</span><strong>Nowhere</strong><p>A bounded run has no push permission.</p></article>
+        <article><span>Delivery is not automatic</span><strong>The browser adds no authority of its own</strong><p>Only a browser-confirmed program action may use pre-granted delivery permission.</p></article>
+      </div>
+      ${consentNeverHtml()}
+    </section>
+    ${(plan.issues || []).map((issue) => `<p class="guard consent-refusal">${esc(issue)} Review a fresh preview before trying again.</p>`).join("")}
+    <details class="consent-technical"><summary>Technical details</summary><p>Exact capability names, repository binding, token, and full grant document.</p><div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div><pre>${esc(JSON.stringify(plan, null, 2))}</pre><button type="button" data-consent-summary="run">Back to permission summary</button></details>
+    <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="run-start-confirm">Approve this permission</button>' : ""}<button type="button" id="run-plan-close">Return without starting</button></div>
+  </section>`;
 }
 
 function runEmptyHtml() {
   const draft = orchState.grantDraft;
-  return `<div class="run-empty"><section><span class="orch-eyebrow">score ≠ authority</span><h2>No local run for this score</h2><p>Saving and validating this score starts nothing. Build a grant preview from current repository, story, score, capability, budget, and expiry facts; only a second explicit confirmation creates immutable local authority.</p>${badge("preview is pure", "ok")} ${badge("grant dispatches nothing", "warn")}</section>
-    <form id="run-grant-form" class="run-grant-form"><label>project slug<input name="project" required value="${esc(draft.project || orchState.score.project || "")}"></label><label>in-progress story id<input name="story" required value="${esc(draft.story)}" placeholder="WLA-24-07"></label><label>operator identity<input name="operator" required value="${esc(draft.operator)}" placeholder="human or accountable agent"></label><label>grant minutes<input name="minutes" type="number" min="1" max="1440" value="${esc(draft.minutes || 60)}"></label><button type="submit">preview exact grant</button></form>${grantPreviewHtml(orchState.runPlan)}</div>`;
+  const consentSnapshot = SNAPSHOT_MODE ? new URLSearchParams(location.search).get("consentpreview") : "";
+  if (consentSnapshot?.startsWith("run-") && orchState.runPlan) {
+    return `<div class="run-empty consent-snapshot-only">${grantPreviewHtml(orchState.runPlan)}</div>`;
+  }
+  return `<div class="run-empty"><section><span class="orch-eyebrow">permission before work</span><h2>No bounded run is active</h2><p>Review who may do the selected work and how long permission lasts. The score fixes capabilities and spend ceilings, so this panel cannot raise or replace them.</p>${badge("preview starts nothing", "ok")} ${badge("approval creates permission only", "warn")}</section>
+    <form id="run-grant-form" class="run-grant-form"><label>project slug<input name="project" required value="${esc(draft.project || orchState.score.project || "")}"></label><label>in-progress story id<input name="story" required value="${esc(draft.story)}" placeholder="WLA-24-07"></label><label>accountable operator<input name="operator" required value="${esc(draft.operator)}" placeholder="person responsible for this permission"></label><label>permission lifetime, up to 60 minutes<input name="minutes" type="number" min="1" max="60" value="${esc(Math.min(60, Number(draft.minutes) || 60))}"></label><button type="submit">Preview permission</button></form>${grantPreviewHtml(orchState.runPlan)}</div>`;
 }
 
 function liveConnectionHtml(connection, recovery) {
@@ -3814,7 +3933,7 @@ function startRunLive() {
 async function previewRunGrant(form) {
   rememberReturnFocus("run-plan");
   const values = Object.fromEntries(new FormData(form).entries());
-  const minutes = Math.max(1, Math.min(1440, Number(values.minutes) || 60));
+  const minutes = Math.max(1, Math.min(60, Number(values.minutes) || 60));
   orchState.grantDraft = { project: String(values.project || "").trim(), story: String(values.story || "").trim(), operator: String(values.operator || "").trim(), minutes };
   orchState.runError = ""; orchState.runPlan = null; renderOrchestration();
   const issued = new Date(); const expires = new Date(issued.getTime() + minutes * 60_000);
@@ -3831,13 +3950,15 @@ async function confirmRunGrant() {
   const request = {
     score: plan.request.score, project: plan.request.project, story: plan.request.story,
     issued_at: plan.request.issued_at, expires_at: plan.request.expires_at,
+    standing_nudges: plan.request.standing_nudges || [],
+    signal_channel: plan.request.signal_channel || "",
     expect: plan.start_token, approve: true, operator: orchState.grantDraft.operator,
   };
   orchState.runLoading = true; renderOrchestration();
   const { status, body } = await postJson("/api/runs/start", request);
   orchState.runLoading = false;
-  if (status === 409) { orchState.runPlan = null; orchState.runError = "Stale grant preview refused. Repository, score, story, or time facts changed; build a fresh preview."; renderOrchestration(); return; }
-  if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run start failed (${status})`; renderOrchestration(); return; }
+  if (startTokenWasRefused(status, body)) { orchState.runPlan = null; orchState.runError = "This start token is stale, reused, or does not match. Nothing started. Review a fresh permission preview."; renderOrchestration(); return; }
+  if (status >= 400 || body.ok === false) { orchState.runError = responseIssueText(body) || `run start failed (${status})`; renderOrchestration(); return; }
   orchState.runId = body.data.run_id; orchState.runPlan = null; await refreshRunData();
 }
 
@@ -3881,6 +4002,7 @@ function wireRunView() {
   document.getElementById("run-select")?.addEventListener("change", async (event) => { orchState.runId = event.target.value; orchState.runAct = null; orchState.runResult = null; orchState.runStream = null; await refreshRunData(); });
   document.getElementById("run-grant-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewRunGrant(event.currentTarget); });
   document.getElementById("run-start-confirm")?.addEventListener("click", confirmRunGrant);
+  document.querySelector('[data-consent-summary="run"]')?.addEventListener("click", () => focusRegion("#run-consent-summary"));
   const closePlan = () => {
     orchState.runPlan = null;
     renderOrchestration();
@@ -3993,9 +4115,34 @@ async function viewOrchestration(name) {
     catch (err) { orchState.runError = err.message; orchState.runView = null; }
     startRunLive();
   }
+  const consentSnapshot = SNAPSHOT_MODE ? new URLSearchParams(location.search).get("consentpreview") : "";
+  if (orchState.view === "run" && !orchState.runId && consentSnapshot?.startsWith("run-")) {
+    orchState.grantDraft = {
+      project: orchState.score.project || "sample", story: "SMP-0-02",
+      operator: "UI consent reviewer", minutes: consentSnapshot === "run-narrowed" ? 20 : 60,
+    };
+    if (consentSnapshot === "run-refusal") {
+      orchState.runPlan = null;
+      orchState.runError = "This start token is stale, reused, or does not match. Nothing started. Review a fresh permission preview.";
+    } else {
+      const issued = new Date();
+      const expires = new Date(issued.getTime() + orchState.grantDraft.minutes * 60_000);
+      const params = new URLSearchParams({
+        score: orchState.score.slug, project: orchState.grantDraft.project,
+        story: orchState.grantDraft.story, issued_at: issued.toISOString(),
+        expires_at: expires.toISOString(),
+      });
+      try { orchState.runPlan = (await api(`/api/run-plan?${params}`)).data; }
+      catch (err) { orchState.runError = err.message; }
+    }
+  }
   renderOrchestration();
+  if (consentSnapshot?.startsWith("run-") && orchState.runPlan) focusConsentSnapshot(".run-consent");
+  if (consentSnapshot === "run-refusal") focusConsentSnapshot(".run-error");
   focusBoundedSnapshot();
   await refreshOrchValidation();
+  if (consentSnapshot?.startsWith("run-") && orchState.runPlan) focusConsentSnapshot(".run-consent");
+  if (consentSnapshot === "run-refusal") focusConsentSnapshot(".run-error");
   focusBoundedSnapshot();
 }
 
@@ -4006,7 +4153,7 @@ async function viewOrchestration(name) {
  * confirmation before the server delegates to the shared program surface. */
 
 let programState = {
-  inventory: null, runId: "", view: null, plan: null, planRequest: null,
+  inventory: null, runId: "", view: null, plan: null, planRequest: null, envelope: null,
   act: null, stream: null, result: null, error: "", loading: false,
   reason: "", maxTicks: 100, maxSeconds: 300, notifications: [],
   connection: { status: SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "checking" },
@@ -4037,6 +4184,10 @@ function programInventoryHtml() {
   const inventory = programState.inventory || { programs: [], runs: [], healthy: true };
   const programs = inventory.programs || [];
   const runs = inventory.runs || [];
+  const consentSnapshot = SNAPSHOT_MODE ? new URLSearchParams(location.search).get("consentpreview") : "";
+  if (consentSnapshot?.startsWith("program-") && (programState.plan || programState.error)) {
+    return `<div class="program-inventory"><section class="program-start consent-snapshot-only">${programState.error && !programState.plan ? `<p class="guard consent-start-error" role="alert">${esc(programState.error)}</p>` : programConsentHtml(programState.plan)}</section></div>`;
+  }
   return `<div class="program-inventory" data-healthy="${inventory.healthy ? "true" : "false"}">
     <header class="program-room-toolbar"><div><span class="orch-eyebrow">delivery options · review first</span><h1>Optional multi-phase delivery</h1><p>Review saved delivery plans and live progress. Opening this view starts no work and changes no saved delivery state.</p></div>${badge(inventory.healthy ? "ready" : "needs attention", inventory.healthy ? "ok" : "issue")}</header>
     <section class="program-room-grid" aria-label="delivery plans">${programs.map((item) => `<article class="program-card"><div><span>delivery plan</span>${item.valid ? badge("ready to review", "ok") : badge("needs repair", "issue")}</div><h2>${esc(item.title || item.slug || item.name)}</h2><p>${item.valid ? "This plan can be reviewed for a separate start." : "Resolve the listed plan issue before starting a delivery."}</p><details><summary>Technical details</summary><code>${esc(item.path)}</code><p>${item.valid ? `Exact fingerprint: <code>${esc(item.semantic_hash)}</code>` : esc((item.diagnostics || []).map((d) => d.message).join("; "))}</p></details></article>`).join("") || '<article class="program-empty"><h2>No optional delivery plan</h2><p>Ordinary roadmap work remains available. Nothing is running or waiting here.</p></article>'}</section>
@@ -4047,25 +4198,79 @@ function programInventoryHtml() {
   </div>`;
 }
 
-function programStartHtml(programs) {
-  const plan = programState.plan;
+function programNarrowingSummary(plan, envelope) {
+  if (!plan || !envelope) return { reduced: false, items: [] };
+  const items = [];
+  if (PROGRAM_MODE_RANK[plan.authority.mode] < PROGRAM_MODE_RANK[envelope.mode]) items.push("delivery pace");
+  if ((plan.authority.capabilities || []).length < envelope.capabilities.length) items.push("allowed work");
+  if (Object.entries(envelope.budgets).some(([key, value]) => Number(plan.authority.budgets?.[key]) < Number(value))) items.push("spend ceilings");
+  const lifetime = Math.max(0, Math.round((Date.parse(plan.request.expires_at) - Date.parse(plan.request.issued_at)) / 1000));
+  if (lifetime < envelope.lifetimeSeconds) items.push("lifetime");
+  return { reduced: items.length > 0, items };
+}
+
+function programNarrowingHtml(plan, envelope) {
+  if (!envelope) return "";
+  const selected = new Set(plan.authority.capabilities || []);
+  const modes = Object.keys(PROGRAM_MODE_RANK).filter((mode) => PROGRAM_MODE_RANK[mode] <= PROGRAM_MODE_RANK[envelope.mode]);
+  const lifetime = Math.max(1, Math.round((Date.parse(plan.request.expires_at) - Date.parse(plan.request.issued_at)) / 1000));
+  const pushPlanned = envelope.capabilities.includes("git:push");
+  return `<form id="program-narrow-form" class="program-narrow-form">
+    <header><div><span>Narrow permission</span><strong>You may lower these limits. You cannot raise them.</strong></div>${badge("server checks the ceiling", "ok")}</header>
+    <div class="program-narrow-grid">
+      <fieldset><legend>Delivery pace</legend>${modes.reverse().map((mode) => `<label><input type="radio" name="mode" value="${mode}"${plan.authority.mode === mode ? " checked" : ""}> ${esc(PROGRAM_MODE_LABELS[mode])}</label>`).join("")}</fieldset>
+      <fieldset class="program-capability-choices"><legend>Allowed work</legend>${envelope.capabilities.map((capability, index) => `<label><input type="checkbox" name="capability" value="${esc(capability)}"${selected.has(capability) ? " checked" : ""}> ${esc(PROGRAM_CAPABILITY_LABELS[capability] || `Planned action type ${index + 1}`)}</label>`).join("") || "<p>This is advice-only permission. It cannot dispatch or change work.</p>"}</fieldset>
+      <fieldset class="program-budget-choices"><legend>Spend ceilings</legend>${Object.entries(envelope.budgets).map(([name, maximum]) => `<label>${esc(consentBudgetLabel(name))}<input type="number" name="budget:${esc(name)}" min="1" max="${esc(maximum)}" value="${esc(plan.authority.budgets?.[name] || maximum)}"></label>`).join("")}</fieldset>
+      <fieldset><legend>Lifetime</legend><label>permission seconds<input type="number" name="lifetime" min="1" max="${esc(envelope.lifetimeSeconds)}" value="${esc(lifetime)}"></label><small>The maximum is the planned lifetime. Lowering the wall-clock budget lowers this again.</small></fieldset>
+      ${pushPlanned ? `<fieldset class="program-push-destination"><legend>Exact push destination</legend><label>remote name<input name="remote" value="${esc(plan.request.remote || "")}" placeholder="origin"></label><label>remote-tracking ref<input name="remote_ref" value="${esc(plan.request.remote_ref || "")}" placeholder="refs/remotes/origin/main"></label><small>A push remains impossible unless the plan grants it and the server verifies this exact destination.</small></fieldset>` : ""}
+    </div>
+    <button type="submit">Preview the reduced permission</button>
+  </form>`;
+}
+
+function programConsentHtml(plan) {
+  if (!plan) return "";
   const request = programState.planRequest || {};
-  const modeLabels = { continuous: "Continue within limits", checkpointed: "Pause at decisions", advisory: "Advice only" };
-  return `<section class="program-start"><div><span class="orch-eyebrow">review before start</span><h2>Review optional delivery permission</h2><p>Choose the delivery plan, accountable operator, pace, lifetime, and reason. This review starts no work; confirmation remains separate.</p></div>
+  const heading = SNAPSHOT_MODE && new URLSearchParams(location.search).get("consentpreview")?.startsWith("program-") ? "h1" : "h2";
+  const envelope = programState.envelope;
+  const narrowing = programNarrowingSummary(plan, envelope);
+  const story = plan.selection?.story;
+  const work = story?.id ? `${story.id}: ${story.title || "selected roadmap work"}` : story || "the current planned roadmap selection";
+  const stops = (plan.authority?.stop_conditions || []).map((stop) => stop.replaceAll("-", " ")).join(", ") || "scope completion, a required decision, a used budget, expiry, revocation, or cancellation";
+  const mayPush = (plan.authority?.capabilities || []).includes("git:push");
+  const destination = mayPush && plan.request.remote && plan.request.remote_ref ? `${plan.request.remote} · ${plan.request.remote_ref}` : "Nowhere";
+  const destinationNote = mayPush ? "A push is possible only after the server verifies this exact destination and all earlier delivery gates pass." : "This reviewed permission does not include pushing.";
+  return `<section class="program-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="program-plan-title" tabindex="-1">
+    <header class="consent-head"><div><span>Permission</span><${heading} id="program-plan-title">Approve optional delivery</${heading}><p>This is possible delivery authority, not automatic delivery. Previewing, opening this page, and receiving live updates start nothing.</p></div>${badge(plan.applicable ? "ready to approve" : "refused", plan.applicable ? "ok" : "issue")}</header>
+    <section id="program-consent-summary" class="consent-summary" tabindex="-1">
+      <div class="consent-fact-grid">
+        <article><span>Allowed work</span><strong>${esc(work)}</strong><p>${esc(PROGRAM_MODE_LABELS[plan.authority.mode] || plan.authority.mode)} for the planned team. ${esc(programAllowedWorkSummary(plan.authority.capabilities))}.</p></article>
+        <article><span>Spend ceiling</span>${consentBudgetListHtml(plan.authority.budgets, true)}</article>
+        <article><span>Permission ends</span><strong>${esc(plan.request.expires_at)}</strong><p>${narrowing.reduced ? `You reduced ${esc(narrowing.items.join(", "))}.` : "No limits were reduced. This preview keeps the planned permission."}</p></article>
+        <article><span>What makes it stop</span><strong>Declared stops always win</strong><p>${esc(stops)}.</p></article>
+        <article><span>Push destination</span><strong>${esc(destination)}</strong><p>${esc(destinationNote)}</p></article>
+        <article><span>Delivery is not automatic</span><strong>The browser adds no authority of its own</strong><p>Only a browser-confirmed program action may use pre-granted delivery permission. Later work still follows its own gates.</p></article>
+      </div>
+      ${consentNeverHtml()}
+    </section>
+    ${programNarrowingHtml(plan, envelope)}
+    ${(plan.issues || []).map((issue) => `<p class="guard consent-refusal">${esc(typeof issue === "object" ? issue.message || issue.code : issue)} Review the permission again after fixing it.</p>`).join("")}
+    <details class="consent-technical"><summary>Technical details</summary><p>Exact capability names, policy envelope, repository binding, token, and full grant document.</p><div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div><pre>${esc(JSON.stringify(plan, null, 2))}</pre><button type="button" data-consent-summary="program">Back to permission summary</button></details>
+    <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="program-start-confirm">Approve this permission</button>' : ""}<button type="button" id="program-plan-close">Return without starting</button></div>
+  </section>`;
+}
+
+function programStartHtml(programs) {
+  const request = programState.planRequest || {};
+  return `<section class="program-start"><div><span class="orch-eyebrow">permission before delivery</span><h2>Review optional delivery permission</h2><p>Choose a plan, name the accountable operator, and state the reason. The first preview loads the planned envelope. You can then reduce it before one approval.</p></div>
     <form id="program-plan-form" class="program-plan-form">
       <label>delivery plan<select name="program">${programs.filter((item) => item.valid).map((item) => `<option value="${esc(item.name)}"${request.program === item.name ? " selected" : ""}>${esc(item.title || item.slug || item.name)}</option>`).join("")}</select></label>
-      <label>delivery pace<select name="mode">${["continuous", "checkpointed", "advisory"].map((mode) => `<option value="${mode}"${request.mode === mode ? " selected" : ""}>${esc(modeLabels[mode])}</option>`).join("")}</select></label>
-      <label>accountable operator<input name="operator" required maxlength="200" value="${esc(request.operator || "")}" placeholder="accountable person or agent"></label>
-      <label>permission lifetime in minutes<input name="minutes" type="number" min="1" max="1440" value="${esc(request.minutes || 60)}"></label>
-      <label class="program-plan-reason">delivery reason<input name="reason" required maxlength="1000" value="${esc(request.reason || "")}" placeholder="one-line reviewed intent"></label>
-      <button type="submit">Review this delivery</button>
+      <label>accountable operator ID<input name="operator" required maxlength="200" value="${esc(request.operator?.id || request.operator || "")}" placeholder="accountable-id"></label>
+      <label class="program-plan-reason">reason for this permission<input name="reason" required maxlength="1000" value="${esc(request.reason || "")}" placeholder="one-line reviewed intent"></label>
+      <button type="submit">Preview planned permission</button>
     </form>
-    ${plan ? `<section class="program-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="program-plan-title" tabindex="-1"><div class="program-consent-head"><div><span>start review</span><strong id="program-plan-title">${esc(plan.program?.title || plan.program?.slug || request.program)}</strong></div>${badge(plan.applicable ? "ready for confirmation" : "blocked", plan.applicable ? "ok" : "issue")}</div>
-      <div class="program-facts"><div><span>work</span><strong>${esc(plan.selection?.story?.id || plan.selection?.story || "—")}</strong></div><div><span>team</span><strong>${esc(plan.roster?.team || "—")}</strong></div><div><span>permission ends</span><strong>${esc(plan.request?.expires_at || request.expires_at)}</strong></div><div><span>allowed action types</span><strong>${esc((plan.authority?.capabilities || []).length)}</strong></div></div>
-      ${(plan.issues || []).map((issue) => `<p class="guard">${esc(typeof issue === "object" ? issue.message || issue.code : issue)}</p>`).join("")}
-      <details><summary>Technical details</summary><div class="run-token"><span>Exact start confirmation</span><code>${esc(plan.start_token)}</code></div><pre>${esc(JSON.stringify({ kind: plan.kind, mode: plan.mode, authority: plan.authority, request: plan.request }, null, 2))}</pre></details>
-      <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="program-start-confirm">Confirm this reviewed delivery</button>' : ""}<button type="button" id="program-plan-close">Cancel review</button></div>
-    </section>` : ""}
+    ${programState.error ? `<p class="guard consent-start-error" role="alert">${esc(programState.error)}</p>` : ""}
+    ${programConsentHtml(programState.plan)}
   </section>`;
 }
 
@@ -4280,21 +4485,101 @@ function startProgramLive() {
   };
 }
 
+async function requestProgramPermission(request) {
+  const { status, body } = await postJson("/api/programs/plan", request);
+  if (status >= 400 || body.ok === false) {
+    programState.error = responseIssueText(body) || `program plan failed (${status})`;
+    return null;
+  }
+  return body.data;
+}
+
+async function loadInitialProgramPermission(base) {
+  const issued = new Date(base.issued_at);
+  // Advice-only discovery is always at or below the tracked mode ceiling. It
+  // reads the planned capabilities and budgets, then a second pure preview
+  // binds the full envelope that the person may narrow.
+  const discovery = await requestProgramPermission({
+    ...base,
+    mode: "advisory",
+    capabilities: [],
+    expires_at: new Date(issued.getTime() + 1_000).toISOString(),
+  });
+  if (!discovery) return;
+  const mode = discovery.program.mode_ceiling;
+  const capabilities = mode === "advisory" ? [] : [...(discovery.program.requested_capabilities || [])];
+  const budgets = { ...(discovery.program.budgets || {}) };
+  const lifetimeSeconds = Math.max(1, Math.min(3_600, Number(budgets.max_wall_seconds || 3_600)));
+  programState.envelope = { mode, capabilities, budgets, lifetimeSeconds };
+  programState.planRequest = {
+    ...base, mode, capabilities, budgets,
+    expires_at: new Date(issued.getTime() + lifetimeSeconds * 1_000).toISOString(),
+  };
+  programState.plan = await requestProgramPermission(programState.planRequest);
+}
+
+async function loadNarrowedProgramPermission({ mode, capabilities, budgets, lifetimeSeconds, remote = "", remoteRef = "" }) {
+  const base = programState.planRequest;
+  if (!programState.envelope || !base) return;
+  const issued = new Date(base.issued_at);
+  programState.planRequest = {
+    program: base.program, operator: base.operator, reason: base.reason,
+    intent_id: base.intent_id, issued_at: base.issued_at,
+    mode, capabilities, budgets,
+    expires_at: new Date(issued.getTime() + lifetimeSeconds * 1_000).toISOString(),
+    ...(capabilities.includes("git:push") && remote ? { remote } : {}),
+    ...(capabilities.includes("git:push") && remoteRef ? { remote_ref: remoteRef } : {}),
+  };
+  programState.plan = await requestProgramPermission(programState.planRequest);
+}
+
 async function previewProgramStart(form) {
   rememberReturnFocus("program-plan");
   const values = Object.fromEntries(new FormData(form).entries());
-  const minutes = Math.max(1, Math.min(1440, Number(values.minutes) || 60));
   const issued = new Date();
-  const request = {
-    program: String(values.program || ""), mode: String(values.mode || "continuous"),
-    operator: String(values.operator || "").trim(), reason: String(values.reason || "").trim(),
-    intent_id: `workbench-${issued.getTime()}`, issued_at: issued.toISOString(),
-    expires_at: new Date(issued.getTime() + minutes * 60_000).toISOString(),
+  const base = {
+    program: String(values.program || ""),
+    operator: String(values.operator || "").trim(),
+    reason: String(values.reason || "").trim(),
+    intent_id: `workbench-${issued.getTime()}`,
+    issued_at: issued.toISOString(),
   };
-  programState.planRequest = { ...request, minutes }; programState.plan = null; programState.error = ""; renderPrograms();
-  const { status, body } = await postJson("/api/programs/plan", request);
-  if (status >= 400 || body.ok === false) programState.error = (body.issues && body.issues[0]) || `program plan failed (${status})`;
-  else programState.plan = body.data;
+  programState.planRequest = base;
+  programState.plan = null;
+  programState.envelope = null;
+  programState.error = "";
+  renderPrograms();
+  await loadInitialProgramPermission(base);
+  renderPrograms();
+  if (programState.plan) focusRegion(".program-consent");
+}
+
+async function previewProgramNarrowing(form) {
+  const envelope = programState.envelope;
+  if (!envelope || !programState.planRequest) return;
+  rememberReturnFocus("program-plan", form.querySelector("button[type='submit']"));
+  const data = new FormData(form);
+  const mode = String(data.get("mode") || envelope.mode);
+  const capabilities = mode === "advisory" ? [] : data.getAll("capability").map(String).filter((item) => envelope.capabilities.includes(item));
+  const budgets = {};
+  Object.entries(envelope.budgets).forEach(([name, maximum]) => {
+    const value = Number(data.get(`budget:${name}`));
+    budgets[name] = Math.max(1, Math.min(Number(maximum), Number.isFinite(value) ? Math.floor(value) : Number(maximum)));
+  });
+  const requestedLifetime = Number(data.get("lifetime"));
+  const lifetimeSeconds = Math.max(1, Math.min(
+    envelope.lifetimeSeconds,
+    Number(budgets.max_wall_seconds || envelope.lifetimeSeconds),
+    Number.isFinite(requestedLifetime) ? Math.floor(requestedLifetime) : envelope.lifetimeSeconds,
+  ));
+  programState.plan = null;
+  programState.error = "";
+  renderPrograms();
+  await loadNarrowedProgramPermission({
+    mode, capabilities, budgets, lifetimeSeconds,
+    remote: String(data.get("remote") || "").trim(),
+    remoteRef: String(data.get("remote_ref") || "").trim(),
+  });
   renderPrograms();
   if (programState.plan) focusRegion(".program-consent");
 }
@@ -4302,14 +4587,15 @@ async function previewProgramStart(form) {
 async function confirmProgramStart() {
   if (!programState.plan?.applicable || !programState.planRequest) return;
   const request = { ...programState.planRequest, approve: true, expect: programState.plan.start_token };
-  delete request.minutes;
   const { status, body } = await postJson("/api/programs/start", request);
   if (status >= 400 || body.ok === false) {
     programState.plan = null;
-    programState.error = (body.issues && body.issues[0]) || `program start failed (${status})`;
+    programState.error = startTokenWasRefused(status, body)
+      ? "This start token is stale, reused, or does not match. Nothing started. Review a fresh permission preview."
+      : responseIssueText(body) || `program start failed (${status})`;
     renderPrograms(); return;
   }
-  programState.plan = null; programState.planRequest = null;
+  programState.plan = null; programState.planRequest = null; programState.envelope = null;
   location.hash = `#/programs/${encodeURIComponent(body.data.run_id)}`;
 }
 
@@ -4379,7 +4665,9 @@ async function ackProgramNotification(id) {
 
 function wirePrograms() {
   document.getElementById("program-plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewProgramStart(event.currentTarget); });
+  document.getElementById("program-narrow-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewProgramNarrowing(event.currentTarget); });
   document.getElementById("program-start-confirm")?.addEventListener("click", confirmProgramStart);
+  document.querySelector('[data-consent-summary="program"]')?.addEventListener("click", () => focusRegion("#program-consent-summary"));
   const closePlan = () => {
     programState.plan = null;
     renderPrograms();
@@ -4458,7 +4746,38 @@ async function viewPrograms(runId = "") {
     }
     startProgramLive();
   }
+  const consentSnapshot = SNAPSHOT_MODE ? new URLSearchParams(location.search).get("consentpreview") : "";
+  if (!runId && consentSnapshot?.startsWith("program-") && programState.inventory?.programs?.some((item) => item.valid)) {
+    const program = programState.inventory.programs.find((item) => item.valid);
+    const issued = new Date();
+    const base = {
+      program: program.name, operator: "ui-consent-reviewer",
+      reason: "Review the exact optional delivery permission.",
+      intent_id: `workbench-${issued.getTime()}`, issued_at: issued.toISOString(),
+    };
+    programState.planRequest = base;
+    programState.plan = null;
+    programState.envelope = null;
+    programState.error = "";
+    await loadInitialProgramPermission(base);
+    if (consentSnapshot === "program-narrowed" && programState.plan && programState.envelope) {
+      const envelope = programState.envelope;
+      const capabilities = envelope.capabilities.includes("roadmap:phase-advance")
+        ? envelope.capabilities.filter((item) => item !== "roadmap:phase-advance")
+        : envelope.capabilities.length > 2 ? envelope.capabilities.slice(0, -1) : [...envelope.capabilities];
+      const budgets = Object.fromEntries(Object.entries(envelope.budgets).map(([name, maximum]) => [name, Math.max(1, Math.floor(Number(maximum) / 2))]));
+      const lifetimeSeconds = Math.max(1, Math.min(Math.floor(envelope.lifetimeSeconds / 2), Number(budgets.max_wall_seconds || envelope.lifetimeSeconds)));
+      programState.plan = null;
+      await loadNarrowedProgramPermission({ mode: envelope.mode, capabilities, budgets, lifetimeSeconds });
+    }
+    if (consentSnapshot === "program-refusal") {
+      programState.plan = null;
+      programState.error = "This start token is stale, reused, or does not match. Nothing started. Review a fresh permission preview.";
+    }
+  }
   renderPrograms();
+  if (consentSnapshot?.startsWith("program-") && programState.plan) focusConsentSnapshot(".program-consent");
+  if (consentSnapshot === "program-refusal") focusConsentSnapshot(".consent-start-error");
   focusBoundedSnapshot();
 }
 

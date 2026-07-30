@@ -57,6 +57,8 @@ adoption = app[app.index("const adoptionReviewMarks"):app.index("const STATUS_VO
 assert index.count('class="navlink"') == 5
 for label in ("Work", "Plan", "Delivery", "Live", "Health"):
     assert f">{label}</a>" in index, label
+assert "Browsing adds no authority" in index
+assert "browser-confirmed program action may use pre-granted delivery permission" in index
 for token in ("project-switcher", "PROJECT_STORAGE_KEY", "viewProjectSelector",
               "viewUnavailableProject", "wireTechnicalFolds", "destinationNav"):
     assert token in index + app, token
@@ -118,7 +120,11 @@ for token in ("Live delivery", "What happens next?", "Scope and progress",
               "Actions and decisions", "Before any action",
               "Decision and blocker inbox", "Could an effect already have occurred?",
               "view.bounded_actions", "exact control catalog",
-              "close explicit stream"):
+              "Approve this bounded run", "Allowed work", "Spend ceiling",
+              "Permission ends", "What makes it stop", "Push destination",
+              "Never allowed", "Raise its own authority",
+              "No limits were reduced", "Review a fresh permission preview",
+              "standing_nudges", "signal_channel", "close explicit stream"):
     assert token in run, token
 assert "setInterval" not in run and "driver_config" not in run and "argv:" not in run
 assert 'aria-labelledby="run-graph-title"' in run
@@ -140,17 +146,23 @@ for token in ("Optional multi-phase delivery", "delivery plan",
               "operator notifications", "transport ≠ authority",
               "boundedActionCenterHtml(view.bounded_actions",
               "exact control catalog", "program-max-ticks",
-              "program-act-confirm", "close explicit stream",
+              "program-act-confirm", "Approve optional delivery",
+              "Narrow permission", "Preview the reduced permission",
+              "You may lower these limits", "Delivery is not automatic",
+              "browser adds no authority", "Back to permission summary",
+              "close explicit stream",
               "/api/programs", "program-ledger", "from=${cursor}"):
     assert token in program, token
 assert "setInterval" not in program and "driver_config" not in program
 assert "argv:" not in program and "command:" not in program
-assert '"checkpointed"' in program and '"supervised"' not in program
+assert "checkpointed: 1" in app and '"supervised"' not in program
 assert "new EventSource" in program and "stopProgramLive" in program
 assert "SNAPSHOT_MODE" in program  # viewport snapshots never open live SSE
 for token in (".program-room-grid", ".program-role-table",
               ".program-quality-grid", ".program-controls",
-              ".program-timeline", ".program-open-stream"):
+              ".program-timeline", ".program-open-stream",
+              ".consent-fact-grid", ".consent-never",
+              ".program-narrow-form", ".program-budget-choices"):
     assert token in css, token
 for token in ("/api/delivery-setup", "What are you delivering?",
               "Choose the delivery scope", "Choose the operating mode",
@@ -277,7 +289,7 @@ DW="$PMO_DIR/bin/dw"
 "$PMO_DIR/install.sh" "$REPO" --skip-bootstrap >/dev/null
 DW="$REPO/.githooks/dw"
 "$DW" --root "$REPO" story status sample 0 SMP-0-02 in-progress >/dev/null
-python3 - "$REPO/pm/orchestration/repair-visual.json" "$REPO/pm/orchestration/terminal-visual.json" "$REPO/pm/orchestration/decision-visual.json" <<'PY'
+python3 - "$REPO/pm/orchestration/repair-visual.json" "$REPO/pm/orchestration/terminal-visual.json" "$REPO/pm/orchestration/decision-visual.json" "$REPO/pm/orchestration/consent-visual.json" <<'PY'
 import json
 import sys
 
@@ -331,7 +343,22 @@ decision = {
     "layout": {"nodes": {"review": {"x": 180, "y": 100}},
                "viewport": {"x": 0, "y": 0, "zoom": 1}},
 }
-for path, document in zip(sys.argv[1:], (repair, terminal, decision)):
+consent = {
+    "kind": "delivery-workbench-orchestration", "schema_version": 1,
+    "slug": "consent-visual", "title": "Consent review", "project": "sample",
+    "defaults": {
+        "max_concurrency": 1, "max_wall_seconds": 3600,
+        "max_agent_starts": 2, "max_check_starts": 2,
+        "default_timeout_seconds": 60, "max_artifact_bytes": 100000,
+    },
+    "nodes": [{
+        "id": "review", "type": "approval", "prompt": "Review bounded work.",
+        "terminal": "awaiting-certification",
+    }],
+    "layout": {"nodes": {"review": {"x": 180, "y": 100}},
+               "viewport": {"x": 0, "y": 0, "zoom": 1}},
+}
+for path, document in zip(sys.argv[1:], (repair, terminal, decision, consent)):
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(document, handle, indent=2)
         handle.write("\n")
@@ -589,9 +616,10 @@ program = {
     }],
     "mode_ceiling": "continuous",
     "requested_capabilities": [
-        "agent:dispatch", "workspace:write", "certification:verdict",
-        "evidence:materialize", "integration:apply", "git:commit",
-        "roadmap:story-start", "roadmap:story-complete", "roadmap:phase-advance",
+        "program:select", "agent:dispatch", "workspace:write", "verdict:issue",
+        "certification:verdict", "evidence:materialize", "integration:apply",
+        "contract:generate", "git:commit", "roadmap:story-start",
+        "roadmap:story-complete", "roadmap:phase-advance",
     ],
     "budgets": {
         "max_phases": 1, "max_stories": 2, "max_child_runs": 8,
@@ -625,17 +653,52 @@ for slug, title in rubrics.items():
         "slug": slug, "title": title,
         "description": "Calm, source-backed questions for independent review.",
         "version": "1.0.0", "subject_type": "diff",
+        "result_vocabulary": ["pass", "fail", "needs-repair", "escalate"],
+        "aggregation": {
+            "method": "all", "threshold": 1, "on_pass": "pass",
+            "on_fail": "needs-repair", "on_abstain": "escalate",
+            "on_inconclusive": "needs-repair",
+        },
+        "freshness": {
+            "max_age_seconds": 3600,
+            "bind": ["subject", "repository", "program", "assignment", "rubric", "ledger"],
+        },
+        "layout": {},
         "criteria": [{
             "id": "intent-and-evidence",
             "question": "Does the delivered change match the plan and include trustworthy evidence?",
             "evaluation": {"kind": "agent-judgment", "fact": None},
             "required_evidence_kinds": ["git-diff"], "min_citations": 2,
-            "allowed_results": ["pass", "fail", "needs-repair"],
-            "veto": True,
+            "allowed_results": ["pass", "fail", "abstain", "inconclusive"],
+            "rationale_max_bytes": 2000, "veto": True,
         }],
     }
 for path, document in documents.items():
     path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+PY
+PYTHONPATH="$PMO_DIR/lib" python3 - "$REPO" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+from dw_pmo.orchestration_driver import write_driver_config
+
+root = Path(sys.argv[1])
+organization = json.loads(
+    (root / "pm/organizations/autonomous-story-cell.json").read_text()
+)
+profiles = {}
+for agent in organization["agents"]:
+    writable = "workspace:write" in agent["capability_ceiling"]
+    profiles[agent["profile"]] = {
+        "adapter": "fixture",
+        "capabilities": ["repository-read", *(["repository-write"] if writable else [])],
+        "workspace_modes": ["isolated-worktree" if writable else "read-only"],
+    }
+write_driver_config(root, {
+    "kind": "delivery-workbench-driver-config", "schema_version": 1,
+    "workspace_root": None, "profiles": profiles,
+})
 PY
 
 VIEWS="board-home:#/ step-confirm:#/ health:#/health trace:#/p/sample/t/SMP-0-01 editor:#/edit/create_story preview:#/edit/attach_evidence validation:#/p/sample board-route:#/board/sample board-create:#/board/sample board-park-refusal:#/board/sample board-done-refusal:#/board/sample orchestration-design:#/orchestration/research-build-review orchestration-validate:#/orchestration/research-build-review orchestration-json:#/orchestration/research-build-review orchestration-run-active:#/orchestration/research-build-review orchestration-run-stale:#/orchestration/research-build-review orchestration-run-technical:#/orchestration/research-build-review orchestration-run-repair:#/orchestration/repair-visual orchestration-run-terminal:#/orchestration/terminal-visual studio-plan-workflow:#/program-studio/workflow/architect-debate-delivery studio-plan-program:#/program-studio/program/studio-program program-studio-plain-delivery:#/program-studio/program/studio-program program-studio-plain-review:#/program-studio/program/studio-program program-studio-plain-technical:#/program-studio/workflow/studio-story-flow studio-plan-invalid:#/program-studio/workflow/studio-invalid-flow studio-team-review:#/program-studio/organization/autonomous-story-cell studio-debate-active:#/program-studio/workflow/architect-debate-delivery studio-budget-exhausted:#/program-studio/workflow/architect-debate-delivery studio-verifier-failed:#/program-studio/organization/autonomous-story-cell studio-phase-transition:#/program-studio/program/studio-program studio-complete:#/program-studio/program/studio-program studio-validate:#/program-studio/workflow/architect-debate-delivery studio-technical-graph:#/program-studio/workflow/architect-debate-delivery studio-technical-config:#/program-studio/workflow/architect-debate-delivery studio-team-technical:#/program-studio/organization/autonomous-story-cell"
@@ -687,6 +750,21 @@ shot "run-action-refusal-mobile" 390,844 "$BASE/?snapshot=1&orchview=run&bounded
 # creating local program authority.
 shot "program-planning-desktop" 1440,900 "$BASE/?snapshot=1#/programs"
 shot "program-planning-mobile" 390,844 "$BASE/?snapshot=1#/programs"
+
+# WLA-32-06 consent slips: both start surfaces, their unchanged and narrowed
+# permission previews, and the plain stale-token refusal at both widths/themes.
+shot "consent-run-unchanged-desktop" 1440,900 "$BASE/?snapshot=1&orchview=run&consentpreview=run-unchanged#/orchestration/consent-visual"
+shot "consent-run-unchanged-mobile" 390,844 "$BASE/?snapshot=1&orchview=run&consentpreview=run-unchanged#/orchestration/consent-visual"
+shot "consent-run-narrowed-desktop" 1440,900 "$BASE/?snapshot=1&orchview=run&consentpreview=run-narrowed#/orchestration/consent-visual"
+shot "consent-run-narrowed-mobile" 390,844 "$BASE/?snapshot=1&orchview=run&consentpreview=run-narrowed#/orchestration/consent-visual"
+shot "consent-run-refusal-desktop" 1440,900 "$BASE/?snapshot=1&orchview=run&consentpreview=run-refusal#/orchestration/consent-visual"
+shot "consent-run-refusal-mobile" 390,844 "$BASE/?snapshot=1&orchview=run&consentpreview=run-refusal#/orchestration/consent-visual"
+shot "consent-program-unchanged-desktop" 1440,900 "$BASE/?snapshot=1&consentpreview=program-unchanged#/programs"
+shot "consent-program-unchanged-mobile" 390,844 "$BASE/?snapshot=1&consentpreview=program-unchanged#/programs"
+shot "consent-program-narrowed-desktop" 1440,900 "$BASE/?snapshot=1&consentpreview=program-narrowed#/programs"
+shot "consent-program-narrowed-mobile" 390,844 "$BASE/?snapshot=1&consentpreview=program-narrowed#/programs"
+shot "consent-program-refusal-desktop" 1440,900 "$BASE/?snapshot=1&consentpreview=program-refusal#/programs"
+shot "consent-program-refusal-mobile" 390,844 "$BASE/?snapshot=1&consentpreview=program-refusal#/programs"
 
 # Real keyboard/semantic exam over the canonical ordinary, setup, bounded,
 # repair, decision, recovery, and technical-inspection journeys.

@@ -618,6 +618,84 @@ assert score["validation"]["valid"] is True
 assert score["simulation"]["waves"][0]["scheduled"] == ["research-api", "research-risks"]
 assert score["starts_work"] is False and score["writes_events"] is False
 PY
+
+# Consent previews are pure and exact. The full preview keeps the score's
+# capabilities and budgets; the second preview narrows lifetime only. Applying
+# the first token to the second request must refuse before any run is created.
+python3 - "$TMP_ROOT/consent-times.json" <<'PY'
+from datetime import datetime, timedelta, timezone
+import json, sys
+issued = datetime.now(timezone.utc).replace(microsecond=0)
+json.dump({
+    "issued": issued.isoformat(),
+    "full": (issued + timedelta(hours=1)).isoformat(),
+    "narrow": (issued + timedelta(minutes=20)).isoformat(),
+}, open(sys.argv[1], "w"))
+PY
+ISSUED="$(python3 -c "import json; print(json.load(open('$TMP_ROOT/consent-times.json'))['issued'])")"
+FULL_EXPIRY="$(python3 -c "import json; print(json.load(open('$TMP_ROOT/consent-times.json'))['full'])")"
+NARROW_EXPIRY="$(python3 -c "import json; print(json.load(open('$TMP_ROOT/consent-times.json'))['narrow'])")"
+curl -sG "$BASE/api/run-plan" \
+  --data-urlencode "score=research-build-review" --data-urlencode "project=sample" \
+  --data-urlencode "story=SMP-0-02" --data-urlencode "issued_at=$ISSUED" \
+  --data-urlencode "expires_at=$FULL_EXPIRY" > "$TMP_ROOT/consent-unchanged.json"
+curl -sG "$BASE/api/run-plan" \
+  --data-urlencode "score=research-build-review" --data-urlencode "project=sample" \
+  --data-urlencode "story=SMP-0-02" --data-urlencode "issued_at=$ISSUED" \
+  --data-urlencode "expires_at=$NARROW_EXPIRY" > "$TMP_ROOT/consent-narrowed.json"
+python3 - "$TMP_ROOT/consent-unchanged.json" "$TMP_ROOT/consent-narrowed.json" \
+  "$PMO_DIR/workbench/app.js" <<'PY' \
+  || fail "unchanged and narrowed permission previews must stay exact and readable"
+import json, sys
+full = json.load(open(sys.argv[1]))["data"]
+narrow = json.load(open(sys.argv[2]))["data"]
+app = open(sys.argv[3], encoding="utf-8").read()
+assert full["starts_work"] is False and narrow["starts_work"] is False
+assert full["authority"]["capabilities"] == narrow["authority"]["capabilities"]
+assert full["authority"]["budgets"] == narrow["authority"]["budgets"]
+assert full["request"]["expires_at"] != narrow["request"]["expires_at"]
+assert full["start_token"] != narrow["start_token"]
+assert "No limits were reduced. This preview keeps the planned permission." in app
+assert "You reduced the lifetime" in app
+assert 'max="60"' in app and 'Math.min(60' in app
+assert "programState.envelope" in app and "Math.min(Number(maximum)" in app
+assert "envelope.capabilities.includes(item)" in app
+PY
+python3 - "$TMP_ROOT/consent-unchanged.json" "$TMP_ROOT/consent-times.json" \
+  "$TMP_ROOT/run-start-stale.json" "$TMP_ROOT/run-start-unknown.json" <<'PY'
+import json, sys
+plan = json.load(open(sys.argv[1]))["data"]
+times = json.load(open(sys.argv[2]))
+request = {
+    "score": plan["request"]["score"], "project": plan["request"]["project"],
+    "story": plan["request"]["story"], "issued_at": times["issued"],
+    "expires_at": times["narrow"], "expect": plan["start_token"],
+    "approve": True, "operator": "consent-explorer",
+    "standing_nudges": ["ci-failed=repair"],
+    "signal_channel": "origin/feature-consent",
+}
+json.dump(request, open(sys.argv[3], "w"))
+json.dump({**request, "unplanned_power": True}, open(sys.argv[4], "w"))
+PY
+curl -s -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/run-start-stale.json" \
+  "$BASE/api/runs/start" > "$TMP_ROOT/run-start-stale-response.json"
+curl -s -X POST -H 'Content-Type: application/json' \
+  --data-binary @"$TMP_ROOT/run-start-unknown.json" \
+  "$BASE/api/runs/start" > "$TMP_ROOT/run-start-unknown-response.json"
+python3 - "$TMP_ROOT/run-start-stale-response.json" "$TMP_ROOT/run-start-unknown-response.json" <<'PY' \
+  || fail "run start must accept notification fields, refuse stale tokens, and reject unknown properties"
+import json, sys
+stale = json.load(open(sys.argv[1]))
+unknown = json.load(open(sys.argv[2]))
+assert stale["ok"] is False and "stale run start token refused" in " ".join(stale["issues"])
+assert "unknown run start parameter" not in " ".join(stale["issues"])
+assert unknown["ok"] is False
+assert "unknown run start parameter(s): unplanned_power" in " ".join(unknown["issues"])
+PY
+[ ! -e "$REPO/.git/pmo-orchestration/grants" ] \
+  || fail "stale consent token must create no bounded run"
+
 ORCH_REQ='{"action":"save","name":"visual-fixture","score":{"kind":"delivery-workbench-orchestration","schema_version":1,"slug":"visual-fixture","title":"Visual fixture","nodes":[{"id":"handoff","type":"approval","prompt":"Review","terminal":"awaiting-certification"}]}}'
 curl -s -X POST -H 'Content-Type: application/json' -d "$ORCH_REQ" \
   "$BASE/api/orchestration/preview" > "$TMP_ROOT/orchestration-preview.json"
