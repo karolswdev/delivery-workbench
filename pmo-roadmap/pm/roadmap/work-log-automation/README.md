@@ -194,6 +194,7 @@ Phase 28 adds no new autonomy, hosted authority, release, or publication scope.
 | 30 | Turn the proven autonomous engine into a reachable product: one command boots an empty directory, one conversation turns an idea into a reviewable roadmap and governed program, one guarded approval saves it, and the existing grant and certification rails deliver it. | done | [phase-30-the-front-door](./phase-30-the-front-door/) |
 | 31 | Release phases 25-30 as v1.15.0 with a recorded full-pipeline ceremony demo: empty directory to delivered WebSocket Tic Tac Toe in one phase, on film. | done | [phase-31-landing-v1-15-0-the-ceremony](./phase-31-landing-v1-15-0-the-ceremony/) |
 | 32 | Turn the web view into the all-in-one front door: a kanban home, plain words everywhere, guided ideation from rough idea to phase plan, automation you can declare and consent to in readable terms, mission control for autonomous work, and a design worth showing. | done | [phase-32-one-workbench](./phase-32-one-workbench/) |
+| 33 | Rebuild the web view as a real workspace — kanban home, live agent sessions, diff review, insights, integrated terminal — with Operator's UX density and DW's evidence-first integrity. | not-started | [phase-33-operator-grade-workbench](./phase-33-operator-grade-workbench/) |
 
 ## Operating cadence
 
