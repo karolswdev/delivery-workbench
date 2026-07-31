@@ -1169,19 +1169,19 @@ function boardCard(slug, lane, card) {
   const parked = PARKED_COLUMNS.includes(card.status) || card.status === "paused";
   const movable = !lane.closed && !lane.paused;
   return `
-    <article class="bcard st-${esc(card.status)}" ${movable ? 'draggable="true"' : ""}
+    <dw-card class="bcard st-${esc(card.status)}" ${movable ? 'draggable="true"' : ""}
          data-story="${esc(card.story_id)}" data-phase="${lane.number}"
          data-status="${esc(card.status)}" data-evidence="${card.evidence_exists ? 1 : 0}"
          aria-label="${esc(card.story_id)}: ${esc(card.title)}. Status ${esc(card.status)}.">
-      <div class="bcard-top"><a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}"><code>${esc(card.story_id)}</code></a>
-        <span class="bcard-status">${esc(card.status)}${card.evidence_exists ? ' · <span class="tick">proof saved</span>' : ""}</span></div>
+      <div slot="header" class="bcard-top"><a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}"><code>${esc(card.story_id)}</code></a>
+        <dw-status-pill status="${esc(card.status)}"></dw-status-pill>${card.evidence_exists ? ' <span class="tick">proof saved</span>' : ""}</div>
       <div class="bcard-title">${esc(card.title)}</div>
       ${parked ? `<div class="bcard-note"><strong>Waiting:</strong> ${esc(card.note || "no reason recorded")}</div>` : ""}
-      ${movable ? `<div class="bcard-actions" role="group" aria-label="Actions for ${esc(card.story_id)}">
-        <button type="button" class="bmove" id="board-move-${esc(card.story_id)}" data-board-move>Move</button>
-        <button type="button" class="bmove" id="board-park-${esc(card.story_id)}" data-board-park>Park</button>
+      ${movable ? `<div slot="footer" class="bcard-actions" role="group" aria-label="Actions for ${esc(card.story_id)}">
+        <dw-button variant="ghost" class="bmove" id="board-move-${esc(card.story_id)}" data-board-move>Move</dw-button>
+        <dw-button variant="ghost" class="bmove" id="board-park-${esc(card.story_id)}" data-board-park>Park</dw-button>
       </div>` : ""}
-    </article>`;
+    </dw-card>`;
 }
 
 function boardLane(slug, columns, lane) {
@@ -1200,8 +1200,8 @@ function boardLane(slug, columns, lane) {
         ${lane.retired ? `<span class="sub">${lane.retired} retired row${lane.retired === 1 ? "" : "s"} not shown</span>` : ""}
         ${uncovered}</div>
       <div class="blane-actions" role="group" aria-label="Actions for phase ${lane.number}">
-        <button type="button" id="board-create-${lane.number}" data-board-create data-phase="${lane.number}" data-phase-name="${esc(lane.slug)}"${lane.paused ? " disabled" : ""}>Create story</button>
-        <button type="button" id="board-phase-${lane.number}" data-board-phase-action="${lane.paused ? "resume_phase" : "pause_phase"}" data-phase="${lane.number}" data-phase-name="${esc(lane.slug)}">${lane.paused ? "Resume phase" : "Pause phase"}</button>
+        <dw-button variant="primary" id="board-create-${lane.number}" data-board-create data-phase="${lane.number}" data-phase-name="${esc(lane.slug)}"${lane.paused ? " disabled" : ""}>Create story</dw-button>
+        <dw-button variant="secondary" id="board-phase-${lane.number}" data-board-phase-action="${lane.paused ? "resume_phase" : "pause_phase"}" data-phase="${lane.number}" data-phase-name="${esc(lane.slug)}">${lane.paused ? "Resume phase" : "Pause phase"}</dw-button>
       </div>
     </div>`;
   if (lane.closed) {
@@ -1225,8 +1225,8 @@ function focusBoardRegion(selector) {
 function boardNotice(text) {
   const out = document.getElementById("board-move");
   if (!out) return;
-  out.innerHTML = `<div class="guard board-refusal" role="alert" tabindex="-1"><strong>Nothing changed.</strong> ${esc(text)}</div>`;
-  focusBoardRegion("#board-move .board-refusal");
+  out.innerHTML = `<dw-toast variant="error" dismissible duration="0"><strong>Nothing changed.</strong> ${esc(text)}</dw-toast>`;
+  focusBoardRegion("#board-move dw-toast");
 }
 
 function boardMutationError(payload, status) {
@@ -1563,7 +1563,7 @@ function boardOverviewStrip(slug, setup, status, step, presentation, notice) {
   return `<section class="board-overview readiness-${esc(setup.readiness)}" aria-labelledby="board-title">
     <div class="board-overview-head"><div><span>Work · ${esc(slug)}</span>
       <h1 id="board-title">${esc(slug)} board</h1></div>
-      ${badge(needsAttention ? "Needs attention" : "Ready", needsAttention ? "issue" : "ok")}</div>
+      <dw-badge variant="${needsAttention ? "alert" : "default"}" count="${esc(needsAttention ? "Needs attention" : "Ready")}"></dw-badge></div>
     <div class="board-overview-strip">
       <div class="board-attention"><span>${needsAttention ? "Needs attention" : "Repository ready"}</span>
         <strong>${esc(status.summary)}</strong></div>
@@ -1572,12 +1572,12 @@ function boardOverviewStrip(slug, setup, status, step, presentation, notice) {
         <p>${esc(next.summary || "Review the current work before acting.")}</p></div>
       ${work ? `<div class="board-current-work"><span>Current work</span>
         <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(work.story_id)}"><code>${esc(work.story_id)}</code> ${esc(work.title)}</a>
-        <small>${esc(work.status)}</small></div>` : ""}
+        <dw-status-pill status="${esc(work.status)}"></dw-status-pill></div>` : ""}
     </div>
-    <details class="board-technical"${technicalOpen ? " open" : ""}><summary>Technical details</summary>
+    <dw-fold class="board-technical" label="Technical details"${technicalOpen ? " open" : ""}>
       <p>Exact repository, contract, gate, command, and one-step facts.</p>
       ${statusPanel(status, step, notice)}
-    </details>
+    </dw-fold>
   </section>`;
 }
 
@@ -6685,6 +6685,7 @@ async function route({ focusMain = false } = {}) {
     else if (parts[0] === "health") await viewHealth();
     else if (parts[0] === "mc") await viewMissionControl();
     else if (parts[0] === "f") await viewFile(parts.slice(1).join("/"));
+    else if (parts[0] === "design") { app.innerHTML = window.DW.designReferencePage(); }
     else handled = false;
     if (!handled) app.innerHTML = stateHtml(`Unknown view: ${hash}`, true);
   } catch (err) {

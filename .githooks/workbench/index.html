@@ -11,14 +11,13 @@
   <header class="topbar">
     <a class="brand" href="#/">Delivery&nbsp;Workbench</a>
     <nav class="primary-nav" aria-label="Primary">
-      <a class="navlink" href="#/mc" id="mc-link" data-presentation-copy="activity">Activity</a>
-      <a class="navlink" href="#/board" id="board-link" data-presentation-copy="progress">Progress</a>
-      <a class="navlink" href="#/orchestration" id="orchestration-link" data-presentation-copy="bounded_delivery">Bounded delivery</a>
-      <a class="navlink" href="#/programs" id="programs-link" data-presentation-copy="live_delivery">Live delivery</a>
-      <a class="navlink" href="#/program-studio" id="program-studio-link" data-presentation-copy="delivery_setup">Delivery setup</a>
-      <a class="navlink" href="#/health" id="health-link" data-presentation-copy="readiness">Readiness</a>
-      <a class="navlink" href="#/edit" id="edit-link" data-presentation-copy="roadmap_changes">Roadmap changes</a>
+      <a class="navlink" href="#/board" id="work-link">Work</a>
+      <a class="navlink" href="#/program-studio" id="plan-link">Plan</a>
+      <a class="navlink" href="#/orchestration" id="delivery-link">Delivery</a>
+      <a class="navlink" href="#/live" id="live-link">Live</a>
+      <a class="navlink" href="#/health" id="health-link">Health</a>
     </nav>
+    <a class="project-switcher" id="project-switcher" href="#/projects">Choose project</a>
     <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
     <div class="refresh">
       <span id="refresh-time" title="last refresh" aria-hidden="true">—</span>
@@ -31,9 +30,13 @@
   <div id="route-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="live-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
   <footer class="footbar">
-    Read-only delivery views · every change keeps its separate review and confirmation · served from
+    Browsing adds no authority · only a browser-confirmed program action may use pre-granted delivery permission · served from
     <code id="foot-root">this repository</code>
   </footer>
+  <script src="components.js"></script>
+  <script src="interactions.js"></script>
+  <script src="layout.js"></script>
+  <script src="design.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

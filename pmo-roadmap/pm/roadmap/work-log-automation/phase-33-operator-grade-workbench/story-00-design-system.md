@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 33
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** none
 - **Unblocks:** WLA-33-01, WLA-33-02, WLA-33-03, WLA-33-04, WLA-33-05, WLA-33-06, WLA-33-07, WLA-33-08
 - **Owner:** unassigned
@@ -67,28 +67,42 @@ stories will produce nine differently-styled panels.
   - `pmo-roadmap/tests/workbench-ui-smoke.sh`
   - `pmo-roadmap/tests/workbench-accessibility.py`
 
+## Framework decision
+
+**Vanilla Web Components (Custom Elements v1, no Shadow DOM).**
+
+The project has no build step and a stdlib-only philosophy. Vanilla Custom
+Elements give a real component model with lifecycle hooks and attribute
+observation, require no dependencies, and work with the existing CSS custom
+property theming system because they render to light DOM. Shadow DOM was
+rejected because it would isolate component internals from the design-token
+stylesheet. Preact+htm was considered but adds a runtime dependency and
+a mental-model shift the codebase doesn't need at this scale. The component
+file self-registers via `customElements.define()` and loads as a plain
+`<script>` tag — no bundler, no imports, no build.
+
 ## Acceptance criteria
 
-- [ ] A framework decision is recorded (Preact, Lit, or vanilla web
+- [x] A framework decision is recorded (Preact, Lit, or vanilla web
   components) with a one-paragraph rationale.
-- [ ] A component library exists with at least: Button (4 variants),
+- [x] A component library exists with at least: Button (4 variants),
   Card, Panel (resizable, collapsible), StatusPill (6 statuses), Badge,
   Fold, Skeleton, EmptyState, and StreamLine.
-- [ ] Every component renders correctly in both light and dark themes.
-- [ ] Drag-and-drop on the board shows a ghost preview of the card and
+- [x] Every component renders correctly in both light and dark themes.
+- [x] Drag-and-drop on the board shows a ghost preview of the card and
   highlights valid drop zones.
-- [ ] Panel resize works with draggable dividers, min/max constraints,
+- [x] Panel resize works with draggable dividers, min/max constraints,
   and a visible resize cursor.
-- [ ] Transitions on panel open/close and card move are 150-200ms
+- [x] Transitions on panel open/close and card move are 150-200ms
   ease-out, and are suppressed under prefers-reduced-motion.
-- [ ] Keyboard navigation works: Tab moves between panels, arrow keys
+- [x] Keyboard navigation works: Tab moves between panels, arrow keys
   move between board cards, Escape closes the active panel.
-- [ ] A reference page at `#/design` shows every component in every
+- [x] A reference page at `#/design` shows every component in every
   state (default, hover, focus, active, disabled, loading, empty, error)
   in both themes.
-- [ ] The existing board renders through the new component system with
+- [x] The existing board renders through the new component system with
   no functional regression — all existing board tests pass.
-- [ ] The existing UI smoke and accessibility suites pass after the
+- [x] The existing UI smoke and accessibility suites pass after the
   migration.
-- [ ] Wide (1440px) and mobile (390px) screenshots in both themes show
+- [x] Wide (1440px) and mobile (390px) screenshots in both themes show
   the migrated board looking better than before, not just equivalent.

@@ -1,7 +1,6 @@
-/* Delivery Workbench — hash-routed, API-backed. Reads are live and pure;
- * mutations cross only the guarded editor or deliberate-step boundaries.
- * Every byte of state comes from /api/*, which derives live from the
- * Markdown roadmap through the dw_pmo core. No local persistence. */
+/* Delivery Workbench — hash-routed, API-backed. Canonical reads come live
+ * from /api/* and mutations cross only guarded boundaries. Browser storage
+ * keeps project choice and inert review drafts; Markdown remains authoritative. */
 
 "use strict";
 
@@ -15,6 +14,115 @@ let presentationCatalog = null;
 let semanticId = 0;
 const returnFocus = new Map();
 const liveAnnouncementKeys = new Map();
+const PROJECT_STORAGE_KEY = "delivery-workbench.selected-project";
+let projectInventory = null;
+let selectedProject = "";
+let projectReturnHash = "#/board";
+
+function storedProject() {
+  try { return localStorage.getItem(PROJECT_STORAGE_KEY) || ""; }
+  catch (_err) { return ""; }
+}
+
+function rememberProject(slug) {
+  selectedProject = slug || "";
+  try {
+    if (selectedProject) localStorage.setItem(PROJECT_STORAGE_KEY, selectedProject);
+    else localStorage.removeItem(PROJECT_STORAGE_KEY);
+  } catch (_err) {
+    // Storage can be unavailable in hardened browsers; selection still lasts
+    // for this page without changing any repository state.
+  }
+  const switcher = document.getElementById("project-switcher");
+  if (switcher) switcher.textContent = selectedProject
+    ? `Project: ${selectedProject}` : "Choose project";
+}
+
+async function loadProjects() {
+  projectInventory = (await api("/api/projects")).data.projects || [];
+  return projectInventory;
+}
+
+function projectBySlug(slug) {
+  return (projectInventory || []).find((project) => project.slug === slug);
+}
+
+function routeProject(parts) {
+  if (parts[0] === "p" && parts[1]) return parts[1];
+  if (parts[0] === "board" && parts[1]) return parts[1];
+  return "";
+}
+
+function destinationNav(active, current = "") {
+  const groups = {
+    work: [["Board", `#/board/${encodeURIComponent(selectedProject)}`], ["Project details", `#/p/${encodeURIComponent(selectedProject)}`]],
+    plan: [["Delivery options", "#/program-studio"], ["Roadmap changes", "#/edit"]],
+    delivery: [["Delivery plans", "#/orchestration"]],
+    live: [["Mission control", "#/live"], ["Activity", "#/mc"]],
+    health: [["Repository health", "#/health"]],
+  };
+  const links = groups[active] || [];
+  if (links.length < 2) return "";
+  return `<nav class="destination-nav" aria-label="${esc(active)} views">${links.map(([label, href], index) => {
+    const isCurrent = current ? href.startsWith(current) : index === 0;
+    return `<a href="${href}"${isCurrent ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
+  }).join("")}</nav>`;
+}
+
+function projectSelectorHtml(projects, unavailable = "") {
+  const explanation = unavailable
+    ? `<p class="project-unavailable"><strong>${esc(unavailable)}</strong> is not available in this repository. Choose an available project; nothing was changed.</p>`
+    : "<p>Choose the work you want to see. The choice stays with you as you move around or reload.</p>";
+  return `<section class="project-selector" aria-labelledby="project-selector-title">
+    <span class="selector-eyebrow">First, choose your work</span>
+    <h1 id="project-selector-title">Choose a project</h1>
+    ${explanation}
+    <form id="project-selector-form">
+      <fieldset><legend>Available projects</legend>
+        <div class="project-options">${projects.map((project) => `<label>
+          <input type="radio" name="project" value="${esc(project.slug)}"${project.slug === selectedProject ? " checked" : ""}>
+          <span><strong>${esc(project.slug)}</strong><small>${project.next_story ? `${esc(project.next_story.title)} is next` : "No next work is available"}</small></span>
+        </label>`).join("")}</div>
+      </fieldset>
+      <button class="primary" type="submit">Open this project</button>
+    </form>
+    <details><summary>Technical details</summary><p>The exact project slug is kept only in this browser. Choosing a project starts no work and changes no files.</p></details>
+  </section>`;
+}
+
+function wireProjectSelector(returnHash) {
+  const form = document.getElementById("project-selector-form");
+  if (!form) return;
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const choice = new FormData(form).get("project");
+    if (!choice) {
+      form.querySelector("fieldset")?.setAttribute("aria-invalid", "true");
+      form.querySelector("input")?.focus();
+      return;
+    }
+    rememberProject(String(choice));
+    const target = returnHash && !["#/projects", "#/board"].includes(returnHash)
+      ? returnHash : `#/board/${encodeURIComponent(selectedProject)}`;
+    if (location.hash === target) route({ focusMain: true });
+    else location.hash = target;
+  });
+}
+
+function viewProjectSelector(returnHash = "#/board", unavailable = "") {
+  setCrumbs([{ label: "choose project" }]);
+  app.innerHTML = projectSelectorHtml(projectInventory || [], unavailable);
+  wireProjectSelector(returnHash);
+}
+
+function viewUnavailableProject(slug) {
+  setCrumbs([{ label: "project unavailable" }]);
+  app.innerHTML = `<section class="project-missing"><h1>That project is not available</h1>
+    <p><strong>${esc(slug)}</strong> is not in this repository. We did not open another project. Nothing changed.</p>
+    <a class="primary" href="#/projects">Choose an available project</a>
+    <details><summary>Technical details</summary><p>Requested project slug: <code>${esc(slug)}</code>.</p></details>
+  </section>`;
+}
 
 const FOCUSABLE_SELECTOR = [
   "a[href]", "button:not([disabled])", "input:not([disabled])",
@@ -101,6 +209,13 @@ function focusRegion(selector) {
   });
 }
 
+function focusConsentSnapshot(selector) {
+  const region = document.querySelector(selector);
+  if (!region) return;
+  region.focus({ preventScroll: true });
+  region.scrollIntoView({ block: "start" });
+}
+
 function wireDismissibleRegion(selector, close, returnKey, fallback = "") {
   const region = document.querySelector(selector);
   if (!region) return;
@@ -126,8 +241,29 @@ function semanticLabel(root, selector, prefix) {
   });
 }
 
+function wireTechnicalFolds(root = app) {
+  root.querySelectorAll("details > summary").forEach((summary) => {
+    if (!summary.textContent.trim().startsWith("Technical details")
+        || summary.dataset.technicalFoldWired === "true") return;
+    summary.dataset.technicalFoldWired = "true";
+    const details = summary.parentElement;
+    details.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !details.open) return;
+      event.preventDefault();
+      details.open = false;
+      summary.focus({ preventScroll: true });
+    });
+    details.addEventListener("toggle", () => {
+      if (!details.open && details.contains(document.activeElement)) {
+        summary.focus({ preventScroll: true });
+      }
+    });
+  });
+}
+
 function enhanceSemantics(root = app) {
   semanticLabel(root, "section", "section-title");
+  wireTechnicalFolds(root);
   semanticLabel(root, "form", "form-title");
   root.querySelectorAll("form:not([aria-label]):not([aria-labelledby])").forEach((form) => {
     form.setAttribute(
@@ -240,12 +376,19 @@ function wireArrowGroup(selector, itemSelector = "button:not([disabled])") {
 }
 
 function updatePrimaryNavigation(hash) {
+  const surface = hash.split("/").filter(Boolean)[0] || "";
+  const activeId = !surface || surface === "board" || surface === "p" ? "work-link"
+    : surface === "program-studio" || surface === "edit" ? "plan-link"
+      : surface === "orchestration" ? "delivery-link"
+        : surface === "live" || surface === "programs" || surface === "mc" ? "live-link"
+          : surface === "health" ? "health-link" : "";
   document.querySelectorAll(".primary-nav a").forEach((link) => {
-    const target = link.getAttribute("href")?.replace(/^#/, "") || "";
-    const active = target !== "/" && hash.startsWith(target);
-    if (active) link.setAttribute("aria-current", "page");
+    if (link.id === activeId) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
+  const projectSwitcher = document.getElementById("project-switcher");
+  if (surface === "projects") projectSwitcher?.setAttribute("aria-current", "page");
+  else projectSwitcher?.removeAttribute("aria-current");
   if (hash === "/") document.querySelector(".brand")?.setAttribute("aria-current", "page");
   else document.querySelector(".brand")?.removeAttribute("aria-current");
 }
@@ -259,6 +402,7 @@ const LIVE_TECHNICAL_OPEN = new URLSearchParams(location.search).has("livetechni
 const SNAPSHOT_BOUNDED_FOCUS = new URLSearchParams(location.search).get("boundedfocus");
 const SNAPSHOT_BOUNDED_PREVIEW = new URLSearchParams(location.search).get("boundedpreview");
 const SNAPSHOT_BOUNDED_ERROR = new URLSearchParams(location.search).get("boundederror");
+const SNAPSHOT_LIVE_SCENARIO = new URLSearchParams(location.search).get("livescenario") || "";
 const ADOPTION_PROPOSAL_FILE = new URLSearchParams(location.search).get("proposal") || "";
 const ADOPTION_PROPOSAL_ID = new URLSearchParams(location.search).get("setuppreview") || "";
 
@@ -435,7 +579,7 @@ async function applyReviewedStep(step, button) {
     const result = body.data && body.data.kind === "delivery-workbench-step-result"
       ? body.data : null;
     if (status === 409) {
-      await viewOverview({
+      await viewBoard(selectedProject, {
         kind: "stale",
         title: "stale confirmation refused — nothing started",
         detail: result ? result.reason : ((body.issues && body.issues[0]) || "Refresh and review the new lease."),
@@ -444,7 +588,7 @@ async function applyReviewedStep(step, button) {
       return;
     }
     if (status >= 400 || !result) {
-      await viewOverview({
+      await viewBoard(selectedProject, {
         kind: "failed",
         title: "step request failed — nothing else was attempted",
         detail: (body.issues && body.issues[0]) || `HTTP ${status}`,
@@ -453,14 +597,14 @@ async function applyReviewedStep(step, button) {
       return;
     }
     const succeeded = result.outcome === "succeeded";
-    await viewOverview({
+    await viewBoard(selectedProject, {
       kind: succeeded ? "succeeded" : "failed",
       title: succeeded ? "one deliberate step applied" : `step ${result.outcome}`,
       detail: result.reason || `Child exit ${result.exit_code}; started=${result.started}.`,
       result,
     });
   } catch (err) {
-    await viewOverview({
+    await viewBoard(selectedProject, {
       kind: "failed",
       title: "step request failed",
       detail: err.message,
@@ -659,9 +803,9 @@ async function loadMissionControl() {
     const data = body.data;
     const el = document.getElementById("mc-root");
     if (!el) { stopMcPoll(); return; } // view left; stop polling
-    el.innerHTML = `
-      <div class="section"><h1>Current activity</h1><p>Work, team activity, decisions, and recent saved changes. This view is read-only.</p><h2>Current phase work</h2>
-        ${data.feed.projects.map((p) => mcBelt(p, data.pins || {})).join("") || stateHtml("No current work is available.")}
+    el.innerHTML = `${destinationNav("live", "#/mc")}
+      <div class="section"><h1>Current activity</h1><p>See what people and deliveries are doing now. Reading this page starts nothing.</p><p class="canonical-next"><strong>Next step:</strong> Open the current work that needs your attention.</p><h2>Current phase work</h2>
+        ${data.feed.projects.filter((project) => !selectedProject || project.slug === selectedProject).map((p) => mcBelt(p, data.pins || {})).join("") || stateHtml("No current work is available.")}
       </div>
       <div class="section"><h2>Team activity not matched to work</h2>${mcOffBelt(data.sessions, data.off_belt || [])}</div>
       <details class="section"><summary>Technical details</summary><h2>Exact saved events</h2>${mcEvents(data.events)}</details>
@@ -695,9 +839,11 @@ async function viewMissionControl() {
 
 async function viewOverview(notice = null) {
   setCrumbs([{ label: "overview" }]);
+  const projectQuery = selectedProject
+    ? `?project=${encodeURIComponent(selectedProject)}` : "";
   const [statusBody, stepBody, body, setupBody, presentationBody] = await Promise.all([
-    api("/api/status"), api("/api/step"), api("/api/projects"),
-    api("/api/delivery-setup"), api("/api/presentation/status"),
+    api(`/api/status${projectQuery}`), api(`/api/step${projectQuery}`), api("/api/projects"),
+    api(`/api/delivery-setup${projectQuery}`), api(`/api/presentation/status${projectQuery}`),
   ]);
   const projects = body.data.projects;
   const step = stepBody.data;
@@ -748,7 +894,8 @@ async function viewProject(slug) {
         ? `<a href="#/f/${encodeURIComponent(ph.final_summary)}">${badge("summary", "ok")}</a>` : "—"}</td>
     </tr>`;
   }).join("");
-  app.innerHTML = `
+  app.innerHTML = `${destinationNav("work", "#/p")}
+    <header class="destination-hero"><span>Project</span><h1>${esc(slug)}</h1><p>Review the next work and the plan around it.</p></header>
     ${p.next_story ? `<div class="next"><span class="lbl">next</span>
       <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(p.next_story.story_id)}">
         <code>${esc(p.next_story.story_id)}</code></a> ${esc(p.next_story.title)} ${badge(p.next_story.status)}</div>` : ""}
@@ -873,7 +1020,10 @@ async function viewHealth() {
   const body = await api("/api/health");
   const h = body.data;
   const sections = [];
-  for (const proj of h.projects) {
+  const shownProjects = selectedProject
+    ? h.projects.filter((project) => project.slug === selectedProject)
+    : h.projects;
+  for (const proj of shownProjects) {
     const byCat = {};
     proj.issues.concat(proj.warnings).forEach((item) => {
       (byCat[item.category] = byCat[item.category] || []).push(item);
@@ -892,10 +1042,13 @@ async function viewHealth() {
     ["local rule seam (pre-commit.local)", hook.has_local_seam],
     ["work-log capture", hook.has_work_log_capture],
   ].map(([k, v]) => `<div class="hitem">${badge(v ? "ok" : "missing", v ? "ok" : "issue")}<span class="msg">${esc(k)}</span></div>`).join("");
-  app.innerHTML = `
-    <div class="guard ${h.mutation_safe ? "ok" : ""}">${h.mutation_safe
-      ? "Delivery changes are ready. Review each change before saving it."
-      : `Delivery changes are blocked: resolve ${h.total_issues} readiness issue${h.total_issues === 1 ? "" : "s"} in the affected work first.`}</div>
+  const issueCount = shownProjects.reduce((total, project) => total + project.issues.length, 0);
+  app.innerHTML = `${destinationNav("health", "#/health")}
+    <header class="destination-hero"><span>Health</span><h1>Is this project ready?</h1><p>See what is ready and what needs attention before you change the plan.</p></header>
+    <div class="guard ${issueCount === 0 ? "ok" : ""}">${issueCount === 0
+      ? "This project is ready. Your next step is to return to current work."
+      : `Resolve ${issueCount} health issue${issueCount === 1 ? "" : "s"} in this project before changing its plan.`}</div>
+    <a class="primary canonical-primary" href="#/board/${encodeURIComponent(selectedProject)}">Return to current work</a>
     ${sections.join("")}
     <details class="section"><summary>Technical details</summary>
       <h2>Repository setup checks</h2>${hookRows}
@@ -1008,21 +1161,27 @@ async function viewWorklog(path) {
  * path. Drops on paused or closed lanes refuse; a "⇄ move" affordance
  * covers keyboards and touch. */
 
+const BOARD_STATUSES = ["backlog", "ready", "in-progress", "blocked", "on-hold", "done"];
 const PARKED_COLUMNS = ["blocked", "on-hold"];
+const HOLD_COLUMNS = ["on-hold"];
 
 function boardCard(slug, lane, card) {
-  const parked = card.status === "blocked" || card.status === "on-hold" || card.status === "paused";
+  const parked = PARKED_COLUMNS.includes(card.status) || card.status === "paused";
   const movable = !lane.closed && !lane.paused;
   return `
-    <div class="bcard st-${esc(card.status)}" ${movable ? 'draggable="true"' : ""}
+    <dw-card class="bcard st-${esc(card.status)}" ${movable ? 'draggable="true"' : ""}
          data-story="${esc(card.story_id)}" data-phase="${lane.number}"
          data-status="${esc(card.status)}" data-evidence="${card.evidence_exists ? 1 : 0}"
-         title="${esc(card.title)} [${esc(card.status)}]">
-      <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}"><code>${esc(card.story_id)}</code></a>${card.evidence_exists ? ' <span class="tick">✓</span>' : ""}
-      ${movable ? `<button type="button" class="bmove" title="move to another column…">⇄</button>` : ""}
+         aria-label="${esc(card.story_id)}: ${esc(card.title)}. Status ${esc(card.status)}.">
+      <div slot="header" class="bcard-top"><a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}"><code>${esc(card.story_id)}</code></a>
+        <dw-status-pill status="${esc(card.status)}"></dw-status-pill>${card.evidence_exists ? ' <span class="tick">proof saved</span>' : ""}</div>
       <div class="bcard-title">${esc(card.title)}</div>
-      ${parked ? `<div class="bcard-note">${esc(card.note || "no reason recorded")}</div>` : ""}
-    </div>`;
+      ${parked ? `<div class="bcard-note"><strong>Waiting:</strong> ${esc(card.note || "no reason recorded")}</div>` : ""}
+      ${movable ? `<div slot="footer" class="bcard-actions" role="group" aria-label="Actions for ${esc(card.story_id)}">
+        <dw-button variant="ghost" class="bmove" id="board-move-${esc(card.story_id)}" data-board-move>Move</dw-button>
+        <dw-button variant="ghost" class="bmove" id="board-park-${esc(card.story_id)}" data-board-park>Park</dw-button>
+      </div>` : ""}
+    </dw-card>`;
 }
 
 function boardLane(slug, columns, lane) {
@@ -1035,10 +1194,16 @@ function boardLane(slug, columns, lane) {
   const uncovered = lane.story_count === 0 && lane.uncovered_story_files
     ? `<span class="sub">no story table — ${lane.uncovered_story_files} story file${lane.uncovered_story_files === 1 ? "" : "s"} on disk, unlisted</span>` : "";
   const head = `
-    ${lane.is_pointer ? "▶ " : ""}<a href="#/p/${encodeURIComponent(slug)}/ph/${lane.number}">phase ${lane.number} · ${esc(lane.slug)}</a>
-    ${lane.paused ? `<span class="pause-banner">⏸ paused — ${esc(lane.pause_note || "no reason recorded")}</span>` : ""}
-    ${lane.retired ? `<span class="sub">${lane.retired} retired row${lane.retired === 1 ? "" : "s"} not shown</span>` : ""}
-    ${uncovered}`;
+    <div class="blane-title">
+      <div>${lane.is_pointer ? '<span aria-label="current phase">Current · </span>' : ""}<a href="#/p/${encodeURIComponent(slug)}/ph/${lane.number}">Phase ${lane.number} · ${esc(lane.slug)}</a>
+        ${lane.paused ? `<span class="pause-banner"><strong>Paused.</strong> ${esc(lane.pause_note || "No reason recorded")}</span>` : ""}
+        ${lane.retired ? `<span class="sub">${lane.retired} retired row${lane.retired === 1 ? "" : "s"} not shown</span>` : ""}
+        ${uncovered}</div>
+      <div class="blane-actions" role="group" aria-label="Actions for phase ${lane.number}">
+        <dw-button variant="primary" id="board-create-${lane.number}" data-board-create data-phase="${lane.number}" data-phase-name="${esc(lane.slug)}"${lane.paused ? " disabled" : ""}>Create story</dw-button>
+        <dw-button variant="secondary" id="board-phase-${lane.number}" data-board-phase-action="${lane.paused ? "resume_phase" : "pause_phase"}" data-phase="${lane.number}" data-phase-name="${esc(lane.slug)}">${lane.paused ? "Resume phase" : "Pause phase"}</dw-button>
+      </div>
+    </div>`;
   if (lane.closed) {
     return `
       <details class="blane closed" data-phase="${lane.number}">
@@ -1053,195 +1218,422 @@ function boardLane(slug, columns, lane) {
     </div>`;
 }
 
+function focusBoardRegion(selector) {
+  if (!SNAPSHOT_MODE) focusRegion(selector);
+}
+
 function boardNotice(text) {
   const out = document.getElementById("board-move");
-  if (out) out.innerHTML = `<div class="guard">${esc(text)}</div>`;
+  if (!out) return;
+  out.innerHTML = `<dw-toast variant="error" dismissible duration="0"><strong>Nothing changed.</strong> ${esc(text)}</dw-toast>`;
+  focusBoardRegion("#board-move dw-toast");
+}
+
+function boardMutationError(payload, status) {
+  return (payload.data && payload.data.error)
+    || (payload.issues && payload.issues[0])
+    || `request refused (${status})`;
+}
+
+function boardPreviewFiles(files) {
+  return files.filter((file) => file.changed || file.action === "create").map((file) => `
+    <details class="filepreview" open>
+      <summary>${badge(file.action === "create" ? "new file" : "changed", file.action === "create" ? "ok" : "in-progress")}
+        <code>${esc(file.path)}</code></summary>
+      ${file.action === "create" ? `<pre class="src">${esc(file.new_content || "")}</pre>`
+        : `<pre class="diff">${diffHtml(file.diff || "")}</pre>`}
+    </details>`).join("");
+}
+
+async function previewBoardMutation(out, intent, sentence) {
+  out.innerHTML = stateHtml("Preparing the exact change…");
+  try {
+    const { status, body: payload } = await postJson("/api/mutations/preview", intent);
+    if (status >= 400 || payload.ok === false) {
+      out.innerHTML = `<div class="guard board-refusal" role="alert" tabindex="-1"><strong>Preview refused. Nothing changed.</strong> ${esc(boardMutationError(payload, status))}</div>`;
+      focusBoardRegion(`#${out.id} .board-refusal`);
+      return;
+    }
+    const preview = payload.data;
+    const reviewedIntent = { ...intent };
+    out.innerHTML = `<section class="board-preview" aria-labelledby="board-preview-title" tabindex="-1">
+      <div class="board-preview-head"><span>Review before applying</span><h2 id="board-preview-title">${esc(sentence)}</h2>
+        ${badge("nothing written yet", "ok")}</div>
+      <p>These are the exact saved-file changes this action would make.</p>
+      ${boardPreviewFiles(preview.files)}
+      <details class="board-preview-technical"><summary>Technical details</summary>
+        <dl><div><dt>Mutation</dt><dd><code>${esc(intent.kind)}</code></dd></div>
+          <div><dt>Single-use preview fingerprint</dt><dd><code>${esc(preview.fingerprint)}</code></dd></div></dl>
+      </details>
+      <div class="board-preview-actions">
+        <button type="button" class="applybtn" id="board-apply">Apply this exact change</button>
+        <button type="button" id="board-preview-cancel">Cancel</button>
+      </div>
+      <div id="board-apply-result"></div>
+    </section>`;
+    enhanceSemantics(out);
+    focusBoardRegion(".board-preview");
+    document.getElementById("board-preview-cancel").addEventListener("click", () => {
+      out.closest("#board-move").innerHTML = "";
+      restoreReturnFocus("board-action");
+    });
+    document.getElementById("board-apply").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const result = document.getElementById("board-apply-result");
+      button.disabled = true;
+      button.textContent = "Applying…";
+      try {
+        const { status: applyStatus, body: applied } = await postJson(
+          "/api/mutations/apply",
+          { ...reviewedIntent, fingerprint: preview.fingerprint },
+        );
+        if (applyStatus >= 400 || applied.ok === false) {
+          const stale = applyStatus === 409;
+          result.innerHTML = `<div class="guard board-refusal" role="alert" tabindex="-1"><strong>${stale ? "Preview refused" : "Apply refused"}. Nothing changed.</strong> ${esc(boardMutationError(applied, applyStatus))}${applied.data && applied.data.rolled_back ? " All writes were rolled back." : ""}</div>`;
+          focusBoardRegion("#board-apply-result .board-refusal");
+          return;
+        }
+        await route();
+      } catch (error) {
+        result.innerHTML = `<div class="guard board-refusal" role="alert" tabindex="-1"><strong>Apply failed. Nothing changed.</strong> ${esc(error.message)}</div>`;
+        focusBoardRegion("#board-apply-result .board-refusal");
+      }
+    });
+  } catch (error) {
+    out.innerHTML = `<div class="guard board-refusal" role="alert" tabindex="-1"><strong>Preview failed. Nothing changed.</strong> ${esc(error.message)}</div>`;
+    focusBoardRegion(`#${out.id} .board-refusal`);
+  }
 }
 
 /* The move panel: the same structured intent the editor builds,
  * pre-filled from a drop or the ⇄ affordance. Client mirrors of the
  * server rules gate the preview button; the server stays the
  * authority. */
-function openMovePanel(slug, move) {
+function openMovePanel(slug, move, trigger = document.activeElement) {
   const out = document.getElementById("board-move");
   if (!out) return;
-  if (move.from === move.to) {
-    out.innerHTML = "";
-    return;
-  }
-  const needsReason = PARKED_COLUMNS.includes(move.to);
-  const needsEvidence = move.to === "done" && !move.evidenceExists;
-  out.innerHTML = `
+  rememberReturnFocus("board-action", trigger);
+  const fixedTarget = move.to || "";
+  const options = BOARD_STATUSES.filter((status) => status !== move.from);
+  out.innerHTML = `<section class="board-action-panel" aria-labelledby="move-panel-title" tabindex="-1">
+    <div class="board-action-heading"><span>Story action · Phase ${esc(move.phase)}</span>
+      <h2 id="move-panel-title">Move <code>${esc(move.story)}</code></h2>
+      <p>Current status: <strong>${esc(move.from)}</strong>. The card stays put until you review and apply an exact preview.</p></div>
     <form class="edit moveform" id="move-form">
-      <h2>move <code>${esc(move.story)}</code>: ${esc(move.from)} → ${esc(move.to)}</h2>
-      ${needsReason ? field("reason (required for a park — recorded in the status cell)",
-        '<input type="text" name="reason" placeholder="why is this waiting?">') : ""}
-      ${move.to === "done" ? field(
-        `evidence body ${move.evidenceExists ? "(evidence exists — leave empty to keep it)" : "(required — no evidence exists yet)"}`,
-        '<textarea name="evidence_body" placeholder="- proof line…"></textarea>') : ""}
-      <button type="submit">preview — no files are written</button>
-      <button type="button" id="move-cancel">cancel</button>
-      <div class="hint">the move goes through the same preview → apply mutation flow as the editor; the fingerprint refuses stale previews.</div>
+      ${fixedTarget
+        ? `<div class="board-choice"><span>New status</span><strong>${esc(fixedTarget)}</strong></div>`
+        : field("new status", selectHtml("status", options, options[0]))}
+      ${field("reason (required when parking on-hold)", '<input type="text" name="reason" placeholder="why is this waiting?">')}
+      <details><summary>Technical details</summary>
+        <p>Proof is only used when marking done. Existing proof is kept when this is blank.</p>
+        ${field(`evidence body ${move.evidenceExists ? "(proof already exists)" : "(required for done when proof is missing)"}`,
+          '<textarea name="evidence_body" placeholder="- proof line…"></textarea>')}
+        <p><a href="#/edit/update_story_status">Open the full roadmap editor</a></p>
+      </details>
+      <div class="board-form-actions"><button type="submit">Preview this move</button>
+        <button type="button" id="move-cancel">Cancel</button></div>
     </form>
-    <div id="move-out"></div>`;
-  document.getElementById("move-cancel").addEventListener("click", () => { out.innerHTML = ""; });
+    <div id="move-out"></div>
+  </section>`;
+  enhanceSemantics(out);
+  const close = () => {
+    out.innerHTML = "";
+    restoreReturnFocus("board-action");
+  };
+  document.getElementById("move-cancel").addEventListener("click", close);
+  wireDismissibleRegion(".board-action-panel", close, "board-action");
   const form = document.getElementById("move-form");
   const runMovePreview = async () => {
     const moveOut = document.getElementById("move-out");
-    const reason = form.elements.reason ? form.elements.reason.value.trim() : "";
-    const evidenceBody = form.elements.evidence_body ? form.elements.evidence_body.value.trim() : "";
-    if (needsReason && !reason) {
-      moveOut.innerHTML = `<div class="guard">refused client-side: a hold needs its why — fill the reason before previewing.</div>`;
+    const target = fixedTarget || form.elements.status.value;
+    const reason = form.elements.reason.value.trim();
+    const evidenceBody = form.elements.evidence_body.value.trim();
+    if (target === move.from) {
+      moveOut.innerHTML = "";
       return;
     }
-    if (needsEvidence && !evidenceBody) {
-      moveOut.innerHTML = `<div class="guard">refused client-side: marking ${esc(move.story)} done requires evidence — none exists and no evidence body was provided.</div>`;
+    if (HOLD_COLUMNS.includes(target) && !reason) {
+      moveOut.innerHTML = '<div class="guard board-refusal" role="alert" tabindex="-1"><strong>Preview refused. Nothing changed.</strong> Parking on-hold requires a reason. Add why this work is waiting, then preview.</div>';
+      focusBoardRegion("#move-out .board-refusal");
       return;
     }
-    const body = {
+    const intent = {
       kind: "update_story_status", project: slug, phase: String(move.phase),
-      story: move.story, status: move.to,
+      story: move.story, status: target,
     };
-    if (reason) body.reason = reason;
-    if (evidenceBody) body.evidence_body = evidenceBody;
-    moveOut.innerHTML = stateHtml("Previewing…");
-    const { status, body: payload } = await postJson("/api/mutations/preview", body);
-    if (status >= 400 || payload.ok === false) {
-      const msg = (payload.data && payload.data.error) || (payload.issues && payload.issues[0]) || `error ${status}`;
-      moveOut.innerHTML = `<div class="guard">${esc(msg)}</div>`;
-      return;
-    }
-    const d = payload.data;
-    moveOut.innerHTML = `
-      <div class="section"><h2>Preview ${badge("nothing written yet", "ok")}</h2>
-        ${d.files.filter((f) => f.changed || f.action === "create").map((f) => `
-          <details class="filepreview" open>
-            <summary>${badge(f.action === "create" ? "new file" : "changed", f.action === "create" ? "ok" : "in-progress")}
-              <code>${esc(f.path)}</code></summary>
-            ${f.action === "create" ? `<pre class="src">${esc(f.new_content || "")}</pre>`
-              : `<pre class="diff">${diffHtml(f.diff || "")}</pre>`}
-          </details>`).join("")}
-        <button type="button" class="applybtn" id="move-apply">apply — writes the files above (no commit)</button>
-      </div>`;
-    document.getElementById("move-apply").addEventListener("click", async () => {
-      document.getElementById("move-apply").disabled = true;
-      const { status: st, body: applied } = await postJson("/api/mutations/apply", { ...body, fingerprint: d.fingerprint });
-      if (st === 409) {
-        moveOut.innerHTML = `<div class="guard">stale preview refused — the source files changed after this preview; nothing was written. Re-open the move for a fresh preview.</div>`;
-        return;
-      }
-      if (st >= 400 || applied.ok === false) {
-        const msg = (applied.data && applied.data.error) || `apply failed (${st})`;
-        moveOut.innerHTML = `<div class="guard">${esc(msg)}${applied.data && applied.data.rolled_back ? " — all writes were rolled back" : ""}</div>`;
-        return;
-      }
-      route(); // re-read the board from Markdown
-    });
+    if (reason) intent.reason = reason;
+    if (evidenceBody) intent.evidence_body = evidenceBody;
+    await previewBoardMutation(
+      moveOut,
+      intent,
+      `Move ${move.story} in phase ${move.phase} from ${move.from} to ${target}.`,
+    );
   };
-  form.addEventListener("submit", (e) => { e.preventDefault(); runMovePreview(); });
-  out.scrollIntoView({ block: "nearest" });
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runMovePreview();
+  });
+  focusBoardRegion(".board-action-panel");
   if (SNAPSHOT_MODE && new URLSearchParams(location.search).has("autopreview")) {
     runMovePreview();
   }
+}
+
+function openCreatePanel(slug, phase, phaseName, trigger = document.activeElement) {
+  const out = document.getElementById("board-move");
+  if (!out) return;
+  rememberReturnFocus("board-action", trigger);
+  out.innerHTML = `<section class="board-action-panel" aria-labelledby="create-panel-title" tabindex="-1">
+    <div class="board-action-heading"><span>New story · Phase ${esc(phase)}</span>
+      <h2 id="create-panel-title">Create a board task</h2>
+      <p>It will start in <strong>Phase ${esc(phase)} · ${esc(phaseName)}</strong>. Nothing is added until you review and apply the preview.</p></div>
+    <form class="edit" id="board-create-form">
+      ${field("title", '<input type="text" name="title" required autocomplete="off" placeholder="What needs to be done?">')}
+      ${field("starting status", selectHtml("status", ["backlog", "ready", "in-progress"], "backlog"))}
+      <details><summary>Technical details</summary>
+        ${field("story slug (optional)", '<input type="text" name="slug" pattern="[a-z0-9-]*" title="lowercase letters, digits, and hyphens">')}
+        <p><a href="#/edit/create_story">Open the full roadmap editor</a> for the complete planning surface.</p>
+      </details>
+      <div class="board-form-actions"><button type="submit">Preview this story</button>
+        <button type="button" id="create-cancel">Cancel</button></div>
+    </form>
+    <div id="create-out"></div>
+  </section>`;
+  enhanceSemantics(out);
+  const close = () => {
+    out.innerHTML = "";
+    restoreReturnFocus("board-action");
+  };
+  document.getElementById("create-cancel").addEventListener("click", close);
+  wireDismissibleRegion(".board-action-panel", close, "board-action");
+  const form = document.getElementById("board-create-form");
+  const runCreatePreview = async () => {
+    const previewOut = document.getElementById("create-out");
+    const title = form.elements.title.value.trim();
+    const status = form.elements.status.value;
+    const storySlug = form.elements.slug.value.trim();
+    if (!title) {
+      previewOut.innerHTML = '<div class="guard board-refusal" role="alert" tabindex="-1"><strong>Preview refused. Nothing changed.</strong> Give the story a short title first.</div>';
+      focusBoardRegion("#create-out .board-refusal");
+      return;
+    }
+    const intent = {
+      kind: "create_story", project: slug, phase: String(phase), title, status,
+    };
+    if (storySlug) intent.slug = storySlug;
+    await previewBoardMutation(
+      previewOut,
+      intent,
+      `Create “${title}” in phase ${phase} with status ${status}.`,
+    );
+  };
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runCreatePreview();
+  });
+  focusBoardRegion(".board-action-panel");
+  if (SNAPSHOT_MODE) {
+    const params = new URLSearchParams(location.search);
+    if (params.has("autocreate")) {
+      form.elements.title.value = params.get("autocreate") || "A short board task";
+      if (params.get("createstatus")) form.elements.status.value = params.get("createstatus");
+      if (params.has("autopreview")) runCreatePreview();
+    }
+  }
+}
+
+function openPhasePanel(slug, phase, phaseName, kind, trigger = document.activeElement) {
+  const out = document.getElementById("board-move");
+  if (!out) return;
+  const pausing = kind === "pause_phase";
+  const action = pausing ? "Pause" : "Resume";
+  rememberReturnFocus("board-action", trigger);
+  out.innerHTML = `<section class="board-action-panel" aria-labelledby="phase-panel-title" tabindex="-1">
+    <div class="board-action-heading"><span>Phase action</span>
+      <h2 id="phase-panel-title">${action} Phase ${esc(phase)} · ${esc(phaseName)}</h2>
+      <p>The lane stays ${pausing ? "active" : "paused"} until you review and apply the exact preview.</p></div>
+    <form class="edit" id="board-phase-form">
+      ${pausing ? field("reason (required)", '<input type="text" name="reason" required placeholder="why should this phase wait?">') : ""}
+      <div class="board-form-actions"><button type="submit">Preview ${action.toLowerCase()}</button>
+        <button type="button" id="phase-cancel">Cancel</button></div>
+    </form>
+    <div id="phase-out"></div>
+  </section>`;
+  enhanceSemantics(out);
+  const close = () => {
+    out.innerHTML = "";
+    restoreReturnFocus("board-action");
+  };
+  document.getElementById("phase-cancel").addEventListener("click", close);
+  wireDismissibleRegion(".board-action-panel", close, "board-action");
+  const form = document.getElementById("board-phase-form");
+  const runPhasePreview = async () => {
+    const previewOut = document.getElementById("phase-out");
+    const reason = pausing ? form.elements.reason.value.trim() : "";
+    if (pausing && !reason) {
+      previewOut.innerHTML = '<div class="guard board-refusal" role="alert" tabindex="-1"><strong>Preview refused. Nothing changed.</strong> Pausing a phase requires a reason.</div>';
+      focusBoardRegion("#phase-out .board-refusal");
+      return;
+    }
+    const intent = { kind, project: slug, phase: String(phase) };
+    if (reason) intent.reason = reason;
+    await previewBoardMutation(previewOut, intent, `${action} phase ${phase} · ${phaseName}.`);
+  };
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runPhasePreview();
+  });
+  focusBoardRegion(".board-action-panel");
 }
 
 function wireBoardMoves(slug) {
   const board = document.querySelector(".board");
   if (!board) return;
   let dragging = null;
-  board.addEventListener("dragstart", (e) => {
-    const card = e.target.closest && e.target.closest(".bcard[draggable]");
+  board.addEventListener("dragstart", (event) => {
+    const card = event.target.closest && event.target.closest(".bcard[draggable]");
     if (!card) return;
-    dragging = card.dataset;
-    e.dataTransfer.setData("text/plain", card.dataset.story);
-    e.dataTransfer.effectAllowed = "move";
+    dragging = { ...card.dataset };
+    event.dataTransfer.setData("text/plain", card.dataset.story);
+    event.dataTransfer.effectAllowed = "move";
   });
-  board.addEventListener("dragover", (e) => {
+  board.addEventListener("dragend", () => { dragging = null; });
+  board.addEventListener("dragover", (event) => {
     if (!dragging) return;
-    const col = e.target.closest && e.target.closest(".bcol");
-    if (col) e.preventDefault();
+    const column = event.target.closest && event.target.closest(".bcol");
+    if (column) event.preventDefault();
   });
-  board.addEventListener("drop", (e) => {
+  board.addEventListener("drop", (event) => {
     if (!dragging) return;
-    const col = e.target.closest && e.target.closest(".bcol");
-    if (!col) return;
-    e.preventDefault();
+    const column = event.target.closest && event.target.closest(".bcol");
+    if (!column) return;
+    event.preventDefault();
     const from = dragging;
     dragging = null;
-    if (col.dataset.droppable !== "1") {
-      boardNotice("this lane refuses drops: it is paused or closed — resume the phase (dw phase resume / the edit view) before moving its stories.");
+    if (column.dataset.phase !== from.phase) {
+      boardNotice("Cross-phase moves are not supported. The story stays in its original lane.");
       return;
     }
-    if (col.dataset.phase !== from.phase) {
-      boardNotice("a story moves between columns of its own phase — the board never moves stories across phases.");
+    if (column.dataset.droppable !== "1") {
+      boardNotice("This phase is paused or closed. Resume it before moving its stories.");
       return;
     }
     openMovePanel(slug, {
       story: from.story, phase: from.phase, from: from.status,
-      to: col.dataset.col, evidenceExists: from.evidence === "1",
+      to: column.dataset.col, evidenceExists: from.evidence === "1",
     });
   });
-  board.addEventListener("click", (e) => {
-    const btn = e.target.closest && e.target.closest(".bmove");
-    if (!btn) return;
-    const card = btn.closest(".bcard");
-    const colNames = PARKED_COLUMNS.concat(["backlog", "ready", "in-progress", "done"]);
-    const target = prompt(`move ${card.dataset.story} to which column?\n(${colNames.join(" | ")})`, "");
-    if (!target) return;
-    const to = target.trim().toLowerCase();
-    if (!colNames.includes(to)) {
-      boardNotice(`unknown column: ${to}`);
+  board.addEventListener("click", (event) => {
+    const create = event.target.closest && event.target.closest("[data-board-create]");
+    if (create) {
+      openCreatePanel(slug, create.dataset.phase, create.dataset.phaseName, create);
       return;
     }
+    const phaseAction = event.target.closest && event.target.closest("[data-board-phase-action]");
+    if (phaseAction) {
+      openPhasePanel(
+        slug,
+        phaseAction.dataset.phase,
+        phaseAction.dataset.phaseName,
+        phaseAction.dataset.boardPhaseAction,
+        phaseAction,
+      );
+      return;
+    }
+    const button = event.target.closest && event.target.closest("[data-board-move], [data-board-park]");
+    if (!button) return;
+    const card = button.closest(".bcard");
     openMovePanel(slug, {
-      story: card.dataset.story, phase: card.dataset.phase,
-      from: card.dataset.status, to, evidenceExists: card.dataset.evidence === "1",
-    });
+      story: card.dataset.story,
+      phase: card.dataset.phase,
+      from: card.dataset.status,
+      to: button.hasAttribute("data-board-park") ? "on-hold" : "",
+      evidenceExists: card.dataset.evidence === "1",
+    }, button);
   });
 }
 
-async function viewBoard(slug) {
+function boardOverviewStrip(slug, setup, status, step, presentation, notice) {
+  const next = presentation.next_step || {};
+  const work = setup.delivery_scope?.current_work;
+  const needsAttention = setup.readiness !== "ready";
+  const technicalOpen = Boolean(
+    notice || (SNAPSHOT_MODE && new URLSearchParams(location.search).has("confirmstep")),
+  );
+  return `<section class="board-overview readiness-${esc(setup.readiness)}" aria-labelledby="board-title">
+    <div class="board-overview-head"><div><span>Work · ${esc(slug)}</span>
+      <h1 id="board-title">${esc(slug)} board</h1></div>
+      <dw-badge variant="${needsAttention ? "alert" : "default"}" count="${esc(needsAttention ? "Needs attention" : "Ready")}"></dw-badge></div>
+    <div class="board-overview-strip">
+      <div class="board-attention"><span>${needsAttention ? "Needs attention" : "Repository ready"}</span>
+        <strong>${esc(status.summary)}</strong></div>
+      <div class="board-next-step"><span>Next step</span>
+        <strong>${esc(next.label || presentationCopy("check_readiness"))}</strong>
+        <p>${esc(next.summary || "Review the current work before acting.")}</p></div>
+      ${work ? `<div class="board-current-work"><span>Current work</span>
+        <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(work.story_id)}"><code>${esc(work.story_id)}</code> ${esc(work.title)}</a>
+        <dw-status-pill status="${esc(work.status)}"></dw-status-pill></div>` : ""}
+    </div>
+    <dw-fold class="board-technical" label="Technical details"${technicalOpen ? " open" : ""}>
+      <p>Exact repository, contract, gate, command, and one-step facts.</p>
+      ${statusPanel(status, step, notice)}
+    </dw-fold>
+  </section>`;
+}
+
+async function viewBoard(slug, notice = null) {
+  slug = slug || selectedProject;
   if (!slug) {
-    const ctx = await api("/api/projects");
-    const projects = ctx.data.projects;
-    if (!projects.length) {
-      app.innerHTML = stateHtml("No roadmap projects found under pm/roadmap/.");
-      return;
-    }
-    slug = projects[0].slug;
-    if (projects.length > 1) {
-      location.hash = `#/board/${encodeURIComponent(slug)}`;
-      return;
-    }
+    viewProjectSelector("#/board");
+    return;
   }
-  setCrumbs([{ label: "overview", href: "#/" },
-    { label: slug, href: `#/p/${encodeURIComponent(slug)}` },
-    { label: "board" }]);
-  const body = await api(`/api/projects/${encodeURIComponent(slug)}/board`);
-  const model = body.data;
+  setCrumbs([{ label: "work", href: "#/" }, { label: slug }]);
+  const projectQuery = `?project=${encodeURIComponent(slug)}`;
+  const [boardBody, statusBody, stepBody, setupBody, presentationBody] = await Promise.all([
+    api(`/api/projects/${encodeURIComponent(slug)}/board`),
+    api(`/api/status${projectQuery}`),
+    api(`/api/step${projectQuery}`),
+    api(`/api/delivery-setup${projectQuery}`),
+    api(`/api/presentation/status${projectQuery}`),
+  ]);
+  const model = boardBody.data;
+  const step = stepBody.data;
   const open = model.phases.filter((lane) => !lane.closed);
   const closed = model.phases.filter((lane) => lane.closed);
-  app.innerHTML = `
-    <div class="board">
+  app.innerHTML = `${destinationNav("work", "#/board")}
+    ${boardOverviewStrip(slug, setupBody.data, statusBody.data, step, presentationBody.data, notice)}
+    <div class="board" aria-labelledby="phase-lanes-title">
+      <div class="board-lanes-head"><div><span>Roadmap</span><h2 id="phase-lanes-title">Phase lanes</h2></div>
+        <p>Create and move work here. Every saved change stops for an exact preview.</p></div>
       <div id="board-move"></div>
-      ${open.map((lane) => boardLane(slug, model.columns, lane)).join("") || stateHtml("no open phases")}
-      ${closed.length ? `<div class="section"><h2>closed phases (${closed.length})</h2>
-        ${closed.map((lane) => boardLane(slug, model.columns, lane)).join("")}</div>` : ""}
+      ${open.map((lane) => boardLane(slug, model.columns, lane)).join("") || stateHtml("No open phases")}
+      ${closed.length ? `<details class="board-closed"><summary>Closed phases (${closed.length})</summary>
+        ${closed.map((lane) => boardLane(slug, model.columns, lane)).join("")}</details>` : ""}
     </div>`;
+  wireStepControl(step);
   wireBoardMoves(slug);
-  // Screenshot affordance (mirrors the editor's autopreview): ?snapshot=1
-  // &automove=<story>:<column> opens the move panel synchronously.
+  // Deterministic screenshot affordances for board action and refusal states.
   if (SNAPSHOT_MODE) {
-    const automove = new URLSearchParams(location.search).get("automove");
+    const params = new URLSearchParams(location.search);
+    const automove = params.get("automove");
+    const autocreate = params.get("autocreate");
     if (automove) {
+      app.classList.add("board-action-snapshot");
       const [story, to] = automove.split(":");
-      const card = document.querySelector(`.bcard[data-story="${story}"]`);
+      const card = document.querySelector(`.bcard[data-story="${selectorEscape(story)}"]`);
       if (card && to) {
         openMovePanel(slug, {
           story, phase: card.dataset.phase, from: card.dataset.status,
           to, evidenceExists: card.dataset.evidence === "1",
         });
       }
+    } else if (autocreate !== null) {
+      app.classList.add("board-action-snapshot");
+      const phase = params.get("createphase");
+      const button = phase
+        ? document.querySelector(`[data-board-create][data-phase="${selectorEscape(phase)}"]`)
+        : document.querySelector("[data-board-create]:not([disabled])");
+      if (button) openCreatePanel(slug, button.dataset.phase, button.dataset.phaseName, button);
     }
   }
 }
@@ -1257,6 +1649,8 @@ const EDIT_ACTIONS = {
   create_phase: "create phase",
   create_story: "create story",
   update_story_status: "update story status",
+  pause_phase: "pause phase",
+  resume_phase: "resume phase",
   attach_evidence: "attach evidence",
   close_phase: "close phase",
 };
@@ -1264,6 +1658,33 @@ const EDIT_ACTIONS = {
 const adoptionReviewMarks = new Map();
 const ADOPTION_TERMINAL_HANDOFF = "dw setup preview <proposal-file>";
 const ADOPTION_TECHNICAL_LABEL = "Technical details";
+const ADOPTION_MARK_STORAGE_PREFIX = "delivery-workbench.adoption-review.";
+const IDEATION_STORAGE_KEY = "delivery-workbench.ideation-plan.v1";
+const IDEATION_SNAPSHOT_STEP = new URLSearchParams(location.search).get("ideationstep") || "";
+const IDEATION_STEPS = [
+  ["idea", "Idea"], ["draft", "Draft"], ["review", "Review"],
+  ["preview", "Preview"], ["apply", "Apply"],
+];
+
+function safeStoredJson(key) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : null;
+  } catch (_err) { return null; }
+}
+
+function storeJson(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); }
+  catch (_err) {
+    // A hardened browser can disable storage. The flow remains usable for the
+    // current page and never falls back to repository files.
+  }
+}
+
+function clearStoredJson(key) {
+  try { localStorage.removeItem(key); }
+  catch (_err) { /* The in-memory reset still succeeds. */ }
+}
 
 function provenanceHtml(provenance) {
   return `<p class="adoption-provenance"><strong>Source:</strong> ${esc(provenance?.sentence || "Unknown.")}</p>`;
@@ -1274,11 +1695,29 @@ function adoptionReviewTabs() {
     `<a href="#/edit/${name}" class="${name === "adoption_review" ? "active" : ""}">${esc(EDIT_ACTIONS[name])}</a>`).join("")}</div>`;
 }
 
+function normalizedReviewState(raw = {}) {
+  return {
+    decision: typeof raw.decision === "string" ? raw.decision : "",
+    accepted_items: Array.isArray(raw.accepted_items) ? raw.accepted_items.filter((item) => typeof item === "string") : [],
+    objections: Array.isArray(raw.objections) ? raw.objections.filter((item) => item && typeof item.item === "string" && typeof item.correction === "string") : [],
+    overall_note: typeof raw.overall_note === "string" ? raw.overall_note : "",
+  };
+}
+
 function adoptionMarkState(key) {
   if (!adoptionReviewMarks.has(key)) {
-    adoptionReviewMarks.set(key, { decision: "", objections: [], overall_note: "" });
+    const stored = safeStoredJson(`${ADOPTION_MARK_STORAGE_PREFIX}${key}`);
+    adoptionReviewMarks.set(key, normalizedReviewState(stored || {}));
   }
   return adoptionReviewMarks.get(key);
+}
+
+function persistAdoptionMark(key, state, persist = null) {
+  const normalized = normalizedReviewState(state);
+  adoptionReviewMarks.set(key, normalized);
+  storeJson(`${ADOPTION_MARK_STORAGE_PREFIX}${key}`, normalized);
+  if (persist) persist(normalized);
+  return normalized;
 }
 
 function correctionPacket(model, state) {
@@ -1294,103 +1733,211 @@ function correctionPacket(model, state) {
   };
 }
 
-function renderAdoptionMarks(model, key, identity = null) {
+function adoptionItemStatus(state, itemId) {
+  if (state.objections.some((item) => item.item === itemId)) return ["Needs correction", "rejected"];
+  if (state.accepted_items.includes(itemId)) return ["Accepted", "accepted"];
+  return ["Not reviewed", "pending"];
+}
+
+function adoptionItemReviewHtml(state, itemId) {
+  const [label, status] = adoptionItemStatus(state, itemId);
+  return `<div class="adoption-item-review" data-review-state="${status}">
+    <strong>${esc(label)}</strong>
+    <span class="adoption-item-actions">
+      <button type="button" data-adoption-item-accept="${esc(itemId)}"${status === "rejected" ? " disabled" : ""}>Accept item</button>
+      <button type="button" data-adoption-item-reject="${esc(itemId)}">Request correction</button>
+    </span>
+  </div>`;
+}
+
+function renderAdoptionMarks(model, key, identity = null, options = {}) {
   const out = document.getElementById("adoption-marks");
   if (!out) return;
-  const state = adoptionMarkState(key);
-  const options = model.objection_items.map((item) =>
+  const allItems = model.objection_items.map((item) => item.id);
+  let state = adoptionMarkState(key);
+  state.accepted_items = state.accepted_items.filter((item) => allItems.includes(item));
+  state.objections = state.objections.filter((item) => allItems.includes(item.item));
+  const rejected = new Set(state.objections.map((item) => item.item));
+  const ready = allItems.length > 0
+    && !state.objections.length
+    && allItems.every((item) => state.accepted_items.includes(item));
+  state.decision = ready ? "accepted" : state.objections.length ? "rejected" : "";
+  state = persistAdoptionMark(key, state, options.persist);
+  const optionsHtml = model.objection_items.map((item) =>
     `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("");
-  const packet = state.decision === "rejected"
-    ? correctionPacket(model, state) : null;
+  const packet = state.objections.length ? correctionPacket(model, state) : null;
   out.innerHTML = `<section class="adoption-marks" aria-labelledby="adoption-marks-title">
-    <h2 id="adoption-marks-title">Your review mark</h2>
-    <p>Marks stay in this browser page only. They do not save files, create a confirmation, or grant permission.</p>
+    <h2 id="adoption-marks-title">Your review marks</h2>
+    <p>Marks stay in this browser across steps and reloads. They save no project files and provide no permission.</p>
     <div class="adoption-mark-actions" role="group" aria-label="Review decision">
-      <button type="button" data-adoption-mark="accept" aria-pressed="${state.decision === "accepted"}">Accepted for preview</button>
-      <button type="button" data-adoption-mark="reject" aria-pressed="${state.decision === "rejected"}">Reject with corrections</button>
-      <button type="button" data-adoption-mark="abandon">Abandon this mark</button>
+      <button type="button" data-adoption-mark="accept" aria-pressed="${ready}">Accepted for preview</button>
+      <button type="button" data-adoption-mark="reject" aria-pressed="${state.objections.length > 0}">Reject with corrections</button>
+      <button type="button" data-adoption-mark="abandon">Abandon these marks</button>
     </div>
-    ${state.decision === "accepted" ? `<div class="adoption-mark-result" role="status">
-      <strong>Accepted for preview.</strong> Nothing has been applied and no terminal confirmation exists yet.
-    </div>` : ""}
-    ${state.decision === "rejected" ? `<form id="adoption-correction-form" class="adoption-correction-form">
+    ${ready ? `<div class="adoption-mark-result" role="status"><strong>Accepted for preview.</strong> Nothing has been applied.</div>` : ""}
+    ${state.objections.length ? `<div class="adoption-review-blocked" role="alert"><strong>Preview is blocked.</strong> Correct or remove every rejected item in the draft.</div>` : ""}
+    ${state.decision === "rejected" || options.openCorrection ? `<form id="adoption-correction-form" class="adoption-correction-form">
       <h3>Correction packet</h3>
-      <label><b>Proposal item</b><select name="item">${options}</select></label>
+      <label><b>Proposal item</b><select name="item">${optionsHtml}</select></label>
       <label><b>What should change?</b><textarea name="correction" required></textarea></label>
       <button type="submit" data-adoption-objection="add">Add objection</button>
       <label><b>Overall note</b><textarea name="overall_note">${esc(state.overall_note)}</textarea></label>
-      <ul class="adoption-objections">${state.objections.map((item, index) => `<li>
+      <ul class="adoption-objections">${state.objections.map((item) => `<li>
         <strong>${esc(model.objection_items.find((candidate) => candidate.id === item.item)?.label || item.item)}</strong>
         <span>${esc(item.correction)}</span>
-        <button type="button" data-adoption-objection="remove-${index}" data-remove-objection="${index}">Remove</button>
+        ${options.editDraft ? `<button type="button" data-edit-rejected="${esc(item.item)}">Correct in draft</button>` : `<button type="button" data-remove-objection="${esc(item.item)}">Withdraw objection</button>`}
       </li>`).join("") || "<li>No item-level objections yet.</li>"}</ul>
-      <details class="adoption-packet"><summary>Correction packet for the setup conversation</summary>
-        <pre>${esc(JSON.stringify(packet, null, 2))}</pre>
-      </details>
+      ${packet ? `<details class="adoption-packet"><summary>Correction packet for the draft</summary><pre>${esc(JSON.stringify(packet, null, 2))}</pre></details>` : ""}
     </form>` : ""}
+    ${options.onPreview ? `<div class="ideation-canonical-action">
+      <button type="button" class="applybtn" id="ideation-preview-button"${ready ? "" : " disabled"}>Preview this setup</button>
+      <p>${ready ? "This is the one next step. It creates a one-use setup preview; it does not save configuration." : "Accept every current item and correct or remove every rejection before preview."}</p>
+    </div>` : ""}
   </section>`;
+
+  const saveAndRender = (nextIdentity = null, extra = {}) => {
+    persistAdoptionMark(key, state, options.persist);
+    renderAdoptionMarks(model, key, nextIdentity, { ...options, ...extra });
+    options.refreshStatuses?.();
+  };
   out.querySelector('[data-adoption-mark="accept"]').addEventListener("click", (event) => {
     const focus = captureAppFocus() || { selector: focusSelector(event.currentTarget), index: -1, tag: "button" };
-    state.decision = "accepted";
-    state.objections = [];
-    renderAdoptionMarks(model, key, focus);
+    const rejectedItems = new Set(state.objections.map((item) => item.item));
+    state.accepted_items = allItems.filter((item) => !rejectedItems.has(item));
+    saveAndRender(focus);
   });
   out.querySelector('[data-adoption-mark="reject"]').addEventListener("click", (event) => {
     const focus = captureAppFocus() || { selector: focusSelector(event.currentTarget), index: -1, tag: "button" };
-    state.decision = "rejected";
-    renderAdoptionMarks(model, key, focus);
+    saveAndRender(focus, { openCorrection: true });
   });
   out.querySelector('[data-adoption-mark="abandon"]').addEventListener("click", (event) => {
     const focus = captureAppFocus() || { selector: focusSelector(event.currentTarget), index: -1, tag: "button" };
-    adoptionReviewMarks.set(key, { decision: "", objections: [], overall_note: "" });
-    renderAdoptionMarks(model, key, focus);
+    state = normalizedReviewState();
+    saveAndRender(focus, { openCorrection: false });
   });
   const form = out.querySelector("#adoption-correction-form");
   if (form) {
     form.elements.overall_note.addEventListener("input", () => {
       state.overall_note = form.elements.overall_note.value;
+      persistAdoptionMark(key, state, options.persist);
     });
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const correction = form.elements.correction.value.trim();
       if (!correction) return;
+      const item = form.elements.item.value;
       state.overall_note = form.elements.overall_note.value;
-      state.objections.push({ item: form.elements.item.value, correction });
-      renderAdoptionMarks(model, key, {
-        selector: '[data-adoption-objection="add"]', index: -1, tag: "button",
-      });
+      state.accepted_items = state.accepted_items.filter((candidate) => candidate !== item);
+      state.objections = state.objections.filter((candidate) => candidate.item !== item);
+      state.objections.push({ item, correction });
+      saveAndRender({ selector: '[data-adoption-objection="add"]', index: -1, tag: "button" });
     });
-    out.querySelectorAll("[data-remove-objection]").forEach((button) => button.addEventListener("click", () => {
-      const index = Number(button.dataset.removeObjection);
-      state.objections.splice(index, 1);
-      renderAdoptionMarks(model, key, {
-        selector: '[data-adoption-mark="reject"]', index: -1, tag: "button",
-      });
-    }));
   }
+  out.querySelectorAll("[data-remove-objection]").forEach((button) => button.addEventListener("click", () => {
+    state.objections = state.objections.filter((item) => item.item !== button.dataset.removeObjection);
+    saveAndRender({ selector: '[data-adoption-mark="reject"]', index: -1, tag: "button" });
+  }));
+  out.querySelectorAll("[data-edit-rejected]").forEach((button) => button.addEventListener("click", () => {
+    options.editDraft?.(button.dataset.editRejected);
+  }));
+  document.querySelectorAll("[data-adoption-item-accept]").forEach((button) => button.addEventListener("click", () => {
+    const item = button.dataset.adoptionItemAccept;
+    if (rejected.has(item)) return;
+    if (!state.accepted_items.includes(item)) state.accepted_items.push(item);
+    saveAndRender({ selector: `[data-adoption-item-accept="${selectorEscape(item)}"]`, index: -1, tag: "button" });
+  }));
+  document.querySelectorAll("[data-adoption-item-reject]").forEach((button) => button.addEventListener("click", () => {
+    const item = button.dataset.adoptionItemReject;
+    state.accepted_items = state.accepted_items.filter((candidate) => candidate !== item);
+    persistAdoptionMark(key, state, options.persist);
+    renderAdoptionMarks(model, key, null, { ...options, openCorrection: true });
+    const nextForm = document.getElementById("adoption-correction-form");
+    nextForm.elements.item.value = item;
+    nextForm.elements.correction.focus();
+    options.refreshStatuses?.();
+  }));
+  document.getElementById("ideation-preview-button")?.addEventListener("click", options.onPreview);
   finishDynamicRender(identity);
 }
 
-function adoptionStoryHtml(story) {
+function adoptionStoryHtml(story, state) {
   return `<article class="adoption-story" data-review-item="${esc(story.item_id)}">
     <h4><code>${esc(story.id_sketch)}</code> ${esc(story.title)}</h4>
+    ${adoptionItemReviewHtml(state, story.item_id)}
     <p>${esc(story.purpose)}</p>
     ${provenanceHtml(story.provenance)}
+    <div class="adoption-scope"><div><h5>Included</h5><ul>${story.scope_in.map((item) => `<li>${esc(item.text)}${provenanceHtml(item.provenance)}</li>`).join("") || "<li>Nothing extra is included.</li>"}</ul></div>
+      <div><h5>Not included</h5><ul>${story.scope_out.map((item) => `<li>${esc(item.text)}${provenanceHtml(item.provenance)}</li>`).join("") || "<li>No exclusions were recorded.</li>"}</ul></div></div>
     <h5>What this story must prove</h5>
-    <ul>${story.acceptance_criteria.map((criterion) => `<li>${esc(criterion.text)}${provenanceHtml(criterion.provenance)}</li>`).join("")}</ul>
+    <ul>${story.acceptance_criteria.map((criterion) => `<li data-review-item="${esc(criterion.item_id)}">${adoptionItemReviewHtml(state, criterion.item_id)}<span>${esc(criterion.text)}</span>${provenanceHtml(criterion.provenance)}</li>`).join("")}</ul>
     <h5>What it depends on</h5>
     ${story.dependencies.length ? `<ul>${story.dependencies.map((dependency) => `<li>${esc(dependency.sentence)}${provenanceHtml(dependency.provenance)}</li>`).join("")}</ul>` : "<p>Nothing else in this draft must finish first.</p>"}
   </article>`;
 }
 
-async function viewAdoptionReview() {
-  setCrumbs([{ label: "overview", href: "#/" }, { label: "roadmap changes", href: "#/edit" }, { label: "review adoption" }]);
+function adoptionReviewBody(model, key) {
+  const state = adoptionMarkState(key);
+  return `<header class="adoption-review-head"><p class="eyebrow">Roadmap changes · review only</p>
+      <h1 tabindex="-1">Review ${esc(model.project.title)}</h1>
+      <p class="adoption-vision">${esc(model.project.vision)}</p>
+      <p>${esc(model.project.context)} ${esc(model.project.identity)}</p>
+      ${provenanceHtml(model.project.vision_provenance)}
+      ${provenanceHtml(model.project.provenance)}
+      <div class="adoption-inert"><strong>Nothing is saved yet.</strong> Reviewing cannot save setup, provide permission, start work, approve proof, or commit.</div>
+    </header>
+    <section class="adoption-phases"><h2>What the phases accomplish</h2>
+      ${model.phases.map((phase) => `<article class="adoption-phase" data-review-item="${esc(phase.item_id)}">
+        <div class="adoption-phase-number">Phase ${esc(phase.number)}</div><h3>${esc(phase.title)}</h3>
+        ${adoptionItemReviewHtml(state, phase.item_id)}
+        <p>${esc(phase.accomplishes)}</p>${provenanceHtml(phase.provenance)}
+        <div class="adoption-stories">${phase.stories.map((story) => adoptionStoryHtml(story, state)).join("")}</div>
+      </article>`).join("")}
+    </section>
+    <section class="adoption-exit"><h2>What the roadmap must prove overall</h2><ul>
+      ${model.exit_criteria.map((criterion) => `<li data-review-item="${esc(criterion.item_id)}">${adoptionItemReviewHtml(state, criterion.item_id)}<span>${esc(criterion.text)}</span>${provenanceHtml(criterion.provenance)}</li>`).join("")}
+    </ul></section>
+    <section class="adoption-unresolved"><h2>Unresolved assumptions</h2><p>${esc(model.unresolved_questions.summary)}</p>
+      ${model.unresolved_questions.items.length ? `<ul>${model.unresolved_questions.items.map((item) => `<li data-review-item="${esc(item.item_id)}">${adoptionItemReviewHtml(state, item.item_id)}<strong>${esc(item.question)}</strong>${provenanceHtml(item.provenance)}</li>`).join("")}</ul>` : ""}
+    </section>
+    <section class="adoption-configuration"><div><p class="eyebrow">Separate from roadmap truth</p><h2>${esc(model.configuration.label)}</h2><p>${esc(model.configuration.explanation)}</p></div>
+      <div class="adoption-config-grid"><article><h3>Tracked delivery policy</h3><p>${esc(model.configuration.policy.sentence)}</p>
+        ${model.configuration.policy.documents.length ? `<ul>${model.configuration.policy.documents.map((item) => `<li><strong>${esc(item.sentence)}</strong>${provenanceHtml(item.provenance)}</li>`).join("")}</ul>` : ""}
+        ${model.configuration.policy.provenance ? provenanceHtml(model.configuration.policy.provenance) : ""}${model.configuration.policy.present && ADOPTION_PROPOSAL_FILE ? '<a class="adoption-bundle-link" href="#/program-studio/bundle">Review the generated program as one linked bundle</a>' : ""}</article>
+      <article><h3>Local driver bindings</h3><p>${esc(model.configuration.driver_bindings.sentence)}</p>
+        <ul>${model.configuration.driver_bindings.items.map((item) => `<li><strong>${esc(item.profile)}</strong> — ${esc(item.sentence)}${provenanceHtml(item.provenance)}</li>`).join("")}</ul></article></div>
+    </section>
+    <section class="adoption-paths"><h2>Files this setup would save</h2><p>${esc(model.changes.summary)}</p>
+      <div class="adoption-path-split"><article><h3>Tracked with the repository</h3><ul>${model.changes.tracked.map((item) => `<li>${badge(item.action, item.action === "unchanged" ? "warn" : "ok")}<code>${esc(item.path)}</code></li>`).join("")}</ul></article>
+      <article><h3>Local to this checkout</h3><ul>${model.changes.git_local.map((item) => `<li>${badge(item.action, item.action === "unchanged" ? "warn" : "ok")}<code>${esc(item.path)}</code></li>`).join("")}</ul></article></div>
+    </section>`;
+}
+
+function technicalDetailsHtml(model, returnLabel = "Return to review") {
+  const proposal = model.technical_details.proposal;
+  return `<details class="adoption-technical"><summary>${esc(model.technical_details.label || ADOPTION_TECHNICAL_LABEL)}</summary>
+    <div class="adoption-technical-content"><h2>Exact proposal data</h2><pre>${esc(JSON.stringify(proposal, null, 2))}</pre>
+      <h2>Terminal fallback</h2><p>If you need the terminal path, save the exact JSON above as a proposal file, then run:</p>
+      <code>${esc(model.terminal_handoff.command || ADOPTION_TERMINAL_HANDOFF)}</code>
+      <code>dw setup apply --proposal &lt;setup:id&gt; --expect &lt;setup-sha256:token&gt;</code>
+      <button type="button" data-return-review>${esc(returnLabel)}</button></div>
+  </details>`;
+}
+
+function wireTechnicalReturn() {
+  document.querySelectorAll("[data-return-review]").forEach((button) => button.addEventListener("click", () => {
+    const details = button.closest("details");
+    details.open = false;
+    details.querySelector("summary")?.focus();
+  }));
+}
+
+async function viewLegacyAdoptionReview() {
   const query = ADOPTION_PROPOSAL_FILE
     ? `proposal_file=${encodeURIComponent(ADOPTION_PROPOSAL_FILE)}`
     : ADOPTION_PROPOSAL_ID ? `proposal=${encodeURIComponent(ADOPTION_PROPOSAL_ID)}` : "";
   const model = (await api(`/api/setup/review${query ? `?${query}` : ""}`)).data;
   if (!model.valid) {
-    app.innerHTML = `${adoptionReviewTabs()}<div class="adoption-review invalid-adoption-review">
+    app.innerHTML = `${destinationNav("plan", "#/edit")}${adoptionReviewTabs()}<div class="adoption-review invalid-adoption-review">
       <h1>Review adoption proposal</h1>
       <div class="guard" role="alert"><strong>Proposal refused.</strong><pre>${esc(model.refusal)}</pre></div>
       <section class="adoption-unresolved"><h2>Unresolved assumptions</h2><p>${esc(model.unresolved_questions.summary)}</p></section>
@@ -1400,45 +1947,508 @@ async function viewAdoptionReview() {
     return;
   }
   const key = model.technical_details.proposal_hash;
-  app.innerHTML = `${adoptionReviewTabs()}<div class="adoption-review">
-    <header class="adoption-review-head"><p class="eyebrow">Roadmap changes · review only</p>
-      <h1>Review ${esc(model.project.title)}</h1>
-      <p class="adoption-vision">${esc(model.project.vision)}</p>
-      <p>${esc(model.project.context)} ${esc(model.project.identity)}</p>
-      ${provenanceHtml(model.project.vision_provenance)}
-      ${provenanceHtml(model.project.provenance)}
-      <div class="adoption-inert"><strong>Review only.</strong> This page cannot save setup, create permission, start work, certify, or commit.</div>
-    </header>
-    <section class="adoption-phases"><h2>What the phases accomplish</h2>
-      ${model.phases.map((phase) => `<article class="adoption-phase" data-review-item="${esc(phase.item_id)}">
-        <div class="adoption-phase-number">Phase ${esc(phase.number)}</div><h3>${esc(phase.title)}</h3>
-        <p>${esc(phase.accomplishes)}</p>${provenanceHtml(phase.provenance)}
-        <div class="adoption-stories">${phase.stories.map(adoptionStoryHtml).join("")}</div>
-      </article>`).join("")}
-    </section>
-    <section class="adoption-exit"><h2>What the roadmap must prove overall</h2><ul>
-      ${model.exit_criteria.map((criterion) => `<li>${esc(criterion.text)}${provenanceHtml(criterion.provenance)}</li>`).join("")}
-    </ul></section>
-    <section class="adoption-unresolved"><h2>Unresolved assumptions</h2><p>${esc(model.unresolved_questions.summary)}</p>
-      ${model.unresolved_questions.items.length ? `<ul>${model.unresolved_questions.items.map((item) => `<li data-review-item="${esc(item.item_id)}"><strong>${esc(item.question)}</strong>${provenanceHtml(item.provenance)}</li>`).join("")}</ul>` : ""}
-    </section>
-    <section class="adoption-configuration"><div><p class="eyebrow">Separate from roadmap truth</p><h2>${esc(model.configuration.label)}</h2><p>${esc(model.configuration.explanation)}</p></div>
-      <div class="adoption-config-grid"><article><h3>Tracked delivery policy</h3><p>${esc(model.configuration.policy.sentence)}</p>
-        ${model.configuration.policy.documents.length ? `<ul>${model.configuration.policy.documents.map((item) => `<li><strong>${esc(item.sentence)}</strong>${provenanceHtml(item.provenance)}</li>`).join("")}</ul>` : ""}
-        ${model.configuration.policy.provenance ? provenanceHtml(model.configuration.policy.provenance) : ""}${model.configuration.policy.present && ADOPTION_PROPOSAL_FILE ? '<a class="adoption-bundle-link" href="#/program-studio/bundle">Review the generated program as one linked bundle</a>' : ""}</article>
-        <article><h3>Local driver bindings</h3><p>${esc(model.configuration.driver_bindings.sentence)}</p>
-          <ul>${model.configuration.driver_bindings.items.map((item) => `<li><strong>${esc(item.profile)}</strong> — ${esc(item.sentence)}${provenanceHtml(item.provenance)}</li>`).join("")}</ul></article></div>
-    </section>
-    <section class="adoption-paths"><h2>Files this setup would save</h2><p>${esc(model.changes.summary)}</p>
-      <div class="adoption-path-split"><article><h3>Tracked with the repository</h3><ul>${model.changes.tracked.map((item) => `<li>${badge(item.action, item.action === "unchanged" ? "warn" : "ok")}<code>${esc(item.path)}</code></li>`).join("")}</ul></article>
-      <article><h3>Local to this checkout</h3><ul>${model.changes.git_local.map((item) => `<li>${badge(item.action, item.action === "unchanged" ? "warn" : "ok")}<code>${esc(item.path)}</code></li>`).join("")}</ul></article></div>
-    </section>
+  app.innerHTML = `${destinationNav("plan", "#/edit")}${adoptionReviewTabs()}<div class="adoption-review">
+    ${adoptionReviewBody(model, key)}
     <div id="adoption-marks"></div>
-    <details class="adoption-technical"><summary>${esc(model.technical_details.label || ADOPTION_TECHNICAL_LABEL)}</summary><pre>${esc(JSON.stringify(model.technical_details, null, 2))}</pre></details>
+    ${technicalDetailsHtml(model)}
     <section class="adoption-handoff"><h2>Next act</h2><p>${esc(model.terminal_handoff.sentence)}</p><code>${esc(model.terminal_handoff.command || ADOPTION_TERMINAL_HANDOFF)}</code></section>
   </div>`;
   renderAdoptionMarks(model, key);
+  wireTechnicalReturn();
 }
+
+function ideaTitle(idea) {
+  const first = idea.trim().split(/[.!?\n]/)[0].trim();
+  if (!first) return "New delivery idea";
+  return first.length > 80 ? `${first.slice(0, 77).trim()}…` : first;
+}
+
+function ideaSlug(title) {
+  const slug = title.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64).replace(/-$/g, "");
+  return slug || "new-delivery-idea";
+}
+
+function ideaPrefix(title) {
+  const words = title.toUpperCase().match(/[A-Z0-9]+/g) || [];
+  const initials = words.slice(0, 5).map((word) => word[0]).join("");
+  return (initials || "IDEA").slice(0, 16);
+}
+
+function source(kind, note) {
+  return { kind, source_note: note };
+}
+
+function sourceText(text, note = "Suggested from the rough idea; edit this source note if needed.") {
+  return { text, provenance: source("recommendation", note) };
+}
+
+function storyDraft(prefix, number, index, idea) {
+  return {
+    id_sketch: `${prefix}-${number}-${String(index).padStart(2, "0")}`,
+    title: index === 1 ? "Deliver the first useful path" : `Prove useful path ${index}`,
+    problem: idea,
+    scope_in: [sourceText("Build one bounded, reviewable result from the idea.")],
+    scope_out: [sourceText("Later expansion and unattended operation stay outside this first plan.")],
+    acceptance_criteria: [
+      sourceText("A person can complete the first useful path end to end."),
+      sourceText("A focused check proves the result without starting later work."),
+    ],
+    dependencies: [],
+    provenance: source("recommendation", "Suggested from the rough idea; rename or reshape this story during drafting."),
+  };
+}
+
+function proposalFromIdea(idea) {
+  const title = ideaTitle(idea);
+  const slug = ideaSlug(title);
+  const prefix = ideaPrefix(title);
+  return {
+    schema: "delivery-workbench-setup-proposal@1",
+    state: "draft",
+    project: {
+      slug, prefix, title,
+      provenance: source("recommendation", "Project identity suggested from the rough idea and left editable."),
+    },
+    source_intent: {
+      idea: idea.trim(), mode: "build",
+      provenance: source("user-answer", "Rough idea entered in the Workbench."),
+    },
+    tracked_content: {
+      roadmap: {
+        phases: [{
+          number: 1,
+          title: "First useful release",
+          goal: "Turn the idea into one reviewable outcome.",
+          provenance: source("recommendation", "A small first phase suggested for review."),
+          stories: [storyDraft(prefix, 1, 1, idea.trim())],
+        }],
+        exit_criteria: [sourceText("The planned result is usable, checked, and ready for a separate work decision.")],
+      },
+      policy: null,
+    },
+    local_content: { driver_bindings: {} },
+    unresolved_questions: [],
+    starts_work: false,
+    creates_grant: false,
+    certifies: false,
+    commits: false,
+  };
+}
+
+function blankIdeationState() {
+  return {
+    step: "idea", rough_idea: "", proposal: null,
+    review: normalizedReviewState(), review_model: null,
+    preview: null, applied: null, refusal: "", draft_signature: "",
+  };
+}
+
+function loadIdeationState() {
+  const stored = safeStoredJson(IDEATION_STORAGE_KEY);
+  if (!stored || typeof stored !== "object") return blankIdeationState();
+  const state = { ...blankIdeationState(), ...stored };
+  state.review = normalizedReviewState(stored.review || {});
+  if (!IDEATION_STEPS.some(([id]) => id === state.step)) state.step = "idea";
+  return state;
+}
+
+let ideationState = loadIdeationState();
+
+function persistIdeation() {
+  if (!SNAPSHOT_MODE) storeJson(IDEATION_STORAGE_KEY, ideationState);
+}
+
+function ideationStepIndicator(step) {
+  const activeIndex = Math.max(0, IDEATION_STEPS.findIndex(([id]) => id === step));
+  return `<nav class="ideation-steps" aria-label="Idea to phase plan progress"><ol>${IDEATION_STEPS.map(([id, label], index) => {
+    const state = index < activeIndex ? "complete" : index === activeIndex ? "current" : "upcoming";
+    return `<li data-step-state="${state}"${state === "current" ? ' aria-current="step"' : ""}><span>${index + 1}</span><strong>${esc(label)}</strong></li>`;
+  }).join("")}</ol></nav>`;
+}
+
+function ideationShell(step, body) {
+  return `${destinationNav("plan", "#/edit")}${adoptionReviewTabs()}<div class="ideation-flow">
+    ${ideationStepIndicator(step)}${body}</div>`;
+}
+
+function moveIdeationStep(step, focus = true) {
+  ideationState.step = step;
+  persistIdeation();
+  return viewIdeationFlow().then(() => {
+    if (focus && !SNAPSHOT_MODE) focusRegion(".ideation-step h1, .ideation-step h2");
+  });
+}
+
+function invalidateIdeationPreview(message = "") {
+  const hadPreview = Boolean(ideationState.preview);
+  ideationState.preview = null;
+  ideationState.applied = null;
+  ideationState.refusal = "";
+  ideationState.draft_signature = "";
+  if (ideationState.proposal) ideationState.proposal.state = "draft";
+  if (hadPreview) announceLiveUpdate("ideation-preview", String(Date.now()), message || "Draft changed. The old preview is no longer usable; preview the revised setup again.");
+}
+
+function setProposalPath(path, value) {
+  const parts = path.split(".");
+  let target = ideationState.proposal;
+  parts.slice(0, -1).forEach((part) => { target = target[Number.isInteger(Number(part)) && String(Number(part)) === part ? Number(part) : part]; });
+  const leaf = parts.at(-1);
+  target[Number.isInteger(Number(leaf)) && String(Number(leaf)) === leaf ? Number(leaf) : leaf] = value;
+}
+
+function resolveReviewItem(itemId) {
+  if (!itemId) return;
+  ideationState.review.accepted_items = ideationState.review.accepted_items.filter((item) => item !== itemId);
+  ideationState.review.objections = ideationState.review.objections.filter((item) => item.item !== itemId);
+}
+
+function draftField(label, path, value, itemId, { multiline = false, type = "text", min = "" } = {}) {
+  const control = multiline
+    ? `<textarea data-draft-path="${esc(path)}" data-review-item="${esc(itemId)}" required>${esc(value)}</textarea>`
+    : `<input type="${esc(type)}" data-draft-path="${esc(path)}" data-review-item="${esc(itemId)}" value="${esc(value)}"${min !== "" ? ` min="${esc(min)}"` : ""} required>`;
+  return `<label><b>${esc(label)}</b>${control}</label>`;
+}
+
+function draftSourceField(path, value, itemId) {
+  return draftField("Source note", `${path}.provenance.source_note`, value.provenance.source_note, itemId, { multiline: true });
+}
+
+function renderDraftStep() {
+  const proposal = ideationState.proposal;
+  const roadmap = proposal.tracked_content.roadmap;
+  const objection = new Map(ideationState.review.objections.map((item) => [item.item, item.correction]));
+  app.innerHTML = ideationShell("draft", `<section class="ideation-step ideation-draft" aria-labelledby="ideation-draft-title">
+    <p class="eyebrow">Step 2 of 5 · shape the draft</p><h1 id="ideation-draft-title" tabindex="-1">Edit the phase plan</h1>
+    <p>Everything below is a browser draft. Nothing is saved yet. Edit the plan in plain words before review.</p>
+    <form id="ideation-draft-form">
+      <fieldset class="ideation-project-fields"><legend>Project</legend>
+        ${draftField("Project title", "project.title", proposal.project.title, "project")}
+        ${draftField("Project slug", "project.slug", proposal.project.slug, "project")}
+        ${draftField("Story prefix", "project.prefix", proposal.project.prefix, "project")}
+        ${draftField("Source note", "project.provenance.source_note", proposal.project.provenance.source_note, "project", { multiline: true })}
+      </fieldset>
+      <div class="ideation-phase-list">${roadmap.phases.map((phase, phaseIndex) => {
+        const phaseId = `phase-${phase.number}`;
+        return `<fieldset class="ideation-phase-editor" data-draft-item="${esc(phaseId)}"><legend>Phase ${phaseIndex + 1}</legend>
+          ${objection.has(phaseId) ? `<div class="ideation-correction" role="alert"><strong>Correction requested:</strong> ${esc(objection.get(phaseId))}</div>` : ""}
+          <div class="ideation-field-grid">
+            ${draftField("Phase number", `tracked_content.roadmap.phases.${phaseIndex}.number`, phase.number, phaseId, { type: "number", min: "0" })}
+            ${draftField("Phase title", `tracked_content.roadmap.phases.${phaseIndex}.title`, phase.title, phaseId)}
+          </div>
+          ${draftField("Phase goal", `tracked_content.roadmap.phases.${phaseIndex}.goal`, phase.goal, phaseId, { multiline: true })}
+          ${draftField("Source note", `tracked_content.roadmap.phases.${phaseIndex}.provenance.source_note`, phase.provenance.source_note, phaseId, { multiline: true })}
+          <div class="ideation-story-list">${phase.stories.map((story, storyIndex) => {
+            const storyId = `story-${story.id_sketch}`;
+            return `<fieldset class="ideation-story-editor" data-draft-item="${esc(storyId)}"><legend>Story ${storyIndex + 1}</legend>
+              ${objection.has(storyId) ? `<div class="ideation-correction" role="alert"><strong>Correction requested:</strong> ${esc(objection.get(storyId))}</div>` : ""}
+              <div class="ideation-field-grid">${draftField("ID sketch", `tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.id_sketch`, story.id_sketch, storyId)}
+                ${draftField("Story title", `tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.title`, story.title, storyId)}</div>
+              ${draftField("Problem to solve", `tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.problem`, story.problem, storyId, { multiline: true })}
+              ${draftField("Story source note", `tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.provenance.source_note`, story.provenance.source_note, storyId, { multiline: true })}
+              <div class="ideation-scope-grid"><fieldset><legend>Included</legend>${story.scope_in.map((item, itemIndex) => `${draftField("Scope item", `tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.scope_in.${itemIndex}.text`, item.text, storyId, { multiline: true })}${draftSourceField(`tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.scope_in.${itemIndex}`, item, storyId)}`).join("")}</fieldset>
+                <fieldset><legend>Not included</legend>${story.scope_out.map((item, itemIndex) => `${draftField("Scope item", `tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.scope_out.${itemIndex}.text`, item.text, storyId, { multiline: true })}${draftSourceField(`tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.scope_out.${itemIndex}`, item, storyId)}`).join("")}</fieldset></div>
+              <fieldset class="ideation-criteria"><legend>Acceptance criteria</legend>${story.acceptance_criteria.map((criterion, criterionIndex) => {
+                const criterionId = `${storyId}-criterion-${criterionIndex + 1}`;
+                return `<div class="ideation-criterion" data-draft-item="${esc(criterionId)}">${objection.has(criterionId) ? `<div class="ideation-correction" role="alert"><strong>Correction requested:</strong> ${esc(objection.get(criterionId))}</div>` : ""}
+                  ${draftField(`Criterion ${criterionIndex + 1}`, `tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.acceptance_criteria.${criterionIndex}.text`, criterion.text, criterionId, { multiline: true })}
+                  ${draftSourceField(`tracked_content.roadmap.phases.${phaseIndex}.stories.${storyIndex}.acceptance_criteria.${criterionIndex}`, criterion, criterionId)}
+                  <button type="button" data-remove-criterion="${phaseIndex}:${storyIndex}:${criterionIndex}"${story.acceptance_criteria.length === 1 ? " disabled" : ""}>Remove criterion</button></div>`;
+              }).join("")}<button type="button" data-add-criterion="${phaseIndex}:${storyIndex}">Add acceptance criterion</button></fieldset>
+              <button type="button" class="danger" data-remove-story="${phaseIndex}:${storyIndex}"${phase.stories.length === 1 ? " disabled" : ""}>Remove story</button>
+            </fieldset>`;
+          }).join("")}<button type="button" data-add-story="${phaseIndex}">Add story</button></div>
+          <button type="button" class="danger" data-remove-phase="${phaseIndex}"${roadmap.phases.length === 1 ? " disabled" : ""}>Remove phase</button>
+        </fieldset>`;
+      }).join("")}<button type="button" data-add-phase>Add phase</button></div>
+      <fieldset class="ideation-exit-editor"><legend>Roadmap result</legend>${roadmap.exit_criteria.map((criterion, index) => {
+        const itemId = `exit-criterion-${index + 1}`;
+        return `<div data-draft-item="${itemId}">${objection.has(itemId) ? `<div class="ideation-correction" role="alert"><strong>Correction requested:</strong> ${esc(objection.get(itemId))}</div>` : ""}
+          ${draftField("Result to prove", `tracked_content.roadmap.exit_criteria.${index}.text`, criterion.text, itemId, { multiline: true })}
+          ${draftSourceField(`tracked_content.roadmap.exit_criteria.${index}`, criterion, itemId)}</div>`;
+      }).join("")}</fieldset>
+      <div class="ideation-actions"><button type="button" data-back-idea>Back to idea</button><button type="submit" class="applybtn">Review the whole plan</button></div>
+    </form>
+  </section>`);
+  wireDraftStep();
+}
+
+function wireDraftStep() {
+  const form = document.getElementById("ideation-draft-form");
+  form.addEventListener("input", (event) => {
+    const input = event.target.closest("[data-draft-path]");
+    if (!input) return;
+    const value = input.type === "number" ? Number(input.value) : input.value;
+    setProposalPath(input.dataset.draftPath, value);
+    resolveReviewItem(input.dataset.reviewItem);
+    invalidateIdeationPreview();
+    persistIdeation();
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    await moveIdeationStep("review");
+  });
+  form.querySelector("[data-back-idea]").addEventListener("click", () => moveIdeationStep("idea"));
+  form.querySelectorAll("[data-add-criterion]").forEach((button) => button.addEventListener("click", () => {
+    const [phaseIndex, storyIndex] = button.dataset.addCriterion.split(":").map(Number);
+    ideationState.proposal.tracked_content.roadmap.phases[phaseIndex].stories[storyIndex].acceptance_criteria.push(sourceText("Describe one observable result."));
+    invalidateIdeationPreview(); persistIdeation(); renderDraftStep();
+    focusRegion(`[data-draft-item="story-${selectorEscape(ideationState.proposal.tracked_content.roadmap.phases[phaseIndex].stories[storyIndex].id_sketch)}-criterion-${ideationState.proposal.tracked_content.roadmap.phases[phaseIndex].stories[storyIndex].acceptance_criteria.length}"]`);
+  }));
+  form.querySelectorAll("[data-remove-criterion]").forEach((button) => button.addEventListener("click", () => {
+    const [phaseIndex, storyIndex, criterionIndex] = button.dataset.removeCriterion.split(":").map(Number);
+    const story = ideationState.proposal.tracked_content.roadmap.phases[phaseIndex].stories[storyIndex];
+    resolveReviewItem(`story-${story.id_sketch}-criterion-${criterionIndex + 1}`);
+    story.acceptance_criteria.splice(criterionIndex, 1);
+    invalidateIdeationPreview(); persistIdeation(); renderDraftStep();
+    focusRegion(`[data-draft-item="story-${selectorEscape(story.id_sketch)}"]`);
+  }));
+  form.querySelectorAll("[data-add-story]").forEach((button) => button.addEventListener("click", () => {
+    const phaseIndex = Number(button.dataset.addStory);
+    const phase = ideationState.proposal.tracked_content.roadmap.phases[phaseIndex];
+    phase.stories.push(storyDraft(ideationState.proposal.project.prefix, phase.number, phase.stories.length + 1, ideationState.rough_idea));
+    invalidateIdeationPreview(); persistIdeation(); renderDraftStep();
+    focusRegion(`[data-draft-item="story-${selectorEscape(phase.stories.at(-1).id_sketch)}"]`);
+  }));
+  form.querySelectorAll("[data-remove-story]").forEach((button) => button.addEventListener("click", () => {
+    const [phaseIndex, storyIndex] = button.dataset.removeStory.split(":").map(Number);
+    const phase = ideationState.proposal.tracked_content.roadmap.phases[phaseIndex];
+    resolveReviewItem(`story-${phase.stories[storyIndex].id_sketch}`);
+    phase.stories.splice(storyIndex, 1);
+    invalidateIdeationPreview(); persistIdeation(); renderDraftStep();
+    focusRegion(`[data-draft-item="phase-${selectorEscape(phase.number)}"]`);
+  }));
+  form.querySelector("[data-add-phase]").addEventListener("click", () => {
+    const phases = ideationState.proposal.tracked_content.roadmap.phases;
+    const number = Math.max(...phases.map((phase) => Number(phase.number))) + 1;
+    phases.push({ number, title: `Phase ${number}`, goal: "Describe the next reviewable outcome.", provenance: source("recommendation", "Added in the Workbench draft."), stories: [storyDraft(ideationState.proposal.project.prefix, number, 1, ideationState.rough_idea)] });
+    invalidateIdeationPreview(); persistIdeation(); renderDraftStep();
+    focusRegion(`[data-draft-item="phase-${number}"]`);
+  });
+  form.querySelectorAll("[data-remove-phase]").forEach((button) => button.addEventListener("click", () => {
+    const phaseIndex = Number(button.dataset.removePhase);
+    const phase = ideationState.proposal.tracked_content.roadmap.phases[phaseIndex];
+    resolveReviewItem(`phase-${phase.number}`);
+    phase.stories.forEach((story) => resolveReviewItem(`story-${story.id_sketch}`));
+    ideationState.proposal.tracked_content.roadmap.phases.splice(phaseIndex, 1);
+    invalidateIdeationPreview(); persistIdeation(); renderDraftStep();
+    focusRegion(".ideation-phase-editor");
+  }));
+}
+
+function renderIdeaStep() {
+  app.innerHTML = ideationShell("idea", `<section class="ideation-step ideation-idea" aria-labelledby="ideation-idea-title">
+    <p class="eyebrow">Step 1 of 5 · start with your words</p><h1 id="ideation-idea-title" tabindex="-1">Turn a rough idea into a phase plan</h1>
+    <p class="ideation-lede">Write what you want to make or change. The Workbench will shape a small editable first draft. Nothing is saved yet.</p>
+    <form id="ideation-idea-form"><label><b>Rough idea</b><textarea name="idea" required maxlength="20000" placeholder="For example: Help a small team capture customer requests and turn them into a weekly plan.">${esc(ideationState.rough_idea)}</textarea></label>
+      <div class="ideation-inert"><strong>Drafting is safe.</strong><span>No project files, work, permission, or process are created.</span></div>
+      <button type="submit" class="applybtn">Shape this idea</button></form>
+    ${ideationState.proposal ? '<button type="button" class="quiet-link" data-resume-draft>Resume saved browser draft</button>' : ""}
+  </section>`);
+  const form = document.getElementById("ideation-idea-form");
+  form.elements.idea.addEventListener("input", () => {
+    ideationState.rough_idea = form.elements.idea.value;
+    persistIdeation();
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    ideationState.rough_idea = form.elements.idea.value.trim();
+    ideationState.proposal = proposalFromIdea(ideationState.rough_idea);
+    ideationState.review = normalizedReviewState();
+    ideationState.review_model = null;
+    invalidateIdeationPreview();
+    await moveIdeationStep("draft");
+  });
+  document.querySelector("[data-resume-draft]")?.addEventListener("click", () => moveIdeationStep("draft"));
+}
+
+function reviewStorageKey(model) {
+  return `ideation-${model.technical_details.proposal_hash}`;
+}
+
+async function renderReviewStep() {
+  const { status, body } = await postJson("/api/setup/review", { proposal: ideationState.proposal });
+  const model = body.data;
+  ideationState.review_model = model;
+  if (status >= 400 || body.ok === false || !model?.valid) {
+    const refusal = model?.refusal || boardMutationError(body, status);
+    app.innerHTML = ideationShell("review", `<section class="ideation-step ideation-review" aria-labelledby="ideation-review-title">
+      <p class="eyebrow">Step 3 of 5 · review</p><h1 id="ideation-review-title" tabindex="-1">The draft needs a correction</h1>
+      <div class="guard" role="alert"><strong>Review refused. Nothing was saved.</strong> ${esc(refusal)}</div>
+      <button type="button" data-edit-draft>Return to the draft</button></section>`);
+    document.querySelector("[data-edit-draft]").addEventListener("click", () => moveIdeationStep("draft"));
+    return;
+  }
+  const key = reviewStorageKey(model);
+  adoptionReviewMarks.set(key, normalizedReviewState(ideationState.review));
+  const refreshStatuses = () => {
+    document.querySelectorAll("[data-review-item]").forEach((element) => {
+      const status = adoptionItemStatus(adoptionMarkState(key), element.dataset.reviewItem);
+      element.dataset.reviewState = status[1];
+    });
+  };
+  app.innerHTML = ideationShell("review", `<section class="ideation-step ideation-review" aria-label="Review the proposed setup">
+    ${adoptionReviewBody(model, key)}
+    <div id="adoption-marks"></div>
+    ${technicalDetailsHtml(model)}
+    <button type="button" class="quiet-link" data-edit-draft>Edit the draft</button>
+  </section>`);
+  renderAdoptionMarks(model, key, null, {
+    persist: (state) => { ideationState.review = normalizedReviewState(state); persistIdeation(); },
+    editDraft: () => moveIdeationStep("draft"),
+    onPreview: previewIdeationSetup,
+    refreshStatuses,
+  });
+  wireTechnicalReturn();
+  document.querySelector("[data-edit-draft]").addEventListener("click", () => moveIdeationStep("draft"));
+  if (IDEATION_SNAPSHOT_STEP === "review" && !ideationState.review.accepted_items.length) {
+    ideationState.review.accepted_items = model.objection_items.slice(0, Math.max(1, model.objection_items.length - 1)).map((item) => item.id);
+    persistIdeation();
+    adoptionReviewMarks.set(key, normalizedReviewState(ideationState.review));
+    renderAdoptionMarks(model, key, null, { persist: (state) => { ideationState.review = state; }, editDraft: () => {}, onPreview: () => {}, refreshStatuses });
+  }
+}
+
+function previewChangesHtml(preview) {
+  return `<div class="ideation-preview-files">${preview.changes.map((change) => `<article>
+    <div>${badge(change.action, change.action === "unchanged" ? "warn" : "ok")}<strong>${change.scope === "tracked" ? "Repository file" : "Local configuration"}</strong></div>
+    <code>${esc(change.path)}</code>
+    <dl><div><dt>Before</dt><dd><code>${esc(change.before_hash || "absent")}</code></dd></div><div><dt>After</dt><dd><code>${esc(change.after_hash)}</code></dd></div></dl>
+  </article>`).join("")}</div>`;
+}
+
+async function previewIdeationSetup() {
+  const proposal = JSON.parse(JSON.stringify(ideationState.proposal));
+  proposal.state = "reviewed";
+  const signature = JSON.stringify(proposal);
+  const { status, body } = await postJson("/api/setup/preview", { proposal });
+  if (status >= 400 || body.ok === false) {
+    ideationState.refusal = boardMutationError(body, status);
+    ideationState.preview = null;
+    persistIdeation();
+    await moveIdeationStep("preview");
+    return;
+  }
+  ideationState.proposal = proposal;
+  ideationState.preview = body.data;
+  ideationState.draft_signature = signature;
+  ideationState.refusal = "";
+  persistIdeation();
+  await moveIdeationStep("preview");
+}
+
+function plainSetupRefusal(message) {
+  const lower = String(message || "").toLowerCase();
+  if (lower.includes("already used")) return "That one-use preview was already applied. Create a fresh preview before trying again.";
+  if (lower.includes("stale") || lower.includes("changed")) return "The repository changed after preview. Nothing was saved; review a fresh preview of the current files.";
+  if (lower.includes("unknown") || lower.includes("requires proposal") || lower.includes("requires expect")) return "The matching setup preview is missing. Nothing was saved; return to review and create a fresh preview.";
+  if (lower.includes("token") || lower.includes("match")) return "This preview no longer matches the setup plan. Nothing was saved; create a fresh preview.";
+  return `Setup was refused and nothing was saved. ${message || "Create a fresh preview and try again."}`;
+}
+
+function renderPreviewStep() {
+  const preview = ideationState.preview;
+  const refusal = ideationState.refusal;
+  app.innerHTML = ideationShell("preview", `<section class="ideation-step ideation-preview" aria-labelledby="ideation-preview-title">
+    <p class="eyebrow">Step 4 of 5 · exact preview</p><h1 id="ideation-preview-title" tabindex="-1">${refusal ? "This setup was refused" : "Review the exact setup"}</h1>
+    ${refusal ? `<div class="guard ideation-refusal" role="alert" tabindex="-1"><strong>Nothing changed.</strong> ${esc(plainSetupRefusal(refusal))}</div>` : `<p>These are the exact configuration files this one-use lease can create. No work, run, program, permission, proof approval, or commit is included.</p>
+      ${previewChangesHtml(preview)}
+      <details class="ideation-preview-technical"><summary>Technical details</summary><pre>${esc(JSON.stringify(preview, null, 2))}</pre></details>`}
+    <div class="ideation-actions"><button type="button" data-edit-after-preview>Edit draft</button>
+      ${preview ? '<button type="button" class="applybtn" id="ideation-apply">Apply this exact setup</button>' : '<button type="button" data-fresh-review>Return to review</button>'}</div>
+  </section>`);
+  document.querySelector("[data-edit-after-preview]").addEventListener("click", () => {
+    invalidateIdeationPreview("Draft editing invalidated the old setup preview.");
+    moveIdeationStep("draft");
+  });
+  document.querySelector("[data-fresh-review]")?.addEventListener("click", () => {
+    ideationState.refusal = ""; persistIdeation(); moveIdeationStep("review");
+  });
+  document.getElementById("ideation-apply")?.addEventListener("click", applyIdeationSetup);
+  if (refusal && !SNAPSHOT_MODE) focusRegion(".ideation-refusal");
+}
+
+async function applyIdeationSetup() {
+  const button = document.getElementById("ideation-apply");
+  button.disabled = true;
+  button.textContent = "Applying configuration…";
+  const preview = ideationState.preview;
+  const { status, body } = await postJson("/api/setup/apply", {
+    proposal: preview?.proposal_id || "",
+    expect: preview?.expect || "",
+  });
+  if (status >= 400 || body.ok === false) {
+    ideationState.refusal = boardMutationError(body, status);
+    persistIdeation();
+    renderPreviewStep();
+    return;
+  }
+  ideationState.applied = body.data;
+  ideationState.step = "apply";
+  persistIdeation();
+  await viewIdeationFlow();
+  focusRegion(".ideation-applied h1");
+}
+
+function renderAppliedStep() {
+  const applied = ideationState.applied || { changes: ideationState.preview?.changes || [] };
+  app.innerHTML = ideationShell("apply", `<section class="ideation-step ideation-applied" aria-labelledby="ideation-applied-title">
+    <p class="eyebrow">Step 5 of 5 · configuration saved</p><h1 id="ideation-applied-title" tabindex="-1">The phase plan is configured</h1>
+    <div class="ideation-success"><strong>Configuration only.</strong><span>No story, run, program, permission, proof approval, or commit was started.</span></div>
+    <p>${esc((applied.changes || []).length)} planned path${(applied.changes || []).length === 1 ? " was" : "s were"} applied through the one-use setup lease.</p>
+    <details><summary>Technical details</summary><pre>${esc(JSON.stringify(applied, null, 2))}</pre></details>
+    <div class="ideation-actions"><a class="canonical-primary" href="#/board/${encodeURIComponent(ideationState.proposal?.project?.slug || "")}">Open the configured board</a>
+      <button type="button" data-new-idea>Plan another idea</button></div>
+  </section>`);
+  document.querySelector("[data-new-idea]").addEventListener("click", () => {
+    ideationState = blankIdeationState();
+    clearStoredJson(IDEATION_STORAGE_KEY);
+    moveIdeationStep("idea");
+  });
+}
+
+function snapshotIdeationState(step) {
+  const state = blankIdeationState();
+  state.rough_idea = "Help a small team turn customer requests into a calm weekly plan.";
+  state.proposal = proposalFromIdea(state.rough_idea);
+  state.step = step === "refusal" ? "preview" : step === "applied" ? "apply" : step;
+  const fakeChanges = [{
+    path: `pm/roadmap/${state.proposal.project.slug}/README.md`, scope: "tracked", action: "create",
+    before_hash: null, after_hash: "sha256:6a9e5f2c9e3b7d1a",
+  }, {
+    path: ".git/pmo-orchestration/drivers.json", scope: "git-local", action: "create",
+    before_hash: null, after_hash: "sha256:9d3c2a1b7f4e8a60",
+  }];
+  if (["preview", "refusal", "applied"].includes(step)) state.preview = {
+    kind: "delivery-workbench-setup-preview", schema_version: 1,
+    proposal_id: "setup:preview-example", expect: "setup-sha256:one-use-example",
+    proposal_hash: "sha256:proposal-example", applicable: true, changes: fakeChanges,
+    starts_work: false, creates_grant: false, certifies: false, commits: false,
+  };
+  if (step === "refusal") { state.preview = null; state.refusal = "setup lease was already used"; }
+  if (step === "applied") state.applied = { kind: "delivery-workbench-setup-apply", changes: fakeChanges, starts_work: false, creates_grant: false };
+  return state;
+}
+
+async function viewIdeationFlow() {
+  if (SNAPSHOT_MODE && IDEATION_SNAPSHOT_STEP) ideationState = snapshotIdeationState(IDEATION_SNAPSHOT_STEP);
+  if (!ideationState.proposal && ideationState.step !== "idea") ideationState.step = "idea";
+  if (ideationState.step === "idea") renderIdeaStep();
+  else if (ideationState.step === "draft") renderDraftStep();
+  else if (ideationState.step === "review") await renderReviewStep();
+  else if (ideationState.step === "preview") renderPreviewStep();
+  else renderAppliedStep();
+  enhanceSemantics(app);
+}
+
+async function viewAdoptionReview() {
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "roadmap changes", href: "#/edit" }, { label: "idea to phase plan" }]);
+  if (ADOPTION_PROPOSAL_FILE || ADOPTION_PROPOSAL_ID) await viewLegacyAdoptionReview();
+  else await viewIdeationFlow();
+}
+
 
 const STATUS_VOCAB = ["backlog", "ready", "in-progress", "blocked", "on-hold", "done"];
 
@@ -1465,7 +2475,11 @@ async function viewEdit(action) {
     app.innerHTML = stateHtml("No projects to edit.");
     return;
   }
-  const proj = projects[0];
+  const proj = projects.find((project) => project.slug === selectedProject);
+  if (!proj) {
+    viewUnavailableProject(selectedProject || "the chosen project");
+    return;
+  }
   const guarded = proj.issue_count > 0;
   const projDetail = await api(`/api/projects/${encodeURIComponent(proj.slug)}`);
   const phases = projDetail.data.phases;
@@ -1501,6 +2515,13 @@ async function viewEdit(action) {
       `<div class="checkline"><input type="checkbox" name="force" id="f-force">
         <label for="f-force">force: replace existing evidence</label></div>`,
     ].join("");
+  } else if (action === "pause_phase") {
+    formFields = [
+      field("phase", selectHtml("phase", phaseOpts)),
+      field("reason (required)", '<input type="text" name="reason" required placeholder="why should this phase wait?">'),
+    ].join("");
+  } else if (action === "resume_phase") {
+    formFields = [field("phase", selectHtml("phase", phaseOpts))].join("");
   } else if (action === "attach_evidence") {
     formFields = [
       field("phase", selectHtml("phase", phaseOpts)),
@@ -1518,12 +2539,12 @@ async function viewEdit(action) {
     ].join("");
   }
 
-  app.innerHTML = `
+  app.innerHTML = `${destinationNav("plan", "#/edit")}
+    <header class="destination-hero"><span>Plan</span><h1>Review a roadmap change</h1><p>Choose one change, review exactly what it would affect, then decide whether to continue.</p></header>
     <div class="tabs">${tabs}</div>
-    ${guarded ? `<div class="guard">mutations guarded — <a href="#/health">${proj.issue_count} validation issue${proj.issue_count === 1 ? "" : "s"}</a>.
-      Preview requires explicit acknowledgment below.</div>` : ""}
+    ${guarded ? `<div class="guard">Changes are paused — <a href="#/health">review ${proj.issue_count} health issue${proj.issue_count === 1 ? "" : "s"}</a> first.</div>` : ""}
     <form class="edit" id="edit-form">
-      ${field("project", selectHtml("project", projects.map((x) => x.slug), proj.slug))}
+      ${field("project", selectHtml("project", [proj.slug], proj.slug))}
       ${formFields}
       ${guarded ? `<div class="checkline"><input type="checkbox" name="acknowledge_issues" id="f-ack">
         <label for="f-ack">I acknowledge the validation issues and still want a preview</label></div>` : ""}
@@ -1652,7 +2673,7 @@ let orchState = {
   runError: "", runPlan: null, runAct: null, runResult: null, runStream: null,
   runConnection: { status: SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "checking" },
   grantDraft: { project: "", story: "", operator: "", minutes: 60 },
-  controlReason: "",
+  controlReason: "", maxTicks: 100, maxSeconds: 300,
 };
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
@@ -2045,7 +3066,7 @@ function runControlsHtml(view) {
 function runActPreviewHtml(preview) {
   if (!preview) return "";
   return `<details class="bounded-exact-preview"><summary>Exact run preview</summary><div class="run-token"><span>state + intent token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.control_generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p>
-    ${preview.correlation_id ? `<p><strong>bound request:</strong> <code>${esc(preview.correlation_id)}</code> · ${esc(preview.response_outcome)}</p>` : ""}${preview.reason ? `<p><strong>bound reason:</strong> ${esc(preview.reason)}</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
+    ${preview.action === "supervise" ? `<p><strong>Bound supervision:</strong> at most ${esc(preview.max_ticks)} steps and ${esc(preview.max_seconds)} seconds. It stops sooner at a checkpoint, terminal state, or no-progress result.</p>` : ""}${preview.correlation_id ? `<p><strong>bound request:</strong> <code>${esc(preview.correlation_id)}</code> · ${esc(preview.response_outcome)}</p>` : ""}${preview.reason ? `<p><strong>bound reason:</strong> ${esc(preview.reason)}</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
 }
 
 function runStreamHtml(stream) {
@@ -2065,20 +3086,132 @@ function runRequestsHtml(view) {
   return `<div class="run-request-grid"><section><h3>outstanding requests</h3>${outstanding.map((request) => `<article class="run-request"><div><code>${esc(request.correlation_id)}</code>${badge(`${esc(request.age_seconds)}s old`, "warn")}</div><strong>${esc(request.kind)} · ${esc(request.origin_node || request.origin)}</strong><span>${esc(request.schema_summary)}</span><small>opened #${esc(request.opened_seq)} · expires ${esc(request.expires_at)} · republished generations ${(request.republished_generations || []).map(esc).join(", ") || "none"}</small></article>`).join("") || '<p class="hint">No human decision is outstanding.</p>'}</section><section><h3>checkpoint lineage · inspect only</h3><ol class="run-decision-tree">${(tree.roots || []).map((id) => renderDecision(id)).join("")}</ol>${!tree.roots?.length ? '<p class="hint">No decision point has been recorded.</p>' : ""}</section></div>`;
 }
 
+const CONSENT_NEVER = [
+  "Merge branches",
+  "Force-push",
+  "Release",
+  "Deploy",
+  "Run arbitrary commands",
+  "Raise its own authority",
+];
+
+const PROGRAM_CAPABILITY_LABELS = {
+  "program:select": "Choose work only from the planned roadmap scope",
+  "agent:dispatch": "Start assigned work agents",
+  "check:execute": "Run declared checks",
+  "workspace:write": "Write only in assigned work areas",
+  "verdict:issue": "Record review verdicts",
+  "council:decide": "Use the planned decision group",
+  "obligation:record": "Record follow-up obligations",
+  "obligation:materialize": "Save approved obligation material",
+  "obligation:disposition": "Close or defer recorded obligations",
+  "nudge:deliver": "Deliver declared standing nudges",
+  "notification:send": "Send declared notifications",
+  "evidence:materialize": "Save evidence for the selected work",
+  "knowledge:lesson-writeback": "Write reviewed delivery lessons",
+  "integration:apply": "Apply a reviewed integration",
+  "contract:generate": "Generate a delivery contract",
+  "certification:objective": "Record objective certification",
+  "certification:verdict": "Record a certification verdict",
+  "git:commit": "Create a contract-bound commit",
+  "git:push": "Push only to the exact destination shown here",
+  "roadmap:story-start": "Start the selected roadmap story",
+  "roadmap:story-complete": "Complete the selected roadmap story after proof",
+  "roadmap:phase-advance": "Advance the planned phase after its gates pass",
+};
+
+const PROGRAM_MODE_RANK = { advisory: 0, checkpointed: 1, continuous: 2 };
+const PROGRAM_MODE_LABELS = {
+  advisory: "Advice only",
+  checkpointed: "Pause at decisions",
+  continuous: "Continue within limits",
+};
+
+function consentBudgetLabel(name) {
+  const labels = {
+    max_phases: "phases", max_stories: "stories", max_child_runs: "bounded runs",
+    max_agent_starts: "agent starts", max_provider_starts: "provider starts",
+    max_model_starts: "model starts", max_check_starts: "check starts",
+    max_loop_rounds: "loop rounds", max_debate_rounds: "review rounds",
+    max_councils: "decision groups", max_repairs_per_story: "repairs per story",
+    max_verdicts: "verdicts", max_obligations: "follow-up obligations",
+    max_integrations: "integrations", max_commits: "commits", max_pushes: "pushes",
+    max_nudges: "nudges", max_artifact_bytes: "artifact bytes",
+    max_wall_seconds: "wall-clock seconds", max_concurrency: "concurrent tasks",
+  };
+  return labels[name] || name.replace(/^max_/, "").replaceAll("_", " ");
+}
+
+function consentBudgetListHtml(budgets, compact = false) {
+  const entries = Object.entries(budgets || {});
+  const primary = new Set([
+    "max_phases", "max_stories", "max_agent_starts", "max_check_starts",
+    "max_commits", "max_pushes", "max_tokens", "max_observed_cost_microunits",
+    "max_artifact_bytes", "max_wall_seconds",
+  ]);
+  const shown = compact ? entries.filter(([name]) => primary.has(name)) : entries;
+  return `<ul class="consent-budget-list">${shown.map(([name, value]) => `<li><strong>${esc(value)}</strong> ${esc(consentBudgetLabel(name))}</li>`).join("")}${compact && shown.length < entries.length ? `<li><strong>+${esc(entries.length - shown.length)}</strong> other finite counters below</li>` : ""}</ul>`;
+}
+
+function programAllowedWorkSummary(capabilities) {
+  const allowed = new Set(capabilities || []);
+  const parts = [];
+  if (allowed.has("program:select")) parts.push("Choose work only from the planned roadmap scope");
+  if (allowed.has("agent:dispatch")) parts.push(allowed.has("workspace:write") ? "Assigned agents may work in their own areas" : "Assigned agents may inspect work");
+  if (allowed.has("check:execute")) parts.push("Declared checks may run");
+  if (allowed.has("verdict:issue") || allowed.has("certification:verdict")) parts.push("Independent review may record a verdict");
+  if (allowed.has("evidence:materialize")) parts.push("Evidence may be saved");
+  if (allowed.has("git:commit")) parts.push("A contract-bound commit is possible after its gates pass");
+  if (allowed.has("git:push")) parts.push("A gated push is possible only to the destination shown here");
+  if (allowed.has("roadmap:story-start") || allowed.has("roadmap:story-complete") || allowed.has("roadmap:phase-advance")) parts.push("Roadmap changes remain limited to the selected work and its gates");
+  return parts.join(". ") || "No dispatch or mutation is allowed";
+}
+
+function consentNeverHtml() {
+  return `<section class="consent-never"><strong>Never allowed</strong><ul>${CONSENT_NEVER.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></section>`;
+}
+
+function responseIssueText(body) {
+  return (body?.issues || []).map((issue) => typeof issue === "object" ? issue.message || issue.code || "" : String(issue)).join(" ");
+}
+
+function startTokenWasRefused(status, body) {
+  return status === 409 || /stale|reuse|used|mismatch|token|exact preview/i.test(responseIssueText(body));
+}
+
 function grantPreviewHtml(plan) {
   if (!plan) return "";
-  return `<section class="run-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="run-plan-title" tabindex="-1"><div class="run-consent-head"><div><span>immutable grant preview</span><strong id="run-plan-title">${esc(plan.story.id)} · ${esc(plan.score.slug)}</strong></div>${badge("starts no work", "ok")}</div>
-    <div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div>
-    <div class="run-grant-facts"><div><span>repository</span><code>${esc(plan.repository.branch)} · ${esc(plan.repository.head)}</code></div><div><span>expiry</span><strong>${esc(plan.request.expires_at)}</strong></div><div><span>capabilities</span><strong>${esc(plan.authority.capabilities.join(", ") || "none")}</strong></div><div><span>profiles / workspaces</span><strong>${esc(plan.authority.profiles.join(", ") || "none")} · ${esc(plan.authority.workspace_modes.join(", ") || "none")}</strong></div></div>
-    ${runBudgetHtml(Object.fromEntries(Object.entries(plan.authority.budgets).map(([key, value]) => [key, { used: 0, limit: value }]))) }
-    ${(plan.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}
-    <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="run-start-confirm">grant authority and create run — dispatch nothing</button>' : ""}<button type="button" id="run-plan-close">close preview</button></div></section>`;
+  const minutes = Number(orchState.grantDraft.minutes || 60);
+  const narrowed = minutes < 60;
+  const work = `${plan.story.id}: ${plan.story.title || "the selected story"}, following ${plan.score.title || "the reviewed score"}`;
+  const stopCopy = "It stops when a finite budget is used, permission expires, a required decision blocks progress, the score finishes, or you pause, revoke, or cancel it.";
+  return `<section class="run-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="run-plan-title" tabindex="-1">
+    <header class="consent-head"><div><span>Permission</span><h2 id="run-plan-title">Approve this bounded run</h2><p>This preview starts nothing. Opening the page and receiving live updates also start nothing.</p></div>${badge(plan.applicable ? "ready to approve" : "refused", plan.applicable ? "ok" : "issue")}</header>
+    <section id="run-consent-summary" class="consent-summary" tabindex="-1">
+      <div class="consent-fact-grid">
+        <article><span>Allowed work</span><strong>${esc(work)}</strong><p>Only declared agent, check, and approval steps may run in their planned work areas.</p></article>
+        <article><span>Spend ceiling</span>${consentBudgetListHtml(plan.authority.budgets)}</article>
+        <article><span>Permission ends</span><strong>${esc(plan.request.expires_at)}</strong><p>${narrowed ? `You reduced the lifetime to ${esc(minutes)} minute${minutes === 1 ? "" : "s"}.` : "No limits were reduced. This preview keeps the planned permission."}</p></article>
+        <article><span>What makes it stop</span><strong>Budget, expiry, decision, completion, or your stop action</strong><p>${stopCopy}</p></article>
+        <article><span>Push destination</span><strong>Nowhere</strong><p>A bounded run has no push permission.</p></article>
+        <article><span>Delivery is not automatic</span><strong>The browser adds no authority of its own</strong><p>Only a browser-confirmed program action may use pre-granted delivery permission.</p></article>
+      </div>
+      ${consentNeverHtml()}
+    </section>
+    ${(plan.issues || []).map((issue) => `<p class="guard consent-refusal">${esc(issue)} Review a fresh preview before trying again.</p>`).join("")}
+    <details class="consent-technical"><summary>Technical details</summary><p>Exact capability names, repository binding, token, and full grant document.</p><div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div><pre>${esc(JSON.stringify(plan, null, 2))}</pre><button type="button" data-consent-summary="run">Back to permission summary</button></details>
+    <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="run-start-confirm">Approve this permission</button>' : ""}<button type="button" id="run-plan-close">Return without starting</button></div>
+  </section>`;
 }
 
 function runEmptyHtml() {
   const draft = orchState.grantDraft;
-  return `<div class="run-empty"><section><span class="orch-eyebrow">score ≠ authority</span><h2>No local run for this score</h2><p>Saving and validating this score starts nothing. Build a grant preview from current repository, story, score, capability, budget, and expiry facts; only a second explicit confirmation creates immutable local authority.</p>${badge("preview is pure", "ok")} ${badge("grant dispatches nothing", "warn")}</section>
-    <form id="run-grant-form" class="run-grant-form"><label>project slug<input name="project" required value="${esc(draft.project || orchState.score.project || "")}"></label><label>in-progress story id<input name="story" required value="${esc(draft.story)}" placeholder="WLA-24-07"></label><label>operator identity<input name="operator" required value="${esc(draft.operator)}" placeholder="human or accountable agent"></label><label>grant minutes<input name="minutes" type="number" min="1" max="1440" value="${esc(draft.minutes || 60)}"></label><button type="submit">preview exact grant</button></form>${grantPreviewHtml(orchState.runPlan)}</div>`;
+  const consentSnapshot = SNAPSHOT_MODE ? new URLSearchParams(location.search).get("consentpreview") : "";
+  if (consentSnapshot?.startsWith("run-") && orchState.runPlan) {
+    return `<div class="run-empty consent-snapshot-only">${grantPreviewHtml(orchState.runPlan)}</div>`;
+  }
+  return `<div class="run-empty"><section><span class="orch-eyebrow">permission before work</span><h2>No bounded run is active</h2><p>Review who may do the selected work and how long permission lasts. The delivery plan fixes allowed work and spend ceilings, so this panel cannot raise or replace them.</p>${badge("preview starts nothing", "ok")} ${badge("approval creates permission only", "warn")}</section>
+    <form id="run-grant-form" class="run-grant-form"><label>project slug<input name="project" required value="${esc(draft.project || orchState.score.project || "")}"></label><label>in-progress story id<input name="story" required value="${esc(draft.story)}" placeholder="WLA-24-07"></label><label>accountable operator<input name="operator" required value="${esc(draft.operator)}" placeholder="person responsible for this permission"></label><label>permission lifetime, up to 60 minutes<input name="minutes" type="number" min="1" max="60" value="${esc(Math.min(60, Number(draft.minutes) || 60))}"></label><button type="submit">Preview permission</button></form>${grantPreviewHtml(orchState.runPlan)}</div>`;
 }
 
 function liveConnectionHtml(connection, recovery) {
@@ -2238,7 +3371,7 @@ function boundedPreviewHtml(model, preview, target) {
   const action = boundedActionMatch(model, preview, target);
   const consequences = action?.consequences || {};
   const applicable = Boolean(preview.applicable);
-  const exact = target === "run" ? runActPreviewHtml(preview) : `<details class="bounded-exact-preview"><summary>Exact program preview</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
+  const exact = target === "run" ? runActPreviewHtml(preview) : `<details class="bounded-exact-preview"><summary>Technical details</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${preview.action === "supervise" ? `<p><strong>Bound supervision:</strong> at most ${esc(preview.max_ticks)} steps and ${esc(preview.max_seconds)} seconds. It stops sooner at a checkpoint, terminal state, or no-progress result.</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
   const refusal = applicable ? "" : boundedFailureDetailsHtml({
     what_happened: (preview.issues || []).join("; ") || "The current saved state refused this preview.",
     what_stayed_unchanged: "Previewing changed no work, permission, cost, or saved event.",
@@ -2252,8 +3385,8 @@ function boundedPreviewHtml(model, preview, target) {
 
 function boundedReceiptsHtml(model, result) {
   const receipts = model?.receipts || [];
-  const resultHtml = result ? `<article class="bounded-result"><div><span>Just completed</span>${badge("recorded", "ok")}</div><h4>${esc(result.kind || "Bounded action completed")}</h4><p>${esc(result.stop || result.state || result.result || result.decision || "The saved operation completed.")}</p><details><summary>Exact receipt</summary><pre>${esc(JSON.stringify(result, null, 2))}</pre></details></article>` : "";
-  return `<section class="bounded-receipts"><div class="bounded-section-head"><div><span>After completion</span><h3>Readable receipts</h3></div>${badge(`${receipts.length + (result ? 1 : 0)} shown`, "ok")}</div><div class="bounded-receipt-grid">${resultHtml}${receipts.map((item) => `<article><div><span>${esc(item.action)}</span>${badge(item.outcome || "recorded", "ok")}</div><h4>${esc(item.label)}</h4><p>${esc(item.at || "time recorded in exact history")}</p><details><summary>Exact receipt</summary><code>${esc(item.exact_reference || "see ordered history")}</code></details></article>`).join("") || (!result ? '<p class="hint">No bounded action receipt has been recorded yet.</p>' : "")}</div></section>`;
+  const resultHtml = result ? `<article class="bounded-result"><div><span>Just completed</span>${badge("recorded", "ok")}</div><h4>${esc(result.kind || "Bounded action completed")}</h4><p>${esc(result.stop || result.state || result.result || result.decision || "The saved operation completed.")}</p><details><summary>Technical details</summary><pre>${esc(JSON.stringify(result, null, 2))}</pre></details></article>` : "";
+  return `<section class="bounded-receipts"><div class="bounded-section-head"><div><span>After completion</span><h3>Readable results</h3></div>${badge(`${receipts.length + (result ? 1 : 0)} shown`, "ok")}</div><div class="bounded-receipt-grid">${resultHtml}${receipts.map((item) => `<article><div><span>${esc(item.action)}</span>${badge(item.outcome || "recorded", "ok")}</div><h4>${esc(item.label)}</h4><p>${esc(item.at || "time recorded in exact history")}</p><details><summary>Technical details</summary><code>${esc(item.exact_reference || "see ordered history")}</code></details></article>`).join("") || (!result ? '<p class="hint">No bounded action result has been recorded yet.</p>' : "")}</div></section>`;
 }
 
 function boundedActionButtonsHtml(model, target) {
@@ -2264,7 +3397,7 @@ function boundedActionButtonsHtml(model, target) {
     const attrs = target === "run"
       ? `data-run-act="${esc(item.action)}" data-run-decision="${esc(item.decision || "")}" data-run-correlation="${esc(item.correlation_id || "")}"`
       : `data-program-act="${esc(item.action)}" data-program-decision="${esc(item.decision || "")}" data-program-request="${esc(item.correlation_id || "")}"`;
-    return `<article class="bounded-action-card severity-${esc(item.severity)} ${item.available ? "" : "unavailable"}"><div><span>${esc(item.kind)}</span>${badge(item.available ? "available" : "unavailable", item.available ? "ok" : "warn")}</div><h4>${esc(item.label)}</h4><p>${esc(item.consequences?.effect)}</p><small><strong>Then:</strong> ${esc(item.consequences?.after)}</small>${item.available ? `<button type="button" ${attrs} class="${item.severity === "danger" ? "danger" : item.may_start_work ? "starts-work" : ""}">Review ${esc(item.label.toLowerCase())}</button>` : `<p class="bounded-action-issue">${esc(item.issue)}</p>`}</article>`;
+    return `<article class="bounded-action-card severity-${esc(item.severity)} action-${esc(item.action)} ${item.available ? "" : "unavailable"}" data-control-action="${esc(item.action)}"><div><span>${esc(item.kind)}</span>${badge(item.available ? "available" : "unavailable", item.available ? "ok" : "warn")}</div><h4><span class="control-icon" aria-hidden="true"></span>${esc(item.label)}</h4><p>${esc(item.consequences?.effect)}</p><small><strong>Then:</strong> ${esc(item.consequences?.after)}</small>${item.available ? `<button type="button" ${attrs} class="${item.severity === "danger" ? "danger" : item.may_start_work ? "starts-work" : ""}">Review ${esc(item.label.toLowerCase())}</button>` : `<p class="bounded-action-issue"><strong>Unavailable now.</strong> ${esc(item.issue)}</p>`}</article>`;
   };
   return `<div class="bounded-read-actions">${read.map((item) => `<button type="button" data-bounded-read="${esc(item.read_action)}"><strong>${esc(item.label)}</strong><span>${esc(item.consequences?.effect)}</span></button>`).join("")}</div><div class="bounded-action-grid">${controls.map(controlButton).join("")}</div>`;
 }
@@ -2278,7 +3411,7 @@ function boundedActionCenterHtml(model, preview, error, result, target) {
   return `<section class="bounded-action-center" aria-labelledby="${esc(target)}-bounded-actions"><div class="bounded-action-hero"><div><span>Actions and decisions</span><h2 id="${esc(target)}-bounded-actions">Understand the consequence, then review one exact action</h2><p>${esc(model.summary)}</p></div>${badge("nothing applies without confirmation", "warn")}</div>
     ${boundedInboxHtml(model)}
     ${boundedPermissionHtml(model)}
-    <section class="bounded-choices"><div class="bounded-section-head"><div><span>Available choices</span><h3>Pause, resume, stop, cancel, reject, and continue stay distinct</h3></div></div>${needsReason ? `<label class="run-reason">Why are you taking this action?<input id="${target === "run" ? "run" : "program"}-control-reason" maxlength="${target === "run" ? "200" : "1000"}" value="${esc(reason)}" placeholder="Required for stop and decision actions"></label>` : ""}${hasSupervise ? `<div class="program-ceilings"><label>maximum steps in this pass<input id="program-max-ticks" type="number" min="1" max="10000" value="${esc(programState.maxTicks)}"></label><label>maximum duration (seconds)<input id="program-max-seconds" type="number" min="1" max="86400" value="${esc(programState.maxSeconds)}"></label></div>` : ""}${boundedActionButtonsHtml(model, target)}</section>
+    <section class="bounded-choices"><div class="bounded-section-head"><div><span>Available choices</span><h3>Pause, resume, stop, cancel, reject, and continue stay distinct</h3></div></div>${needsReason ? `<label class="run-reason">Why are you taking this action?<input id="${target === "run" ? "run" : "program"}-control-reason" maxlength="${target === "run" ? "200" : "1000"}" value="${esc(reason)}" placeholder="Required for stop and decision actions"></label>` : ""}${hasSupervise ? `<div class="program-ceilings"><label>maximum steps in this pass<input id="${target}-max-ticks" type="number" min="1" max="10000" value="${esc(target === "run" ? orchState.maxTicks : programState.maxTicks)}"></label><label>maximum duration (seconds)<input id="${target}-max-seconds" type="number" min="1" max="86400" value="${esc(target === "run" ? orchState.maxSeconds : programState.maxSeconds)}"></label><p>Supervision stops at these finite ceilings, a checkpoint, a terminal state, or the first no-progress result.</p></div>` : ""}${boundedActionButtonsHtml(model, target)}</section>
     ${boundedErrorHtml(error)}
     ${boundedPreviewHtml(model, preview, target)}
     ${boundedReceiptsHtml(model, result)}
@@ -2391,14 +3524,23 @@ function focusBoundedSnapshot() {
   setTimeout(focus, 100);
 }
 
+function liveDetailRoute() {
+  const parts = decodeURIComponent(location.hash.replace(/^#\/?/, "")).split("/").filter(Boolean);
+  if (parts[0] !== "live" || !["run", "program"].includes(parts[1]) || !parts[2]) return null;
+  return { kind: parts[1], id: parts[2], section: parts[3] || "" };
+}
+
 function runViewHtml() {
   if (orchState.runLoading) return `<div class="orch-run-shell">${stateHtml("Replaying the authoritative run ledger…")}</div>`;
   const error = orchState.runError ? `<div class="guard run-error" role="alert">${esc(orchState.runError)}</div>` : "";
   if (!orchState.runs.length || !orchState.runView) return `<div class="orch-run-shell">${error}${runEmptyHtml()}</div>`;
   const view = orchState.runView;
   const actions = boundedActionCenterHtml(view.bounded_actions, orchState.runAct, orchState.runError, orchState.runResult, "run");
-  const toolbar = `<div class="live-toolbar"><label>delivery run<select id="run-select">${orchState.runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run.story?.id || item.run_id)} · ${esc(item.run.state)}</option>`).join("")}</select></label><button type="button" id="run-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
-  const technical = `<div class="run-summary"><div><span>exact state</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>ledger</span><strong>${esc(view.ledger_events)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>attempts</span><strong>${esc(view.attempts.active.length)} active · ${esc(view.attempts.completed.length)} complete</strong><small>generation ${esc(view.control_generation)}</small></div><div><span>authority</span><strong>${view.dispatch_allowed ? "dispatch permitted" : "dispatch stopped"}</strong><small>${view.expired ? "grant expired" : "grant fresh by time"}</small></div></div>
+  const liveRoute = liveDetailRoute();
+  const toolbar = liveRoute?.kind === "run"
+    ? `<div class="live-toolbar"><a href="#/live">Back to all live work</a><button type="button" id="run-refresh">Check for updates</button><a href="#/live/run/${encodeURIComponent(view.run_id)}/technical">Technical details</a></div>`
+    : `<div class="live-toolbar"><label>delivery run<select id="run-select">${orchState.runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(item.run.story?.id || item.run_id)} · ${esc(item.run.state)}</option>`).join("")}</select></label><button type="button" id="run-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
+  const technical = `${liveRoute?.kind === "run" ? `<p class="live-technical-return"><a href="#/live/run/${encodeURIComponent(view.run_id)}">Return to the ordinary view</a></p>` : ""}<div class="run-summary"><div><span>exact state</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>ledger</span><strong>${esc(view.ledger_events)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>attempts</span><strong>${esc(view.attempts.active.length)} active · ${esc(view.attempts.completed.length)} complete</strong><small>generation ${esc(view.control_generation)}</small></div><div><span>authority</span><strong>${view.dispatch_allowed ? "dispatch permitted" : "dispatch stopped"}</strong><small>${view.expired ? "grant expired" : "grant fresh by time"}</small></div></div>
     ${runBudgetHtml(view.budgets)}
     <section class="run-panel"><div class="run-panel-head"><div><span>authoritative graph state</span><strong>Why every node is waiting, eligible, active, failed, or complete</strong></div>${badge("inspection is pure", "ok")}</div>${liveRunGraph(view)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>executors and fail checks</span><strong>Sessions expose receipts and bounded streams, never prompts or commands</strong></div></div>${runSessionsHtml(view)}${runStreamHtml(orchState.runStream)}</section>
@@ -2408,7 +3550,7 @@ function runViewHtml() {
     ${runControlsHtml(view)}
     <section class="run-panel"><div class="run-panel-head"><div><span>operator notifications</span><strong>Derived from the ledger and signal chains; ack is receipted</strong></div>${badge("previews, never tokens", "ok")}</div>${runNotificationsHtml(view)}</section>
     <section class="run-panel"><div class="run-panel-head"><div><span>hash-chained receipts</span><strong>Run ledger timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${runTimelineHtml(view)}</section>`;
-  return `<div class="orch-run-shell" data-run-id="${esc(view.run_id)}">${liveProgressShell(view.live_progress, orchState.runConnection, toolbar, actions, technical, Boolean(orchState.runStream))}</div>`;
+  return `<div class="orch-run-shell" data-run-id="${esc(view.run_id)}">${liveProgressShell(view.live_progress, orchState.runConnection, toolbar, actions, technical, Boolean(orchState.runStream) || ["technical", "notifications"].includes(liveRoute?.section), liveRoute?.kind === "run" ? "h1" : "h2")}</div>`;
 }
 
 function runNotificationsHtml(view) {
@@ -2444,10 +3586,11 @@ function orchestrationBody() {
 }
 
 function renderOrchestration() {
+  if (liveDetailRoute()?.kind === "run") { renderLiveMission(); return; }
   const focus = captureAppFocus();
   const current = orchState.name || orchState.score.slug;
-  app.innerHTML = `<div class="orchestration" data-score="${esc(current)}">
-    <header class="orch-toolbar"><div><span class="orch-eyebrow">visual orchestration score</span><h1>${esc(orchState.score.title || orchState.score.slug)}</h1><code>pm/orchestration/${esc(orchState.score.slug)}.json</code></div>
+  app.innerHTML = `${destinationNav("delivery", "#/orchestration")}<div class="orchestration" data-score="${esc(current)}">
+    <header class="orch-toolbar"><div><span class="orch-eyebrow">Delivery</span><h1>${esc(orchState.score.title || orchState.score.slug)}</h1><p>Review the work and its order before you continue.</p><details><summary>Technical details</summary><span>visual orchestration score</span><code>pm/orchestration/${esc(orchState.score.slug)}.json</code></details></div>
       <div class="orch-score-actions"><label>score<select id="orch-score-select"><option value="">new unsaved score</option>${orchState.inventory.map((s) => `<option value="${esc(s.name)}"${s.name === orchState.name ? " selected" : ""}>${esc(s.slug || s.name)}${s.valid ? "" : " (invalid)"}</option>`).join("")}</select></label><button type="button" id="orch-new">new</button><button type="button" id="orch-duplicate">duplicate</button><button type="button" id="orch-preview-save">preview save</button><button type="button" id="orch-preview-delete" class="danger"${orchState.exists ? "" : " disabled"}>preview delete</button></div>
     </header>
     <div class="orch-tabs" role="tablist" aria-label="Orchestration editor views">${[
@@ -2706,7 +3849,8 @@ async function refreshRunData() {
   try {
     const inventory = await api("/api/runs");
     orchState.runInventory = inventory.data.runs || [];
-    selectScoreRuns();
+    if (liveDetailRoute()?.kind === "run") orchState.runs = orchState.runInventory.filter((item) => item.valid !== false);
+    else selectScoreRuns();
     orchState.runView = orchState.runId ? (await api(`/api/runs/${encodeURIComponent(orchState.runId)}/view`)).data : null;
     orchState.runConnection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
     try { orchState.notifications = (await api("/api/notifications")).data.notifications; }
@@ -2801,7 +3945,7 @@ function startRunLive() {
 async function previewRunGrant(form) {
   rememberReturnFocus("run-plan");
   const values = Object.fromEntries(new FormData(form).entries());
-  const minutes = Math.max(1, Math.min(1440, Number(values.minutes) || 60));
+  const minutes = Math.max(1, Math.min(60, Number(values.minutes) || 60));
   orchState.grantDraft = { project: String(values.project || "").trim(), story: String(values.story || "").trim(), operator: String(values.operator || "").trim(), minutes };
   orchState.runError = ""; orchState.runPlan = null; renderOrchestration();
   const issued = new Date(); const expires = new Date(issued.getTime() + minutes * 60_000);
@@ -2818,13 +3962,15 @@ async function confirmRunGrant() {
   const request = {
     score: plan.request.score, project: plan.request.project, story: plan.request.story,
     issued_at: plan.request.issued_at, expires_at: plan.request.expires_at,
+    standing_nudges: plan.request.standing_nudges || [],
+    signal_channel: plan.request.signal_channel || "",
     expect: plan.start_token, approve: true, operator: orchState.grantDraft.operator,
   };
   orchState.runLoading = true; renderOrchestration();
   const { status, body } = await postJson("/api/runs/start", request);
   orchState.runLoading = false;
-  if (status === 409) { orchState.runPlan = null; orchState.runError = "Stale grant preview refused. Repository, score, story, or time facts changed; build a fresh preview."; renderOrchestration(); return; }
-  if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run start failed (${status})`; renderOrchestration(); return; }
+  if (startTokenWasRefused(status, body)) { orchState.runPlan = null; orchState.runError = "This start token is stale, reused, or does not match. Nothing started. Review a fresh permission preview."; renderOrchestration(); return; }
+  if (status >= 400 || body.ok === false) { orchState.runError = responseIssueText(body) || `run start failed (${status})`; renderOrchestration(); return; }
   orchState.runId = body.data.run_id; orchState.runPlan = null; await refreshRunData();
 }
 
@@ -2833,7 +3979,7 @@ async function previewRunAct(action, decision, correlation, trigger = document.a
   const control = (orchState.runView?.controls || []).find((item) => item.action === action && String(item.decision || "") === String(decision || "") && String(item.correlation_id || "") === String(correlation || ""));
   const reason = control?.reason_required ? orchState.controlReason.trim() : "";
   orchState.runAct = null; orchState.runError = ""; orchState.runResult = null; renderOrchestration();
-  const { status, body } = await postJson("/api/runs/preview", { run_id: orchState.runId, action, ...(reason ? { reason } : {}), ...(decision ? { decision } : {}), ...(correlation ? { correlation_id: correlation } : {}) });
+  const { status, body } = await postJson("/api/runs/preview", { run_id: orchState.runId, action, ...(reason ? { reason } : {}), ...(decision ? { decision } : {}), ...(correlation ? { correlation_id: correlation } : {}), ...(action === "supervise" ? { max_ticks: Number(orchState.maxTicks), max_seconds: Number(orchState.maxSeconds) } : {}) });
   if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run preview failed (${status})`; }
   else orchState.runAct = body.data;
   renderOrchestration();
@@ -2843,9 +3989,17 @@ async function previewRunAct(action, decision, correlation, trigger = document.a
 async function confirmRunAct() {
   const preview = orchState.runAct;
   if (!preview?.applicable) return;
-  const request = { run_id: preview.run_id, expect: preview.act_token, ...(preview.reason ? { reason: preview.reason } : {}), ...(preview.decision ? { decision: preview.decision } : {}), ...(preview.correlation_id ? { correlation_id: preview.correlation_id } : {}) };
+  const request = { run_id: preview.run_id, expect: preview.act_token, ...(preview.reason ? { reason: preview.reason } : {}), ...(preview.decision ? { decision: preview.decision } : {}), ...(preview.correlation_id ? { correlation_id: preview.correlation_id } : {}), ...(preview.action === "supervise" ? { max_ticks: preview.max_ticks, max_seconds: preview.max_seconds } : {}) };
   orchState.runLoading = true; renderOrchestration();
-  const { status, body } = await postJson(`/api/runs/${encodeURIComponent(preview.action)}`, request);
+  let response;
+  try {
+    response = await postJson(`/api/runs/${encodeURIComponent(preview.action)}`, request);
+  } catch (_err) {
+    orchState.runLoading = false; orchState.runAct = null;
+    orchState.runError = "The transport ended without a confirmed receipt. An effect may have occurred. Reload saved history before another action; this view will not retry automatically.";
+    renderOrchestration(); return;
+  }
+  const { status, body } = response;
   orchState.runLoading = false;
   if (status === 409) { orchState.runAct = null; orchState.runError = "Stale run act refused before work or ledger change. Refresh once and preview the current state."; renderOrchestration(); return; }
   if (status >= 400 || body.ok === false) { orchState.runError = (body.issues && body.issues[0]) || `run act failed (${status})`; renderOrchestration(); return; }
@@ -2868,6 +4022,7 @@ function wireRunView() {
   document.getElementById("run-select")?.addEventListener("change", async (event) => { orchState.runId = event.target.value; orchState.runAct = null; orchState.runResult = null; orchState.runStream = null; await refreshRunData(); });
   document.getElementById("run-grant-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewRunGrant(event.currentTarget); });
   document.getElementById("run-start-confirm")?.addEventListener("click", confirmRunGrant);
+  document.querySelector('[data-consent-summary="run"]')?.addEventListener("click", () => focusRegion("#run-consent-summary"));
   const closePlan = () => {
     orchState.runPlan = null;
     renderOrchestration();
@@ -2875,6 +4030,8 @@ function wireRunView() {
   };
   document.getElementById("run-plan-close")?.addEventListener("click", closePlan);
   document.getElementById("run-control-reason")?.addEventListener("input", (event) => { orchState.controlReason = event.target.value; });
+  document.getElementById("run-max-ticks")?.addEventListener("input", (event) => { orchState.maxTicks = Number(event.target.value); });
+  document.getElementById("run-max-seconds")?.addEventListener("input", (event) => { orchState.maxSeconds = Number(event.target.value); });
   document.querySelectorAll("[data-run-act]").forEach((button) => button.addEventListener("click", () => previewRunAct(button.dataset.runAct, button.dataset.runDecision, button.dataset.runCorrelation, button)));
   document.getElementById("run-act-confirm")?.addEventListener("click", confirmRunAct);
   const closeAct = () => {
@@ -2980,9 +4137,34 @@ async function viewOrchestration(name) {
     catch (err) { orchState.runError = err.message; orchState.runView = null; }
     startRunLive();
   }
+  const consentSnapshot = SNAPSHOT_MODE ? new URLSearchParams(location.search).get("consentpreview") : "";
+  if (orchState.view === "run" && !orchState.runId && consentSnapshot?.startsWith("run-")) {
+    orchState.grantDraft = {
+      project: orchState.score.project || "sample", story: "SMP-0-02",
+      operator: "UI consent reviewer", minutes: consentSnapshot === "run-narrowed" ? 20 : 60,
+    };
+    if (consentSnapshot === "run-refusal") {
+      orchState.runPlan = null;
+      orchState.runError = "This start token is stale, reused, or does not match. Nothing started. Review a fresh permission preview.";
+    } else {
+      const issued = new Date();
+      const expires = new Date(issued.getTime() + orchState.grantDraft.minutes * 60_000);
+      const params = new URLSearchParams({
+        score: orchState.score.slug, project: orchState.grantDraft.project,
+        story: orchState.grantDraft.story, issued_at: issued.toISOString(),
+        expires_at: expires.toISOString(),
+      });
+      try { orchState.runPlan = (await api(`/api/run-plan?${params}`)).data; }
+      catch (err) { orchState.runError = err.message; }
+    }
+  }
   renderOrchestration();
+  if (consentSnapshot?.startsWith("run-") && orchState.runPlan) focusConsentSnapshot(".run-consent");
+  if (consentSnapshot === "run-refusal") focusConsentSnapshot(".run-error");
   focusBoundedSnapshot();
   await refreshOrchValidation();
+  if (consentSnapshot?.startsWith("run-") && orchState.runPlan) focusConsentSnapshot(".run-consent");
+  if (consentSnapshot === "run-refusal") focusConsentSnapshot(".run-error");
   focusBoundedSnapshot();
 }
 
@@ -2993,7 +4175,7 @@ async function viewOrchestration(name) {
  * confirmation before the server delegates to the shared program surface. */
 
 let programState = {
-  inventory: null, runId: "", view: null, plan: null, planRequest: null,
+  inventory: null, runId: "", view: null, plan: null, planRequest: null, envelope: null,
   act: null, stream: null, result: null, error: "", loading: false,
   reason: "", maxTicks: 100, maxSeconds: 300, notifications: [],
   connection: { status: SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "checking" },
@@ -3024,6 +4206,10 @@ function programInventoryHtml() {
   const inventory = programState.inventory || { programs: [], runs: [], healthy: true };
   const programs = inventory.programs || [];
   const runs = inventory.runs || [];
+  const consentSnapshot = SNAPSHOT_MODE ? new URLSearchParams(location.search).get("consentpreview") : "";
+  if (consentSnapshot?.startsWith("program-") && (programState.plan || programState.error)) {
+    return `<div class="program-inventory"><section class="program-start consent-snapshot-only">${programState.error && !programState.plan ? `<p class="guard consent-start-error" role="alert">${esc(programState.error)}</p>` : programConsentHtml(programState.plan)}</section></div>`;
+  }
   return `<div class="program-inventory" data-healthy="${inventory.healthy ? "true" : "false"}">
     <header class="program-room-toolbar"><div><span class="orch-eyebrow">delivery options · review first</span><h1>Optional multi-phase delivery</h1><p>Review saved delivery plans and live progress. Opening this view starts no work and changes no saved delivery state.</p></div>${badge(inventory.healthy ? "ready" : "needs attention", inventory.healthy ? "ok" : "issue")}</header>
     <section class="program-room-grid" aria-label="delivery plans">${programs.map((item) => `<article class="program-card"><div><span>delivery plan</span>${item.valid ? badge("ready to review", "ok") : badge("needs repair", "issue")}</div><h2>${esc(item.title || item.slug || item.name)}</h2><p>${item.valid ? "This plan can be reviewed for a separate start." : "Resolve the listed plan issue before starting a delivery."}</p><details><summary>Technical details</summary><code>${esc(item.path)}</code><p>${item.valid ? `Exact fingerprint: <code>${esc(item.semantic_hash)}</code>` : esc((item.diagnostics || []).map((d) => d.message).join("; "))}</p></details></article>`).join("") || '<article class="program-empty"><h2>No optional delivery plan</h2><p>Ordinary roadmap work remains available. Nothing is running or waiting here.</p></article>'}</section>
@@ -3034,25 +4220,79 @@ function programInventoryHtml() {
   </div>`;
 }
 
-function programStartHtml(programs) {
-  const plan = programState.plan;
+function programNarrowingSummary(plan, envelope) {
+  if (!plan || !envelope) return { reduced: false, items: [] };
+  const items = [];
+  if (PROGRAM_MODE_RANK[plan.authority.mode] < PROGRAM_MODE_RANK[envelope.mode]) items.push("delivery pace");
+  if ((plan.authority.capabilities || []).length < envelope.capabilities.length) items.push("allowed work");
+  if (Object.entries(envelope.budgets).some(([key, value]) => Number(plan.authority.budgets?.[key]) < Number(value))) items.push("spend ceilings");
+  const lifetime = Math.max(0, Math.round((Date.parse(plan.request.expires_at) - Date.parse(plan.request.issued_at)) / 1000));
+  if (lifetime < envelope.lifetimeSeconds) items.push("lifetime");
+  return { reduced: items.length > 0, items };
+}
+
+function programNarrowingHtml(plan, envelope) {
+  if (!envelope) return "";
+  const selected = new Set(plan.authority.capabilities || []);
+  const modes = Object.keys(PROGRAM_MODE_RANK).filter((mode) => PROGRAM_MODE_RANK[mode] <= PROGRAM_MODE_RANK[envelope.mode]);
+  const lifetime = Math.max(1, Math.round((Date.parse(plan.request.expires_at) - Date.parse(plan.request.issued_at)) / 1000));
+  const pushPlanned = envelope.capabilities.includes("git:push");
+  return `<form id="program-narrow-form" class="program-narrow-form">
+    <header><div><span>Narrow permission</span><strong>You may lower these limits. You cannot raise them.</strong></div>${badge("server checks the ceiling", "ok")}</header>
+    <div class="program-narrow-grid">
+      <fieldset><legend>Delivery pace</legend>${modes.reverse().map((mode) => `<label><input type="radio" name="mode" value="${mode}"${plan.authority.mode === mode ? " checked" : ""}> ${esc(PROGRAM_MODE_LABELS[mode])}</label>`).join("")}</fieldset>
+      <fieldset class="program-capability-choices"><legend>Allowed work</legend>${envelope.capabilities.map((capability, index) => `<label><input type="checkbox" name="capability" value="${esc(capability)}"${selected.has(capability) ? " checked" : ""}> ${esc(PROGRAM_CAPABILITY_LABELS[capability] || `Planned action type ${index + 1}`)}</label>`).join("") || "<p>This is advice-only permission. It cannot dispatch or change work.</p>"}</fieldset>
+      <fieldset class="program-budget-choices"><legend>Spend ceilings</legend>${Object.entries(envelope.budgets).map(([name, maximum]) => `<label>${esc(consentBudgetLabel(name))}<input type="number" name="budget:${esc(name)}" min="1" max="${esc(maximum)}" value="${esc(plan.authority.budgets?.[name] || maximum)}"></label>`).join("")}</fieldset>
+      <fieldset><legend>Lifetime</legend><label>permission seconds<input type="number" name="lifetime" min="1" max="${esc(envelope.lifetimeSeconds)}" value="${esc(lifetime)}"></label><small>The maximum is the planned lifetime. Lowering the wall-clock budget lowers this again.</small></fieldset>
+      ${pushPlanned ? `<fieldset class="program-push-destination"><legend>Exact push destination</legend><label>remote name<input name="remote" value="${esc(plan.request.remote || "")}" placeholder="origin"></label><label>remote-tracking ref<input name="remote_ref" value="${esc(plan.request.remote_ref || "")}" placeholder="refs/remotes/origin/main"></label><small>A push remains impossible unless the plan permits it and the server verifies this exact destination.</small></fieldset>` : ""}
+    </div>
+    <button type="submit">Preview the reduced permission</button>
+  </form>`;
+}
+
+function programConsentHtml(plan) {
+  if (!plan) return "";
   const request = programState.planRequest || {};
-  const modeLabels = { continuous: "Continue within limits", checkpointed: "Pause at decisions", advisory: "Advice only" };
-  return `<section class="program-start"><div><span class="orch-eyebrow">review before start</span><h2>Review optional delivery permission</h2><p>Choose the delivery plan, accountable operator, pace, lifetime, and reason. This review starts no work; confirmation remains separate.</p></div>
+  const heading = SNAPSHOT_MODE && new URLSearchParams(location.search).get("consentpreview")?.startsWith("program-") ? "h1" : "h2";
+  const envelope = programState.envelope;
+  const narrowing = programNarrowingSummary(plan, envelope);
+  const story = plan.selection?.story;
+  const work = story?.id ? `${story.id}: ${story.title || "selected roadmap work"}` : story || "the current planned roadmap selection";
+  const stops = (plan.authority?.stop_conditions || []).map((stop) => stop.replaceAll("-", " ")).join(", ") || "scope completion, a required decision, a used budget, expiry, revocation, or cancellation";
+  const mayPush = (plan.authority?.capabilities || []).includes("git:push");
+  const destination = mayPush && plan.request.remote && plan.request.remote_ref ? `${plan.request.remote} · ${plan.request.remote_ref}` : "Nowhere";
+  const destinationNote = mayPush ? "A push is possible only after the server verifies this exact destination and all earlier delivery gates pass." : "This reviewed permission does not include pushing.";
+  return `<section class="program-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="program-plan-title" tabindex="-1">
+    <header class="consent-head"><div><span>Permission</span><${heading} id="program-plan-title">Approve optional delivery</${heading}><p>This is possible delivery authority, not automatic delivery. Previewing, opening this page, and receiving live updates start nothing.</p></div>${badge(plan.applicable ? "ready to approve" : "refused", plan.applicable ? "ok" : "issue")}</header>
+    <section id="program-consent-summary" class="consent-summary" tabindex="-1">
+      <div class="consent-fact-grid">
+        <article><span>Allowed work</span><strong>${esc(work)}</strong><p>${esc(PROGRAM_MODE_LABELS[plan.authority.mode] || plan.authority.mode)} for the planned team. ${esc(programAllowedWorkSummary(plan.authority.capabilities))}.</p></article>
+        <article><span>Spend ceiling</span>${consentBudgetListHtml(plan.authority.budgets, true)}</article>
+        <article><span>Permission ends</span><strong>${esc(plan.request.expires_at)}</strong><p>${narrowing.reduced ? `You reduced ${esc(narrowing.items.join(", "))}.` : "No limits were reduced. This preview keeps the planned permission."}</p></article>
+        <article><span>What makes it stop</span><strong>Declared stops always win</strong><p>${esc(stops)}.</p></article>
+        <article><span>Push destination</span><strong>${esc(destination)}</strong><p>${esc(destinationNote)}</p></article>
+        <article><span>Delivery is not automatic</span><strong>The browser adds no authority of its own</strong><p>Only a browser-confirmed program action may use pre-granted delivery permission. Later work still follows its own gates.</p></article>
+      </div>
+      ${consentNeverHtml()}
+    </section>
+    ${programNarrowingHtml(plan, envelope)}
+    ${(plan.issues || []).map((issue) => `<p class="guard consent-refusal">${esc(typeof issue === "object" ? issue.message || issue.code : issue)} Review the permission again after fixing it.</p>`).join("")}
+    <details class="consent-technical"><summary>Technical details</summary><p>Exact capability names, policy envelope, repository binding, token, and full grant document.</p><div class="run-token"><span>single-use start token</span><code>${esc(plan.start_token)}</code></div><pre>${esc(JSON.stringify(plan, null, 2))}</pre><button type="button" data-consent-summary="program">Back to permission summary</button></details>
+    <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="program-start-confirm">Approve this permission</button>' : ""}<button type="button" id="program-plan-close">Return without starting</button></div>
+  </section>`;
+}
+
+function programStartHtml(programs) {
+  const request = programState.planRequest || {};
+  return `<section class="program-start"><div><span class="orch-eyebrow">permission before delivery</span><h2>Review optional delivery permission</h2><p>Choose a plan, name the accountable operator, and state the reason. The first preview loads the planned envelope. You can then reduce it before one approval.</p></div>
     <form id="program-plan-form" class="program-plan-form">
       <label>delivery plan<select name="program">${programs.filter((item) => item.valid).map((item) => `<option value="${esc(item.name)}"${request.program === item.name ? " selected" : ""}>${esc(item.title || item.slug || item.name)}</option>`).join("")}</select></label>
-      <label>delivery pace<select name="mode">${["continuous", "checkpointed", "advisory"].map((mode) => `<option value="${mode}"${request.mode === mode ? " selected" : ""}>${esc(modeLabels[mode])}</option>`).join("")}</select></label>
-      <label>accountable operator<input name="operator" required maxlength="200" value="${esc(request.operator || "")}" placeholder="accountable person or agent"></label>
-      <label>permission lifetime in minutes<input name="minutes" type="number" min="1" max="1440" value="${esc(request.minutes || 60)}"></label>
-      <label class="program-plan-reason">delivery reason<input name="reason" required maxlength="1000" value="${esc(request.reason || "")}" placeholder="one-line reviewed intent"></label>
-      <button type="submit">Review this delivery</button>
+      <label>accountable operator ID<input name="operator" required maxlength="200" value="${esc(request.operator?.id || request.operator || "")}" placeholder="accountable-id"></label>
+      <label class="program-plan-reason">reason for this permission<input name="reason" required maxlength="1000" value="${esc(request.reason || "")}" placeholder="one-line reviewed intent"></label>
+      <button type="submit">Preview planned permission</button>
     </form>
-    ${plan ? `<section class="program-consent ${plan.applicable ? "" : "refused"}" role="dialog" aria-modal="false" aria-labelledby="program-plan-title" tabindex="-1"><div class="program-consent-head"><div><span>start review</span><strong id="program-plan-title">${esc(plan.program?.title || plan.program?.slug || request.program)}</strong></div>${badge(plan.applicable ? "ready for confirmation" : "blocked", plan.applicable ? "ok" : "issue")}</div>
-      <div class="program-facts"><div><span>work</span><strong>${esc(plan.selection?.story?.id || plan.selection?.story || "—")}</strong></div><div><span>team</span><strong>${esc(plan.roster?.team || "—")}</strong></div><div><span>permission ends</span><strong>${esc(plan.request?.expires_at || request.expires_at)}</strong></div><div><span>allowed action types</span><strong>${esc((plan.authority?.capabilities || []).length)}</strong></div></div>
-      ${(plan.issues || []).map((issue) => `<p class="guard">${esc(typeof issue === "object" ? issue.message || issue.code : issue)}</p>`).join("")}
-      <details><summary>Technical details</summary><div class="run-token"><span>Exact start confirmation</span><code>${esc(plan.start_token)}</code></div><pre>${esc(JSON.stringify({ kind: plan.kind, mode: plan.mode, authority: plan.authority, request: plan.request }, null, 2))}</pre></details>
-      <div class="run-consent-actions">${plan.applicable ? '<button type="button" id="program-start-confirm">Confirm this reviewed delivery</button>' : ""}<button type="button" id="program-plan-close">Cancel review</button></div>
-    </section>` : ""}
+    ${programState.error ? `<p class="guard consent-start-error" role="alert">${esc(programState.error)}</p>` : ""}
+    ${programConsentHtml(programState.plan)}
   </section>`;
 }
 
@@ -3118,7 +4358,7 @@ function programControlsHtml(view) {
 
 function programActHtml(preview) {
   if (!preview) return "";
-  return `<details class="bounded-exact-preview"><summary>Exact program preview</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
+  return `<details class="bounded-exact-preview"><summary>Technical details</summary><div class="run-token"><span>state + ledger + parameter token</span><code>${esc(preview.act_token)}</code></div><p>Observed <code>${esc(preview.state)}</code> at generation ${esc(preview.generation)} and ledger <code>${esc(preview.ledger_head)}</code>.</p><p><strong>lane:</strong> ${esc(preview.operation?.lane || "—")} · <strong>next:</strong> ${esc(programScalar(preview.operation?.next_action))}</p>${preview.action === "supervise" ? `<p><strong>Bound supervision:</strong> at most ${esc(preview.max_ticks)} steps and ${esc(preview.max_seconds)} seconds. It stops sooner at a checkpoint, terminal state, or no-progress result.</p>` : ""}${(preview.issues || []).map((issue) => `<p class="guard">${esc(issue)}</p>`).join("")}</details>`;
 }
 
 function programTimelineHtml(view) {
@@ -3138,8 +4378,11 @@ function programRunHtml(view) {
   const runs = programState.inventory?.runs || [];
   const progress = view.phase_progress || {};
   const actions = boundedActionCenterHtml(view.bounded_actions, programState.act, programState.error, programState.result, "program");
-  const toolbar = `<div class="live-toolbar"><label>delivery run<select id="program-run-select">${runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(view.program?.title || item.program || "program")} · ${esc(item.state)}</option>`).join("")}</select></label><button type="button" id="program-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
-  const technical = `${programState.result ? `<div class="program-result" role="status"><strong>bounded operation completed</strong><span>${esc(programState.result.kind)} · ${esc(programState.result.stop || programState.result.state || programState.result.result || "recorded")}</span></div>` : ""}
+  const liveRoute = liveDetailRoute();
+  const toolbar = liveRoute?.kind === "program"
+    ? `<div class="live-toolbar"><a href="#/live">Back to all live work</a><button type="button" id="program-refresh">Check for updates</button><a href="#/live/program/${encodeURIComponent(view.run_id)}/technical">Technical details</a></div>`
+    : `<div class="live-toolbar"><label>delivery run<select id="program-run-select">${runs.map((item) => `<option value="${esc(item.run_id)}"${item.run_id === view.run_id ? " selected" : ""}>${esc(view.program?.title || item.program || "program")} · ${esc(item.state)}</option>`).join("")}</select></label><button type="button" id="program-refresh">Check for updates</button><button type="button" data-live-technical>Technical details</button></div>`;
+  const technical = `${liveRoute?.kind === "program" ? `<p class="live-technical-return"><a href="#/live/program/${encodeURIComponent(view.run_id)}">Return to the ordinary view</a></p>` : ""}${programState.result ? `<div class="program-result" role="status"><strong>bounded operation completed</strong><span>${esc(programState.result.kind)} · ${esc(programState.result.stop || programState.result.state || programState.result.result || "recorded")}</span></div>` : ""}
     <div class="program-summary"><div><span>authority</span><strong>${esc(view.state)}</strong><small>${esc(view.terminal_meaning)}</small></div><div><span>operational frontier</span><strong>${esc(view.operational_state)}</strong><small>${esc(view.current?.stop || "ready")}</small></div><div><span>ledger</span><strong>${esc(view.event_count)} events</strong><code>${esc(view.ledger_head)}</code></div><div><span>scope progress</span><strong>${esc((progress.selected_stories || []).length)} selected</strong><small>${esc(programScalar(progress.scope_completion))}</small></div></div>
     ${programWhyHtml(view)}
     ${runBudgetHtml(view.budgets)}
@@ -3150,10 +4393,11 @@ function programRunHtml(view) {
     ${programControlsHtml(view)}
     <section class="program-panel"><div class="program-panel-head"><div><span>phase and authority boundary</span><strong>Granted scope, selected progress, capabilities, and permanent exclusions</strong></div></div><div class="program-boundary"><section><h3>phase progress</h3><pre>${esc(JSON.stringify(progress, null, 2))}</pre></section><section><h3>capabilities</h3><p>${(view.capabilities || []).map((item) => badge(item, "ok")).join(" ") || "none"}</p><h3>permanently excluded</h3><p>${(view.permanent_exclusions || []).map((item) => badge(item, "warn")).join(" ") || "none"}</p></section></div></section>
     <section class="program-panel"><div class="program-panel-head"><div><span>hash-chained receipts</span><strong>Program authority timeline</strong></div>${badge("content-safe metadata", "ok")}</div>${programTimelineHtml(view)}</section>`;
-  return `<div class="program-room" data-program-run="${esc(view.run_id)}">${liveProgressShell(view.live_progress, programState.connection, toolbar, actions, technical, Boolean(programState.stream), "h1")}</div>`;
+  return `<div class="program-room" data-program-run="${esc(view.run_id)}">${liveProgressShell(view.live_progress, programState.connection, toolbar, actions, technical, Boolean(programState.stream) || ["technical", "notifications"].includes(liveRoute?.section), "h1")}</div>`;
 }
 
 function renderPrograms() {
+  if (liveDetailRoute()?.kind === "program") { renderLiveMission(); return; }
   const focus = captureAppFocus();
   if (programState.loading) {
     app.innerHTML = stateHtml("Replaying the authoritative program ledger…");
@@ -3165,7 +4409,8 @@ function renderPrograms() {
     finishDynamicRender(focus);
     return;
   }
-  app.innerHTML = programState.view ? programRunHtml(programState.view) : programInventoryHtml();
+  app.innerHTML = destinationNav("live", "#/programs")
+    + (programState.view ? programRunHtml(programState.view) : programInventoryHtml());
   wirePrograms();
   finishDynamicRender(focus);
 }
@@ -3266,21 +4511,101 @@ function startProgramLive() {
   };
 }
 
+async function requestProgramPermission(request) {
+  const { status, body } = await postJson("/api/programs/plan", request);
+  if (status >= 400 || body.ok === false) {
+    programState.error = responseIssueText(body) || `program plan failed (${status})`;
+    return null;
+  }
+  return body.data;
+}
+
+async function loadInitialProgramPermission(base) {
+  const issued = new Date(base.issued_at);
+  // Advice-only discovery is always at or below the tracked mode ceiling. It
+  // reads the planned capabilities and budgets, then a second pure preview
+  // binds the full envelope that the person may narrow.
+  const discovery = await requestProgramPermission({
+    ...base,
+    mode: "advisory",
+    capabilities: [],
+    expires_at: new Date(issued.getTime() + 1_000).toISOString(),
+  });
+  if (!discovery) return;
+  const mode = discovery.program.mode_ceiling;
+  const capabilities = mode === "advisory" ? [] : [...(discovery.program.requested_capabilities || [])];
+  const budgets = { ...(discovery.program.budgets || {}) };
+  const lifetimeSeconds = Math.max(1, Math.min(3_600, Number(budgets.max_wall_seconds || 3_600)));
+  programState.envelope = { mode, capabilities, budgets, lifetimeSeconds };
+  programState.planRequest = {
+    ...base, mode, capabilities, budgets,
+    expires_at: new Date(issued.getTime() + lifetimeSeconds * 1_000).toISOString(),
+  };
+  programState.plan = await requestProgramPermission(programState.planRequest);
+}
+
+async function loadNarrowedProgramPermission({ mode, capabilities, budgets, lifetimeSeconds, remote = "", remoteRef = "" }) {
+  const base = programState.planRequest;
+  if (!programState.envelope || !base) return;
+  const issued = new Date(base.issued_at);
+  programState.planRequest = {
+    program: base.program, operator: base.operator, reason: base.reason,
+    intent_id: base.intent_id, issued_at: base.issued_at,
+    mode, capabilities, budgets,
+    expires_at: new Date(issued.getTime() + lifetimeSeconds * 1_000).toISOString(),
+    ...(capabilities.includes("git:push") && remote ? { remote } : {}),
+    ...(capabilities.includes("git:push") && remoteRef ? { remote_ref: remoteRef } : {}),
+  };
+  programState.plan = await requestProgramPermission(programState.planRequest);
+}
+
 async function previewProgramStart(form) {
   rememberReturnFocus("program-plan");
   const values = Object.fromEntries(new FormData(form).entries());
-  const minutes = Math.max(1, Math.min(1440, Number(values.minutes) || 60));
   const issued = new Date();
-  const request = {
-    program: String(values.program || ""), mode: String(values.mode || "continuous"),
-    operator: String(values.operator || "").trim(), reason: String(values.reason || "").trim(),
-    intent_id: `workbench-${issued.getTime()}`, issued_at: issued.toISOString(),
-    expires_at: new Date(issued.getTime() + minutes * 60_000).toISOString(),
+  const base = {
+    program: String(values.program || ""),
+    operator: String(values.operator || "").trim(),
+    reason: String(values.reason || "").trim(),
+    intent_id: `workbench-${issued.getTime()}`,
+    issued_at: issued.toISOString(),
   };
-  programState.planRequest = { ...request, minutes }; programState.plan = null; programState.error = ""; renderPrograms();
-  const { status, body } = await postJson("/api/programs/plan", request);
-  if (status >= 400 || body.ok === false) programState.error = (body.issues && body.issues[0]) || `program plan failed (${status})`;
-  else programState.plan = body.data;
+  programState.planRequest = base;
+  programState.plan = null;
+  programState.envelope = null;
+  programState.error = "";
+  renderPrograms();
+  await loadInitialProgramPermission(base);
+  renderPrograms();
+  if (programState.plan) focusRegion(".program-consent");
+}
+
+async function previewProgramNarrowing(form) {
+  const envelope = programState.envelope;
+  if (!envelope || !programState.planRequest) return;
+  rememberReturnFocus("program-plan", form.querySelector("button[type='submit']"));
+  const data = new FormData(form);
+  const mode = String(data.get("mode") || envelope.mode);
+  const capabilities = mode === "advisory" ? [] : data.getAll("capability").map(String).filter((item) => envelope.capabilities.includes(item));
+  const budgets = {};
+  Object.entries(envelope.budgets).forEach(([name, maximum]) => {
+    const value = Number(data.get(`budget:${name}`));
+    budgets[name] = Math.max(1, Math.min(Number(maximum), Number.isFinite(value) ? Math.floor(value) : Number(maximum)));
+  });
+  const requestedLifetime = Number(data.get("lifetime"));
+  const lifetimeSeconds = Math.max(1, Math.min(
+    envelope.lifetimeSeconds,
+    Number(budgets.max_wall_seconds || envelope.lifetimeSeconds),
+    Number.isFinite(requestedLifetime) ? Math.floor(requestedLifetime) : envelope.lifetimeSeconds,
+  ));
+  programState.plan = null;
+  programState.error = "";
+  renderPrograms();
+  await loadNarrowedProgramPermission({
+    mode, capabilities, budgets, lifetimeSeconds,
+    remote: String(data.get("remote") || "").trim(),
+    remoteRef: String(data.get("remote_ref") || "").trim(),
+  });
   renderPrograms();
   if (programState.plan) focusRegion(".program-consent");
 }
@@ -3288,14 +4613,15 @@ async function previewProgramStart(form) {
 async function confirmProgramStart() {
   if (!programState.plan?.applicable || !programState.planRequest) return;
   const request = { ...programState.planRequest, approve: true, expect: programState.plan.start_token };
-  delete request.minutes;
   const { status, body } = await postJson("/api/programs/start", request);
   if (status >= 400 || body.ok === false) {
     programState.plan = null;
-    programState.error = (body.issues && body.issues[0]) || `program start failed (${status})`;
+    programState.error = startTokenWasRefused(status, body)
+      ? "This start token is stale, reused, or does not match. Nothing started. Review a fresh permission preview."
+      : responseIssueText(body) || `program start failed (${status})`;
     renderPrograms(); return;
   }
-  programState.plan = null; programState.planRequest = null;
+  programState.plan = null; programState.planRequest = null; programState.envelope = null;
   location.hash = `#/programs/${encodeURIComponent(body.data.run_id)}`;
 }
 
@@ -3331,7 +4657,15 @@ async function confirmProgramAct() {
     ...(preview.request_id ? { request_id: preview.request_id } : {}),
     ...(preview.action === "supervise" ? { max_ticks: preview.max_ticks, max_seconds: preview.max_seconds } : {}),
   };
-  const { status, body } = await postJson(`/api/programs/${encodeURIComponent(preview.action)}`, request);
+  let response;
+  try {
+    response = await postJson(`/api/programs/${encodeURIComponent(preview.action)}`, request);
+  } catch (_err) {
+    programState.act = null;
+    programState.error = "The transport ended without a confirmed receipt. An effect may have occurred. Reload saved history before another action; this view will not retry automatically.";
+    renderPrograms(); return;
+  }
+  const { status, body } = response;
   if (status >= 400 || body.ok === false) {
     programState.act = null;
     programState.error = status === 409
@@ -3365,7 +4699,9 @@ async function ackProgramNotification(id) {
 
 function wirePrograms() {
   document.getElementById("program-plan-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewProgramStart(event.currentTarget); });
+  document.getElementById("program-narrow-form")?.addEventListener("submit", (event) => { event.preventDefault(); previewProgramNarrowing(event.currentTarget); });
   document.getElementById("program-start-confirm")?.addEventListener("click", confirmProgramStart);
+  document.querySelector('[data-consent-summary="program"]')?.addEventListener("click", () => focusRegion("#program-consent-summary"));
   const closePlan = () => {
     programState.plan = null;
     renderPrograms();
@@ -3444,8 +4780,232 @@ async function viewPrograms(runId = "") {
     }
     startProgramLive();
   }
+  const consentSnapshot = SNAPSHOT_MODE ? new URLSearchParams(location.search).get("consentpreview") : "";
+  if (!runId && consentSnapshot?.startsWith("program-") && programState.inventory?.programs?.some((item) => item.valid)) {
+    const program = programState.inventory.programs.find((item) => item.valid);
+    const issued = new Date();
+    const base = {
+      program: program.name, operator: "ui-consent-reviewer",
+      reason: "Review the exact optional delivery permission.",
+      intent_id: `workbench-${issued.getTime()}`, issued_at: issued.toISOString(),
+    };
+    programState.planRequest = base;
+    programState.plan = null;
+    programState.envelope = null;
+    programState.error = "";
+    await loadInitialProgramPermission(base);
+    if (consentSnapshot === "program-narrowed" && programState.plan && programState.envelope) {
+      const envelope = programState.envelope;
+      const capabilities = envelope.capabilities.includes("roadmap:phase-advance")
+        ? envelope.capabilities.filter((item) => item !== "roadmap:phase-advance")
+        : envelope.capabilities.length > 2 ? envelope.capabilities.slice(0, -1) : [...envelope.capabilities];
+      const budgets = Object.fromEntries(Object.entries(envelope.budgets).map(([name, maximum]) => [name, Math.max(1, Math.floor(Number(maximum) / 2))]));
+      const lifetimeSeconds = Math.max(1, Math.min(Math.floor(envelope.lifetimeSeconds / 2), Number(budgets.max_wall_seconds || envelope.lifetimeSeconds)));
+      programState.plan = null;
+      await loadNarrowedProgramPermission({ mode: envelope.mode, capabilities, budgets, lifetimeSeconds });
+    }
+    if (consentSnapshot === "program-refusal") {
+      programState.plan = null;
+      programState.error = "This start token is stale, reused, or does not match. Nothing started. Review a fresh permission preview.";
+    }
+  }
   renderPrograms();
+  if (consentSnapshot?.startsWith("program-") && programState.plan) focusConsentSnapshot(".program-consent");
+  if (consentSnapshot === "program-refusal") focusConsentSnapshot(".consent-start-error");
   focusBoundedSnapshot();
+}
+
+/* ── Live mission control (WLA-32-07) ───────────────────────────────
+ * The combined inventory is a read-only composition of the canonical run and
+ * program views. Its groups are presentation only; exact ledger states remain
+ * visible and every act stays on the existing preview/confirm boundary. */
+
+let liveMissionState = {
+  runs: [], programs: [], notifications: [], error: "", loading: false,
+  detail: null,
+  connection: { status: SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "manual" },
+};
+
+function liveAttentionItems(kind, view) {
+  const inbox = view?.bounded_actions?.inbox || [];
+  const notificationPrefix = kind === "program" ? "program-" : "";
+  const unread = liveMissionState.notifications.filter((item) => (
+    item.run_id === view.run_id && item.unread
+    && (kind === "program" ? String(item.kind || "").startsWith(notificationPrefix) : !String(item.kind || "").startsWith("program-"))
+  ));
+  return [
+    ...inbox.map((item) => ({
+      kind: item.kind === "decision" ? "Decision" : item.kind === "refusal" ? "Refusal" : "Blocker",
+      label: item.affected_work || item.why || "Saved work needs attention",
+      detail: item.why || item.after_no_choice || "Review the canonical saved state.",
+      href: `#/live/${kind}/${encodeURIComponent(view.run_id)}/attention`,
+    })),
+    ...unread.map((item) => ({
+      kind: "Unread notification",
+      label: item.detail || item.kind,
+      detail: "Acknowledge it from this delivery's notification history.",
+      href: `#/live/${kind}/${encodeURIComponent(view.run_id)}/notifications`,
+    })),
+  ];
+}
+
+function liveMissionItem(kind, view) {
+  const progress = view.live_progress || {};
+  const exactState = String(view.state || view.operational_state || "unknown");
+  const attention = liveAttentionItems(kind, view);
+  const statusGroup = String(progress.status?.group || "waiting");
+  const group = attention.length ? "attention"
+    : statusGroup === "complete" || ["complete", "cancelled", "revoked"].includes(exactState) ? "finished"
+      : ["paused", "blocked", "stopped"].includes(exactState) ? "paused"
+        : "moving";
+  return {
+    kind, view, exactState, attention, group,
+    statusLabel: progress.status?.label || exactState,
+    statusMeaning: progress.status?.meaning || view.terminal_meaning || "Saved ledger state.",
+    next: progress.next_step || { label: "Inspect saved state", detail: "Open the canonical control room." },
+    title: progress.title || (kind === "program" ? view.program?.title : view.story?.title) || view.run_id,
+  };
+}
+
+function liveMissionCard(item) {
+  const view = item.view;
+  const detailHref = `#/live/${item.kind}/${encodeURIComponent(view.run_id)}`;
+  const kindLabel = item.kind === "run" ? "Bounded run" : "Multi-phase program";
+  return `<article class="live-mission-card group-${esc(item.group)}" data-live-kind="${esc(item.kind)}" data-live-state="${esc(item.exactState)}">
+    <header><div><span class="live-kind">${esc(kindLabel)}</span><h3><a href="${detailHref}">${esc(item.title)}</a></h3></div>${liveStateBadge(view.live_progress)}</header>
+    <dl class="live-mission-facts"><div><dt>Current status</dt><dd><strong>${esc(item.statusLabel)}</strong><span>Exact state: ${esc(item.exactState)}</span><small>${esc(item.statusMeaning)}</small></dd></div><div><dt>Canonical next step</dt><dd><strong>${esc(item.next.label || "Wait")}</strong><small>${esc(item.next.detail || "")}</small></dd></div><div><dt>Needs attention</dt><dd><strong>${item.attention.length ? `${esc(item.attention.length)} item${item.attention.length === 1 ? "" : "s"}` : "No"}</strong><small>${item.attention.length ? "Decision, blocker, refusal, or unread notice." : "No decision, blocker, refusal, or unread notice is visible."}</small></dd></div></dl>
+    ${item.attention.length ? `<ul class="live-mission-attention">${item.attention.map((attention) => `<li><span>${esc(attention.kind)}</span><a href="${attention.href}">${esc(attention.label)}</a><small>${esc(attention.detail)}</small></li>`).join("")}</ul>` : ""}
+    <a class="live-open" href="${detailHref}">Open exact control room</a>
+  </article>`;
+}
+
+function liveMissionInventoryHtml() {
+  let items = [
+    ...liveMissionState.runs.map((view) => liveMissionItem("run", view)),
+    ...liveMissionState.programs.map((view) => liveMissionItem("program", view)),
+  ];
+  if (SNAPSHOT_MODE && SNAPSHOT_LIVE_SCENARIO) {
+    const matches = {
+      active: (item) => item.exactState === "active" || item.exactState === "running",
+      "awaiting-decision": (item) => item.exactState === "awaiting-approval" || item.attention.some((attention) => attention.kind === "Decision"),
+      paused: (item) => item.exactState === "paused",
+      revoked: (item) => item.exactState === "revoked",
+      cancelled: (item) => item.exactState === "cancelled",
+      complete: (item) => item.exactState === "complete" || item.exactState === "awaiting-certification" || item.view.live_progress?.status?.group === "complete",
+      stale: () => true,
+      empty: () => false,
+    }[SNAPSHOT_LIVE_SCENARIO];
+    if (matches) items = items.filter(matches);
+  }
+  const groups = [
+    ["attention", "Needs you", "A decision, blocker, refusal, or unread notification is visible."],
+    ["moving", "Moving or ready", "Canonical state says this work can move or is waiting for its next reviewed act."],
+    ["paused", "Paused or blocked", "These exact states are not moving. Paused permission is resumable; blocked work needs recovery."],
+    ["finished", "Finished or permanently stopped", "Complete work is done. Revoked and cancelled permission cannot resume."],
+  ];
+  return `<section class="live-mission" aria-labelledby="live-mission-title">
+    <header class="live-mission-head"><div><span class="orch-eyebrow">Mission control</span><h1 id="live-mission-title">Live work</h1><p>One glance shows what is running, what happens next, and where you need to act. Opening this view starts no work.</p></div><button type="button" id="live-mission-refresh">Refresh all saved history</button></header>
+    ${liveMissionState.connection.status === "stale" ? liveConnectionHtml(liveMissionState.connection, {}) : ""}
+    <section class="live-mission-summary" aria-label="Live work summary"><article><strong>${esc(items.length)}</strong><span>saved runs and programs</span></article><article><strong>${esc(items.filter((item) => item.group === "attention").length)}</strong><span>need attention</span></article><article><strong>${esc(items.filter((item) => item.group === "moving").length)}</strong><span>moving or ready</span></article></section>
+    ${liveMissionState.error ? boundedErrorHtml(liveMissionState.error) : ""}
+    ${groups.map(([id, title, description]) => { const matching = items.filter((item) => item.group === id); return matching.length ? `<section class="live-mission-group group-${id}" aria-labelledby="live-group-${id}"><header><h2 id="live-group-${id}">${title} <small>${matching.length}</small></h2><p>${description}</p></header><div class="live-mission-grid">${matching.map(liveMissionCard).join("")}</div></section>` : ""; }).join("") || stateHtml("No bounded runs or programs have been saved. Opening Live does not create one.")}
+  </section>`;
+}
+
+function focusLiveDetailSection(section) {
+  if (!section) return;
+  const selector = section === "attention" ? ".bounded-inbox"
+    : section === "notifications" ? ".run-notifications"
+      : section === "technical" ? ".live-technical" : "";
+  if (!selector) return;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const target = document.querySelector(selector);
+    if (!target) return;
+    if (section === "notifications") target.closest(".live-technical")?.setAttribute("open", "");
+    target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start" });
+  }));
+}
+
+function renderLiveMission() {
+  const focus = captureAppFocus();
+  if (liveMissionState.loading && !liveMissionState.detail) {
+    app.innerHTML = `${destinationNav("live", "#/live")}${stateHtml("Replaying saved run and program history…")}`;
+  } else if (liveMissionState.detail?.kind === "run") {
+    app.innerHTML = `${destinationNav("live", "#/live")}${runViewHtml()}`;
+    wireRunView();
+  } else if (liveMissionState.detail?.kind === "program") {
+    app.innerHTML = `${destinationNav("live", "#/live")}${programRunHtml(programState.view)}`;
+    wirePrograms();
+  } else {
+    app.innerHTML = `${destinationNav("live", "#/live")}${liveMissionInventoryHtml()}`;
+    document.getElementById("live-mission-refresh")?.addEventListener("click", () => viewLive());
+  }
+  finishDynamicRender(focus);
+  focusLiveDetailSection(liveMissionState.detail?.section || "");
+}
+
+async function loadCanonicalLiveViews(inventory) {
+  const runIds = (inventory.runs || []).filter((item) => item.valid !== false).map((item) => item.run_id);
+  const programIds = (inventory.programs?.runs || []).map((item) => item.run_id);
+  const [runResults, programResults] = await Promise.all([
+    Promise.allSettled(runIds.map((id) => api(`/api/runs/${encodeURIComponent(id)}/view`))),
+    Promise.allSettled(programIds.map((id) => api(`/api/programs/${encodeURIComponent(id)}/view`))),
+  ]);
+  liveMissionState.runs = runResults.filter((result) => result.status === "fulfilled").map((result) => result.value.data);
+  liveMissionState.programs = programResults.filter((result) => result.status === "fulfilled").map((result) => result.value.data);
+  const refused = [...runResults, ...programResults].filter((result) => result.status === "rejected");
+  liveMissionState.error = refused.length ? `${refused.length} saved item${refused.length === 1 ? "" : "s"} could not be replayed. Refresh after inspecting repository health.` : "";
+}
+
+async function viewLive(kind = "", runId = "", section = "") {
+  setCrumbs([{ label: "overview", href: "#/" }, { label: "live", href: "#/live" }, ...(kind && runId ? [{ label: `${kind} ${runId}` }] : [])]);
+  liveMissionState.loading = true;
+  liveMissionState.detail = kind && runId ? { kind, id: runId, section } : null;
+  let runsBody;
+  let programsBody;
+  let notificationsBody;
+  try {
+    [runsBody, programsBody, notificationsBody] = await Promise.all([
+      api("/api/runs"), api("/api/programs"), api("/api/notifications"),
+    ]);
+  } catch (err) {
+    liveMissionState.loading = false;
+    liveMissionState.error = `Saved history could not be refreshed. ${err.message}`;
+    liveMissionState.connection.status = "stale";
+    renderLiveMission();
+    announceLiveUpdate(
+      "mission-control",
+      `stale:${Date.now()}`,
+      "Live work could not be refreshed. The last verified list remains visible; use Refresh all saved history when you are ready.",
+    );
+    return;
+  }
+  liveMissionState.connection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : "verified";
+  liveMissionState.error = "";
+  const inventory = { runs: runsBody.data.runs || [], programs: programsBody.data };
+  liveMissionState.notifications = notificationsBody.data.notifications || [];
+  orchState.runInventory = inventory.runs;
+  orchState.runs = inventory.runs.filter((item) => item.valid !== false);
+  programState.inventory = inventory.programs;
+  orchState.notifications = liveMissionState.notifications;
+  programState.notifications = liveMissionState.notifications;
+  if (kind === "run" && runId) {
+    orchState.view = "run"; orchState.runId = runId; orchState.runAct = null; orchState.runResult = null; orchState.runError = ""; orchState.runStream = null;
+    orchState.runView = (await api(`/api/runs/${encodeURIComponent(runId)}/view`)).data;
+    orchState.runConnection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
+  } else if (kind === "program" && runId) {
+    programState.runId = runId; programState.act = null; programState.result = null; programState.error = ""; programState.stream = null;
+    programState.view = (await api(`/api/programs/${encodeURIComponent(runId)}/view`)).data;
+    programState.connection.status = SNAPSHOT_LIVE_STATE === "stale" ? "stale" : SNAPSHOT_MODE ? "verified" : "checking";
+  } else {
+    await loadCanonicalLiveViews(inventory);
+  }
+  liveMissionState.loading = false;
+  renderLiveMission();
+  if (kind === "run") startRunLive();
+  if (kind === "program") startProgramLive();
 }
 
 /* ── delivery-shaped front door (WLA-27-03) ────────────────────────
@@ -3536,8 +5096,8 @@ function renderDeliverySetup() {
   if (!deliverySetupState.project && scope.selected_project) deliverySetupState.project = scope.selected_project;
   if (!deliverySetupState.phase && phase?.number !== undefined) deliverySetupState.phase = String(phase.number);
   const choice = setupChoice(model, deliverySetupState.choice);
-  app.innerHTML = `<div class="delivery-setup" data-readiness="${esc(model.readiness)}">
-    <header class="delivery-setup-hero"><div><span>Delivery setup · read-only until a reviewed save or start</span><h1>What are you delivering?</h1><p>${esc(model.summary)}</p></div>${badge(model.readiness, model.readiness === "ready" ? "ok" : "issue")}</header>
+  app.innerHTML = `${destinationNav("plan", "#/program-studio")}<div class="delivery-setup" data-readiness="${esc(model.readiness)}">
+    <header class="delivery-setup-hero"><div><span>Plan your delivery</span><h1>What are you delivering?</h1><p>${esc(model.summary)} Nothing starts until you review and confirm it.</p></div>${badge(model.readiness, model.readiness === "ready" ? "ok" : "issue")}</header>
     <section class="delivery-scope" aria-labelledby="delivery-scope-title"><div><span>Step 1</span><h2 id="delivery-scope-title">Choose the delivery scope</h2></div>
       <label>Roadmap project<select id="delivery-project"><option value="">Choose a project</option>${projects.map((item) => `<option value="${esc(item.slug)}"${item.slug === deliverySetupState.project ? " selected" : ""}>${esc(item.slug)}</option>`).join("")}</select></label>
       <label>Phase to review<input id="delivery-phase" type="number" min="0" value="${esc(deliverySetupState.phase)}" inputmode="numeric"></label>
@@ -3557,6 +5117,7 @@ function renderDeliverySetup() {
 function wireDeliverySetup() {
   document.getElementById("delivery-project")?.addEventListener("change", async (event) => {
     deliverySetupState.project = event.target.value;
+    if (deliverySetupState.project) rememberProject(deliverySetupState.project);
     deliverySetupState.phase = "";
     deliverySetupState.choice = "";
     const query = deliverySetupState.project
@@ -3622,7 +5183,7 @@ function wireDeliverySetup() {
 async function viewDeliverySetup() {
   setCrumbs([{ label: "overview", href: "#/" }, { label: "delivery setup" }]);
   const requested = new URLSearchParams(location.search);
-  const queryProject = requested.get("setupproject") || "";
+  const queryProject = requested.get("setupproject") || selectedProject;
   const query = queryProject ? `?project=${encodeURIComponent(queryProject)}` : "";
   deliverySetupState.model = (await api(`/api/delivery-setup${query}`)).data;
   deliverySetupState.project = queryProject || deliverySetupState.model.delivery_scope.selected_project || "";
@@ -3651,6 +5212,7 @@ let studioState = {
   selected: "", jsonDraft: "", validationTimer: null,
   scenario: "candidate-assignment", error: "", jsonPointer: "",
   setupContext: null, planSection: "scope", technicalMode: "graph",
+  technicalExpanded: false,
 };
 
 function studioFamilyModel(family = studioState.family) {
@@ -4073,7 +5635,7 @@ function studioTeamEscalationEditor() {
         <fieldset class="studio-team-members"><legend>May ask these responsibilities for bounded help</legend>${(team.roles || []).filter((item) => item !== role).map((peer) => `<label><input type="checkbox" data-team-role-link="${roleIndex}" data-team-team="${teamIndex}" data-team-role-link-field="may_request" data-team-role-target="${esc(peer.id)}"${(role.may_request || []).includes(peer.id) ? " checked" : ""}><span>${esc(studioTeamRoleLabel(peer))}</span></label>`).join("") || "<small>No other responsibility in this team.</small>"}</fieldset>
       </fieldset>`;
     }).join("")}</div>
-    <aside class="studio-team-honesty"><strong>Escalation does not grant authority</strong><p>A delivery-owner escalation leaves this team and waits for separately authorized handling. The team design does not name, create, or impersonate that person.</p></aside>
+    <aside class="studio-team-honesty"><strong>Escalation does not provide permission</strong><p>A delivery-owner escalation leaves this team and waits for separately authorized handling. The team design does not name, create, or impersonate that person.</p></aside>
   </div>`;
 }
 
@@ -4109,12 +5671,43 @@ function studioTeamReviewEditor(section) {
   return studioTeamAuditEditor();
 }
 
+const STUDIO_PLAIN_SECTION_COPY = {
+  scope: { label: "The delivery", question: "What will be delivered?", guidance: "Name the roadmap work and the boundary this delivery may cover." },
+  flow: { label: "The team and work", question: "Who will do the work?", guidance: "Choose the team, work owners, inputs, and route from ready work to completion." },
+  quality: { label: "Independent review", question: "Who will review the work independently?", guidance: "Choose what reviewers check and keep review separate from the work it judges." },
+  decisions: { label: "Decision points", question: "When should a person decide?", guidance: "Name the closed choices that can pause, redirect, or stop work." },
+  recovery: { label: "Repair path", question: "What happens when work does not pass?", guidance: "Make repair, help, and blocked-work routes visible before delivery." },
+  stops: { label: "Stop conditions", question: "When must delivery stop?", guidance: "State completion and safety stops explicitly." },
+  limits: { label: "Finite limits", question: "How much time, spending, and work may this delivery use?", guidance: "Keep time, attempts, work, and cost finite and reviewable." },
+};
+
+function studioPlainSection(section) {
+  if (studioState.family === "organization") return section;
+  return { ...section, ...(STUDIO_PLAIN_SECTION_COPY[section?.id] || {}) };
+}
+
+function studioReviewCriteriaHtml() {
+  const references = studioState.model?.review_criteria || [];
+  if (!references.length) return `<section class="studio-review-criteria empty"><header><span>Independent review</span><h3>No saved review criteria are referenced yet</h3></header><p>Choose readable review criteria for each work route that needs an independent judgment.</p></section>`;
+  return `<section class="studio-review-criteria" aria-labelledby="studio-review-criteria-title"><header><span>Independent review</span><h3 id="studio-review-criteria-title">What reviewers will check</h3><p>These criteria are read only here. Their source stays in repository files.</p></header><div class="studio-review-criteria-list">${references.map((reference) => {
+    if (reference.status !== "available") return `<article class="missing"><div><strong>${esc(reference.reference)}</strong>${badge("reference missing", "issue")}</div><p>${esc(reference.message)}</p><small>${esc(reference.next_step)}</small><details><summary>Technical details</summary><code>${esc(reference.path)}</code></details></article>`;
+    return `<article class="available"><div><strong>${esc(reference.title)}</strong>${badge(`${reference.criteria?.length || 0} check${reference.criteria?.length === 1 ? "" : "s"}`, "ok")}</div>${reference.description ? `<p>${esc(reference.description)}</p>` : ""}<ol>${(reference.criteria || []).map((criterion) => `<li><strong>${esc(criterion.question)}</strong><dl><div><dt>Checked by</dt><dd>${esc(criterion.checked_by)}</dd></div><div><dt>Evidence</dt><dd>${esc(criterion.required_evidence?.join(", ") || "No separate evidence kind")}</dd></div><div><dt>Citations</dt><dd>${esc(criterion.minimum_citations || "None required")}</dd></div><div><dt>Must pass</dt><dd>${criterion.required_to_pass ? "Yes" : "Contributes to the full review"}</dd></div></dl></li>`).join("") || "<li>No individual review question was provided.</li>"}</ol><details><summary>Technical details</summary><code>${esc(reference.path)}</code><dl><div><dt>kind</dt><dd><code>${esc(reference.technical_details?.kind || "unknown")}</code></dd></div><div><dt>schema_version</dt><dd><code>${esc(reference.technical_details?.schema_version ?? "unknown")}</code></dd></div><div><dt>version</dt><dd><code>${esc(reference.technical_details?.version || "unknown")}</code></dd></div></dl></details></article>`;
+  }).join("")}</div></section>`;
+}
+
+function studioTechnicalDisclosure(section) {
+  const technical = studioState.technicalMode === "config"
+    ? studioJsonView()
+    : `<div class="studio-embedded-graph"><p>The exact graph keeps every saved step and route. Exact field editors remain available in the dedicated Technical details tab.</p>${studioGraphHtml()}</div>`;
+  return `<details class="studio-form-technical"${studioState.technicalExpanded ? " open" : ""}><summary>Technical details</summary><div class="studio-form-technical-body"><p>The exact graph and lossless configuration edit this same draft. Closing these details returns to <strong>${esc(section.question)}</strong> without discarding edits.</p><div class="studio-technical-tabs" role="tablist" aria-label="Technical editor mode"><button type="button" id="studio-technical-tab-graph" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "graph"}" tabindex="${studioState.technicalMode === "graph" ? "0" : "-1"}" data-studio-technical="graph" class="${studioState.technicalMode === "graph" ? "active" : ""}">Exact graph</button><button type="button" id="studio-technical-tab-config" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "config"}" tabindex="${studioState.technicalMode === "config" ? "0" : "-1"}" data-studio-technical="config" class="${studioState.technicalMode === "config" ? "active" : ""}">Raw JSON</button></div><div id="studio-technical-panel" role="tabpanel" aria-labelledby="studio-technical-tab-${esc(studioState.technicalMode)}">${technical}</div><button type="button" data-studio-return-plain>Return to ${esc(section.label)}</button></div></details>`;
+}
+
 function studioPlanReview() {
   const authoring = studioAuthoring();
   const review = authoring?.review_sections || [];
   const team = studioState.family === "organization";
   return `<aside class="studio-plan-review" aria-label="${team ? "Readable team and review summary" : "Readable plan summary"}"><div><span>Review before save</span><strong>${esc(authoring?.status === "ready-to-review" ? "Ready to review" : "Needs attention")}</strong>${badge(authoring?.status === "ready-to-review" ? "nothing starts" : `${authoring?.corrections?.length || 0} corrections`, authoring?.status === "ready-to-review" ? "ok" : "issue")}</div>
-    <dl>${review.map((item) => `<div><dt>${esc(item.label)}</dt><dd>${esc(item.answer)}</dd></div>`).join("")}</dl>
+    <dl>${review.map((item) => `<div><dt>${esc(studioPlainSection(item).label)}</dt><dd>${esc(item.answer)}</dd></div>`).join("")}</dl>
     ${team ? `<p>${esc(authoring?.runtime_independence?.claim || "")}</p>` : ""}
     <p>Drafting, checking, and leaving make no change. Saving still requires a separate review of the exact file change and starts no work.</p>
     <button type="button" id="studio-review-save"${authoring?.status === "ready-to-review" ? "" : " disabled"}>Review this save</button>
@@ -4127,6 +5720,7 @@ function studioPlanView() {
   if (!authoring.applicable) return stateHtml("This delivery design has no ordinary authoring view.");
   const section = studioPlanSection() || authoring.sections[0];
   if (section) studioState.planSection = section.id;
+  const plainSection = studioPlainSection(section);
   const editor = studioState.family === "program"
     ? studioProgramPlanEditor(section)
     : studioState.family === "workflow"
@@ -4136,9 +5730,9 @@ function studioPlanView() {
   return `<div class="studio-plan" data-plan-status="${esc(authoring.status)}">
     <header><div><span>${team ? "Team and review" : "Delivery decisions"}</span><h2>${team ? "Make ownership, independence, and decisions understandable" : "Build the plan in the order people review it"}</h2><p>${esc(authoring.summary)}</p></div>${badge(authoring.status === "ready-to-review" ? "ready to review" : "needs attention", authoring.status === "ready-to-review" ? "ok" : "issue")}</header>
     <div class="studio-plan-shell">
-      <nav class="studio-plan-sections" aria-label="${team ? "Team and review sections" : "Delivery plan sections"}">${authoring.sections.map((item) => `<button type="button" data-plan-section="${esc(item.id)}" class="${item.id === section.id ? "active" : ""}" aria-current="${item.id === section.id ? "step" : "false"}"><span>${item.step}</span><strong>${esc(item.label)}</strong>${item.correction_count ? `<small>${item.correction_count} to fix</small>` : "<small>ready</small>"}</button>`).join("")}</nav>
-      <main class="studio-plan-section" id="studio-plan-section" tabindex="-1"><header><span>Step ${section.step} of ${authoring.sections.length}</span><h2>${esc(section.question)}</h2><p>${esc(section.guidance)}</p><strong>${esc(section.answer)}</strong></header>
-        ${studioPlanCorrections(section.id)}${editor}${section.id !== "limits" ? studioPlanFactList(section.facts) : ""}${studioPlanExamples()}
+      <nav class="studio-plan-sections" aria-label="${team ? "Team and review sections" : "Delivery plan sections"}">${authoring.sections.map((item) => { const plainItem = studioPlainSection(item); return `<button type="button" data-plan-section="${esc(item.id)}" class="${item.id === section.id ? "active" : ""}" aria-current="${item.id === section.id ? "step" : "false"}"><span>${item.step}</span><strong>${esc(plainItem.label)}</strong>${item.correction_count ? `<small>${item.correction_count} to fix</small>` : "<small>ready</small>"}</button>`; }).join("")}</nav>
+      <main class="studio-plan-section" id="studio-plan-section" tabindex="-1"><header><span>Step ${section.step} of ${authoring.sections.length}</span><h2>${esc(plainSection.question)}</h2><p>${esc(plainSection.guidance)}</p><strong>${esc(section.answer)}</strong></header>
+        ${studioPlanCorrections(section.id)}${editor}${section.id !== "limits" ? studioPlanFactList(section.facts) : ""}${section.id === "quality" ? studioReviewCriteriaHtml() : ""}${studioPlanExamples()}${studioTechnicalDisclosure(plainSection)}
       </main>
       ${studioPlanReview()}
     </div>
@@ -4147,7 +5741,9 @@ function studioPlanView() {
 
 function studioTechnicalView() {
   const team = studioState.family === "organization";
+  const section = studioPlainSection(studioPlanSection());
   return `<div class="studio-technical-view"><header><div><span class="orch-eyebrow">Technical details</span><h2>${team ? "Exact responsibilities, provenance, and configuration" : "Exact graph, fields, and configuration"}</h2><p>${team ? "Inspect stable role IDs, candidate profiles, provider and model resolution, auth and principal fingerprints, work areas, sessions, packet bounds, decision rules, and the lossless source." : "Use this view for hierarchical flows, bounded loops, discussion cells, exact conditions, raw import/export, and source-level diagnostics."}</p></div>${badge("same source document", "ok")}</header>
+    <button type="button" class="studio-technical-return" data-studio-return-plain>Return to ${esc(section?.label || (team ? "team and review" : "plain plan"))}</button>
     <div class="studio-technical-tabs" role="tablist" aria-label="Technical editor mode"><button type="button" id="studio-technical-tab-graph" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "graph"}" tabindex="${studioState.technicalMode === "graph" ? "0" : "-1"}" data-studio-technical="graph" class="${studioState.technicalMode === "graph" ? "active" : ""}">Graph and fields</button><button type="button" id="studio-technical-tab-config" role="tab" aria-controls="studio-technical-panel" aria-selected="${studioState.technicalMode === "config"}" tabindex="${studioState.technicalMode === "config" ? "0" : "-1"}" data-studio-technical="config" class="${studioState.technicalMode === "config" ? "active" : ""}">Lossless configuration</button></div>
     <div id="studio-technical-panel" role="tabpanel" aria-labelledby="studio-technical-tab-${esc(studioState.technicalMode)}">${studioState.technicalMode === "config" ? studioJsonView() : studioDesignView()}</div>
   </div>`;
@@ -4296,7 +5892,7 @@ function renderProgramStudio() {
     authority: "Permission details",
   };
   const objectLabel = objectLabels[studioState.family] || "delivery design";
-  app.innerHTML = `<div class="program-studio" data-family="${esc(studioState.family)}" data-policy="${esc(studioState.name)}">
+  app.innerHTML = `${destinationNav("plan", "#/program-studio")}<div class="program-studio" data-family="${esc(studioState.family)}" data-policy="${esc(studioState.name)}">
     ${studioState.setupContext ? `<section class="studio-setup-context"><div><span>Delivery scope from setup</span><strong>${esc(studioState.setupContext.project || "project not chosen")} · phase ${esc(studioState.setupContext.phase || "review needed")}</strong><p>This is an unsaved delivery-plan draft. Editing and checking it start nothing; Save draft still requires its own exact preview and confirmation.</p></div><div><a href="#/program-studio">Back to delivery choices</a><a href="#/">Leave for now</a></div></section>` : ""}
     ${empty ? `<section class="studio-empty-neutral"><div><span class="orch-eyebrow">Optional delivery design</span><h2>Nothing has been saved here yet</h2><p>Ordinary roadmap work is ready. Drafting a ${esc(objectLabel)} is optional and starts no work.</p></div><a href="#/">Return to current work</a></section>` : ""}
     <header class="studio-toolbar"><div><span class="orch-eyebrow">${esc(familyLabels[studioState.family])}</span><h1>${esc(document.title || document.slug || "Delivery plan")}</h1><p>Draft, check, and review before saving. Nothing here starts work or provides permission.</p><details><summary>Technical details</summary><code>pm/${esc(family?.plural || `${studioState.family}s`)}/${esc(document.slug || studioState.name)}.json</code></details></div><div class="studio-policy-actions"><label>Design area<select id="studio-family-select">${STUDIO_FAMILIES.map((id) => `<option value="${id}"${id === studioState.family ? " selected" : ""}>${esc(familyLabels[id])}</option>`).join("")}</select></label><label>Saved ${esc(objectLabel)}<select id="studio-policy-select"><option value="">New unsaved ${esc(objectLabel)}</option>${items.map((item) => `<option value="${esc(item.name)}"${item.name === studioState.name && studioState.exists ? " selected" : ""}>${esc(item.slug || item.name)}${item.valid ? "" : " · needs attention"}</option>`).join("")}</select></label><button type="button" id="studio-new">New</button><button type="button" id="studio-duplicate">Duplicate</button><button type="button" id="studio-preview-save">${studioState.setupContext && studioState.family === "program" ? "Review draft save" : `Review ${esc(objectLabel)} save`}</button><button type="button" id="studio-preview-delete" class="danger"${studioState.exists ? "" : " disabled"}>Review removal</button></div></header>
@@ -4509,7 +6105,7 @@ async function previewStudioAction(action, trigger = document.activeElement) {
 async function applyStudioAction(preview, request) {
   const button = document.getElementById("studio-confirm-apply"); if (button) { button.disabled = true; button.textContent = "applying exact policy…"; }
   const { status, body } = await postJson("/api/program-studio/apply", { ...request, fingerprint: preview.fingerprint });
-  if (status === 409) { studioState.error = "Stale Program Studio preview refused; policy bytes or desired content changed. Nothing was written."; renderProgramStudio(); return; }
+  if (status === 409) { studioState.error = "This save review is no longer current. Nothing was written. Review the change again to get a fresh preview before saving."; renderProgramStudio(); return; }
   if (status >= 400 || body.ok === false) { studioState.error = (body.issues && body.issues[0]) || `apply failed (${status})`; renderProgramStudio(); return; }
   const family = studioState.family;
   if (request.action === "delete") { location.hash = `#/program-studio/${family}`; await viewProgramStudio(family); return; }
@@ -4833,7 +6429,14 @@ function updateStudioCouncilMember(index) {
 
 function wireProgramStudio() {
   document.querySelectorAll("[data-studio-view]").forEach((button) => button.addEventListener("click", () => { studioState.view = button.dataset.studioView; renderProgramStudio(); }));
-  document.querySelectorAll("[data-studio-technical]").forEach((button) => button.addEventListener("click", () => { studioState.technicalMode = button.dataset.studioTechnical; renderProgramStudio(); }));
+  document.querySelector(".studio-form-technical")?.addEventListener("toggle", (event) => { studioState.technicalExpanded = event.currentTarget.open; });
+  document.querySelectorAll("[data-studio-technical]").forEach((button) => button.addEventListener("click", () => { studioState.technicalMode = button.dataset.studioTechnical; studioState.technicalExpanded = studioState.view === "plan"; renderProgramStudio(); }));
+  document.querySelectorAll("[data-studio-return-plain]").forEach((button) => button.addEventListener("click", () => {
+    studioState.view = "plan";
+    studioState.technicalExpanded = false;
+    renderProgramStudio();
+    requestAnimationFrame(() => document.getElementById("studio-plan-section")?.focus());
+  }));
   document.querySelectorAll("[data-plan-section]").forEach((button) => button.addEventListener("click", () => {
     studioState.planSection = button.dataset.planSection;
     studioState.selected = "";
@@ -4929,7 +6532,7 @@ function bundleBadges(items, tone = "") {
 
 function renderStudioBundle(model) {
   if (!model.valid && model.refusal) {
-    app.innerHTML = `<div class="program-studio studio-bundle-review"><header class="bundle-hero refused"><div><span class="orch-eyebrow">Generated program review</span><h1>Bundle review refused</h1><p>${esc(model.refusal)}</p></div>${badge("needs attention", "issue")}</header><p class="studio-no-grant">This review is read-only. It accepted no lease or grant credential, wrote nothing, and started nothing.</p></div>`;
+    app.innerHTML = `<div class="program-studio studio-bundle-review"><header class="bundle-hero refused"><div><span class="orch-eyebrow">Generated program review</span><h1>Bundle review refused</h1><p>${esc(model.refusal)}</p></div>${badge("needs attention", "issue")}</header><p class="studio-no-grant">This review is read-only. It accepted no lease or permission credential, wrote nothing, and started nothing.</p></div>`;
     return;
   }
   const scope = model.roadmap_scope || {};
@@ -4942,19 +6545,19 @@ function renderStudioBundle(model) {
   app.innerHTML = `<div class="program-studio studio-bundle-review" data-bundle-valid="${model.valid ? "true" : "false"}">
     <header class="bundle-hero ${model.valid ? "ready" : "refused"}"><div><span class="orch-eyebrow">Program Studio · generated bundle</span><h1>${esc(model.title)}</h1><p>${esc(model.summary)}</p></div>${badge(model.valid ? "ready for setup review" : `${diagnostics.length} linked issue${diagnostics.length === 1 ? "" : "s"}`, model.valid ? "ok" : "issue")}</header>
     <section class="bundle-configuration" aria-labelledby="bundle-configuration-title"><div><span class="orch-eyebrow">Separate from authority</span><h2 id="bundle-configuration-title">${esc(model.configuration?.label)}</h2><p>These are two kinds of configuration. Neither saves itself, creates permission, or starts delivery.</p></div><div class="bundle-config-cards"><article class="tracked"><span>${esc(model.configuration?.tracked?.label)}</span><strong>Roadmap and program policy</strong><code>${esc(model.configuration?.tracked?.source)}</code><small>non-authorizing</small></article><article class="git-local"><span>${esc(model.configuration?.git_local?.label)}</span><strong>Local non-secret driver resolution</strong><code>${esc(model.configuration?.git_local?.source)}</code><small>non-authorizing</small></article></div></section>
-    ${diagnostics.length ? `<section class="bundle-diagnostics" aria-labelledby="bundle-diagnostics-title"><header><div><span class="orch-eyebrow">Whole-bundle check</span><h2 id="bundle-diagnostics-title">Source decisions that need attention</h2><p>The shared program validator checked the embedded roadmap, policy documents, budgets, and local roster together.</p></div>${badge(`${diagnostics.length} issue${diagnostics.length === 1 ? "" : "s"}`, "issue")}</header><ol>${diagnostics.map((item) => `<li><a href="${esc(item.anchor_href)}" data-bundle-anchor="${esc(item.anchor_id)}"><span>${esc(item.code)}</span><strong>${esc(item.message)}</strong><code>${esc(item.source)}${esc(item.pointer)}</code><small>${esc(item.remediation)}</small></a></li>`).join("")}</ol></section>` : `<section class="bundle-diagnostics clear"><div><span class="orch-eyebrow">Whole-bundle check</span><h2>Every linked decision agrees</h2><p>The shared program validator found no roadmap, workflow, rubric, budget, team, diversity, or local-driver contradiction.</p></div>${badge("ready", "ok")}</section>`}
+    ${diagnostics.length ? `<section class="bundle-diagnostics" aria-labelledby="bundle-diagnostics-title"><header><div><span class="orch-eyebrow">Whole-bundle check</span><h2 id="bundle-diagnostics-title">Source decisions that need attention</h2><p>The shared program validator checked the embedded roadmap, policy documents, budgets, and local roster together.</p></div>${badge(`${diagnostics.length} issue${diagnostics.length === 1 ? "" : "s"}`, "issue")}</header><ol>${diagnostics.map((item) => `<li><a href="${esc(item.anchor_href)}" data-bundle-anchor="${esc(item.anchor_id)}"><span>${esc(item.code)}</span><strong>${esc(item.message)}</strong><code>${esc(item.source)}${esc(item.pointer)}</code><small>${esc(item.remediation)}</small></a></li>`).join("")}</ol></section>` : `<section class="bundle-diagnostics clear"><div><span class="orch-eyebrow">Whole-bundle check</span><h2>Every linked decision agrees</h2><p>The shared program validator found no roadmap, workflow, review, budget, team, diversity, or local-driver contradiction.</p></div>${badge("ready", "ok")}</section>`}
     <div class="bundle-overview-grid">
-      <section id="${esc(model.sections.scope)}" class="bundle-section"><span class="orch-eyebrow">What will run</span><h2>${esc(scope.project_title)}</h2><p>The generated program selects the roadmap frontier only inside this reviewed scope.</p><dl><div><dt>Project</dt><dd>${esc(scope.project)}</dd></div><div><dt>Phases</dt><dd>${bundleBadges(scope.phase_numbers)}</dd></div><div><dt>Stories</dt><dd>${bundleBadges(scope.story_ids)}</dd></div></dl></section>
+      <section id="${esc(model.sections.scope)}" class="bundle-section"><span class="orch-eyebrow">What will run</span><h2>${esc(scope.project_title)}</h2><p>The generated program selects work only inside this reviewed roadmap scope.</p><dl><div><dt>Project</dt><dd>${esc(scope.project)}</dd></div><div><dt>Phases</dt><dd>${bundleBadges(scope.phase_numbers)}</dd></div><div><dt>Stories</dt><dd>${bundleBadges(scope.story_ids)}</dd></div></dl></section>
       <section id="${esc(model.sections.workflow)}" class="bundle-section wide"><span class="orch-eyebrow">How work moves</span><h2>${esc(workflow.title)}</h2><p>${esc(workflow.summary)}</p><ol class="bundle-route">${(workflow.nodes || []).map((node) => `<li><span>${esc(node.type)}</span><strong>${esc(node.id)}</strong>${node.role ? `<small>${esc(node.role)}</small>` : ""}</li>`).join("")}${(workflow.terminals || []).map((terminal) => `<li class="terminal"><span>stop</span><strong>${esc(terminal.id)}</strong><small>${esc(terminal.description)}</small></li>`).join("")}</ol></section>
       <section id="${esc(model.sections.team)}" class="bundle-section wide"><span class="orch-eyebrow">Who implements and verifies</span><h2>${esc(team.title)}</h2><p>${esc(team.independence_explanation)}</p><div class="bundle-seat-grid">${(team.seats || []).map((seat) => `<article><span>${esc(seat.duty)}</span><strong>${esc(seat.profile)}</strong><p>${esc(seat.workspace)} · ${esc(seat.local?.provider_family)}</p>${seat.independent_from?.length ? `<small>independent from ${esc(seat.independent_from.join(", "))}</small>` : '<small>isolated implementation seat</small>'}${badge(seat.local?.available ? "available locally" : "missing locally", seat.local?.available ? "ok" : "issue")}</article>`).join("")}</div><p class="bundle-rules">${(team.independence_rules || []).map((rule) => `${esc(rule.kind)}: ${esc(rule.roles.join(" ↔ "))}`).join(" · ")}</p></section>
-      <section id="${esc(model.sections.checks)}" class="bundle-section wide"><span class="orch-eyebrow">What the checks prove</span><h2>Rubric criteria are bound to producers</h2><div class="bundle-checks">${criteria.map((criterion) => `<article class="${criterion.producer_exists === false ? "missing" : ""}"><span>${esc(criterion.rubric)}</span><strong>${esc(criterion.question)}</strong><p>${criterion.producing_check ? `Produced by <code>${esc(criterion.producing_check)}</code>` : "Independent diff-cited judgment"}</p>${criterion.producing_check ? badge(criterion.producer_exists ? "producer found" : "producer missing", criterion.producer_exists ? "ok" : "issue") : badge("verifier judgment")}</article>`).join("")}</div></section>
-      <section id="${esc(model.sections.capabilities)}" class="bundle-section"><span class="orch-eyebrow">What it may request later</span><h2>Bounded capabilities</h2><p>Policy requests are not permission. A separate grant may authorize only a reviewed subset.</p><div>${bundleBadges(model.requested_capabilities, "warn")}</div></section>
+      <section id="${esc(model.sections.checks)}" class="bundle-section wide"><span class="orch-eyebrow">What the checks prove</span><h2>Review criteria are bound to producers</h2><div class="bundle-checks">${criteria.map((criterion) => `<article class="${criterion.producer_exists === false ? "missing" : ""}"><span>${esc(criterion.rubric)}</span><strong>${esc(criterion.question)}</strong><p>${criterion.producing_check ? `Produced by <code>${esc(criterion.producing_check)}</code>` : "Independent diff-cited judgment"}</p>${criterion.producing_check ? badge(criterion.producer_exists ? "producer found" : "producer missing", criterion.producer_exists ? "ok" : "issue") : badge("verifier judgment")}</article>`).join("")}</div></section>
+      <section id="${esc(model.sections.capabilities)}" class="bundle-section"><span class="orch-eyebrow">What it may request later</span><h2>Bounded allowed work</h2><p>Policy requests are not permission. Separate approval may authorize only a reviewed subset.</p><div>${bundleBadges(model.requested_capabilities, "warn")}</div></section>
       <section id="${esc(model.sections.budgets)}" class="bundle-section"><span class="orch-eyebrow">What it can spend</span><h2>Finite budgets</h2><dl class="bundle-budgets">${Object.entries(model.budgets || {}).map(([name, value]) => `<div><dt>${esc(name.replace(/^max_/, "").replaceAll("_", " "))}</dt><dd>${esc(value)}</dd></div>`).join("")}</dl></section>
-      <section id="${esc(model.sections.stops)}" class="bundle-section"><span class="orch-eyebrow">When it stops</span><h2>Declared stop conditions</h2><div>${bundleBadges(model.stop_conditions)}</div><p>No stop grants authority to continue by itself.</p></section>
+      <section id="${esc(model.sections.stops)}" class="bundle-section"><span class="orch-eyebrow">When it stops</span><h2>Declared stop conditions</h2><div>${bundleBadges(model.stop_conditions)}</div><p>No stop provides permission to continue by itself.</p></section>
       <section id="${esc(model.sections.drivers)}" class="bundle-section"><span class="orch-eyebrow">Local driver resolution</span><h2>${esc(model.driver_resolution?.status || "not checked")}</h2><div class="bundle-drivers">${driverProfiles.map((profile) => `<article><strong>${esc(profile.profile)}</strong><span>${esc(profile.provider_family)} · ${esc(profile.adapter?.kind || "adapter unresolved")}</span><small>${esc(profile.model?.alias || "model unresolved")}</small>${badge(profile.available ? "available" : "unavailable", profile.available ? "ok" : "issue")}</article>`).join("") || '<p class="hint">No local profiles resolved.</p>'}</div><p>Local bindings disclose availability and non-secret metadata only.</p></section>
     </div>
     <section class="bundle-simulation"><header><div><span class="orch-eyebrow">Pure simulation</span><h2>One bounded route, before any work starts</h2><p>This is the same scaffold simulation core used by the terminal surface. It writes no state.</p></div>${badge(simulation.bounded ? "bounded" : "unavailable", simulation.bounded ? "ok" : "issue")}</header><ol class="bundle-route">${(simulation.green_route || []).map((step) => `<li><strong>${esc(step)}</strong></li>`).join("")}</ol><details><summary>Failure and repair routes</summary><p><strong>Repair:</strong> ${esc((simulation.repair_route || []).join(" → "))}</p><ul>${(simulation.failure_routes || []).map((route) => `<li><code>${esc(route.type)}</code> stops at <strong>${esc(route.target)}</strong></li>`).join("")}</ul></details></section>
-    <section id="${esc(model.sections.handoff)}" class="bundle-handoff"><div><span class="orch-eyebrow">After dw setup apply</span><h2>${esc(model.handoff?.label)}</h2><p>Return to the terminal for a fresh, separate grant preview. The browser mints nothing and runs nothing.</p></div><code>${esc(model.handoff?.command)}</code><small>configuration, not permission · creates grant: false</small></section>
+    <section id="${esc(model.sections.handoff)}" class="bundle-handoff"><div><span class="orch-eyebrow">After dw setup apply</span><h2>${esc(model.handoff?.label)}</h2><p>Return to the terminal for a fresh, separate permission preview. The browser creates nothing and runs nothing.</p></div><code>${esc(model.handoff?.command)}</code><small>configuration only · creates permission: false</small></section>
   </div>`;
   document.querySelectorAll("[data-bundle-anchor]").forEach((link) => link.addEventListener("click", () => {
     requestAnimationFrame(() => document.getElementById(link.dataset.bundleAnchor)?.scrollIntoView({ block: "start" }));
@@ -4978,6 +6581,7 @@ async function viewProgramStudio(family = "program", name) {
   studioState.view = "plan";
   studioState.planSection = family === "organization" ? "responsibilities" : "scope";
   studioState.technicalMode = "graph";
+  studioState.technicalExpanded = false;
   const familyModel = studioFamilyModel(family);
   const chosen = (!name && family === "program" && pendingProgramSetup)
     ? null
@@ -5001,13 +6605,22 @@ async function viewProgramStudio(family = "program", name) {
     }
   }
   if (chosen) studioState.setupContext = null;
-  const requestedView = new URLSearchParams(location.search).get("studioview");
+  const studioParams = new URLSearchParams(location.search);
+  const requestedView = studioParams.get("studioview");
   if (STUDIO_VIEWS.includes(requestedView)) studioState.view = requestedView;
-  const requestedTechnical = new URLSearchParams(location.search).get("studiotechnical");
+  const requestedSection = studioParams.get("studiosection");
+  if ((studioAuthoring()?.sections || []).some((section) => section.id === requestedSection)) studioState.planSection = requestedSection;
+  studioState.technicalExpanded = studioParams.get("studiofold") === "1";
+  const requestedTechnical = studioParams.get("studiotechnical");
   if (["graph", "config"].includes(requestedTechnical)) studioState.technicalMode = requestedTechnical;
   const requestedScenario = new URLSearchParams(location.search).get("studioscenario");
   if (requestedScenario) studioState.scenario = requestedScenario;
   if (studioState.model) renderProgramStudio(); else { renderProgramStudio(); await refreshStudioModel(); }
+  if (studioParams.get("studiofocus") === "technical") {
+    requestAnimationFrame(() => requestAnimationFrame(() => (
+      document.querySelector(".studio-form-technical")?.scrollIntoView({ block: "start" })
+    )));
+  }
 }
 
 /* ── router ─────────────────────────────────────────────────────────── */
@@ -5018,13 +6631,44 @@ async function route({ focusMain = false } = {}) {
   stopRunLive(); // leaving the run view closes its live tail
   stopProgramLive(); // leaving an explicit program run closes its live tail
   app.setAttribute("aria-busy", "true");
+  app.classList.remove("board-action-snapshot");
   app.innerHTML = stateHtml("Loading…");
   const hash = decodeURIComponent(location.hash.replace(/^#/, "")) || "/";
   const parts = hash.split("/").filter(Boolean);
   try {
     await loadPresentationCatalog();
+    const projects = await loadProjects();
+    const requestedProject = new URLSearchParams(location.search).get("project")
+      || routeProject(parts);
+    let blockedByProjectChoice = false;
+    if (requestedProject) {
+      if (projectBySlug(requestedProject)) rememberProject(requestedProject);
+      else {
+        viewUnavailableProject(requestedProject);
+        blockedByProjectChoice = true;
+      }
+    } else if (!selectedProject) {
+      selectedProject = storedProject();
+    }
+    if (!blockedByProjectChoice && selectedProject && !projectBySlug(selectedProject)) {
+      viewUnavailableProject(selectedProject);
+      blockedByProjectChoice = true;
+    }
+    if (!blockedByProjectChoice && parts[0] === "projects") {
+      viewProjectSelector(projectReturnHash);
+      blockedByProjectChoice = true;
+    }
+    if (!blockedByProjectChoice && projects.length > 1 && !selectedProject) {
+      projectReturnHash = `#${hash}`;
+      viewProjectSelector(projectReturnHash);
+      blockedByProjectChoice = true;
+    }
+    if (!blockedByProjectChoice && projects.length === 1 && !selectedProject) {
+      rememberProject(projects[0].slug);
+    }
     let handled = true;
-    if (!parts.length) await viewOverview();
+    if (blockedByProjectChoice) handled = true;
+    else if (!parts.length) await viewBoard(selectedProject);
     else if (parts[0] === "p" && parts.length === 2) await viewProject(parts[1]);
     else if (parts[0] === "p" && parts[2] === "ph") await viewPhase(parts[1], parts[3]);
     else if (parts[0] === "p" && parts[2] === "s") await viewStory(parts[1], parts[3]);
@@ -5032,6 +6676,7 @@ async function route({ focusMain = false } = {}) {
     else if (parts[0] === "wl") await viewWorklog(parts.slice(1).join("/"));
     else if (parts[0] === "board") await viewBoard(parts[1]);
     else if (parts[0] === "orchestration") await viewOrchestration(parts[1]);
+    else if (parts[0] === "live") await viewLive(parts[1], parts[2], parts[3]);
     else if (parts[0] === "programs") await viewPrograms(parts[1]);
     else if (parts[0] === "program-studio" && parts.length === 1) await viewDeliverySetup();
     else if (parts[0] === "program-studio" && parts[1] === "bundle") await viewStudioBundle(parts[2]);
@@ -5040,6 +6685,7 @@ async function route({ focusMain = false } = {}) {
     else if (parts[0] === "health") await viewHealth();
     else if (parts[0] === "mc") await viewMissionControl();
     else if (parts[0] === "f") await viewFile(parts.slice(1).join("/"));
+    else if (parts[0] === "design") { app.innerHTML = window.DW.designReferencePage(); }
     else handled = false;
     if (!handled) app.innerHTML = stateHtml(`Unknown view: ${hash}`, true);
   } catch (err) {
@@ -5069,6 +6715,10 @@ document.getElementById("skip-link").addEventListener("click", () => {
   target.scrollIntoView({ block: "start" });
 });
 document.getElementById("refresh-btn").addEventListener("click", () => route());
+document.getElementById("project-switcher").addEventListener("click", () => {
+  projectReturnHash = location.hash && location.hash !== "#/projects"
+    ? location.hash : `#/board/${encodeURIComponent(selectedProject)}`;
+});
 window.addEventListener("hashchange", () => route({ focusMain: true }));
 
 api("/api/context").then((body) => {
