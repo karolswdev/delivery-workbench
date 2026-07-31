@@ -53,6 +53,7 @@ interaction — never the authority model.
 
 ## Exit criteria (evidence required)
 
+- [ ] A component library and design system exists, with a framework decision recorded, and the existing board migrated to new components with no regression (WLA-33-00).
 - [ ] The workbench opens to a workspace layout: a kanban board of stories with status columns, drag-to-move, and inline create — not a text page with a board link (WLA-33-01).
 - [ ] Clicking a story card opens a session panel showing the live agent transcript — tool calls, edits, questions — streamed in real time via SSE (WLA-33-02).
 - [ ] The session panel includes a diff review view: side-by-side or unified changes with accept/reject controls that ride the existing preview/apply boundary (WLA-33-03).
@@ -67,6 +68,7 @@ interaction — never the authority model.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
+| WLA-33-00 | Design system and component foundation | backlog | [story-00-design-system](./story-00-design-system.md) | [evidence-story-00](./evidence-story-00.md) |
 | WLA-33-01 | Workspace home | backlog | [story-01-workspace-home](./story-01-workspace-home.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-33-02 | Live session stream | backlog | [story-02-live-session-stream](./story-02-live-session-stream.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-33-03 | Diff review panel | backlog | [story-03-diff-review-panel](./story-03-diff-review-panel.md) | [evidence-story-03](./evidence-story-03.md) |
@@ -79,13 +81,15 @@ interaction — never the authority model.
 
 ## Sequencing
 
-Foundation first: WLA-33-01 (workspace layout) and WLA-33-08 (multi-panel
-frame) set the shell everything else renders inside. Then the live-work
-core: WLA-33-02 (session stream) and WLA-33-03 (diff review) — these are
-the heart of the Operator feel. Then the supporting panels: WLA-33-04
-(terminal), WLA-33-05 (services), WLA-33-06 (insights). WLA-33-07
-(progressive disclosure) sweeps the advanced features into their fold.
-WLA-33-09 closes the phase as the exam.
+Design system first: WLA-33-00 (components, framework, interaction
+primitives, layout grid) is the foundation everything else builds on.
+Then the workspace shell: WLA-33-01 (board as home) and WLA-33-08
+(multi-panel layout engine). Then the live-work core: WLA-33-02
+(session stream) and WLA-33-03 (diff review) — the heart of the
+Operator feel. Then the supporting panels: WLA-33-04 (terminal),
+WLA-33-05 (services), WLA-33-06 (insights). WLA-33-07 (progressive
+disclosure) sweeps the advanced features into their fold. WLA-33-09
+closes the phase as the exam.
 
 ## Where we are
 

@@ -3,7 +3,7 @@
 - **Project:** work-log-automation
 - **Phase:** 33
 - **Status:** backlog
-- **Depends on:** WLA-33-02, WLA-33-03, WLA-33-04, WLA-33-05, WLA-33-06, WLA-33-07, WLA-33-08
+- **Depends on:** WLA-33-00, WLA-33-02, WLA-33-03, WLA-33-04, WLA-33-05, WLA-33-06, WLA-33-07, WLA-33-08
 - **Unblocks:** none
 - **Owner:** unassigned
 
