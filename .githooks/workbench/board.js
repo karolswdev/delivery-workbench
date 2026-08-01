@@ -1,37 +1,88 @@
 "use strict";
 
 /* ── board view ───────────────────────────────────────────────────────
- * Kanban-style phase lanes with drag-and-drop, story creation,
- * and phase pause/resume.  Extracted from app.js. */
+ * Operator-style flat board with "Backlog", "In progress", "Needs you",
+ * and "Done" columns, plus a toggle to fall back to the legacy
+ * phase-lane layout.  Cards are enriched with execution state,
+ * attention badges, evidence indicators, and relative timestamps.
+ * Clicking a card title opens a slide-over session panel alongside
+ * the board instead of navigating away. */
 
 const BOARD_STATUSES = ["backlog", "ready", "in-progress", "blocked", "on-hold", "done"];
-const HOLD_COLUMNS = ["on-hold"];
+const HOLD_COLUMNS   = ["on-hold"];
+
+/* ── time helpers ───────────────────────────────────────── */
+
+function _relativeTime(ts) {
+  if (!ts) return "";
+  const then = new Date(ts);
+  if (isNaN(then)) return "";
+  const diff = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (diff < 60)   return "just now";
+  if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+  if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+  return Math.floor(diff / 86400) + "d ago";
+}
+
+/* ── flat column assignment ─────────────────────────────── */
+
+const FLAT_BACKLOG    = "flat-backlog";
+const FLAT_INPROGRESS = "flat-inprogress";
+const FLAT_NEEDSYOU   = "flat-needsyou";
+const FLAT_DONE       = "flat-done";
+
+function flatColumn(card, ortho) {
+  const attn = (ortho && ortho.attention) || "none";
+  if (attn !== "none") return FLAT_NEEDSYOU;
+  const st = card.status;
+  if (st === "done" || st === "complete" || st === "closed" || st === "shipped") return FLAT_DONE;
+  if (st === "in-progress" || st === "blocked" || st === "on-hold" || st === "paused") return FLAT_INPROGRESS;
+  return FLAT_BACKLOG;
+}
+
+/* ── card rendering (shared between flat and phase views) ─ */
 
 function boardCard(slug, lane, card, orthoState) {
-  const parked = PARKED_COLUMNS.includes(card.status) || card.status === "paused";
+  const parked  = PARKED_COLUMNS.includes(card.status) || card.status === "paused";
   const movable = !lane.closed && !lane.paused;
-  const ortho = orthoState || {};
-  const exec = ortho.execution || "stopped";
-  const attn = ortho.attention || "none";
-  const auth = ortho.authority || "none";
+  const ortho   = orthoState || {};
+  const exec    = ortho.execution || "stopped";
+  const attn    = ortho.attention || "none";
+  const auth    = ortho.authority || "none";
+  const lastTs  = ortho.last_activity || ortho.updated_at || "";
+
   const execDot = exec === "running"
     ? '<span class="bcard-exec bcard-exec-running" title="Running" aria-label="Execution: running"></span>'
     : exec === "idle"
     ? '<span class="bcard-exec bcard-exec-idle" title="Idle" aria-label="Execution: idle"></span>'
     : "";
+
+  const attnLabel = attn === "waiting-for-input" ? "Input needed"
+    : attn === "decision-pending" ? "Decision"
+    : attn !== "none" ? "Blocked" : "";
   const attnBadge = attn !== "none"
-    ? `<dw-badge variant="needs-you" count="${esc(attn === "waiting-for-input" ? "Input needed" : attn === "decision-pending" ? "Decision" : "Blocked")}"></dw-badge>`
+    ? `<dw-badge variant="needs-you" count="${esc(attnLabel)}"></dw-badge>`
     : "";
+  const attnPreview = (attn !== "none" && ortho.question)
+    ? `<div class="bcard-question">${esc(ortho.question)}</div>` : "";
+
   const authRing = auth !== "none" ? ` bcard-auth-${esc(auth)}` : "";
+  const timeLabel = _relativeTime(lastTs);
+
   return `
     <dw-card class="bcard st-${esc(card.status)}${authRing}" ${movable ? 'draggable="true"' : ""}
          data-story="${esc(card.story_id)}" data-phase="${lane.number}"
          data-status="${esc(card.status)}" data-evidence="${card.evidence_exists ? 1 : 0}"
          data-execution="${esc(exec)}" data-attention="${esc(attn)}" data-authority="${esc(auth)}"
          aria-label="${esc(card.story_id)}: ${esc(card.title)}. Status ${esc(card.status)}. Execution ${esc(exec)}.${attn !== "none" ? " Attention: " + esc(attn) + "." : ""}">
-      <div slot="header" class="bcard-top"><a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}"><code>${esc(card.story_id)}</code></a>${execDot}
-        <dw-status-pill status="${esc(card.status)}"></dw-status-pill>${attnBadge}${card.evidence_exists ? ' <span class="tick">proof saved</span>' : ""}</div>
+      <div slot="header" class="bcard-top">
+        <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}" class="bcard-link"><code>${esc(card.story_id)}</code></a>${execDot}
+        <span class="bcard-phase-label">Phase ${esc(String(lane.number))}</span>
+        <dw-status-pill status="${esc(card.status)}"></dw-status-pill>${attnBadge}${card.evidence_exists ? ' <span class="tick">proof saved</span>' : ""}
+        ${timeLabel ? `<span class="bcard-time">${esc(timeLabel)}</span>` : ""}
+      </div>
       <div class="bcard-title">${esc(card.title)}</div>
+      ${attnPreview}
       ${parked ? `<div class="bcard-note"><strong>Waiting:</strong> ${esc(card.note || "no reason recorded")}</div>` : ""}
       ${movable ? `<div slot="footer" class="bcard-actions" role="group" aria-label="Actions for ${esc(card.story_id)}">
         <dw-button variant="ghost" class="bmove" id="board-move-${esc(card.story_id)}" data-board-move>Move</dw-button>
@@ -40,13 +91,87 @@ function boardCard(slug, lane, card, orthoState) {
     </dw-card>`;
 }
 
+/* ── flat board rendering ─────────────────────────────────── */
+
+function flatBoardCards(slug, model, orthoMap) {
+  const buckets = {
+    [FLAT_BACKLOG]:    [],
+    [FLAT_INPROGRESS]: [],
+    [FLAT_NEEDSYOU]:   [],
+    [FLAT_DONE]:       [],
+  };
+
+  for (const lane of model.phases) {
+    for (const col of model.columns) {
+      for (const card of (lane.columns[col] || [])) {
+        const ortho  = orthoMap[card.story_id] || {};
+        const bucket = flatColumn(card, ortho);
+        buckets[bucket].push({ card, lane, ortho });
+      }
+    }
+  }
+  return buckets;
+}
+
+function flatColumnHtml(slug, id, label, items, orthoMap, opts) {
+  const collapsed   = opts && opts.collapsed;
+  const collapseMax = opts && opts.collapseMax;
+  const count       = items.length;
+  const droppable   = 1;
+
+  let cardsHtml = "";
+  let displayItems = items;
+  let hiddenCount = 0;
+
+  if (collapsed && collapseMax && count > collapseMax) {
+    // Show last N items (most recent)
+    displayItems = items.slice(-collapseMax);
+    hiddenCount = count - collapseMax;
+  }
+
+  if (hiddenCount > 0) {
+    cardsHtml += `<div class="flat-collapsed-count">${hiddenCount} more stor${hiddenCount === 1 ? "y" : "ies"} not shown</div>`;
+  }
+
+  cardsHtml += displayItems.map((entry) =>
+    boardCard(slug, entry.lane, entry.card, orthoMap[entry.card.story_id])
+  ).join("");
+
+  return `
+    <div class="bcol flat-col flat-col-${esc(id)}${count === 0 ? " bcol-empty flat-col-empty" : ""}" data-flat-col="${esc(id)}" data-droppable="${droppable}">
+      <div class="bcol-head">${esc(label)} <span class="bcol-count">${count}</span></div>
+      ${cardsHtml}
+    </div>`;
+}
+
+function flatBoardHtml(slug, model, orthoMap) {
+  const buckets = flatBoardCards(slug, model, orthoMap);
+  const totalStories = Object.values(buckets).reduce((s, b) => s + b.length, 0);
+  const inProgressCount = buckets[FLAT_INPROGRESS].length;
+  const needsYouCount   = buckets[FLAT_NEEDSYOU].length;
+
+  const cols = [
+    flatColumnHtml(slug, FLAT_BACKLOG,    "Backlog",     buckets[FLAT_BACKLOG],    orthoMap, { collapsed: true, collapseMax: 5 }),
+    flatColumnHtml(slug, FLAT_INPROGRESS, "In progress", buckets[FLAT_INPROGRESS], orthoMap, {}),
+    flatColumnHtml(slug, FLAT_NEEDSYOU,   "Needs you",   buckets[FLAT_NEEDSYOU],   orthoMap, {}),
+    flatColumnHtml(slug, FLAT_DONE,       "Done",        buckets[FLAT_DONE],       orthoMap, { collapsed: true, collapseMax: 3 }),
+  ];
+
+  return { html: cols.join(""), totalStories, inProgressCount, needsYouCount };
+}
+
+/* ── legacy phase-lane rendering (unchanged logic) ──────── */
+
 function boardLane(slug, columns, lane, orthoMap) {
   const droppable = !lane.closed && !lane.paused;
-  const cols = columns.map((col) => `
-    <div class="bcol" data-col="${esc(col)}" data-phase="${lane.number}" data-droppable="${droppable ? 1 : 0}">
-      <div class="bcol-head">${esc(col)} <span class="bcol-count">${lane.columns[col].length}</span></div>
+  const cols = columns.map((col) => {
+    const count = lane.columns[col].length;
+    return `
+    <div class="bcol${count === 0 ? " bcol-empty" : ""}" data-col="${esc(col)}" data-phase="${lane.number}" data-droppable="${droppable ? 1 : 0}">
+      <div class="bcol-head">${esc(col)} <span class="bcol-count">${count}</span></div>
       ${lane.columns[col].map((card) => boardCard(slug, lane, card, orthoMap[card.story_id])).join("")}
-    </div>`).join("");
+    </div>`;
+  }).join("");
   const uncovered = lane.story_count === 0 && lane.uncovered_story_files
     ? `<span class="sub">no story table — ${lane.uncovered_story_files} story file${lane.uncovered_story_files === 1 ? "" : "s"} on disk, unlisted</span>` : "";
   const head = `
@@ -61,9 +186,13 @@ function boardLane(slug, columns, lane, orthoMap) {
       </div>
     </div>`;
   if (lane.closed) {
+    const allDone = lane.story_count > 0 && lane.done_count === lane.story_count;
+    const summaryText = allDone
+      ? `Phase ${lane.number} · ${esc(lane.slug)} — ${lane.story_count} stor${lane.story_count === 1 ? "y" : "ies"}, all done`
+      : `Phase ${lane.number} · ${esc(lane.slug)} — closed, ${lane.done_count}/${lane.story_count} done`;
     return `
       <details class="blane closed" data-phase="${lane.number}">
-        <summary>phase ${lane.number} · ${esc(lane.slug)} — closed, ${lane.done_count}/${lane.story_count} done</summary>
+        <summary>${summaryText}</summary>
         <div class="bcols">${cols}</div>
       </details>`;
   }
@@ -73,6 +202,8 @@ function boardLane(slug, columns, lane, orthoMap) {
       <div class="bcols">${cols}</div>
     </div>`;
 }
+
+/* ── helpers ──────────────────────────────────────────────── */
 
 function focusBoardRegion(selector) {
   if (!SNAPSHOT_MODE) focusRegion(selector);
@@ -162,7 +293,7 @@ async function previewBoardMutation(out, intent, sentence) {
 }
 
 /* The move panel: the same structured intent the editor builds,
- * pre-filled from a drop or the ⇄ affordance. Client mirrors of the
+ * pre-filled from a drop or the Move affordance. Client mirrors of the
  * server rules gate the preview button; the server stays the
  * authority. */
 function openMovePanel(slug, move, trigger = document.activeElement) {
@@ -366,7 +497,7 @@ function wireBoardMoves(slug) {
     event.preventDefault();
     const from = dragging;
     dragging = null;
-    if (column.dataset.phase !== from.phase) {
+    if (column.dataset.phase && column.dataset.phase !== from.phase) {
       boardNotice("Cross-phase moves are not supported. The story stays in its original lane.");
       return;
     }
@@ -376,7 +507,7 @@ function wireBoardMoves(slug) {
     }
     openMovePanel(slug, {
       story: from.story, phase: from.phase, from: from.status,
-      to: column.dataset.col, evidenceExists: from.evidence === "1",
+      to: column.dataset.col || "", evidenceExists: from.evidence === "1",
     });
   });
   board.addEventListener("click", (event) => {
@@ -409,26 +540,160 @@ function wireBoardMoves(slug) {
   });
 }
 
-function boardOverviewStrip(slug, setup, status, step, presentation, notice) {
+/* ── slide-over session panel (inline) ────────────────────── */
+
+function _openSlideOver(storyId, slug) {
+  // Use the existing SessionPanel if available
+  if (!window.DW._sessionPanel) {
+    if (window.DW.SessionPanel) {
+      window.DW._sessionPanel = new window.DW.SessionPanel();
+    } else {
+      // Fallback: navigate
+      location.hash = `#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(storyId)}`;
+      return;
+    }
+  }
+  const panel = window.DW._sessionPanel;
+  const slideOver = document.getElementById("board-slide-over");
+  if (!slideOver) return;
+
+  // Toggle: same card closes
+  if (panel.isOpen() && panel.storyId() === storyId) {
+    _closeSlideOver();
+    return;
+  }
+
+  // Open
+  slideOver.hidden = false;
+  slideOver.classList.add("open");
+  document.querySelector(".board")?.classList.add("board-has-slide-over");
+
+  // Ensure session panel root exists in slide-over
+  let root = slideOver.querySelector(".session-panel-root");
+  if (!root) {
+    root = document.createElement("div");
+    root.className = "session-panel-root";
+    const content = slideOver.querySelector(".slide-over-content");
+    if (content) { content.innerHTML = ""; content.appendChild(root); }
+  }
+
+  // Open the layout panel if workspace layout is available
+  if (window.DW._layout) window.DW._layout.open("session");
+
+  panel.open(storyId, slug);
+}
+
+function _closeSlideOver() {
+  const panel = window.DW._sessionPanel;
+  if (panel) panel.close();
+  const slideOver = document.getElementById("board-slide-over");
+  if (slideOver) {
+    slideOver.classList.remove("open");
+    slideOver.hidden = true;
+  }
+  document.querySelector(".board")?.classList.remove("board-has-slide-over");
+  if (window.DW._layout) window.DW._layout.close("session");
+}
+
+function wireSlideOverPanel(slug) {
+  const board = document.querySelector(".board");
+  if (!board) return;
+
+  board.addEventListener("click", (event) => {
+    const link = event.target.closest && event.target.closest(".bcard-link");
+    if (!link) return;
+
+    const href = link.getAttribute("href") || "";
+    const match = href.match(/#\/p\/([^/]+)\/s\/([^/]+)/);
+    if (!match) return;
+
+    event.preventDefault();
+    const linkSlug = decodeURIComponent(match[1]);
+    const storyId  = decodeURIComponent(match[2]);
+    _openSlideOver(storyId, linkSlug);
+  });
+
+  // Escape closes
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      const slideOver = document.getElementById("board-slide-over");
+      if (slideOver && slideOver.classList.contains("open")) {
+        event.preventDefault();
+        _closeSlideOver();
+      }
+    }
+  });
+}
+
+/* ── SSE live updates ─────────────────────────────────────── */
+
+function wireBoardLiveUpdates() {
+  if (SNAPSHOT_MODE || typeof document === "undefined") return;
+
+  document.addEventListener("dw-story-changed", (event) => {
+    const detail = event.detail || {};
+    const card = document.querySelector(`dw-card[data-story="${selectorEscape(detail.story_id || "")}"]`);
+    if (!card) return;
+    card.classList.add("bcard-transitioning");
+    setTimeout(() => {
+      card.dataset.status = detail.status || card.dataset.status;
+      card.classList.remove("bcard-transitioning");
+      // A full re-render is more reliable than DOM surgery for column moves
+    }, 300);
+  });
+
+  document.addEventListener("dw-request-pending", (event) => {
+    const detail = event.detail || {};
+    const card = document.querySelector(`dw-card[data-story="${selectorEscape(detail.story_id || "")}"]`);
+    if (!card) return;
+    card.dataset.attention = detail.type || "waiting-for-input";
+    if (!card.querySelector(".bcard-top dw-badge[variant='needs-you']")) {
+      const badge = document.createElement("dw-badge");
+      badge.setAttribute("variant", "needs-you");
+      badge.setAttribute("count", "Needs you");
+      const top = card.querySelector(".bcard-top");
+      if (top) top.appendChild(badge);
+    }
+  });
+
+  document.addEventListener("dw-request-resolved", (event) => {
+    const detail = event.detail || {};
+    const card = document.querySelector(`dw-card[data-story="${selectorEscape(detail.story_id || "")}"]`);
+    if (!card) return;
+    card.dataset.attention = "none";
+    const needsBadge = card.querySelector(".bcard-top dw-badge[variant='needs-you']");
+    if (needsBadge) needsBadge.remove();
+  });
+}
+
+/* ── overview strip ───────────────────────────────────────── */
+
+function boardOverviewStrip(slug, setup, status, step, presentation, notice, flatStats) {
   const next = presentation.next_step || {};
   const work = setup.delivery_scope?.current_work;
   const needsAttention = setup.readiness !== "ready";
   const technicalOpen = Boolean(
     notice || (SNAPSHOT_MODE && new URLSearchParams(location.search).has("confirmstep")),
   );
-  return `<section class="board-overview readiness-${esc(setup.readiness)}" aria-labelledby="board-title">
-    <div class="board-overview-head"><div><span>Work · ${esc(slug)}</span>
-      <h1 id="board-title">${esc(slug)} board</h1></div>
-      <dw-badge variant="${needsAttention ? "alert" : "default"}" count="${esc(needsAttention ? "Needs attention" : "Ready")}"></dw-badge></div>
-    <div class="board-overview-strip">
-      <div class="board-attention"><span>${needsAttention ? "Needs attention" : "Repository ready"}</span>
-        <strong>${esc(status.summary)}</strong></div>
-      <div class="board-next-step"><span>Next step</span>
-        <strong>${esc(next.label || presentationCopy("check_readiness"))}</strong>
-        <p>${esc(next.summary || "Review the current work before acting.")}</p></div>
-      ${work ? `<div class="board-current-work"><span>Current work</span>
-        <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(work.story_id)}"><code>${esc(work.story_id)}</code> ${esc(work.title)}</a>
-        <dw-status-pill status="${esc(work.status)}"></dw-status-pill></div>` : ""}
+
+  const statusSentence = needsAttention
+    ? `Needs attention. ${status.summary || ""}`
+    : `Ready. ${status.summary || ""}`;
+
+  const statsLine = flatStats
+    ? `${flatStats.totalStories} stor${flatStats.totalStories === 1 ? "y" : "ies"}, ${flatStats.inProgressCount} in progress, ${flatStats.needsYouCount} need you`
+    : "";
+
+  return `<section class="board-overview board-overview-flat readiness-${esc(setup.readiness)}" aria-labelledby="board-title">
+    <div class="board-overview-head-flat">
+      <div class="board-overview-name">
+        <h1 id="board-title">${esc(slug)}</h1>
+        ${statsLine ? `<span class="board-stats-line">${esc(statsLine)}</span>` : ""}
+      </div>
+      <div class="board-overview-status-line">
+        <dw-badge variant="${needsAttention ? "alert" : "default"}" count="${esc(needsAttention ? "Needs attention" : "Ready")}"></dw-badge>
+        <span class="board-status-sentence">${esc(statusSentence)}</span>
+      </div>
     </div>
     <dw-fold class="board-technical" label="Technical details"${technicalOpen ? " open" : ""}>
       <p>Exact repository, contract, gate, command, and one-step facts.</p>
@@ -436,6 +701,22 @@ function boardOverviewStrip(slug, setup, status, step, presentation, notice) {
     </dw-fold>
   </section>`;
 }
+
+/* ── view toggle persistence ──────────────────────────────── */
+
+const BOARD_VIEW_KEY = "delivery-workbench.board-view";
+
+function _savedBoardView() {
+  try { return localStorage.getItem(BOARD_VIEW_KEY) || "flat"; }
+  catch (_) { return "flat"; }
+}
+
+function _saveBoardView(view) {
+  try { localStorage.setItem(BOARD_VIEW_KEY, view); }
+  catch (_) { /* ignore */ }
+}
+
+/* ── main view function ───────────────────────────────────── */
 
 async function viewBoard(slug, notice = null) {
   slug = slug || selectedProject;
@@ -454,24 +735,85 @@ async function viewBoard(slug, notice = null) {
     api(`/api/projects/${encodeURIComponent(slug)}/state`).catch(() => ({ data: { stories: [] } })),
   ]);
   const model = boardBody.data;
-  const step = stepBody.data;
+  const step  = stepBody.data;
   const orthoMap = {};
   (stateBody.data.stories || []).forEach((s) => { orthoMap[s.story_id] = s; });
-  const open = model.phases.filter((lane) => !lane.closed);
+
+  const currentView = _savedBoardView();
+  const flatResult  = flatBoardHtml(slug, model, orthoMap);
+
+  const open   = model.phases.filter((lane) => !lane.closed);
   const closed = model.phases.filter((lane) => lane.closed);
+
+  // Find the first open phase for the "Create story" button in flat view
+  const firstOpenPhase = open[0] || null;
+
+  const phaseLanesHtml = `
+    ${open.map((lane) => boardLane(slug, model.columns, lane, orthoMap)).join("") || stateHtml("No open phases")}
+    ${closed.length ? `<details class="board-closed"><summary>Closed phases (${closed.length})</summary>
+      ${closed.map((lane) => boardLane(slug, model.columns, lane, orthoMap)).join("")}</details>` : ""}`;
+
   app.innerHTML = `${destinationNav("work", "#/board")}
-    ${boardOverviewStrip(slug, setupBody.data, statusBody.data, step, presentationBody.data, notice)}
-    <div class="board" aria-labelledby="phase-lanes-title">
-      <div class="board-lanes-head"><div><span>Roadmap</span><h2 id="phase-lanes-title">Phase lanes</h2></div>
-        <p>Create and move work here. Every saved change stops for an exact preview.</p></div>
+    ${boardOverviewStrip(slug, setupBody.data, statusBody.data, step, presentationBody.data, notice, flatResult)}
+    <div class="board board-redesigned" aria-labelledby="board-columns-title">
+      <div class="board-toolbar">
+        <div class="board-toolbar-left">
+          <h2 id="board-columns-title">Stories</h2>
+          ${firstOpenPhase ? `<dw-button variant="primary" id="board-create-flat" data-board-create data-phase="${firstOpenPhase.number}" data-phase-name="${esc(firstOpenPhase.slug)}">Create story</dw-button>` : ""}
+        </div>
+        <div class="board-toolbar-right">
+          <div class="board-view-toggle" role="group" aria-label="Board view">
+            <button type="button" class="board-view-btn${currentView === "flat" ? " active" : ""}" data-board-view="flat" aria-pressed="${currentView === "flat"}">Flat</button>
+            <button type="button" class="board-view-btn${currentView === "phase" ? " active" : ""}" data-board-view="phase" aria-pressed="${currentView === "phase"}">By phase</button>
+          </div>
+        </div>
+      </div>
       <div id="board-move"></div>
-      ${open.map((lane) => boardLane(slug, model.columns, lane, orthoMap)).join("") || stateHtml("No open phases")}
-      ${closed.length ? `<details class="board-closed"><summary>Closed phases (${closed.length})</summary>
-        ${closed.map((lane) => boardLane(slug, model.columns, lane, orthoMap)).join("")}</details>` : ""}
+      <div class="board-flat-view${currentView === "flat" ? "" : " hidden"}" data-board-layout="flat">
+        <div class="bcols flat-cols">${flatResult.html}</div>
+      </div>
+      <div class="board-phase-view${currentView === "phase" ? "" : " hidden"}" data-board-layout="phase">
+        <div class="board-lanes-head"><div><span>Roadmap</span><h2>Phase lanes</h2></div>
+          <p>Create and move work here. Every saved change stops for an exact preview.</p></div>
+        ${phaseLanesHtml}
+      </div>
+      <div id="board-slide-over" class="slide-over" hidden aria-label="Story session panel">
+        <div class="slide-over-header">
+          <button type="button" class="slide-over-close" aria-label="Close panel">Close</button>
+        </div>
+        <div class="slide-over-content" data-panel="session"></div>
+      </div>
     </div>`;
+
+  // Wire view toggle
+  const toggleGroup = document.querySelector(".board-view-toggle");
+  if (toggleGroup) {
+    toggleGroup.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-board-view]");
+      if (!btn) return;
+      const view = btn.dataset.boardView;
+      _saveBoardView(view);
+      document.querySelectorAll("[data-board-layout]").forEach((el) => {
+        el.classList.toggle("hidden", el.dataset.boardLayout !== view);
+      });
+      document.querySelectorAll(".board-view-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.boardView === view);
+        b.setAttribute("aria-pressed", String(b.dataset.boardView === view));
+      });
+    });
+  }
+
+  // Wire slide-over close button
+  const slideCloseBtn = document.querySelector(".slide-over-close");
+  if (slideCloseBtn) {
+    slideCloseBtn.addEventListener("click", _closeSlideOver);
+  }
+
   wireStepControl(step);
   wireBoardMoves(slug);
-  if (window.DW.wireSessionPanelClicks) wireSessionPanelClicks();
+  wireSlideOverPanel(slug);
+  wireBoardLiveUpdates();
+
   // Deterministic screenshot affordances for board action and refusal states.
   if (SNAPSHOT_MODE) {
     const params = new URLSearchParams(location.search);
