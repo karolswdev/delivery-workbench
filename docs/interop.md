@@ -121,6 +121,9 @@ is added when an external consumer asks for one.
 | Conductor supervision | `delivery-workbench-conductor-supervision` v1 | `orchestration_conductor.supervise_run` |
 | Exact check receipt | `delivery-workbench-check-receipt` v1 | `orchestration_conductor.CheckManager` |
 | Rail-step receipt | `delivery-workbench-rail-receipt` v1 | `orchestration_conductor.RailManager` |
+| Memory read model | `delivery-workbench-memory-read` v1 | `memory_read.build_memory_recall_projection` |
+| Memory writeback inventory | `delivery-workbench-memory-writebacks` v1 | `memory_read.build_memory_writeback_projection` |
+| Memory record read | `delivery-workbench-memory-record` v1 | `memory_read.build_memory_record_projection` |
 | Roadmap context | `delivery-workbench-roadmap-context` v1 | `api.build_context_payload` |
 | Workbench envelope | `delivery-workbench-workbench-response` v1 | `workbench.envelope` (wraps every HTTP response) |
 | Board | `delivery-workbench-board` v1 | `board.board_model` |
@@ -135,6 +138,8 @@ is added when an external consumer asks for one.
 | `dw knowledge map [--json]` | `repository_map.read_symbol_map` | the cached symbol, module, test, and named-gap map only when its index tree is current; otherwise refuses |
 | `dw knowledge ground <project> <story> [--json]` | `grounding.ground_project_story` | advisory verified/new/unknown localization results from a fresh map plus bounded tracked-blob text fallback; read-only and refuses stale knowledge |
 | `dw knowledge lessons [--json]` | `knowledge.build_lesson_inventory` | append-only machine lessons with run, HEAD, timestamp, location-resolution, age, and supersession provenance; advisory only |
+| `dw knowledge recall --run <run-id>` / `--program <program-run-id>` | `memory_read.build_memory_recall_projection` | one fail-closed frozen memory history grouped as `recalled`, `used-as-basis`, `written-back`, `superseded`, and `excluded`; exit 1 carries a typed missing/stale/malformed/tampered refusal and never refreshes or recomputes |
+| `dw knowledge writebacks [--run ID | --program ID] [--story ID] [--state STATE]` | `memory_read.build_memory_writeback_projection` | verified terminal writeback receipts and earned-ledger coordinates filtered by origin, story, or memory/terminal state; refuses rather than returning a partial history |
 | `dw knowledge refresh [--json]` | `repository_map.refresh_symbol_map` | an explicit incremental refresh of the disposable derived map; reads tracked blobs and changes no authoritative state |
 | `dw setup [project] [--technical]` | `delivery_setup.build_delivery_setup` | human guidance over the same three delivery choices and readiness used by Workbench; intentionally no JSON mode, write, grant, or start |
 | `dw step [project] --json` | `step.build_step` | pure state-bound preview; add `--apply --expect <token>` for exactly one closed-table action and the stamped result |
@@ -246,6 +251,13 @@ or provider argv.
 | `GET /api/program-studio/<family>/<name>` | `program_studio.build_studio_document` | selected program/workflow/organization source plus task-shaped delivery-plan authoring and, for organizations, the shared team-and-review application view; validation, graph, simulation, and authority projections remain pure |
 | `GET /api/notifications` | `notifications.build_notifications` | the derived notification inventory in `data`; pure |
 | `POST /api/notifications/ack` | `notifications.acknowledge_notification` | receipted idempotent acknowledgement of one notification id |
+| `GET /api/insights` | `workbench._insights` | read-only cross-run delivery insights derived from canonical run/program projections |
+| `GET /api/suggestions?project=<slug>&state=<state>` | `suggestions.SuggestionStore.list` | project-scoped suggestion inventory and pending count |
+| `POST /api/suggestions` | `suggestions.SuggestionStore.create` | one bounded suggestion receipt; suggestion state grants no delivery authority |
+| `GET /api/services` | workbench tracked-service registry | local service process summaries tracked by this server instance |
+| `GET /api/telemetry` | `workbench._telemetry` | read-only local telemetry projection |
+| `GET /api/session-outcomes` | `workbench._session_outcomes` | read-only normalized outcomes for correlated local sessions |
+| `POST /api/requests/respond` | exact run/program request preview and apply | one browser-confirmed typed response resolved by correlation id; no generic mutation authority |
 | `GET /api/signals?remote=…&branch=…` | `signals.build_signals_inventory` | observed outward channels and derived status in `data`; pure, never an observe pass |
 | `POST /api/orchestration/preview` | `orchestration_edit.build_score_mutation_plan` | normalized save/delete diff, compiler verdict, and state fingerprint; no write/run/event |
 | `POST /api/orchestration/apply` | `orchestration_edit.apply_score_mutation` | one fresh atomic score save/delete with read-back verification and rollback; never starts a run |
@@ -253,6 +265,7 @@ or provider argv.
 | `POST /api/program-studio/apply` | `program_studio.apply_studio_mutation` | one fresh direct-contained policy save/delete with read-back validation and explicit false runtime effects |
 | `GET /api/programs` | `program_surface.program_summary_inventory` | healthy empty policy/run inventory in ordinary mode, otherwise canonical content-safe run summaries; pure |
 | `GET /api/programs/<run>` / `GET /api/programs/<run>/view` | `program_surface.build_program_view` | the same canonical control-room document returned by CLI and MCP, including the shared live-progress and bounded-actions application views |
+| `GET /api/programs/<program>/memory` | `memory_read.build_memory_recall_projection` | read-only grouped frozen recall and verified terminal writeback history for every persisted program scope; a broken source returns a typed refusal, never a partial history |
 | `GET /api/programs/<run>/act/<action>` / `POST /api/programs/preview` | `program_surface.build_program_act_preview` | pure exact action preview; POST carries bounded reason/decision/request/ceiling fields outside the URL |
 | `GET /api/programs/<run>/tail?after=N&limit=N` | `program_surface.tail_program_events` | stamped bounded verified ledger suffix; no token or mutation authority |
 | `GET /api/programs/<run>/streams/<session>/<stdout\|stderr>` | `program_surface.read_program_stream` | one explicit independently bounded session log; never included in list/view/event payloads |
@@ -270,6 +283,8 @@ or provider argv.
 | `GET /api/runs` | `orchestration_run.run_inventory` | authoritative local projections; no prompts, argv, source, transcripts, or artifact bytes |
 | `GET /api/runs/<run>` | `orchestration_run.replay_run` | byte-identical projection in `data` |
 | `GET /api/runs/<run>/view` | `orchestration_surface.build_run_view` | pure live-progress and bounded-actions explanation used by Workbench Run; exact consent remains a separate preview |
+| `GET /api/runs/<run>/memory` | `memory_read.build_memory_recall_projection` | read-only grouped frozen recall and verified terminal writeback history; reading never dispatches, refreshes, recomputes, or writes back |
+| `GET /api/memory/records/<record-hash>` | `memory_read.build_memory_record_projection` | one hash-verified earned record at its append-only ledger coordinates, returned in the same five-group shape; missing or broken chains fail closed |
 | `GET /api/runs/<run>/act/<action>` / `POST /api/runs/preview` | `orchestration_surface.build_run_act_preview` | exact pure act preview; POST carries bounded reason/decision/correlation fields and, for supervision, finite tick/time ceilings outside the address bar |
 | `POST /api/runs/start` | `orchestration_surface.start_run_by_id` | identifiers/timestamps/token/approval only; grant creation dispatches nothing |
 | `POST /api/runs/tick`, `POST /api/runs/pause`, `POST /api/runs/resume`, `POST /api/runs/revoke`, `POST /api/runs/cancel`, `POST /api/runs/request`, `POST /api/runs/checkpoint` | `orchestration_surface.apply_run_act` | exact preview token plus only its bound reason/decision/correlation; stale is HTTP 409; checkpoint is a compatibility alias |
@@ -297,7 +312,8 @@ or provider argv.
 
 The full tool table with input schemas lives in [mcp.md](./mcp.md);
 this is the inventory. Read-only: `dw_status`, `dw_knowledge_map`,
-`dw_knowledge_ground`, `dw_knowledge_lessons`, `dw_step`, `dw_context`,
+`dw_knowledge_ground`, `dw_knowledge_lessons`, `dw_knowledge_recall`,
+`dw_knowledge_writebacks`, `dw_step`, `dw_context`,
 `dw_next`, `dw_check`, `dw_doctor`, `dw_board`, `dw_holds`,
 `dw_story_show`, `dw_verify`, `dw_gate`, `dw_orchestration_list`,
 `dw_signals`, `dw_notifications`, `dw_orchestration_show`,

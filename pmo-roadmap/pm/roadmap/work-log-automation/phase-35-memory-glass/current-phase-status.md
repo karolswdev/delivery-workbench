@@ -28,7 +28,7 @@ Make memory a visible, testable part of every bounded run and autonomous program
 | WLA-35-02 | Explainable recall | done | [story-02-explainable-recall](./story-02-explainable-recall.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-35-03 | Recall before dispatch | done | [story-03-recall-before-dispatch](./story-03-recall-before-dispatch.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-35-04 | Terminal writeback | done | [story-04-terminal-writeback](./story-04-terminal-writeback.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-35-05 | Memory read surfaces | backlog | [story-05-memory-read-surfaces](./story-05-memory-read-surfaces.md) | - |
+| WLA-35-05 | Memory read surfaces | done | [story-05-memory-read-surfaces](./story-05-memory-read-surfaces.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-35-06 | AgentGlass memory pane | backlog | [story-06-agentglass-memory-pane](./story-06-agentglass-memory-pane.md) | - |
 | WLA-35-07 | Decision basis timeline | backlog | [story-07-decision-basis-timeline](./story-07-decision-basis-timeline.md) | - |
 | WLA-35-08 | Compounding multi-agent memory | backlog | [story-08-compounding-multi-agent-memory](./story-08-compounding-multi-agent-memory.md) | - |
@@ -37,7 +37,7 @@ Make memory a visible, testable part of every bounded run and autonomous program
 
 ## Where we are
 
-WLA-35-04 done (2026-08-01): every terminal state of runs and programs produces an exactly-once `delivery-workbench-memory-writeback@1` receipt with crash-replay dedup by deterministic digest; unsuccessful outcomes land as candidate terminal-outcome earned records; writeback failure surfaces in projections, the needs-you inbox, and orthogonal attention without touching verdicts. Writeback suite 6 → 14. Stories 01-03 (contract, recall builder, recall-before-dispatch) landed earlier. Next: WLA-35-05 (memory read surfaces over CLI/MCP/HTTP).
+WLA-35-05 done (2026-08-01): one memory read model behind three transports — `dw knowledge recall`/`writebacks` on the CLI, `dw_knowledge_recall`/`dw_knowledge_writebacks` over MCP (byte-identical payloads), and three read-only GET memory endpoints (200/404/409, no mutation form, reads proven side-effect free). Also repaired guard rot from the post-phase-34 board-redesign commits (POST census 17 → 19, explorer nav assertions). Stories 01-04 landed earlier. Next: WLA-35-06 (the AgentGlass memory pane).
 
 ## Active risks
 

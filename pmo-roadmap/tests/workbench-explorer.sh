@@ -58,6 +58,65 @@ cp "$PMO_DIR/templates/orchestration/research-build-review.json" \
   "$REPO/pm/orchestration/research-build-review.json"
 "$PMO_DIR/bootstrap/new-project.sh" "$REPO" zebra "Zebra" ZBR >/dev/null
 
+# Frozen run/program memory fixtures for the read-only memory API.
+PYTHONPATH="$PMO_DIR/lib" python3 - "$REPO" "$TMP_ROOT/memory-record-hash" <<'PY'
+from datetime import datetime, timezone
+from pathlib import Path
+import sys
+
+from dw_pmo.knowledge_writeback import persist_terminal_writeback
+from dw_pmo.memory_dispatch import persist_recall_slices
+
+repo = Path(sys.argv[1])
+record_path = Path(sys.argv[2])
+head = "a" * 40
+tree = "b" * 40
+stamp = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+
+def knowledge():
+    return {
+        "index_tree": tree,
+        "verified_locations": [{"file": "demo.py", "symbol": "demo.work"}],
+        "snippets": [], "test_references": [], "lessons": [],
+    }
+
+def projection(run_id):
+    return {
+        "run_id": run_id, "state": "complete",
+        "terminal_event_ref": "sha256:" + "d" * 64,
+        "head_sha": head, "story": {"id": "SMP-0-01"},
+        "selected_stories": ["SMP-0-01"], "request_history": [],
+        "checkpoints": [], "node_receipts": [], "completed_claims": [],
+        "routes": [], "budgets": {"max_wall_seconds": {"used": 0, "limit": 1}},
+        "delivery_facts": {"head_sha": head, "files_touched": ["demo.py"]},
+    }
+
+run_id = "run-" + "a" * 24
+run_dir = repo / ".git" / "pmo-orchestration" / "runs" / run_id
+persist_recall_slices(
+    run_dir, subject=run_id, knowledge=knowledge(),
+    story_criteria="Change demo.py at demo.work.", story_ids=["SMP-0-01"],
+    phase_ids=["0"], orchestration_tags=["memory-read"],
+)
+run_writeback = persist_terminal_writeback(
+    repo, run_dir, projection=projection(run_id), origin_kind="run",
+    timestamp=stamp,
+)
+record_path.write_text(run_writeback["record_hash"], encoding="utf-8")
+
+program_id = "program-" + "b" * 24
+program_dir = repo / ".git" / "pmo-programs" / "runs" / program_id
+persist_recall_slices(
+    program_dir, subject=program_id, knowledge=knowledge(),
+    story_criteria="Change demo.py at demo.work.", story_ids=["SMP-0-01"],
+    phase_ids=["0"], orchestration_tags=["memory-read"], scope="SMP-0-01",
+)
+persist_terminal_writeback(
+    repo, program_dir, projection=projection(program_id), origin_kind="program",
+    timestamp=stamp,
+)
+PY
+
 # ── start the documented command ─────────────────────────────────────
 # Work-log root for the trace tests: exported before start, but the
 # directory does not exist yet — traces must degrade cleanly until the
@@ -216,19 +275,72 @@ assert "First fixture story" in d["story_markdown"]
 assert "fixture evidence body" in d["evidence_markdown"]
 PY
 
+RUN_MEMORY="$BASE/api/runs/run-aaaaaaaaaaaaaaaaaaaaaaaa/memory"
+PROGRAM_MEMORY="$BASE/api/programs/program-bbbbbbbbbbbbbbbbbbbbbbbb/memory"
+RECORD_HASH="$(cat "$TMP_ROOT/memory-record-hash")"
+curl -s "$RUN_MEMORY" > "$TMP_ROOT/run-memory.json"
+curl -s "$PROGRAM_MEMORY" > "$TMP_ROOT/program-memory.json"
+curl -s "$BASE/api/memory/records/$RECORD_HASH" > "$TMP_ROOT/memory-record.json"
+python3 - "$TMP_ROOT/run-memory.json" "$TMP_ROOT/program-memory.json" \
+  "$TMP_ROOT/memory-record.json" <<'PY' \
+  || fail "read-only memory endpoints should preserve groups and ledger coordinates"
+import json, sys
+run, program, record = [json.load(open(path))["data"] for path in sys.argv[1:]]
+for document in (run, program, record):
+    assert document["status"] == "ok", document
+    assert set(document["groups"]) == {
+        "recalled", "used-as-basis", "written-back", "superseded", "excluded",
+    }
+    assert document["starts_work"] is False
+    assert document["authorizes"] is False
+    assert document["satisfies_gate"] is False
+    assert document["substitutes_for_evidence"] is False
+assert run["scope"]["kind"] == "run" and len(run["groups"]["recalled"]) == 5
+assert program["scope"]["kind"] == "program" and len(program["groups"]["recalled"]) == 5
+assert len(run["groups"]["written-back"]) == 1
+assert len(program["groups"]["written-back"]) == 1
+assert run["groups"]["written-back"][0]["ledger_coordinates"]["seq"] == 0
+assert len(record["groups"]["written-back"]) == 1
+PY
+[ "$(curl -s -o "$TMP_ROOT/missing-memory.json" -w '%{http_code}' \
+  "$BASE/api/runs/run-cccccccccccccccccccccccc/memory")" = "404" ] \
+  || fail "missing memory should be a typed HTTP 404 refusal"
+python3 - "$TMP_ROOT/missing-memory.json" <<'PY' \
+  || fail "missing memory refusal payload should be typed and empty"
+import json, sys
+d = json.load(open(sys.argv[1]))["data"]
+assert d["status"] == "refused" and d["refusal"]["reason"] == "missing"
+assert all(not values for values in d["groups"].values())
+PY
+MEMORY_BEFORE="$(find "$REPO/.git/pmo-orchestration/runs" "$REPO/.git/pmo-programs/runs" \
+  "$REPO/.git/pmo-knowledge/earned" -type f -print0 | sort -z | xargs -0 cksum)"
+for _ in 1 2 3; do
+  curl -sf "$RUN_MEMORY" >/dev/null
+  curl -sf "$PROGRAM_MEMORY" >/dev/null
+  curl -sf "$BASE/api/memory/records/$RECORD_HASH" >/dev/null
+done
+MEMORY_AFTER="$(find "$REPO/.git/pmo-orchestration/runs" "$REPO/.git/pmo-programs/runs" \
+  "$REPO/.git/pmo-knowledge/earned" -type f -print0 | sort -z | xargs -0 cksum)"
+[ "$MEMORY_BEFORE" = "$MEMORY_AFTER" ] \
+  || fail "memory GET routes must not recompute, refresh, dispatch, or write back"
+rm -rf "$REPO/.git/pmo-orchestration" "$REPO/.git/pmo-programs" \
+  "$REPO/.git/pmo-knowledge"
+
 # ── static shell + supplemental file reads ───────────────────────────
 curl -s "$BASE/" > "$TMP_ROOT/index.html"
 curl -s "$BASE/app.js" > "$TMP_ROOT/app.js"
 grep -q 'id="app"' "$TMP_ROOT/index.html" || fail "index.html should serve the app shell"
-grep -q "read-only" "$TMP_ROOT/app.js" || fail "app.js should be served"
-[ "$(grep -o 'class="navlink"' "$TMP_ROOT/index.html" | wc -l | tr -d ' ')" = "5" ] \
-  || fail "app shell should expose exactly five destinations"
-for label in Work Plan Delivery Live Health; do
+grep -q "async function route" "$TMP_ROOT/app.js" || fail "app.js should be served"
+grep -q "read-only" "$PMO_DIR"/workbench/*.js \
+  || fail "workbench modules should preserve the read-only boundary"
+[ "$(grep -o 'class="navlink"' "$TMP_ROOT/index.html" | wc -l | tr -d ' ')" = "2" ] \
+  || fail "app shell should expose exactly two primary destinations"
+for label in Work Health; do
   grep -q ">$label</a>" "$TMP_ROOT/index.html" || fail "app shell should expose $label"
 done
-for marker in 'id="project-switcher"' 'Choose a project' 'PROJECT_STORAGE_KEY' \
+for marker in 'id="project-switcher"' 'Choose project' 'PROJECT_STORAGE_KEY' \
   'viewUnavailableProject' 'wireTechnicalFolds'; do
-  grep -q "$marker" "$TMP_ROOT/index.html" "$TMP_ROOT/app.js" \
+  grep -q "$marker" "$TMP_ROOT/index.html" "$PMO_DIR"/workbench/*.js \
     || fail "front door is missing $marker"
 done
 grep -q '#/orchestration' "$TMP_ROOT/index.html" || fail "app shell should link delivery planning"
@@ -238,19 +350,19 @@ for marker in 'function liveMissionInventoryHtml' 'Bounded run' 'Multi-phase pro
   'Canonical next step' 'Needs attention' 'Unread notification' \
   'Open exact control room' 'function viewLive' \
   'else if (parts\[0\] === "live")'; do
-  grep -q "$marker" "$TMP_ROOT/app.js" || fail "combined Live view is missing $marker"
+  grep -q "$marker" "$PMO_DIR"/workbench/*.js || fail "combined Live view is missing $marker"
 done
 for marker in '/api/runs/${encodeURIComponent(preview.action)}' \
   '/api/programs/${encodeURIComponent(preview.action)}' \
   'max_ticks: preview.max_ticks' 'will not retry automatically'; do
-  grep -Fq "$marker" "$TMP_ROOT/app.js" || fail "run/program permission parity is missing $marker"
+  grep -Fq "$marker" "$PMO_DIR"/workbench/*.js || fail "run/program permission parity is missing $marker"
 done
-grep -q 'else if (!parts.length) await viewBoard(selectedProject)' "$TMP_ROOT/app.js" \
+grep -q 'else if (!parts.length) await viewBoard(selectedProject)' "$PMO_DIR"/workbench/*.js \
   || fail "home route should open the selected project board"
 for marker in 'kind: "create_story"' 'kind: "update_story_status"' \
   '"pause_phase"' '"resume_phase"' \
   'Cross-phase moves are not supported. The story stays in its original lane.'; do
-  grep -q "$marker" "$TMP_ROOT/app.js" || fail "board controls are missing $marker"
+  grep -q "$marker" "$PMO_DIR"/workbench/*.js || fail "board controls are missing $marker"
 done
 curl -s "$BASE/api/file?path=pm/roadmap/sample/README.md" \
   | grep -q 'Sample - Roadmap' || fail "file endpoint should serve roadmap files"
@@ -656,12 +768,12 @@ curl -sG "$BASE/api/run-plan" \
   --data-urlencode "story=SMP-0-02" --data-urlencode "issued_at=$ISSUED" \
   --data-urlencode "expires_at=$NARROW_EXPIRY" > "$TMP_ROOT/consent-narrowed.json"
 python3 - "$TMP_ROOT/consent-unchanged.json" "$TMP_ROOT/consent-narrowed.json" \
-  "$PMO_DIR/workbench/app.js" <<'PY' \
+  "$PMO_DIR"/workbench/*.js <<'PY' \
   || fail "unchanged and narrowed permission previews must stay exact and readable"
 import json, sys
 full = json.load(open(sys.argv[1]))["data"]
 narrow = json.load(open(sys.argv[2]))["data"]
-app = open(sys.argv[3], encoding="utf-8").read()
+app = "\n".join(open(path, encoding="utf-8").read() for path in sys.argv[3:])
 assert full["starts_work"] is False and narrow["starts_work"] is False
 assert full["authority"]["capabilities"] == narrow["authority"]["capabilities"]
 assert full["authority"]["budgets"] == narrow["authority"]["budgets"]

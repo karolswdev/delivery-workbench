@@ -84,6 +84,28 @@ def _tool_knowledge_lessons(root: Path, args: dict) -> tuple[str, dict]:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")), payload
 
 
+def _tool_knowledge_recall(root: Path, args: dict) -> tuple[str, dict]:
+    from .memory_read import build_memory_recall_projection, render_memory_projection
+
+    payload = build_memory_recall_projection(
+        root, run=args.get("run"), program=args.get("program")
+    )
+    return render_memory_projection(payload), payload
+
+
+def _tool_knowledge_writebacks(root: Path, args: dict) -> tuple[str, dict]:
+    from .memory_read import build_memory_writeback_projection, render_memory_projection
+
+    payload = build_memory_writeback_projection(
+        root,
+        run=args.get("run"),
+        program=args.get("program"),
+        story=args.get("story"),
+        state=args.get("state"),
+    )
+    return render_memory_projection(payload), payload
+
+
 def _tool_step(root: Path, args: dict) -> tuple[str, dict]:
     from .step import build_step, render_step
 
@@ -783,6 +805,48 @@ TOOLS: dict[str, dict] = {
             "additionalProperties": False,
         },
         "handler": _tool_knowledge_lessons,
+    },
+    "dw_knowledge_recall": {
+        "description": (
+            "Read one frozen bounded-run or program memory history. Returns "
+            "typed missing, stale, malformed, or tampered refusals and never "
+            "recomputes recall. Adapter over "
+            "dw_pmo.memory_read.build_memory_recall_projection."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run": {"type": "string", "description": "Bounded run id"},
+                "program": {"type": "string", "description": "Program run id"},
+            },
+            "oneOf": [
+                {"required": ["run"]},
+                {"required": ["program"]},
+            ],
+            "additionalProperties": False,
+        },
+        "handler": _tool_knowledge_recall,
+    },
+    "dw_knowledge_writebacks": {
+        "description": (
+            "List terminal memory writebacks with optional run, program, story, "
+            "and state filters after verifying receipts and earned ledgers. "
+            "Adapter over dw_pmo.memory_read.build_memory_writeback_projection."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run": {"type": "string", "description": "Bounded run id"},
+                "program": {"type": "string", "description": "Program run id"},
+                "story": {"type": "string", "description": "Story id"},
+                "state": {
+                    "type": "string",
+                    "description": "Memory or terminal outcome state",
+                },
+            },
+            "additionalProperties": False,
+        },
+        "handler": _tool_knowledge_writebacks,
     },
     "dw_step": {
         "description": (

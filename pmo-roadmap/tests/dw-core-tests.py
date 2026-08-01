@@ -158,10 +158,11 @@ class DwCoreTest(unittest.TestCase):
             if "/api/" in line and "route ==" in line
         ]
         self.assertEqual(
-            len(post_routes), 17,
+            len(post_routes), 19,
             "only deliberate-step, the read-only setup review projection, guarded "
             "setup/roadmap/score/Studio edits, run preview/start/finite supervision, "
-            "program grant preview/start/plan, and the receipted notification ack "
+            "program grant preview/start/plan, typed request responses, suggestions, "
+            "and the receipted notification ack "
             "use direct POST equality routes; "
             f"found: {post_routes}",
         )
@@ -181,6 +182,8 @@ class DwCoreTest(unittest.TestCase):
         self.assertTrue(any('/api/programs/plan' in line for line in post_routes))
         self.assertTrue(any('/api/programs/preview' in line for line in post_routes))
         self.assertTrue(any('/api/programs/start' in line for line in post_routes))
+        self.assertTrue(any('/api/requests/respond' in line for line in post_routes))
+        self.assertTrue(any('/api/suggestions' in line for line in post_routes))
         self.assertTrue(any('/api/notifications/ack' in line for line in post_routes))
 
     def test_run_start_accepts_notification_fields_and_still_refuses_unknown_properties(self):
@@ -1737,13 +1740,15 @@ class DwCoreTest(unittest.TestCase):
                 "/api/runs/preview", "/api/runs/start", "/api/runs/tick",
                 "/api/runs/supervise", "/api/runs/pause", "/api/runs/resume", "/api/runs/revoke",
                 "/api/runs/cancel", "/api/runs/checkpoint", "/api/runs/request",
+                "/api/requests/respond", "/api/suggestions",
                 "/api/notifications/ack",
             },
         )
         self.assertEqual(self._interop_missing(post_routes, doc), [])
         # the CLI's machine-readable verbs
         verbs = [
-            "dw status", "dw setup", "dw step", "dw context", "dw state --json", "dw next", "dw board",
+            "dw status", "dw knowledge recall", "dw knowledge writebacks",
+            "dw setup", "dw step", "dw context", "dw state --json", "dw next", "dw board",
             "dw holds", "dw story show", "dw sessions --json", "dw events",
             "dw check", "dw gate --porcelain", "dw verify",
             "dw orchestration list", "dw orchestration show", "dw orchestration simulate",
@@ -1772,6 +1777,9 @@ class DwCoreTest(unittest.TestCase):
                       "delivery-workbench-step",
                       "delivery-workbench-step-result",
                       "delivery-workbench-roadmap-context",
+                      "delivery-workbench-memory-read",
+                      "delivery-workbench-memory-writebacks",
+                      "delivery-workbench-memory-record",
                       "delivery-workbench-workbench-response",
                       "delivery-workbench-board", "delivery-workbench-run-act-preview",
                       "delivery-workbench-run-view", "delivery-workbench-run-stream",

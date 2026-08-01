@@ -160,6 +160,13 @@ from .status import (
     render_status,
 )
 from .knowledge import build_lesson_inventory
+from .memory_read import (
+    build_memory_recall_projection,
+    build_memory_record_projection,
+    build_memory_writeback_projection,
+    memory_http_status,
+    render_memory_projection,
+)
 from .repository_map import read_symbol_map, refresh_symbol_map
 from .grounding import (
     GROUNDING_KIND,

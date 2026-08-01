@@ -18,6 +18,13 @@ sys.path.insert(0, str(TESTS_DIR.parent / "lib"))
 
 from dw_pmo import knowledge  # noqa: E402
 from dw_pmo.knowledge_packet import build_knowledge_packet  # noqa: E402
+from dw_pmo.memory_dispatch import persist_recall_slices  # noqa: E402
+from dw_pmo.memory_read import (  # noqa: E402
+    build_memory_recall_projection,
+    build_memory_record_projection,
+    build_memory_writeback_projection,
+    render_memory_projection,
+)
 from dw_pmo.knowledge_writeback import (  # noqa: E402
     LESSON_OUTPUT_KIND,
     build_terminal_writeback,
@@ -568,6 +575,184 @@ class KnowledgeWritebackTest(unittest.TestCase):
         without = self.packet()
         self.assertEqual(without["lessons"], [])
         self.assertEqual(source_sections, {key: without[key] for key in source_sections})
+
+    def _persist_memory_recall(self, run_id):
+        run_dir = self.git_dir / "pmo-orchestration" / "runs" / run_id
+        persist_recall_slices(
+            run_dir,
+            subject=run_id,
+            knowledge={
+                "index_tree": TREE,
+                "verified_locations": [{
+                    "file": "pkg/delivery.py",
+                    "symbol": "pkg.delivery.deliver",
+                }],
+                "snippets": [],
+                "test_references": [],
+                "lessons": [{
+                    "record_hash": "sha256:" + "e" * 64,
+                    "claim": "An unrelated lesson that should be excluded.",
+                    "delivery_state": "candidate",
+                    "confidence": "high",
+                }],
+            },
+            story_criteria="Change pkg/delivery.py at pkg.delivery.deliver.",
+            story_ids=["WLA-35-05"],
+            phase_ids=["35"],
+            orchestration_tags=["memory-read"],
+        )
+        return run_dir
+
+    def test_memory_read_groups_recall_writeback_and_ledger_coordinates(self):
+        run_id = "run-" + "1" * 24
+        run_dir = self._persist_memory_recall(run_id)
+        persisted = persist_terminal_writeback(
+            self.root,
+            run_dir,
+            projection=terminal_projection(),
+            origin_kind="run",
+            timestamp=STAMP,
+        )
+
+        recalled = build_memory_recall_projection(self.root, run=run_id)
+        self.assertEqual(recalled["status"], "ok")
+        self.assertEqual(
+            set(recalled["groups"]),
+            {"recalled", "used-as-basis", "written-back", "superseded", "excluded"},
+        )
+        self.assertEqual(len(recalled["groups"]["recalled"]), 5)
+        self.assertEqual(len(recalled["groups"]["excluded"]), 5)
+        self.assertEqual(recalled["groups"]["used-as-basis"], [])
+        self.assertEqual(len(recalled["groups"]["written-back"]), 1)
+        written = recalled["groups"]["written-back"][0]
+        self.assertEqual(written["record_hash"], persisted["record_hash"])
+        self.assertEqual(written["story_ids"], ["WLA-35-04"])
+        self.assertEqual(written["ledger_coordinates"]["seq"], 0)
+        self.assertIn("terminal-outcome.jsonl", written["ledger_coordinates"]["path"])
+        self.assertEqual(render_memory_projection(recalled), json.dumps(
+            recalled, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            allow_nan=False,
+        ))
+
+        filtered = build_memory_writeback_projection(
+            self.root, run=run_id, story="WLA-35-04", state="confirmed"
+        )
+        self.assertEqual(filtered["status"], "ok")
+        self.assertEqual(filtered["count"], 1)
+        self.assertEqual(filtered["writebacks"][0]["writeback_id"], persisted["writeback_id"])
+        self.assertEqual(
+            build_memory_writeback_projection(
+                self.root, run=run_id, story="WLA-99-99"
+            )["count"],
+            0,
+        )
+
+        record = build_memory_record_projection(self.root, persisted["record_hash"])
+        self.assertEqual(record["status"], "ok")
+        self.assertEqual(len(record["groups"]["written-back"]), 1)
+        self.assertEqual(
+            record["groups"]["written-back"][0]["record_hash"],
+            persisted["record_hash"],
+        )
+
+    def test_memory_read_groups_supersession_without_losing_hashes(self):
+        run_id = "run-" + "1" * 24
+        run_dir = self._persist_memory_recall(run_id)
+        first = persist_terminal_writeback(
+            self.root, run_dir, projection=terminal_projection(),
+            origin_kind="run", timestamp=STAMP,
+        )
+        second_projection = terminal_projection(
+            event_ref="sha256:" + "f" * 64
+        )
+        second = persist_terminal_writeback(
+            self.root, run_dir, projection=second_projection,
+            origin_kind="run", timestamp=STAMP + timedelta(minutes=1),
+            supersedes=first["record_hash"],
+        )
+
+        result = build_memory_recall_projection(self.root, run=run_id)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["groups"]["written-back"], [])
+        self.assertEqual(
+            {entry["record_hash"] for entry in result["groups"]["superseded"]},
+            {first["record_hash"], second["record_hash"]},
+        )
+        prior = next(
+            entry for entry in result["groups"]["superseded"]
+            if entry["record_hash"] == first["record_hash"]
+        )
+        self.assertEqual(prior["superseded_by"], second["record_hash"])
+
+    def test_memory_read_refuses_missing_stale_malformed_and_tampered_sources(self):
+        missing_run = "run-" + "2" * 24
+        missing = build_memory_recall_projection(self.root, run=missing_run)
+        self.assertEqual(missing["status"], "refused")
+        self.assertEqual(missing["refusal"]["reason"], "missing")
+        self.assertTrue(all(not values for values in missing["groups"].values()))
+
+        malformed_run = "run-" + "3" * 24
+        malformed_dir = self._persist_memory_recall(malformed_run)
+        (malformed_dir / "memory" / "source.json").write_text("{", encoding="utf-8")
+        malformed = build_memory_recall_projection(self.root, run=malformed_run)
+        self.assertEqual(malformed["refusal"]["reason"], "malformed")
+
+        tampered_run = "run-" + "4" * 24
+        tampered_dir = self._persist_memory_recall(tampered_run)
+        recall_path = tampered_dir / "memory" / "recalls" / "shared.json"
+        recall = json.loads(recall_path.read_text(encoding="utf-8"))
+        recall["items"][0]["summary"] = "changed after persistence"
+        recall_path.write_text(json.dumps(recall), encoding="utf-8")
+        tampered = build_memory_recall_projection(self.root, run=tampered_run)
+        self.assertEqual(tampered["refusal"]["reason"], "tampered")
+
+        stale_run = "run-" + "5" * 24
+        stale_dir = self._persist_memory_recall(stale_run)
+        memory = stale_dir / "memory"
+        source_path = memory / "source.json"
+        manifest_path = memory / "manifest.json"
+        source = json.loads(source_path.read_text(encoding="utf-8"))
+        source["index_tree"] = "c" * 40
+        source_path.write_text(json.dumps(source), encoding="utf-8")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        source_hash = "sha256:" + hashlib.sha256(json.dumps(
+            source, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        manifest["source_hash"] = source_hash
+        manifest["source_heads"] = {
+            "index_tree": source["index_tree"], "knowledge_packet": source_hash,
+        }
+        manifest["source_revision"] = "sha256:" + hashlib.sha256(json.dumps(
+            {"subject": stale_run, "knowledge": source},
+            sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        unsigned = {key: value for key, value in manifest.items() if key != "manifest_hash"}
+        manifest["manifest_hash"] = "sha256:" + hashlib.sha256(json.dumps(
+            unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        stale = build_memory_recall_projection(self.root, run=stale_run)
+        self.assertEqual(stale["refusal"]["reason"], "stale")
+
+    def test_memory_writeback_read_refuses_a_tampered_receipt(self):
+        run_id = "run-" + "1" * 24
+        run_dir = self._persist_memory_recall(run_id)
+        persisted = persist_terminal_writeback(
+            self.root, run_dir, projection=terminal_projection(),
+            origin_kind="run", timestamp=STAMP,
+        )
+        receipt_path = Path(persisted["receipt_path"])
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        receipt["terminal_state"] = "failed"
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+        result = build_memory_writeback_projection(self.root, run=run_id)
+        self.assertEqual(result["status"], "refused")
+        self.assertEqual(result["refusal"]["reason"], "tampered")
+        self.assertEqual(result["writebacks"], [])
 
     def packet(self):
         records = knowledge.EarnedRecordStore(self.root).read("lesson")

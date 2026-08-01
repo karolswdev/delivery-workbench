@@ -829,6 +829,46 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
         for spawning in ("subprocess", "os.system", "os.popen", "os.spawn"):
             self.assertNotIn(spawning, source)
 
+    def test_memory_read_adapter_is_offline_non_spawning_and_read_only(self):
+        source = (LIB_DIR / "memory_read.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        imported = []
+        called = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.append(node.module or "")
+            elif isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Name):
+                    called.append(node.func.id)
+                elif isinstance(node.func, ast.Attribute):
+                    called.append(node.func.attr)
+        forbidden_imports = {
+            "socket", "urllib", "http", "ssl", "subprocess", "requests",
+            "aiohttp", "httpx", "random", "secrets", "uuid",
+        }
+        self.assertEqual(
+            sorted(
+                name for name in imported
+                if name.split(".", 1)[0] in forbidden_imports
+            ),
+            [],
+        )
+        for authority in (
+            "contract", "gate", "grant", "program_verdict", "verdict",
+            "orchestration_conductor", "program_conductor",
+        ):
+            self.assertNotIn("from .%s" % authority, source)
+        for mutation in (
+            "persist_recall_slices", "build_memory_recall",
+            "persist_terminal_writeback", "ensure_terminal_writeback",
+            "refresh_symbol_map", "read_or_recompute",
+        ):
+            self.assertNotIn(mutation, called)
+        for spawning in ("subprocess", "os.system", "os.popen", "os.spawn"):
+            self.assertNotIn(spawning, source)
+
     def test_writeback_adapter_cannot_import_authority_or_verdict_paths(self):
         source = (LIB_DIR / "knowledge_writeback.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -878,7 +918,8 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
     def test_hook_payload_keeps_knowledge_modules_byte_identical(self):
         for name in (
             "grounding.py", "knowledge.py", "knowledge_packet.py",
-            "knowledge_writeback.py", "memory_dispatch.py", "memory_recall.py", "repository_map.py",
+            "knowledge_writeback.py", "memory_dispatch.py", "memory_read.py",
+            "memory_recall.py", "repository_map.py",
             "symbol_map.py",
         ):
             with self.subTest(module=name):

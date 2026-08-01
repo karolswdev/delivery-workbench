@@ -63,6 +63,9 @@ try:
         build_action_presentation,
         build_live_presentation,
         build_lesson_inventory,
+        build_memory_recall_projection,
+        build_memory_writeback_projection,
+        render_memory_projection,
         build_start_presentation,
         build_step_result_presentation,
         build_step,
@@ -1477,6 +1480,26 @@ def command_knowledge_lessons(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_knowledge_recall(args: argparse.Namespace) -> int:
+    document = build_memory_recall_projection(
+        args.root, run=args.run, program=args.program
+    )
+    print(render_memory_projection(document))
+    return 0 if document["status"] == "ok" else 1
+
+
+def command_knowledge_writebacks(args: argparse.Namespace) -> int:
+    document = build_memory_writeback_projection(
+        args.root,
+        run=args.run,
+        program=args.program,
+        story=args.story,
+        state=args.state,
+    )
+    print(render_memory_projection(document))
+    return 0 if document["status"] == "ok" else 1
+
+
 def command_setup(args: argparse.Namespace) -> int:
     setup_args = list(args.setup_args)
     if setup_args and setup_args[0] == "preview":
@@ -1858,6 +1881,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="emit the versioned lesson inventory"
     )
     knowledge_lessons.set_defaults(func=command_knowledge_lessons)
+    knowledge_recall = knowledge_sub.add_parser(
+        "recall", help="read one frozen run or program memory history"
+    )
+    knowledge_recall_scope = knowledge_recall.add_mutually_exclusive_group(
+        required=True
+    )
+    knowledge_recall_scope.add_argument("--run", help="bounded run id")
+    knowledge_recall_scope.add_argument("--program", help="program run id")
+    knowledge_recall.set_defaults(func=command_knowledge_recall)
+    knowledge_writebacks = knowledge_sub.add_parser(
+        "writebacks", help="list terminal memory writebacks with filters"
+    )
+    knowledge_writeback_scope = knowledge_writebacks.add_mutually_exclusive_group()
+    knowledge_writeback_scope.add_argument("--run", help="bounded run id")
+    knowledge_writeback_scope.add_argument("--program", help="program run id")
+    knowledge_writebacks.add_argument("--story", help="story id")
+    knowledge_writebacks.add_argument(
+        "--state", help="memory or terminal outcome state"
+    )
+    knowledge_writebacks.set_defaults(func=command_knowledge_writebacks)
 
     setup = sub.add_parser(
         "setup",

@@ -144,7 +144,8 @@ assert init["serverInfo"]["name"] == "delivery-workbench", init
 
 names = [t["name"] for t in replies[2]["result"]["tools"]]
 expected = [
-    "dw_status", "dw_step", "dw_step_apply", "dw_setup_preview", "dw_setup_apply", "dw_context", "dw_next",
+    "dw_status", "dw_knowledge_recall", "dw_knowledge_writebacks",
+    "dw_step", "dw_step_apply", "dw_setup_preview", "dw_setup_apply", "dw_context", "dw_next",
     "dw_check", "dw_doctor", "dw_verify", "dw_gate",
 ]
 for name in expected:
@@ -187,6 +188,119 @@ echo "$CLI_NEXT" | grep -q '"story_id": "DM-1-01"' \
   || fail "CLI next disagrees with fixture expectation: $CLI_NEXT"
 (cd "$REPO" && ./.githooks/dw check) >/dev/null \
   || fail "CLI check disagrees with MCP verdict"
+
+# ── frozen memory reads: CLI/MCP success + refusal bytes are identical ─
+python3 - "$REPO" "$DWMCP" <<'PYEOF' || fail "memory read parity failed"
+import json
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+dwmcp = sys.argv[2]
+sys.path.insert(0, str(repo / ".githooks"))
+from dw_pmo.knowledge_writeback import persist_terminal_writeback
+from dw_pmo.memory_dispatch import persist_recall_slices
+
+head = subprocess.check_output(
+    ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+).strip()
+tree = subprocess.check_output(
+    ["git", "-C", str(repo), "write-tree"], text=True
+).strip()
+stamp = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+
+def knowledge():
+    return {
+        "index_tree": tree,
+        "verified_locations": [{"file": "demo.py", "symbol": "demo.work"}],
+        "snippets": [], "test_references": [], "lessons": [],
+    }
+
+def projection(run_id, story):
+    return {
+        "run_id": run_id, "state": "complete",
+        "terminal_event_ref": "sha256:" + "d" * 64,
+        "head_sha": head, "story": {"id": story},
+        "selected_stories": [story], "request_history": [],
+        "checkpoints": [], "node_receipts": [], "completed_claims": [],
+        "routes": [], "budgets": {"max_wall_seconds": {"used": 0, "limit": 1}},
+        "delivery_facts": {"head_sha": head, "files_touched": ["demo.py"]},
+    }
+
+run_id = "run-" + "a" * 24
+run_dir = repo / ".git" / "pmo-orchestration" / "runs" / run_id
+persist_recall_slices(
+    run_dir, subject=run_id, knowledge=knowledge(),
+    story_criteria="Change demo.py at demo.work.", story_ids=["DM-1-01"],
+    phase_ids=["1"], orchestration_tags=["memory-read"],
+)
+persist_terminal_writeback(
+    repo, run_dir, projection=projection(run_id, "DM-1-01"),
+    origin_kind="run", timestamp=stamp,
+)
+
+program_id = "program-" + "b" * 24
+program_dir = repo / ".git" / "pmo-programs" / "runs" / program_id
+persist_recall_slices(
+    program_dir, subject=program_id, knowledge=knowledge(),
+    story_criteria="Change demo.py at demo.work.", story_ids=["DM-1-01"],
+    phase_ids=["1"], orchestration_tags=["memory-read"], scope="DM-1-01",
+)
+persist_terminal_writeback(
+    repo, program_dir, projection=projection(program_id, "DM-1-01"),
+    origin_kind="program", timestamp=stamp,
+)
+
+def cli(*args, expected=0):
+    completed = subprocess.run(
+        [str(repo / ".githooks" / "dw"), "--root", str(repo), *args],
+        cwd=repo, text=True, capture_output=True,
+    )
+    assert completed.returncode == expected, (args, completed.returncode, completed.stderr)
+    return completed.stdout.strip()
+
+def exchange(calls):
+    proc = subprocess.Popen(
+        ["python3", dwmcp, "--root", str(repo)], cwd=repo,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+    )
+    frames = [
+        {"jsonrpc": "2.0", "id": index, "method": "tools/call",
+         "params": {"name": name, "arguments": arguments}}
+        for index, (name, arguments) in enumerate(calls, 1)
+    ]
+    out, _ = proc.communicate(
+        "\n".join(json.dumps(frame) for frame in frames) + "\n", timeout=60
+    )
+    assert proc.returncode == 0
+    return [json.loads(line)["result"] for line in out.strip().splitlines()]
+
+cli_documents = [
+    cli("knowledge", "recall", "--run", run_id),
+    cli("knowledge", "recall", "--program", program_id),
+    cli("knowledge", "writebacks", "--run", run_id,
+        "--story", "DM-1-01", "--state", "confirmed"),
+    cli("knowledge", "writebacks", "--program", program_id),
+    cli("knowledge", "recall", "--run", "run-" + "c" * 24, expected=1),
+]
+mcp_results = exchange([
+    ("dw_knowledge_recall", {"run": run_id}),
+    ("dw_knowledge_recall", {"program": program_id}),
+    ("dw_knowledge_writebacks", {
+        "run": run_id, "story": "DM-1-01", "state": "confirmed",
+    }),
+    ("dw_knowledge_writebacks", {"program": program_id}),
+    ("dw_knowledge_recall", {"run": "run-" + "c" * 24}),
+])
+for cli_text, mcp_result in zip(cli_documents, mcp_results):
+    assert not mcp_result.get("isError"), mcp_result
+    assert mcp_result["content"][0]["text"] == cli_text
+    assert mcp_result["structuredContent"] == json.loads(cli_text)
+assert json.loads(cli_documents[-1])["refusal"]["reason"] == "missing"
+print("memory CLI/MCP parity: ok (5 projections)")
+PYEOF
 
 # ── outside any adopted repo: discoverable refusal, not a dead socket ─
 NOWHERE="$TMP_ROOT/nowhere"

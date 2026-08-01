@@ -70,6 +70,8 @@ to `isError`.
 | `dw_knowledge_map` | `repository_map.read_symbol_map` | `{}` — result: the index-tree-bound derived symbol, module, test, and named-gap map; refuses missing or stale cache and never refreshes or authorizes |
 | `dw_knowledge_ground` | `grounding.ground_project_story` | `{project: string, story: string}` (required) — result: advisory verified/new/unknown localization from a fresh map and bounded tracked-blob text fallback; read-only, never authorizes, and refuses stale knowledge |
 | `dw_knowledge_lessons` | `knowledge.build_lesson_inventory` | `{}` — result: append-only machine lessons with run, HEAD, timestamp, location-resolution, age, and supersession provenance; advisory only |
+| `dw_knowledge_recall` | `memory_read.build_memory_recall_projection` | exactly one of `{run: string}` or `{program: string}` — frozen memory grouped as recalled, used-as-basis, written-back, superseded, and excluded; success and typed refusal text use the exact CLI projection bytes |
+| `dw_knowledge_writebacks` | `memory_read.build_memory_writeback_projection` | `{run?: string, program?: string, story?: string, state?: string}` with run/program mutually exclusive — verified writeback receipts and earned-ledger coordinates; success and refusal bytes match CLI |
 | `dw_step` | `step.build_step` | `{project?: string}` — pure `delivery-workbench-step` v1 preview of one state-bound action; never executes |
 | `dw_context` | `api.build_context_payload` | `{project?: string, compact?: boolean}` |
 | `dw_next` | `api.next_story` | `{project?: string}` — result: the story object or `{next: null}` |

@@ -866,6 +866,26 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             ))
 
         if (
+            len(parts) == 4
+            and parts[:2] == ["api", "programs"]
+            and parts[3] == "memory"
+        ):
+            from .memory_read import (
+                build_memory_recall_projection,
+                memory_http_status,
+            )
+
+            document = build_memory_recall_projection(root, program=parts[2])
+            status = memory_http_status(document)
+            issues = (
+                [document["refusal"]["message"]]
+                if status != 200 else []
+            )
+            return status, envelope(
+                document, ok=status == 200, issues=issues
+            )
+
+        if (
             len(parts) in {3, 4}
             and parts[:2] == ["api", "programs"]
             and (len(parts) == 3 or parts[3] == "view")
@@ -1002,6 +1022,26 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             from .orchestration_run import run_inventory
 
             return 200, envelope(run_inventory(root))
+
+        if (
+            len(parts) == 4
+            and parts[:2] == ["api", "runs"]
+            and parts[3] == "memory"
+        ):
+            from .memory_read import (
+                build_memory_recall_projection,
+                memory_http_status,
+            )
+
+            document = build_memory_recall_projection(root, run=parts[2])
+            status = memory_http_status(document)
+            issues = (
+                [document["refusal"]["message"]]
+                if status != 200 else []
+            )
+            return status, envelope(
+                document, ok=status == 200, issues=issues
+            )
 
         if len(parts) == 3 and parts[:2] == ["api", "runs"]:
             from .orchestration_run import replay_run
@@ -1299,6 +1339,25 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
         if parts == ["api", "session-outcomes"]:
             return _session_outcomes(root, query)
+
+        if (
+            len(parts) == 4
+            and parts[:3] == ["api", "memory", "records"]
+        ):
+            from .memory_read import (
+                build_memory_record_projection,
+                memory_http_status,
+            )
+
+            document = build_memory_record_projection(root, parts[3])
+            status = memory_http_status(document)
+            issues = (
+                [document["refusal"]["message"]]
+                if status != 200 else []
+            )
+            return status, envelope(
+                document, ok=status == 200, issues=issues
+            )
 
         return _error(404, f"unknown API route: {path}")
     except DwError as err:
