@@ -102,15 +102,43 @@ alone — CI catches anything that bypassed a local hook.
 Run any command with `--help` for details. Most support `--json` for
 machine-readable output.
 
-## The web view
+## The workbench
 
 ```bash
 dw-workbench --root /path/to/repo
 ```
 
-A localhost page for browsing phases, stories, evidence, and the
-kanban board. It can preview and apply roadmap changes but never
-commits for you.
+A multi-panel workspace for managing delivery — inspired by
+[Operator](https://github.com/iishyfishyy/operator-oss), built on
+DW's evidence-first model.
+
+- **Kanban board** as the home view — drag stories, create inline,
+  park with a reason
+- **Live session stream** — watch agents work in real time (tool
+  calls, edits, questions)
+- **"Needs you" inbox** — a global count of pending decisions with
+  browser notifications and one-click jump
+- **Inline ask-and-resume** — answer an agent's typed request right
+  in the transcript, and the agent continues
+- **Diff review** — see what changed, file by file
+- **Integrated terminal** — run `dw` and `git` commands without
+  leaving the browser
+- **Session telemetry** — per-turn tokens, cache hits, cost
+- **Insights dashboard** — stories shipped, evidence captured,
+  commit activity over time
+- **Command palette** — Ctrl+K to jump to any project, story, run,
+  or request
+- **Reconnect-safe** — close your laptop, reopen, pick up where you
+  left off
+
+Panels coexist side-by-side (board + session + diff + terminal),
+resize with dividers, and remember their layout. On mobile they
+stack with a tab bar. Advanced features (orchestration, programs,
+grants) live behind one "Advanced" entry — out of sight until you
+need them.
+
+The workbench never commits for you. Every mutation goes through
+preview, exact token, apply.
 
 ![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
 
@@ -139,6 +167,12 @@ structure. These are all opt-in and don't change ordinary use:
 - **Mission control** — watch and steer from Telegram, HoldSpeak,
   or any client that reads the event feed
   ([docs/mission-control.md](./docs/mission-control.md))
+- **Project context** — revisioned, hash-bound instructions injected
+  into every agent session, with agent-draft and operator-accept
+  lifecycle (stored under `pm/context/`)
+- **Agent suggestions** — agents propose follow-up work with
+  provenance; accept to create a roadmap story, dismiss to archive
+  (stored under `pm/suggestions/`)
 
 ## This repo runs on it
 
