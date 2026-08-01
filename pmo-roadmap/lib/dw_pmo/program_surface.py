@@ -19,6 +19,7 @@ import time
 
 from .bounded_actions import build_program_bounded_actions
 from .live_progress import build_program_live_progress
+from .knowledge_writeback import ensure_terminal_writeback
 from .model import DwError
 from .orchestration import canonical_json
 from .program_conductor import (
@@ -38,6 +39,7 @@ from .program_delivery import (
 from .program_run import (
     _run_dir,
     _sha,
+    _time,
     apply_program_control,
     build_program_control_preview,
     build_program_start_plan,
@@ -647,12 +649,23 @@ def apply_program_act(
         ),
         "program act token is stale at the control boundary",
     )
-    return apply_program_control(
+    updated = apply_program_control(
         root,
         control,
         control_token=str(control["control_token"]),
         now=now,
     )
+    if updated.get("terminal_event_ref") is not None:
+        observed = _time(now, "now")
+        ensure_terminal_writeback(
+            root,
+            _run_dir(root, run_id),
+            projection=updated,
+            origin_kind="program",
+            timestamp=observed,
+        )
+        return replay_program(root, run_id, now=observed)
+    return updated
 
 
 def _safe_artifact(value: object) -> dict[str, object] | None:

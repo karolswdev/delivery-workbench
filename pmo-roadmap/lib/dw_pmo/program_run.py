@@ -1356,6 +1356,33 @@ def _budget_map(value: object) -> dict[str, int]:
     return result
 
 
+def _writeback_status(run_dir: Path) -> dict[str, object] | None:
+    path = run_dir / "memory" / "writeback-status.json"
+    failure = {
+        "status": "action-needed", "terminal_event_ref": "unknown",
+        "reason": "terminal writeback status is malformed",
+    }
+    if path.is_symlink():
+        return failure
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return {**failure, "reason": "terminal writeback status is unreadable"}
+    if (
+        not isinstance(value, dict)
+        or set(value) != {
+            "kind", "schema_version", "terminal_event_ref", "status",
+            "writeback_id", "record_hash", "reason",
+        }
+        or value.get("schema_version") != 1
+        or value.get("status") not in {"persisted", "action-needed"}
+    ):
+        return failure
+    return value
+
+
 def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None) -> dict[str, object]:
     """Validate immutable documents and derive the complete disposable view."""
     path, grant, _plan = _load_documents(root.resolve(), run_id)
@@ -1401,7 +1428,14 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
     expected_roadmap = dict(grant["roadmap"])
     exhaustion: dict[str, object] | None = None
     test_baseline: dict[str, object] | None = None
+    terminal_event_ref: str | None = None
     expires = _time(str(grant["expires_at"]), "expires_at")
+    expiration_ref = _sha({
+        "kind": "delivery-workbench-program-expiration",
+        "schema_version": 1,
+        "run_id": run_id,
+        "expires_at": grant["expires_at"],
+    })
 
     for event in events[1:]:
         detail = event["detail"]
@@ -1409,6 +1443,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
         event_at = _time(str(event["at"]), "event.at")
         if event_at >= expires and state in {"running", "checkpoint", "paused"}:
             state = "expired"
+            terminal_event_ref = expiration_ref
         event_generation = event["generation"]
         _require(isinstance(event_generation, int) and not isinstance(event_generation, bool), "program event generation is invalid")
         if event_name == "test_baseline_captured":
@@ -1856,6 +1891,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
                 "completed_at": event["at"],
             }
             state = "complete"
+            terminal_event_ref = str(event["event_hash"])
         elif event_name in {"program_paused", "program_resumed", "program_revoked", "program_cancelled"}:
             _require(detail["from_state"] == state, "program control source state is stale")
             expected_action = event_name.removeprefix("program_")
@@ -1891,6 +1927,8 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
             _require(event_generation == new_generation, "program control event uses the wrong generation")
             generation = new_generation
             state = str(detail["to_state"])
+            if state in {"revoked", "cancelled"}:
+                terminal_event_ref = str(event["event_hash"])
             controls.append({"event": event_name, "at": event["at"], **detail})
         elif event_name == "program_exhausted":
             _require(event_generation == generation, "program exhaustion uses the wrong generation")
@@ -1900,12 +1938,14 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
             _hash(detail["request_hash"], "program exhaustion request hash")
             _require(detail["used"] == counters[counter] and detail["limit"] == grant["authority"]["budgets"][counter], "program exhaustion facts are invalid")  # type: ignore[index]
             state = "exhausted"
+            terminal_event_ref = str(event["event_hash"])
             exhaustion = dict(detail)
 
     observed = _time(now, "now")
     expired = observed >= expires
     if expired and state in {"running", "checkpoint", "paused"}:
         state = "expired"
+        terminal_event_ref = expiration_ref
     outstanding_requests = [
         {
             "claim_id": item["claim_id"],
@@ -1918,6 +1958,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
         for item in active.values()
         if item["category"] == "checkpoint-request"
     ]
+    memory_writeback = _writeback_status(path)
     budget_state = {
         key: {
             "used": counters[key],
@@ -1935,6 +1976,8 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
         "program": grant["program"],
         "mode": mode,
         "state": state,
+        "terminal_event_ref": terminal_event_ref,
+        "memory_writeback": memory_writeback,
         "generation": generation,
         "ledger_head": events[-1]["event_hash"],
         "event_count": len(events),

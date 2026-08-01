@@ -117,6 +117,16 @@ def _derive_attention(
             continue
         run_story = run.get("story", {})
         if isinstance(run_story, dict) and run_story.get("id") == story_id:
+            writeback = run.get("memory_writeback")
+            if isinstance(writeback, dict) and writeback.get("status") == "action-needed":
+                return "blocked", {
+                    "kind": "memory-writeback-action-needed",
+                    "terminal_event_ref": str(
+                        writeback.get("terminal_event_ref", "")
+                    ),
+                    "reason": str(writeback.get("reason", "")),
+                }
+
             outstanding = run.get("outstanding_requests", [])
             if outstanding:
                 req = outstanding[0]

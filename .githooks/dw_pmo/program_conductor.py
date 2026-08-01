@@ -40,6 +40,7 @@ from .memory_dispatch import (
 )
 from .knowledge_writeback import (
     LESSON_ARTIFACT_KIND,
+    ensure_terminal_writeback,
     parse_lesson_output,
     persist_certified_handoff,
     persist_completed_program,
@@ -2552,6 +2553,27 @@ def _execute_certified_lesson_writeback(
     return {"status": "complete", "projection": updated, "receipt": receipt}
 
 
+def _ensure_program_terminal_writeback(
+    root: Path,
+    run_id: str,
+    projection: dict[str, object],
+    *,
+    now: datetime,
+    discarded_lesson_count: int = 0,
+) -> dict[str, object]:
+    if projection.get("terminal_event_ref") is None:
+        return projection
+    ensure_terminal_writeback(
+        root,
+        _run_dir(root, run_id),
+        projection=projection,
+        origin_kind="program",
+        timestamp=now,
+        discarded_lesson_count=discarded_lesson_count,
+    )
+    return replay_program(root, run_id, now=now)
+
+
 def _persist_completed_knowledge(
     root: Path,
     run_id: str,
@@ -2622,11 +2644,21 @@ def _execute_scope_completion(
         completed_phases=list(payload["completed_phases"]),
         now=now,
     )
-    _persist_completed_knowledge(
+    knowledge_result = _persist_completed_knowledge(
         root,
         run_id,
         replay_program_conductor(root, run_id, now=now),
         now=now,
+    )
+    projection = _ensure_program_terminal_writeback(
+        root,
+        run_id,
+        replay_program(root, run_id, now=now),
+        now=now,
+        discarded_lesson_count=int(
+            knowledge_result.get("discarded_lessons", 0)
+            if isinstance(knowledge_result, dict) else 0
+        ),
     )
     _boundary(boundary_hook, "after-scope-completion", {
         "action_id": action["action_id"],
@@ -7665,9 +7697,21 @@ def tick_program(
         before_head = str(before_projection["ledger_head"])
         before_receipts = len(before["receipts"])
         if before_projection["state"] != "running":
+            knowledge_result = None
             if before_projection["state"] == "complete":
-                _persist_completed_knowledge(
+                knowledge_result = _persist_completed_knowledge(
                     root, run_id, before, now=observed
+                )
+            if before_projection.get("terminal_event_ref") is not None:
+                before_projection = _ensure_program_terminal_writeback(
+                    root,
+                    run_id,
+                    before_projection,
+                    now=observed,
+                    discarded_lesson_count=int(
+                        knowledge_result.get("discarded_lessons", 0)
+                        if isinstance(knowledge_result, dict) else 0
+                    ),
                 )
             frontier = derive_program_frontier(
                 root, run_id, driver_config=config, now=observed
@@ -7817,6 +7861,11 @@ def tick_program(
                 }
         after = replay_program_conductor(root, run_id, now=observed)
         after_projection = after["authority"]
+        if after_projection.get("terminal_event_ref") is not None:
+            after_projection = _ensure_program_terminal_writeback(
+                root, run_id, after_projection, now=observed
+            )
+            after = replay_program_conductor(root, run_id, now=observed)
         progressed = (
             str(after_projection["ledger_head"]) != before_head
             or len(after["receipts"]) != before_receipts

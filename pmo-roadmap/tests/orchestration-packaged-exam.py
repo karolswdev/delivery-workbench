@@ -477,6 +477,26 @@ def main():
         assert route["action"] == "route" and route["resolved"] is True
         assert route["outcome"] == "succeeded" and route["visit"] == 1
         assert final["checkpoints"][-1]["node_id"] == "human-handoff"
+        assert final["memory_writeback"]["status"] == "persisted"
+        writeback_files = sorted(
+            (root / ".git" / "pmo-orchestration" / "runs"
+             / main_run["run_id"] / "memory" / "writebacks").glob("*.json")
+        )
+        assert len(writeback_files) == 1
+        writeback = json.loads(writeback_files[0].read_text(encoding="utf-8"))
+        assert writeback["terminal_state"] == "succeeded"
+        assert writeback["memory_state"] == "confirmed"
+        assert writeback["story_ids"] == ["SMP-0-01"]
+        assert set(writeback["recalled_memory_ids"]) == {
+            item["recall_id"] for item in final["memory_recalls"]
+        }
+        assert not any(
+            key in writeback
+            for key in ("prompt", "transcript", "tool_output", "credentials", "thinking")
+        )
+        replay_tick = tick_run(root, main_run["run_id"], now=now)
+        assert replay_tick["state"] == "awaiting-certification"
+        assert len(list(writeback_files[0].parent.glob("*.json"))) == 1
 
         artifacts = artifact_inventory(root, main_run["run_id"])
         by_name = {item["name"]: item for item in artifacts}

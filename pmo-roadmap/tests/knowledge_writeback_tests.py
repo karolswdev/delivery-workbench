@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""WLA-29-07 terminal delivery and lesson write-back proof."""
+"""WLA-29-07 delivery lessons and WLA-35-04 terminal memory writeback proof."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import sys
@@ -19,9 +20,13 @@ from dw_pmo import knowledge  # noqa: E402
 from dw_pmo.knowledge_packet import build_knowledge_packet  # noqa: E402
 from dw_pmo.knowledge_writeback import (  # noqa: E402
     LESSON_OUTPUT_KIND,
+    build_terminal_writeback,
     delivery_detail_from_projection,
+    ensure_terminal_writeback,
     parse_lesson_output,
     persist_completed_program,
+    persist_terminal_writeback,
+    read_terminal_writeback_status,
     validate_lesson_output,
 )
 from dw_pmo.model import DwError  # noqa: E402
@@ -88,6 +93,67 @@ def projection(run_id="program-" + "1" * 24, state="complete"):
             "obligation_ids": ["obligation-follow-up"],
         } if state == "complete" else None,
     }
+
+
+def terminal_projection(state="complete", *, event_ref=None):
+    terminal = {
+        "awaiting-certification": "succeeded",
+        "expired": "timed-out",
+    }.get(state, "failed" if state == "blocked" else state)
+    return {
+        "run_id": "run-" + "1" * 24,
+        "state": state,
+        "terminal_event_ref": event_ref or "sha256:" + "d" * 64,
+        "head_sha": HEAD,
+        "story": {"id": "WLA-35-04"},
+        "memory_recalls": [],
+        "request_history": [{
+            "correlation_id": "req-" + "2" * 24,
+            "response_hash": "sha256:" + "3" * 64,
+        }],
+        "checkpoints": [],
+        "node_receipts": [
+            {"executor": "driver", "receipt_hash": "sha256:" + "4" * 64},
+            {"executor": "check", "receipt_hash": "sha256:" + "5" * 64},
+        ],
+        "completed_claims": (
+            [] if terminal in {"complete", "succeeded"} else [{
+                "node_id": "implement", "attempt": 1,
+                "outcome": "lost" if terminal == "lost" else "failed",
+                "reason": "bounded failure",
+            }]
+        ),
+        "routes": ([{"action": "exhausted"}] if terminal == "exhausted" else []),
+        "budgets": {"max_wall_seconds": {"used": 0, "limit": 100}},
+        "expired": state == "expired",
+        "delivery_facts": None,
+    }
+
+
+def recall_manifest(run_dir):
+    memory = run_dir / "memory"
+    memory.mkdir(parents=True)
+    unsigned = {
+        "kind": "delivery-workbench-memory-recall-manifest",
+        "schema_version": 1,
+        "subject": "run-" + "1" * 24,
+        "source_revision": "sha256:" + "6" * 64,
+        "source_heads": {"index_tree": TREE},
+        "source_hash": "sha256:" + "7" * 64,
+        "audiences": {
+            "coordinator": "sha256:" + "8" * 64,
+            "implementer": "sha256:" + "9" * 64,
+        },
+    }
+    unsigned["manifest_hash"] = "sha256:" + hashlib.sha256(
+        json.dumps(
+            unsigned, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    (memory / "manifest.json").write_text(
+        json.dumps(unsigned, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def lesson_document(claim="Keep delivery writes terminal and bounded.", *,
@@ -189,6 +255,278 @@ class KnowledgeWritebackTest(unittest.TestCase):
         store = knowledge.EarnedRecordStore(self.root)
         self.assertEqual(len(store.read("delivery-record")), 1)
         self.assertEqual(len(store.read("lesson")), 1)
+
+    def test_every_terminal_outcome_builds_a_closed_bounded_receipt(self):
+        successful = {"complete", "succeeded"}
+        states = (
+            "complete", "succeeded", "failed", "cancelled", "revoked",
+            "lost", "timed-out", "exhausted",
+        )
+        for state in states:
+            document = build_terminal_writeback(
+                origin_kind="run",
+                origin="run-" + "1" * 24,
+                terminal_state=state,
+                subject="sha256:" + "1" * 64,
+                head_sha=HEAD,
+                terminal_event_ref="sha256:" + "2" * 64,
+                story_ids=["WLA-35-04"],
+                recalled_memory_ids=["sha256:" + "3" * 64],
+                decision_refs=["sha256:" + "4" * 64],
+                evidence_refs=["sha256:" + "5" * 64],
+                check_refs=["sha256:" + "6" * 64],
+                changed_files=["pkg/delivery.py"],
+                failure_signatures=(
+                    [] if state in successful else ["sha256:" + "7" * 64]
+                ),
+                accepted_lesson_hashes=["sha256:" + "8" * 64],
+                discarded_lesson_count=2,
+                source_revision="sha256:" + "9" * 64,
+            )
+            self.assertEqual(
+                set(document),
+                set(knowledge.MEMORY_DOCUMENT_FIELDS[knowledge.MEMORY_WRITEBACK_KIND]),
+            )
+            self.assertEqual(
+                document["memory_state"],
+                "confirmed" if state in successful else "candidate",
+            )
+            self.assertLessEqual(
+                len(json.dumps(document, sort_keys=True).encode("utf-8")),
+                knowledge.MEMORY_DOCUMENT_BYTE_CAPS[knowledge.MEMORY_WRITEBACK_KIND]["document"],
+            )
+            for forbidden in (
+                "prompt", "transcript", "tool_output", "credentials", "thinking",
+            ):
+                self.assertNotIn(forbidden, document)
+
+    def test_terminal_writeback_persists_manifest_recall_ids_and_exact_facts(self):
+        run_dir = self.root / "run-store" / ("run-" + "1" * 24)
+        recall_manifest(run_dir)
+        result = persist_terminal_writeback(
+            self.root,
+            run_dir,
+            projection=terminal_projection(),
+            origin_kind="run",
+            timestamp=STAMP,
+            discarded_lesson_count=3,
+        )
+        document = result["document"]
+        self.assertEqual(document["terminal_state"], "complete")
+        self.assertEqual(document["story_ids"], ["WLA-35-04"])
+        self.assertEqual(document["recalled_memory_ids"], [
+            "sha256:" + "8" * 64,
+            "sha256:" + "9" * 64,
+        ])
+        self.assertEqual(document["decision_refs"], [
+            "req-" + "2" * 24,
+            "sha256:" + "3" * 64,
+        ])
+        self.assertEqual(document["evidence_refs"], ["sha256:" + "4" * 64])
+        self.assertEqual(document["check_refs"], ["sha256:" + "5" * 64])
+        self.assertEqual(document["discarded_lesson_count"], 3)
+        self.assertEqual(document["failure_signatures"], [])
+        receipt_path = Path(result["receipt_path"])
+        self.assertTrue(receipt_path.is_file())
+        records = knowledge.EarnedRecordStore(self.root).read(
+            knowledge.TERMINAL_OUTCOME_KIND
+        )
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["detail"]["receipt_id"], document["writeback_id"])
+        self.assertEqual(records[0]["detail"]["memory_state"], "confirmed")
+
+    def test_terminal_replay_deduplicates_receipt_and_earned_outcome(self):
+        run_dir = self.root / "run-store" / ("run-" + "1" * 24)
+        recall_manifest(run_dir)
+        first = persist_terminal_writeback(
+            self.root, run_dir, projection=terminal_projection(),
+            origin_kind="run", timestamp=STAMP,
+        )
+        second = persist_terminal_writeback(
+            self.root, run_dir, projection=terminal_projection(),
+            origin_kind="run", timestamp=STAMP + timedelta(minutes=1),
+        )
+        self.assertEqual(first["writeback_id"], second["writeback_id"])
+        self.assertEqual(first["record_hash"], second["record_hash"])
+        self.assertTrue(second["deduplicated"])
+        self.assertEqual(
+            len(knowledge.EarnedRecordStore(self.root).read(
+                knowledge.TERMINAL_OUTCOME_KIND
+            )),
+            1,
+        )
+        self.assertEqual(len(list((run_dir / "memory" / "writebacks").iterdir())), 1)
+
+    def test_crash_after_earned_append_replays_the_same_receipt(self):
+        run_dir = self.root / "run-store" / ("run-" + "1" * 24)
+        recall_manifest(run_dir)
+        from dw_pmo import knowledge_writeback
+
+        real_atomic = knowledge_writeback._atomic_json
+        crashed = {"done": False}
+
+        def crash_once(path, value):
+            if path.parent.name == "writebacks" and not crashed["done"]:
+                crashed["done"] = True
+                raise OSError("planted crash after earned append")
+            return real_atomic(path, value)
+
+        with mock.patch(
+            "dw_pmo.knowledge_writeback._atomic_json", side_effect=crash_once
+        ):
+            with self.assertRaises(OSError):
+                persist_terminal_writeback(
+                    self.root, run_dir, projection=terminal_projection(),
+                    origin_kind="run", timestamp=STAMP,
+                )
+        self.assertEqual(
+            len(knowledge.EarnedRecordStore(self.root).read(
+                knowledge.TERMINAL_OUTCOME_KIND
+            )),
+            1,
+        )
+        replayed = persist_terminal_writeback(
+            self.root, run_dir, projection=terminal_projection(),
+            origin_kind="run", timestamp=STAMP + timedelta(minutes=1),
+        )
+        self.assertEqual(replayed["status"], "persisted")
+        self.assertEqual(
+            len(knowledge.EarnedRecordStore(self.root).read(
+                knowledge.TERMINAL_OUTCOME_KIND
+            )),
+            1,
+        )
+        self.assertEqual(len(list((run_dir / "memory" / "writebacks").iterdir())), 1)
+
+    def test_program_terminal_vocabulary_maps_expiry_without_confirming_it(self):
+        run_dir = self.root / "program-store" / ("program-" + "1" * 24)
+        recall_manifest(run_dir)
+        for index, state in enumerate(("cancelled", "revoked", "exhausted", "expired")):
+            current = terminal_projection(
+                state, event_ref="sha256:" + format(index + 10, "064x")
+            )
+            current.update({
+                "run_id": "program-" + "1" * 24,
+                "selected_stories": ["WLA-35-04"],
+                "scope": {"story_ids": ["WLA-35-04"]},
+                "expected_repository": {"head": HEAD},
+                "delivery_facts": None,
+            })
+            result = persist_terminal_writeback(
+                self.root, run_dir, projection=current,
+                origin_kind="program",
+                timestamp=STAMP + timedelta(minutes=index),
+            )
+            self.assertEqual(
+                result["document"]["terminal_state"],
+                "timed-out" if state == "expired" else state,
+            )
+            self.assertEqual(result["document"]["memory_state"], "candidate")
+
+    def test_unsuccessful_outcome_is_candidate_and_supersession_appends(self):
+        run_dir = self.root / "run-store" / ("run-" + "1" * 24)
+        recall_manifest(run_dir)
+        failed = persist_terminal_writeback(
+            self.root, run_dir, projection=terminal_projection("blocked"),
+            origin_kind="run", timestamp=STAMP,
+        )
+        self.assertEqual(failed["document"]["terminal_state"], "failed")
+        self.assertEqual(failed["document"]["memory_state"], "candidate")
+        self.assertTrue(failed["document"]["failure_signatures"])
+
+        corrected_projection = terminal_projection(
+            "blocked", event_ref="sha256:" + "e" * 64
+        )
+        corrected = persist_terminal_writeback(
+            self.root,
+            run_dir,
+            projection=corrected_projection,
+            origin_kind="run",
+            timestamp=STAMP + timedelta(minutes=1),
+            supersedes=failed["record_hash"],
+        )
+        self.assertEqual(corrected["document"]["memory_state"], "superseded")
+        records = knowledge.EarnedRecordStore(self.root).read(
+            knowledge.TERMINAL_OUTCOME_KIND
+        )
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]["record_hash"], failed["record_hash"])
+        self.assertEqual(records[1]["detail"]["supersedes"], failed["record_hash"])
+
+    def test_writeback_failure_is_action_needed_and_not_retried_implicitly(self):
+        run_dir = self.root / "run-store" / ("run-" + "1" * 24)
+        recall_manifest(run_dir)
+        terminal = terminal_projection("cancelled")
+        with mock.patch(
+            "dw_pmo.knowledge_writeback.persist_terminal_writeback",
+            side_effect=DwError("earned store unavailable"),
+        ) as adapter:
+            first = ensure_terminal_writeback(
+                self.root, run_dir, projection=terminal, origin_kind="run",
+                timestamp=STAMP,
+            )
+            second = ensure_terminal_writeback(
+                self.root, run_dir, projection=terminal, origin_kind="run",
+                timestamp=STAMP + timedelta(minutes=1),
+            )
+        self.assertEqual(adapter.call_count, 1)
+        self.assertEqual(first["status"], "action-needed")
+        self.assertEqual(second["status"], "action-needed")
+        self.assertEqual(terminal["state"], "cancelled")
+        self.assertEqual(terminal["terminal_event_ref"], "sha256:" + "d" * 64)
+        self.assertEqual(read_terminal_writeback_status(run_dir), first)
+        self.assertEqual(
+            knowledge.EarnedRecordStore(self.root).read(
+                knowledge.TERMINAL_OUTCOME_KIND
+            ),
+            [],
+        )
+
+    def test_writeback_failure_reaches_needs_you_without_changing_terminal_state(self):
+        from dw_pmo.bounded_actions import _program_inbox, _run_inbox
+        from dw_pmo.orthogonal_state import _derive_attention
+
+        failure = {
+            "status": "action-needed",
+            "terminal_event_ref": "sha256:" + "d" * 64,
+            "reason": "terminal writeback failed: earned store unavailable",
+        }
+        run_projection = terminal_projection("cancelled")
+        run_projection["memory_writeback"] = failure
+        run_inbox = _run_inbox(run_projection, {"blocked": []}, [], [])
+        self.assertEqual(run_inbox[0]["id"], "blocker:memory-writeback")
+        self.assertEqual(run_inbox[0]["source"]["path"], "/memory_writeback")
+        self.assertEqual(run_projection["state"], "cancelled")
+
+        program_projection = {
+            "state": "revoked",
+            "selection": {"story": "WLA-35-04"},
+            "outstanding_requests": [],
+            "blocking_obligations": [],
+            "memory_writeback": failure,
+        }
+        program_inbox = _program_inbox(
+            program_projection, {"stop": "scope-complete"}, [], None
+        )
+        self.assertEqual(program_inbox[0]["id"], "blocker:memory-writeback")
+        self.assertEqual(program_projection["state"], "revoked")
+
+        attention, detail = _derive_attention(
+            "WLA-35-04",
+            "in-progress",
+            [{
+                "valid": True,
+                "run": {
+                    "story": {"id": "WLA-35-04"},
+                    "memory_writeback": failure,
+                    "outstanding_requests": [],
+                    "state": "cancelled",
+                },
+            }],
+            [],
+        )
+        self.assertEqual(attention, "blocked")
+        self.assertEqual(detail["kind"], "memory-writeback-action-needed")
 
     def test_second_packet_prefers_superseding_lesson_and_keeps_chain(self):
         first = persist_completed_program(

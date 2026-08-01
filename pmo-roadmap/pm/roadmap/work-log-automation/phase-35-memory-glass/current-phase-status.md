@@ -27,7 +27,7 @@ Make memory a visible, testable part of every bounded run and autonomous program
 | WLA-35-01 | Memory contract | done | [story-01-memory-contract](./story-01-memory-contract.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-35-02 | Explainable recall | done | [story-02-explainable-recall](./story-02-explainable-recall.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-35-03 | Recall before dispatch | done | [story-03-recall-before-dispatch](./story-03-recall-before-dispatch.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-35-04 | Terminal writeback | backlog | [story-04-terminal-writeback](./story-04-terminal-writeback.md) | - |
+| WLA-35-04 | Terminal writeback | done | [story-04-terminal-writeback](./story-04-terminal-writeback.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-35-05 | Memory read surfaces | backlog | [story-05-memory-read-surfaces](./story-05-memory-read-surfaces.md) | - |
 | WLA-35-06 | AgentGlass memory pane | backlog | [story-06-agentglass-memory-pane](./story-06-agentglass-memory-pane.md) | - |
 | WLA-35-07 | Decision basis timeline | backlog | [story-07-decision-basis-timeline](./story-07-decision-basis-timeline.md) | - |
@@ -37,7 +37,7 @@ Make memory a visible, testable part of every bounded run and autonomous program
 
 ## Where we are
 
-WLA-35-03 done (2026-08-01): both conductors freeze five audience recall slices before first dispatch, persist them under the run/program ledgers' memory stores, emit `memory-recall-built`/`memory-recall-attached` hash-chained events, attach recall to agent packets beside the knowledge packet, and fail closed (typed action-needed) on missing/malformed/tampered/stale recall. Recovery reuses persisted recall IDs. Stories 01 (memory contract) and 02 (pure recall builder) landed earlier the same day. Next: WLA-35-04 (terminal writeback for every outcome).
+WLA-35-04 done (2026-08-01): every terminal state of runs and programs produces an exactly-once `delivery-workbench-memory-writeback@1` receipt with crash-replay dedup by deterministic digest; unsuccessful outcomes land as candidate terminal-outcome earned records; writeback failure surfaces in projections, the needs-you inbox, and orthogonal attention without touching verdicts. Writeback suite 6 → 14. Stories 01-03 (contract, recall builder, recall-before-dispatch) landed earlier. Next: WLA-35-05 (memory read surfaces over CLI/MCP/HTTP).
 
 ## Active risks
 

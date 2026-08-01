@@ -13,11 +13,12 @@ import hashlib
 import json
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .bounded_actions import build_run_bounded_actions
 from .live_progress import build_run_live_progress
+from .knowledge_writeback import ensure_terminal_writeback
 from .model import DwError
 from .orchestration import canonical_json
 from .orchestration_conductor import TERMINAL_STATES, schedule_decision, tick_run
@@ -414,18 +415,35 @@ def apply_run_act(
         )
     if action == "checkpoint":
         if correlation_id:
-            return decide_outstanding_request(
+            projection = decide_outstanding_request(
                 root, run_id, correlation_id, decision, ledger_head, now=now,
                 expected_kind="checkpoint",
             )
-        return decide_checkpoint(root, run_id, decision, ledger_head, now=now)
-    if action == "request":
-        return decide_outstanding_request(
+        else:
+            projection = decide_checkpoint(
+                root, run_id, decision, ledger_head, now=now
+            )
+    elif action == "request":
+        projection = decide_outstanding_request(
             root, run_id, correlation_id, decision, ledger_head, now=now
         )
-    return transition_run(
-        root, run_id, action, ledger_head, reason=reason, now=now
-    )
+    else:
+        projection = transition_run(
+            root, run_id, action, ledger_head, reason=reason, now=now
+        )
+    if projection.get("terminal_event_ref") is not None:
+        observed = (now or datetime.now(timezone.utc)).astimezone(
+            timezone.utc
+        ).replace(microsecond=0)
+        ensure_terminal_writeback(
+            root,
+            _run_dir(root, run_id),
+            projection=projection,
+            origin_kind="run",
+            timestamp=observed,
+        )
+        return replay_run(root, run_id, now=observed)
+    return projection
 
 
 def _read_records(directory: Path, pattern: str, label: str) -> list[dict[str, object]]:

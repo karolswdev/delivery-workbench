@@ -973,6 +973,26 @@ def _run_inbox(
                 "path": "/blocked",
             },
         })
+    writeback = projection.get("memory_writeback")
+    if isinstance(writeback, dict) and writeback.get("status") == "action-needed":
+        inbox.append({
+            "id": "blocker:memory-writeback",
+            "kind": "blocker",
+            "status": "blocked",
+            "affected_work": "Terminal memory writeback",
+            "why": _bounded_text(
+                writeback.get("reason"),
+                "The terminal outcome could not be written to advisory memory.",
+            ),
+            "resolver": "Repair the local knowledge store, then replay the exact terminal writeback.",
+            "valid_choices": _fallback_choices(actions),
+            "after_no_choice": "The run verdict and terminal state remain unchanged; memory stays incomplete.",
+            "technical_reference": writeback.get("terminal_event_ref"),
+            "source": {
+                "model": "delivery-workbench-run",
+                "path": "/memory_writeback",
+            },
+        })
     if projection.get("state") == "blocked" and not any(
         item["kind"] == "blocker" for item in inbox
     ):
@@ -1097,6 +1117,26 @@ def _program_inbox(
             "source": {
                 "model": "delivery-workbench-program",
                 "path": "/blocking_obligations",
+            },
+        })
+    writeback = authority.get("memory_writeback")
+    if isinstance(writeback, dict) and writeback.get("status") == "action-needed":
+        inbox.append({
+            "id": "blocker:memory-writeback",
+            "kind": "blocker",
+            "status": "blocked",
+            "affected_work": "Terminal memory writeback",
+            "why": _bounded_text(
+                writeback.get("reason"),
+                "The program outcome could not be written to advisory memory.",
+            ),
+            "resolver": "Repair the local knowledge store, then replay the exact terminal writeback.",
+            "valid_choices": _fallback_choices(actions),
+            "after_no_choice": "The program verdict and terminal state remain unchanged; memory stays incomplete.",
+            "technical_reference": writeback.get("terminal_event_ref"),
+            "source": {
+                "model": "delivery-workbench-program",
+                "path": "/memory_writeback",
             },
         })
     stop = str(frontier.get("stop") or "")

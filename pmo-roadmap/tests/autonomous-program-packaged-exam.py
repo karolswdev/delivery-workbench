@@ -2487,6 +2487,29 @@ def main():
             root, run_id, now=issued
         )
         assert final_authority["state"] == "complete"
+        assert final_authority["memory_writeback"]["status"] == "persisted"
+        writeback_files = sorted(
+            (authority._run_dir(root, run_id) / "memory" / "writebacks").glob("*.json")
+        )
+        assert len(writeback_files) == 1
+        writeback = json.loads(writeback_files[0].read_text(encoding="utf-8"))
+        assert writeback["terminal_state"] == "complete"
+        assert writeback["memory_state"] == "confirmed"
+        assert writeback["story_ids"] == ["AX-1-01", "AX-1-02", "AX-2-01"]
+        assert set(writeback["recalled_memory_ids"]) == {
+            item["recall_id"] for item in final_authority["memory_recalls"]
+        }
+        assert writeback["changed_files"]
+        assert isinstance(writeback["accepted_lesson_hashes"], list)
+        assert not any(
+            key in writeback
+            for key in ("prompt", "transcript", "tool_output", "credentials", "thinking")
+        )
+        replayed_terminal = conductor.tick_program(
+            root, run_id, driver_config=config, adapters=adapters, now=issued
+        )
+        assert replayed_terminal["terminal"]
+        assert len(list(writeback_files[0].parent.glob("*.json"))) == 1
         assert final_authority["selected_stories"] == [
             "AX-1-01",
             "AX-1-02",

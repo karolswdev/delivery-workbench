@@ -24,6 +24,7 @@ from typing import Callable, Iterator
 
 from .gitio import head_sha, in_rewrite_state
 from .knowledge_packet import build_repository_knowledge_packet
+from .knowledge_writeback import ensure_terminal_writeback
 from .memory_dispatch import (
     MemoryRecallActionNeeded,
     persist_recall_slices,
@@ -48,7 +49,7 @@ from .orchestration_run import (
     maintain_outstanding_requests,
     observed_external_fact_binding,
     observed_fact_binding,
-    record_runtime_event,
+    record_runtime_event as _record_runtime_event,
     release_node_claim,
     replay_run,
     transition_run,
@@ -83,6 +84,34 @@ BoundaryHook = Callable[[str, dict[str, object]], None]
 CheckRunner = Callable[
     [list[str], Path, int, Path, Path, dict[str, str]], int
 ]
+
+
+def record_runtime_event(
+    root: Path,
+    run_id: str,
+    event: str,
+    detail: dict[str, object],
+    expect: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Record one runtime event, then distill a terminal outcome outside authority."""
+    projection = _record_runtime_event(
+        root, run_id, event, detail, expect, now=now
+    )
+    if projection.get("terminal_event_ref") is None:
+        return projection
+    observed = (now or datetime.now(timezone.utc)).astimezone(
+        timezone.utc
+    ).replace(microsecond=0)
+    ensure_terminal_writeback(
+        root,
+        _run_dir(root, run_id),
+        projection=projection,
+        origin_kind="run",
+        timestamp=observed,
+    )
+    return replay_run(root, run_id, now=observed)
 
 
 def _nodes(compiled: dict[str, object]) -> list[dict[str, object]]:

@@ -822,6 +822,33 @@ def _read_events(run_dir: Path, run_id: str) -> list[dict[str, object]]:
     return events
 
 
+def _writeback_status(run_dir: Path) -> dict[str, object] | None:
+    path = run_dir / "memory" / "writeback-status.json"
+    failure = {
+        "status": "action-needed", "terminal_event_ref": "unknown",
+        "reason": "terminal writeback status is malformed",
+    }
+    if path.is_symlink():
+        return failure
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return {**failure, "reason": "terminal writeback status is unreadable"}
+    if (
+        not isinstance(value, dict)
+        or set(value) != {
+            "kind", "schema_version", "terminal_event_ref", "status",
+            "writeback_id", "record_hash", "reason",
+        }
+        or value.get("schema_version") != 1
+        or value.get("status") not in {"persisted", "action-needed"}
+    ):
+        return failure
+    return value
+
+
 def replay_run(
     root: Path,
     run_id: str,
@@ -852,6 +879,7 @@ def replay_run(
     nudges: list[dict[str, object]] = []
     memory_recalls: list[dict[str, object]] = []
     memory_attachments: list[dict[str, object]] = []
+    terminal_event_ref: str | None = None
     counters = {
         "agent_starts": 0, "check_starts": 0, "artifact_bytes": 0,
         "nudges": 0,
@@ -892,6 +920,7 @@ def replay_run(
             if detail["generation"] != generation:
                 raise DwError("run_revoked generation is not monotonic")
             state = "revoked"
+            terminal_event_ref = str(event["event_hash"])
         elif kind == "run_cancelled":
             if state not in {"active", "paused", "awaiting-approval"}:
                 raise DwError("invalid run_cancelled transition")
@@ -899,6 +928,7 @@ def replay_run(
             if detail["generation"] != generation:
                 raise DwError("run_cancelled generation is not monotonic")
             state = "cancelled"
+            terminal_event_ref = str(event["event_hash"])
         elif kind == "node_claimed":
             if state != "active":
                 raise DwError("node claim exists while run is not active")
@@ -960,6 +990,7 @@ def replay_run(
                 # budgeted, receipted nudge re-opens the run for one more
                 # bounded round. Certification authority is untouched.
                 state = "active"
+                terminal_event_ref = None
             elif state != "active":
                 raise DwError("nudge delivery recorded in an inactive run")
             counters["nudges"] += 1
@@ -1078,6 +1109,7 @@ def replay_run(
                 # run and reach the handoff again after its bounded repair.
                 pending_checkpoint = None
                 state = terminal
+                terminal_event_ref = str(event["event_hash"])
             else:
                 pending_checkpoint = checkpoint
                 node = next(
@@ -1151,6 +1183,8 @@ def replay_run(
                 )
                 latest_decision = correlation
             state = "active" if detail["decision"] == "approve" else "blocked"
+            if state == "blocked":
+                terminal_event_ref = str(event["event_hash"])
             pending_checkpoint = None
         elif kind == "request_republished":
             correlation = str(detail["correlation_id"])
@@ -1231,6 +1265,7 @@ def replay_run(
                     pending_checkpoint = None
                     if state not in {"revoked", "cancelled"}:
                         state = "blocked"
+                        terminal_event_ref = str(event["event_hash"])
             elif reason == "invalid-response":
                 if request is None:
                     raise DwError("invalid response refusal has no matching request")
@@ -1243,10 +1278,12 @@ def replay_run(
             if detail["generation"] != generation:
                 raise DwError("run_aborted generation is not monotonic")
             state = "blocked"
+            terminal_event_ref = str(event["event_hash"])
         elif kind == "run_terminal":
             if state != "active":
                 raise DwError("run terminal handoff requires an active run")
             state = str(detail["meaning"])
+            terminal_event_ref = str(event["event_hash"])
         elif kind == "rail_advanced":
             if state != "active":
                 raise DwError("rail fact advance requires an active run")
@@ -1328,6 +1365,7 @@ def replay_run(
         str(node["id"]): index
         for index, node in enumerate(compiled["score"]["nodes"])
     }
+    memory_writeback = _writeback_status(run_dir)
     return {
         "kind": RUN_KIND,
         "schema_version": RUN_SCHEMA_VERSION,
@@ -1337,6 +1375,9 @@ def replay_run(
         "dispatch_allowed": state == "active" and not expired and not wall_exhausted,
         "control_generation": generation,
         "grant_hash": grant["grant_hash"],
+        "head_sha": grant["repository"]["head"],
+        "terminal_event_ref": terminal_event_ref,
+        "memory_writeback": memory_writeback,
         "score": grant["score"],
         "project": grant["project"],
         "story": grant["story"],
