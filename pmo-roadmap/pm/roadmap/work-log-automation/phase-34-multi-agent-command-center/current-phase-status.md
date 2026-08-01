@@ -85,16 +85,16 @@ uses `--no-verify`.
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-34-01 | Global event stream | backlog | [story-01](./story-01-global-event-stream.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-34-02 | Orthogonal state model | backlog | [story-02](./story-02-orthogonal-state.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-34-03 | Needs-you inbox | backlog | [story-03](./story-03-needs-you-inbox.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-34-04 | Inline ask-and-resume | backlog | [story-04](./story-04-inline-ask-resume.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-34-05 | Reconnect-safe execution | backlog | [story-05](./story-05-reconnect-safe.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-34-06 | Session telemetry | backlog | [story-06](./story-06-session-telemetry.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-34-07 | Session-to-outcome links | backlog | [story-07](./story-07-session-outcomes.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-34-08 | Command palette | backlog | [story-08](./story-08-command-palette.md) | [evidence-story-08](./evidence-story-08.md) |
-| WLA-34-09 | Revisioned project context | backlog | [story-09](./story-09-project-context.md) | [evidence-story-09](./evidence-story-09.md) |
-| WLA-34-10 | Agent suggestion inbox | backlog | [story-10](./story-10-suggestion-inbox.md) | [evidence-story-10](./evidence-story-10.md) |
+| WLA-34-01 | Global event stream | done | [story-01](./story-01-global-event-stream.md) | [evidence-story-01](./evidence-story-01.md) |
+| WLA-34-02 | Orthogonal state model | done | [story-02](./story-02-orthogonal-state.md) | [evidence-story-02](./evidence-story-02.md) |
+| WLA-34-03 | Needs-you inbox | done | [story-03](./story-03-needs-you-inbox.md) | [evidence-story-03](./evidence-story-03.md) |
+| WLA-34-04 | Inline ask-and-resume | done | [story-04](./story-04-inline-ask-resume.md) | [evidence-story-04](./evidence-story-04.md) |
+| WLA-34-05 | Reconnect-safe execution | done | [story-05](./story-05-reconnect-safe.md) | [evidence-story-05](./evidence-story-05.md) |
+| WLA-34-06 | Session telemetry | done | [story-06](./story-06-session-telemetry.md) | [evidence-story-06](./evidence-story-06.md) |
+| WLA-34-07 | Session-to-outcome links | done | [story-07](./story-07-session-outcomes.md) | [evidence-story-07](./evidence-story-07.md) |
+| WLA-34-08 | Command palette | done | [story-08](./story-08-command-palette.md) | [evidence-story-08](./evidence-story-08.md) |
+| WLA-34-09 | Revisioned project context | done | [story-09](./story-09-project-context.md) | [evidence-story-09](./evidence-story-09.md) |
+| WLA-34-10 | Agent suggestion inbox | done | [story-10](./story-10-suggestion-inbox.md) | [evidence-story-10](./evidence-story-10.md) |
 | WLA-34-11 | Prove it works | done | [story-11](./story-11-prove-it-works.md) | [evidence-story-11](./evidence-story-11.md) |
 
 ## Sequencing
