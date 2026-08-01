@@ -69,7 +69,7 @@ interaction — never the authority model.
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-33-00 | Design system and component foundation | done | [story-00-design-system](./story-00-design-system.md) | [evidence-story-00](./evidence-story-00.md) |
-| WLA-33-01 | Workspace home | backlog | [story-01-workspace-home](./story-01-workspace-home.md) | [evidence-story-01](./evidence-story-01.md) |
+| WLA-33-01 | Workspace home | done | [story-01-workspace-home](./story-01-workspace-home.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-33-02 | Live session stream | backlog | [story-02-live-session-stream](./story-02-live-session-stream.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-33-03 | Diff review panel | backlog | [story-03-diff-review-panel](./story-03-diff-review-panel.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-33-04 | Integrated terminal | backlog | [story-04-integrated-terminal](./story-04-integrated-terminal.md) | [evidence-story-04](./evidence-story-04.md) |

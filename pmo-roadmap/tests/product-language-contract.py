@@ -1054,19 +1054,30 @@ def validate_runtime_wiring(errors: list[str]) -> None:
             "build_step_result_presentation",
             'help_text("cli")',
         ],
-        "pmo-roadmap/workbench/app.js": [
+        "pmo-roadmap/workbench/*.js": [
             'api(`/api/presentation/status${projectQuery}`)',
             'api("/api/presentation")',
             "data-presentation-copy",
         ],
     }
     for path_value, needles in required.items():
-        path = ROOT / path_value
-        try:
-            source = path.read_text(encoding="utf-8")
-        except OSError as exc:
-            errors.append(f"{path_value}: cannot read for runtime wiring: {exc}")
-            continue
+        if "*" in path_value:
+            parent = ROOT / Path(path_value).parent
+            try:
+                source = "\n".join(
+                    f.read_text(encoding="utf-8")
+                    for f in sorted(parent.glob(Path(path_value).name))
+                )
+            except OSError as exc:
+                errors.append(f"{path_value}: cannot read for runtime wiring: {exc}")
+                continue
+        else:
+            path = ROOT / path_value
+            try:
+                source = path.read_text(encoding="utf-8")
+            except OSError as exc:
+                errors.append(f"{path_value}: cannot read for runtime wiring: {exc}")
+                continue
         for needle in needles:
             if needle not in source:
                 errors.append(

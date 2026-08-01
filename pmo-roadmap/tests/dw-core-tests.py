@@ -813,7 +813,7 @@ class DwCoreTest(unittest.TestCase):
                          "repeated API loads must not modify the roadmap tree")
 
     def test_workbench_step_front_door_keeps_review_and_act_separate(self) -> None:
-        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        app = "\n".join(f.read_text(encoding="utf-8") for f in sorted((TESTS_DIR.parent / "workbench").glob("*.js")))
         css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
         recommendation = app[
             app.index("function statusActionHtml") : app.index("function stepArgvHtml")
@@ -844,12 +844,12 @@ class DwCoreTest(unittest.TestCase):
         self.assertIn("@media (max-width: 430px)", css)
 
     def test_board_is_home_and_keeps_every_act_on_canonical_mutations(self) -> None:
-        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        app = "\n".join(f.read_text(encoding="utf-8") for f in sorted((TESTS_DIR.parent / "workbench").glob("*.js")))
         css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
         board = app[
             app.index("const BOARD_STATUSES") : app.index("/* ── structured editor")
         ]
-        router = app[app.index("/* ── router") :]
+        router = app[app.index("/* Delivery Workbench — hash router") :]
         wiring = board[board.index("function wireBoardMoves") :]
         self.assertIn("else if (!parts.length) await viewBoard(selectedProject)", router)
         for token in (
@@ -5496,7 +5496,7 @@ class OrchestrationEditorTest(unittest.TestCase):
         self.assertIn("outside the repository", body["issues"][0])
 
     def test_visual_editor_static_contract_names_every_rule_surface(self):
-        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        app = "\n".join(f.read_text(encoding="utf-8") for f in sorted((TESTS_DIR.parent / "workbench").glob("*.js")))
         html = (TESTS_DIR.parent / "workbench" / "index.html").read_text(encoding="utf-8")
         css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
         self.assertIn('href="#/orchestration"', html)
@@ -8781,7 +8781,7 @@ class OrchestrationConductorTest(unittest.TestCase):
             decision_event["prev_hash"],
         )
         self.assertEqual(by_id[first_id]["preview"]["state"], "awaiting-approval")
-        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        app = "\n".join(f.read_text(encoding="utf-8") for f in sorted((TESTS_DIR.parent / "workbench").glob("*.js")))
         for token in (
             "outstanding requests", "checkpoint lineage · inspect only",
             "inspect exact decision preview", "schema_summary",
@@ -9487,7 +9487,7 @@ class OrchestrationConductorTest(unittest.TestCase):
             self.assertNotIn(forbidden, serialized)
 
     def test_run_view_static_contract_has_consent_privacy_and_no_poller(self):
-        app = (TESTS_DIR.parent / "workbench" / "app.js").read_text(encoding="utf-8")
+        app = "\n".join(f.read_text(encoding="utf-8") for f in sorted((TESTS_DIR.parent / "workbench").glob("*.js")))
         css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
         run_source = app[
             app.index("function runStateBadge"):
@@ -9521,7 +9521,7 @@ class WorkbenchAccessibilityContractTest(unittest.TestCase):
 
     def setUp(self):
         self.workbench = TESTS_DIR.parent / "workbench"
-        self.app = (self.workbench / "app.js").read_text(encoding="utf-8")
+        self.app = "\n".join(f.read_text(encoding="utf-8") for f in sorted(self.workbench.glob("*.js")))
         self.css = (self.workbench / "style.css").read_text(encoding="utf-8")
         self.html = (self.workbench / "index.html").read_text(encoding="utf-8")
 

@@ -591,7 +591,7 @@ def main():
         serialized_summary = json.dumps(summary, sort_keys=True).lower()
         for private in ("prompt", "argv", "packet", "transcript", "artifact content"):
             assert private not in serialized_summary
-        app = (root / ".githooks" / "workbench" / "app.js").read_text(encoding="utf-8")
+        app = "\n".join(f.read_text(encoding="utf-8") for f in sorted((root / ".githooks" / "workbench").glob("*.js")))
         run_source = app[
             app.index("function runStateBadge"):
             app.index("/* ── optional Program / Workflow Studio")

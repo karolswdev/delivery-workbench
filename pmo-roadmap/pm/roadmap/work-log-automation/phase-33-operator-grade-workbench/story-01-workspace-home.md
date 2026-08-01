@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 33
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-33-00
 - **Unblocks:** WLA-33-02, WLA-33-03, WLA-33-04, WLA-33-05, WLA-33-06, WLA-33-07, WLA-33-08
 - **Owner:** unassigned
@@ -38,12 +38,12 @@ cards — the work is the first thing you see.
 
 ## Acceptance criteria
 
-- [ ] The workbench opens to a workspace layout with the kanban board as
+- [x] The workbench opens to a workspace layout with the kanban board as
   the primary content, not behind a navigation link.
-- [ ] The briefing strip (verdict, next step, blockers) is visible above
+- [x] The briefing strip (verdict, next step, blockers) is visible above
   the board without scrolling.
-- [ ] Stories can be created inline from a board lane.
-- [ ] Drag-to-move and status changes go through preview/token/apply.
-- [ ] `app.js` is split into at least four modules (board, panels,
+- [x] Stories can be created inline from a board lane.
+- [x] Drag-to-move and status changes go through preview/token/apply.
+- [x] `app.js` is split into at least four modules (board, panels,
   navigation, core) loadable independently.
-- [ ] Wide and 390px screenshots in both themes pass visual review.
+- [x] Wide and 390px screenshots in both themes pass visual review.

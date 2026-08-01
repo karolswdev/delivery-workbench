@@ -21,7 +21,7 @@ from typing import Any, Iterator
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SOURCE = ROOT / "pmo-roadmap" / "workbench" / "app.js"
+DEFAULT_SOURCE_DIR = ROOT / "pmo-roadmap" / "workbench"
 CONTRACT_PATH = ROOT / "docs" / "product-language-contract-v1.json"
 
 # These functions own ordinary, human-facing panels. Exact graph, timeline,
@@ -360,8 +360,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source",
         type=Path,
-        default=DEFAULT_SOURCE,
-        help="JavaScript source to inspect (defaults to the Workbench app)",
+        default=None,
+        help="JavaScript source to inspect (defaults to all Workbench JS files)",
     )
     parser.add_argument(
         "--no-self-test",
@@ -373,26 +373,34 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    use_default = args.source is None
     try:
         technical_label, reserved = load_contract()
-        source = args.source.read_text(encoding="utf-8")
+        if use_default:
+            source = "\n".join(
+                f.read_text(encoding="utf-8")
+                for f in sorted(DEFAULT_SOURCE_DIR.glob("*.js"))
+            )
+        else:
+            source = args.source.read_text(encoding="utf-8")
     except (OSError, ValueError, json.JSONDecodeError, re.error) as exc:
         print(f"ERROR {exc}")
         return 1
 
-    try:
-        display_path = str(args.source.resolve().relative_to(ROOT))
-    except ValueError:
-        display_path = str(args.source)
+    if use_default:
+        display_path = str(DEFAULT_SOURCE_DIR.relative_to(ROOT)) + "/*.js"
+    else:
+        try:
+            display_path = str(args.source.resolve().relative_to(ROOT))
+        except ValueError:
+            display_path = str(args.source)
     errors = lint_source(
         source,
         display_path=display_path,
         technical_label=technical_label,
         reserved=reserved,
         ordinary_functions=(
-            ORDINARY_PANEL_FUNCTIONS
-            if args.source.resolve() == DEFAULT_SOURCE.resolve()
-            else None
+            ORDINARY_PANEL_FUNCTIONS if use_default else None
         ),
     )
     fixture_proof = "not run"

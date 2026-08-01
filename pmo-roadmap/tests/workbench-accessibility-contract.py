@@ -22,7 +22,7 @@ JOURNEYS_PATH = TESTS / "fixtures" / "usability" / "journeys-v1.json"
 STATES_PATH = TESTS / "fixtures" / "usability" / "states-v1.json"
 BROWSER_PATH = TESTS / "workbench-accessibility.py"
 INDEX_PATH = ROOT / "pmo-roadmap" / "workbench" / "index.html"
-APP_PATH = ROOT / "pmo-roadmap" / "workbench" / "app.js"
+APP_DIR = ROOT / "pmo-roadmap" / "workbench"
 CSS_PATH = ROOT / "pmo-roadmap" / "workbench" / "style.css"
 DOC_PATH = ROOT / "docs" / "accessibility.md"
 
@@ -160,7 +160,7 @@ def validate(
 def validate_sources(expected_ids: set[str]) -> list[str]:
     issues: list[str] = []
     index = INDEX_PATH.read_text(encoding="utf-8")
-    app = APP_PATH.read_text(encoding="utf-8")
+    app = "\n".join(f.read_text(encoding="utf-8") for f in sorted(APP_DIR.glob("*.js")))
     css = CSS_PATH.read_text(encoding="utf-8")
     browser = BROWSER_PATH.read_text(encoding="utf-8")
     documentation = DOC_PATH.read_text(encoding="utf-8")

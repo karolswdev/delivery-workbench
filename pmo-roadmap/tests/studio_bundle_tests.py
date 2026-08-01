@@ -285,7 +285,7 @@ class StudioBundleTest(unittest.TestCase):
         index = (PMO_ROOT / "workbench" / "index.html").read_text(encoding="utf-8")
         self.assertEqual(index.count('class="navlink"'), 5)
         self.assertNotIn("generated bundle", index.lower())
-        app_source = (PMO_ROOT / "workbench" / "app.js").read_text(encoding="utf-8")
+        app_source = "\n".join(f.read_text(encoding="utf-8") for f in sorted((PMO_ROOT / "workbench").glob("*.js")))
         self.assertIn('parts[1] === "bundle"', app_source)
         self.assertIn("viewStudioBundle", app_source)
         self.assertIn("Review the generated program as one linked bundle", app_source)
