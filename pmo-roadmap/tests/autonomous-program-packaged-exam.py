@@ -1129,8 +1129,10 @@ def main():
             def __init__(self, architect_veto=False):
                 super().__init__()
                 self.architect_veto = architect_veto
+                self.packets = []
 
             def _response(self, packet):
+                self.packets.append(copy.deepcopy(packet))
                 try:
                     prompt = json.loads(str(packet.get("prompt") or "{}"))
                 except ValueError:
@@ -2233,6 +2235,50 @@ def main():
             git(root, "rev-list", "--count", "HEAD").stdout.strip()
         )
         conduct_story("AX-1-01")
+        assert driver.packets
+        for work_packet in driver.packets:
+            assert work_packet["knowledge"]["kind"] == "delivery-workbench-knowledge-packet"
+            recall = work_packet["memory_recall"]
+            assert recall["kind"] == "delivery-workbench-memory-recall"
+            assert recall["source_revision"]
+            assert recall["used_bytes"] > 0
+        program_events = authority._events(
+            authority._run_dir(root, run_id), run_id
+        )
+        built_events = [
+            item for item in program_events
+            if item["event"] == "memory-recall-built"
+            and item["detail"]["source_revision"]
+            == driver.packets[0]["memory_recall"]["source_revision"]
+        ]
+        attached_events = [
+            item for item in program_events
+            if item["event"] == "memory-recall-attached"
+        ]
+        assert {item["detail"]["audience"] for item in built_events} == {
+            "coordinator", "implementer", "verifier", "judge", "shared",
+        }
+        first_agent_claim_seq = next(
+            item["seq"] for item in program_events
+            if item["event"] == "claim_reserved"
+            and item["detail"]["category"] == "agent"
+        )
+        assert max(item["seq"] for item in built_events) < first_agent_claim_seq
+        dispatch_by_claim = {
+            item["detail"]["claim_id"]: item for item in program_events
+            if item["event"] == "claim_dispatched"
+        }
+        assert attached_events
+        assert all(
+            item["seq"] < dispatch_by_claim[item["detail"]["claim_id"]]["seq"]
+            for item in attached_events
+            if item["detail"]["claim_id"] in dispatch_by_claim
+        )
+        story_scope = (
+            root / ".git" / "pmo-programs" / "runs" / run_id
+            / "memory" / "scopes"
+        )
+        assert list(story_scope.glob("scope-*/manifest.json"))
         assert failed_delivery_refusal is not None
         red["failed-or-dissenting-verdict"] = [
             issue["code"]
@@ -2570,11 +2616,17 @@ def main():
         connection.close()
         assert response.status == 200
         frames = parse_sse(body)
+        snapshot_sequence, snapshot = frames[0]
+        assert snapshot_sequence == 0
+        assert snapshot["run_id"] == run_id
+        assert snapshot["ledger_head"] == expected_tail["ledger_head"]
+        assert snapshot["event_count"] == expected_tail["head_seq"]
+        ledger_frames = frames[1:]
         assert [
-            item for _sequence, item in frames
+            item for _sequence, item in ledger_frames
         ] == expected_tail["events"]
         assert [
-            sequence for sequence, _item in frames
+            sequence for sequence, _item in ledger_frames
         ] == [
             item["seq"] for item in expected_tail["events"]
         ]

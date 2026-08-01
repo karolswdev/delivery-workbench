@@ -208,6 +208,15 @@ _EVENT_DETAIL_KEYS = {
     "program_exhausted": {
         "counter", "used", "limit", "request_hash",
     },
+    "memory-recall-built": {
+        "recall_id", "subject", "source_revision", "audience", "byte_count",
+        "included_item_count", "exclusion_count",
+    },
+    "memory-recall-attached": {
+        "recall_id", "subject", "source_revision", "audience", "byte_count",
+        "included_item_count", "exclusion_count", "node_id", "claim_id",
+        "packet_hash",
+    },
 }
 
 _OBLIGATION_KEYS = {
@@ -1378,6 +1387,8 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
     completed: list[dict[str, object]] = []
     claims: list[dict[str, object]] = []
     dispatches: list[dict[str, object]] = []
+    memory_recalls: list[dict[str, object]] = []
+    memory_attachments: list[dict[str, object]] = []
     controls: list[dict[str, object]] = []
     obligations: dict[str, dict[str, object]] = {}
     obligation_history: list[dict[str, object]] = []
@@ -1413,6 +1424,34 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
                 test_baseline["head_sha"] == grant["repository"]["head"],  # type: ignore[index]
                 "program test baseline head differs from the granted head",
             )
+        elif event_name == "memory-recall-built":
+            _require(event_generation == generation, "memory recall uses the wrong revocation generation")
+            _require(state == "running", "memory recall was built while program was not running")
+            _require(
+                not any(
+                    item["audience"] == detail["audience"]
+                    and item["source_revision"] == detail["source_revision"]
+                    for item in memory_recalls
+                ),
+                "memory recall audience was built more than once",
+            )
+            memory_recalls.append({"seq": event["seq"], **dict(detail)})
+        elif event_name == "memory-recall-attached":
+            _require(event_generation == generation, "memory attachment uses the wrong revocation generation")
+            _require(state == "running", "memory recall was attached while program was not running")
+            claim = active.get(str(detail["claim_id"]))
+            _require(claim is not None and claim["category"] == "agent", "memory attachment has no active agent claim")
+            built = next((
+                item for item in memory_recalls
+                if item["recall_id"] == detail["recall_id"]
+                and item["audience"] == detail["audience"]
+            ), None)
+            _require(built is not None, "memory attachment has no built recall")
+            _require(
+                not any(item["claim_id"] == detail["claim_id"] for item in memory_attachments),
+                "program claim received more than one memory recall",
+            )
+            memory_attachments.append({"seq": event["seq"], **dict(detail)})
         elif event_name == "claim_reserved":
             _require(event_generation == generation, "claim uses the wrong revocation generation")
             _require(state == "running", "claim was reserved while program was not running")
@@ -1910,6 +1949,8 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
         "expected_roadmap": expected_roadmap,
         "claims": claims,
         "dispatches": dispatches,
+        "memory_recalls": memory_recalls,
+        "memory_attachments": memory_attachments,
         "active_claims": sorted(active.values(), key=lambda item: str(item["claim_id"])),
         "completed_claims": completed,
         "outstanding_requests": outstanding_requests,
@@ -2925,6 +2966,60 @@ def record_program_dispatch(
     after = replay_program(root, run_id, now=observed)
     dispatch = next(item for item in after["dispatches"] if item["claim_id"] == claim_id)
     return {**after, "dispatch": dispatch, "idempotent": False}
+
+
+def record_program_memory_event(
+    root: Path,
+    run_id: str,
+    event_name: str,
+    detail: dict[str, object],
+    *,
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    """Append one idempotent frozen-recall build or attachment fact."""
+    _require(
+        event_name in {"memory-recall-built", "memory-recall-attached"},
+        "unsupported program memory event",
+    )
+    expected = _EVENT_DETAIL_KEYS[event_name]
+    _exact(detail, expected, event_name + " detail")
+    observed = _time(now, "now")
+    root = root.resolve()
+    path, _grant, _plan = _load_documents(root, run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        _require(projection["state"] == "running", "program is not running")
+        collection = (
+            projection["memory_recalls"]
+            if event_name == "memory-recall-built"
+            else projection["memory_attachments"]
+        )
+        prior = next((
+            item for item in collection
+            if (
+                item["audience"] == detail["audience"]
+                and item["source_revision"] == detail["source_revision"]
+                if event_name == "memory-recall-built"
+                else item["claim_id"] == detail["claim_id"]
+            )
+        ), None)
+        if prior is not None:
+            _require(
+                all(prior.get(key) == value for key, value in detail.items()),
+                "program memory event conflicts with its persisted ledger fact",
+            )
+            return {**projection, "idempotent": True}
+        event = _event_document(
+            run_id,
+            int(projection["event_count"]) + 1,
+            event_name,
+            int(projection["generation"]),
+            observed,
+            detail,
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    return {**replay_program(root, run_id, now=observed), "idempotent": False}
 
 
 def record_program_obligation(

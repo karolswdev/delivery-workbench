@@ -7,6 +7,7 @@ import ast
 import importlib.util
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -20,6 +21,10 @@ from dw_pmo.knowledge_packet import (  # noqa: E402
     build_knowledge_packet,
 )
 from dw_pmo.live_progress import _budget_rows, _usage_budget_overlay  # noqa: E402
+from dw_pmo.memory_dispatch import (  # noqa: E402
+    MemoryRecallActionNeeded,
+    persist_recall_slices,
+)
 from dw_pmo.memory_recall import (  # noqa: E402
     SOURCE_KINDS,
     build_memory_recall,
@@ -369,6 +374,76 @@ class MemoryRecallTest(unittest.TestCase):
         self.assertEqual(forbidden, [])
         self.assertEqual(unexpected, [])
         self.assertEqual(ambient_calls, [])
+
+
+class MemoryDispatchTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="dw-memory-dispatch.")
+        self.run_dir = Path(self.temporary.name) / "run"
+        self.run_dir.mkdir()
+        self.knowledge = build_knowledge_packet(
+            "No localization hints.", None, None, {}, [],
+            story="plain.md", index_tree=TREE,
+        )
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def persist(self, knowledge=None):
+        return persist_recall_slices(
+            self.run_dir,
+            subject="run-memory-fixture",
+            knowledge=self.knowledge if knowledge is None else knowledge,
+            story_criteria="No localization hints.",
+            story_ids=["WLA-35-03"],
+            phase_ids=["35"],
+            orchestration_tags=["memory-glass"],
+        )
+
+    def test_hint_free_slices_are_explicit_persisted_and_reused(self):
+        first, built = self.persist()
+        second, rebuilt = self.persist()
+        self.assertTrue(built)
+        self.assertFalse(rebuilt)
+        self.assertEqual(
+            {audience: document["recall_id"] for audience, document in first.items()},
+            {audience: document["recall_id"] for audience, document in second.items()},
+        )
+        self.assertTrue(all(document["items"] == [] for document in first.values()))
+        self.assertTrue(all(document["exclusions"] == [] for document in first.values()))
+        self.assertTrue((self.run_dir / "memory" / "manifest.json").is_file())
+
+    def test_missing_slice_is_typed_action_needed(self):
+        self.persist()
+        (self.run_dir / "memory" / "recalls" / "verifier.json").unlink()
+        with self.assertRaises(MemoryRecallActionNeeded) as caught:
+            self.persist()
+        self.assertEqual(caught.exception.reason, "missing")
+
+    def test_malformed_slice_is_typed_action_needed(self):
+        self.persist()
+        path = self.run_dir / "memory" / "recalls" / "coordinator.json"
+        path.write_text("{not-json\n", encoding="utf-8")
+        with self.assertRaises(MemoryRecallActionNeeded) as caught:
+            self.persist()
+        self.assertEqual(caught.exception.reason, "malformed")
+
+    def test_tampered_slice_is_typed_action_needed(self):
+        self.persist()
+        path = self.run_dir / "memory" / "recalls" / "implementer.json"
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["items"].append({"planted": "tamper"})
+        path.write_text(json.dumps(document) + "\n", encoding="utf-8")
+        with self.assertRaises(MemoryRecallActionNeeded) as caught:
+            self.persist()
+        self.assertEqual(caught.exception.reason, "tampered")
+
+    def test_stale_source_is_typed_action_needed(self):
+        self.persist()
+        changed = {**self.knowledge, "index_tree": "9" * 40}
+        with self.assertRaises(MemoryRecallActionNeeded) as caught:
+            self.persist(changed)
+        self.assertEqual(caught.exception.reason, "stale")
 
 
 class HonestUsageTest(unittest.TestCase):

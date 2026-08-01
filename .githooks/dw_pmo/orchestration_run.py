@@ -147,6 +147,15 @@ _EVENT_DETAIL_KEYS = {
         "index_tree", "operation", "status_hash", "story_hash",
     },
     "external_commit_observed": _EXTERNAL_COMMIT_BOUND_KEYS,
+    "memory-recall-built": {
+        "recall_id", "subject", "source_revision", "audience", "byte_count",
+        "included_item_count", "exclusion_count",
+    },
+    "memory-recall-attached": {
+        "recall_id", "subject", "source_revision", "audience", "byte_count",
+        "included_item_count", "exclusion_count", "node_id", "claim_id",
+        "packet_hash",
+    },
 }
 
 _RUNTIME_EVENTS = {
@@ -155,6 +164,7 @@ _RUNTIME_EVENTS = {
     "checkpoint_reached", "checkpoint_decided", "run_aborted",
     "request_republished", "request_decided", "request_refused",
     "run_terminal", "rail_advanced", "external_commit_observed",
+    "memory-recall-built", "memory-recall-attached",
 }
 
 # The driver activity vocabulary (docs/signals.md). This is a separate
@@ -840,6 +850,8 @@ def replay_run(
     claimed_attempts: set[tuple[str, int]] = set()
     idempotency_keys: set[str] = set()
     nudges: list[dict[str, object]] = []
+    memory_recalls: list[dict[str, object]] = []
+    memory_attachments: list[dict[str, object]] = []
     counters = {
         "agent_starts": 0, "check_starts": 0, "artifact_bytes": 0,
         "nudges": 0,
@@ -1245,6 +1257,32 @@ def replay_run(
             if state not in {"awaiting-certification", "complete", "blocked"}:
                 raise DwError("external commit observation requires a terminal handoff")
             external_commits.append({"seq": offset, **dict(detail)})
+        elif kind == "memory-recall-built":
+            if state != "active":
+                raise DwError("memory recall was built while the run was inactive")
+            if any(
+                item["audience"] == detail["audience"]
+                and item["source_revision"] == detail["source_revision"]
+                for item in memory_recalls
+            ):
+                raise DwError("memory recall audience was built more than once")
+            memory_recalls.append({"seq": offset, **dict(detail)})
+        elif kind == "memory-recall-attached":
+            if state != "active":
+                raise DwError("memory recall was attached while the run was inactive")
+            claim = active.get(str(detail["claim_id"]))
+            if claim is None or claim["node_id"] != detail["node_id"]:
+                raise DwError("memory recall attachment has no matching active claim")
+            built = next((
+                item for item in memory_recalls
+                if item["recall_id"] == detail["recall_id"]
+                and item["audience"] == detail["audience"]
+            ), None)
+            if built is None:
+                raise DwError("memory recall attachment has no built recall")
+            if any(item["claim_id"] == detail["claim_id"] for item in memory_attachments):
+                raise DwError("node claim received more than one memory recall")
+            memory_attachments.append({"seq": offset, **dict(detail)})
         else:
             raise DwError(f"unsupported event transition: {kind}")
 
@@ -1308,6 +1346,8 @@ def replay_run(
         "signal_channel": str(grant.get("signal_channel") or ""),
         "budgets": budget_state,
         "nudges": nudges,
+        "memory_recalls": memory_recalls,
+        "memory_attachments": memory_attachments,
         "active_claims": sorted(
             active.values(),
             key=lambda item: (node_order[str(item["node_id"])], int(item["attempt"])),

@@ -23,6 +23,13 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 from .gitio import head_sha, in_rewrite_state
+from .knowledge_packet import build_repository_knowledge_packet
+from .memory_dispatch import (
+    MemoryRecallActionNeeded,
+    persist_recall_slices,
+    recall_audience,
+    recall_event_detail,
+)
 from .model import DwError
 from .orchestration_driver import (
     DriverManager,
@@ -957,6 +964,92 @@ def _driver_manager(
     return DriverManager(root, config, adapters=adapters)
 
 
+def _run_memory_recall(
+    root: Path,
+    run_id: str,
+    projection: dict[str, object],
+    grant: dict[str, object],
+    compiled: dict[str, object],
+    actions: list[dict[str, object]],
+    *,
+    now: datetime | None,
+) -> tuple[dict[str, object], dict[str, dict]]:
+    story = grant.get("story")
+    if not isinstance(story, dict) or not story.get("story_path"):
+        raise MemoryRecallActionNeeded(
+            "malformed", "run grant has no story path for memory recall"
+        )
+    story_path = root / str(story["story_path"])
+    try:
+        story_criteria = story_path.read_text(encoding="utf-8")
+        knowledge = build_repository_knowledge_packet(root, story_path)
+        story_id = str(story.get("story_id") or story.get("id") or "")
+        phase = str(story.get("phase") or "")
+        documents, _built = persist_recall_slices(
+            _run_dir(root, run_id),
+            subject=run_id,
+            knowledge=knowledge,
+            story_criteria=story_criteria,
+            story_ids=[story_id] if story_id else [],
+            phase_ids=[phase] if phase else [],
+            orchestration_tags=[str(compiled["score"].get("slug") or "bounded-run")],  # type: ignore[union-attr]
+            require_existing=bool(projection.get("memory_recalls")),
+        )
+    except MemoryRecallActionNeeded:
+        raise
+    except (DwError, OSError, UnicodeError, ValueError) as exc:
+        raise MemoryRecallActionNeeded(
+            "malformed", "memory recall could not be assembled: " + str(exc)
+        ) from exc
+    for audience in sorted(documents):
+        document = documents[audience]
+        prior = next((
+            item for item in projection["memory_recalls"]
+            if item["recall_id"] == document["recall_id"]
+            and item["audience"] == audience
+        ), None)
+        if prior is not None:
+            continue
+        projection = record_runtime_event(
+            root,
+            run_id,
+            "memory-recall-built",
+            recall_event_detail(document),
+            str(projection["ledger_head"]),
+            now=now,
+        )
+        actions.append({
+            "action": "memory-recall-built",
+            "audience": audience,
+            "recall_id": document["recall_id"],
+        })
+    return projection, documents
+
+
+def _memory_action_needed(
+    started: dict[str, object],
+    projection: dict[str, object],
+    actions: list[dict[str, object]],
+    error: MemoryRecallActionNeeded,
+    decision: dict[str, object] | None = None,
+) -> dict[str, object]:
+    item = {
+        "kind": "memory-recall",
+        "reason": error.reason,
+        "message": error.message,
+    }
+    actions.append({"action": "action-needed", **item})
+    if decision is None:
+        decision = {
+            "eligible": [], "scheduled": [], "blocked": [],
+            "action_needed": [item],
+        }
+    else:
+        decision = {**decision, "scheduled": [],
+                    "action_needed": list(decision.get("action_needed", [])) + [item]}
+    return _tick_document(started, projection, actions, decision)
+
+
 def _reconcile_claim(
     root: Path,
     run_id: str,
@@ -982,6 +1075,11 @@ def _reconcile_claim(
     control_state = str(projection["state"])
 
     if node["type"] == "agent":
+        projection, memory_documents = _run_memory_recall(
+            root, run_id, projection, grant, compiled, actions, now=now
+        )
+        audience = recall_audience(node.get("role"))
+        memory_document = memory_documents[audience]
         manager = _driver_manager(root, driver_config, adapters)
         receipt = manager.receipt_for_claim(run_id, claim_id)
         if control_state == "cancelled":
@@ -996,13 +1094,43 @@ def _reconcile_claim(
         elif receipt is None:
             try:
                 packet = build_work_packet(
-                    root, run_id, claim_id, manager.config, now=now
+                    root, run_id, claim_id, manager.config, now=now,
+                    memory_recall=memory_document,
                 )
+                attachment = next((
+                    item for item in projection["memory_attachments"]
+                    if item["claim_id"] == claim_id
+                ), None)
+                attachment_detail = {
+                    **recall_event_detail(memory_document),
+                    "node_id": node["id"],
+                    "claim_id": claim_id,
+                    "packet_hash": packet["packet_hash"],
+                }
+                if attachment is None:
+                    projection = record_runtime_event(
+                        root, run_id, "memory-recall-attached",
+                        attachment_detail, str(projection["ledger_head"]), now=now,
+                    )
+                    actions.append({
+                        "action": "memory-recall-attached",
+                        "node_id": node["id"],
+                        "recall_id": memory_document["recall_id"],
+                    })
+                elif any(
+                    attachment.get(key) != value
+                    for key, value in attachment_detail.items()
+                ):
+                    raise MemoryRecallActionNeeded(
+                        "tampered", "memory recall attachment differs on recovery"
+                    )
                 _boundary(boundary_hook, "before-driver-start", {"node_id": node["id"], "attempt": claim["attempt"]})
                 receipt = manager.start(
                     packet, f"dispatch-{node['id']}-{claim['attempt']}"
                 )
                 _boundary(boundary_hook, "after-driver-start", {"node_id": node["id"], "attempt": claim["attempt"]})
+            except MemoryRecallActionNeeded:
+                raise
             except DwError as exc:
                 message = exc.message.lower()
                 reason = (
@@ -1580,6 +1708,18 @@ def _tick_run_once(
     check_manager = CheckManager(root, check_runner)
     rail_manager = RailManager(root, rail_runner)
 
+    active_agent = any(
+        _node_map(compiled)[str(claim["node_id"])]["type"] == "agent"
+        for claim in maintained["active_claims"]
+    )
+    if active_agent and maintained["state"] == "active":
+        try:
+            maintained, _documents = _run_memory_recall(
+                root, run_id, maintained, grant, compiled, actions, now=now
+            )
+        except MemoryRecallActionNeeded as exc:
+            return _memory_action_needed(started, maintained, actions, exc)
+
     # Claims always reconcile before new eligibility. Cancellation first
     # prevents any future start, then interrupts a persisted live session.
     ordered = sorted(
@@ -1587,11 +1727,16 @@ def _tick_run_once(
         key=lambda item: (_node_index(compiled)[str(item["node_id"])], int(item["attempt"])),
     )
     for claim in ordered:
-        _reconcile_claim(
-            root, run_id, str(claim["claim_id"]), driver_config, adapters,
-            check_manager, rail_manager, actions, now=now,
-            boundary_hook=boundary_hook,
-        )
+        try:
+            _reconcile_claim(
+                root, run_id, str(claim["claim_id"]), driver_config, adapters,
+                check_manager, rail_manager, actions, now=now,
+                boundary_hook=boundary_hook,
+            )
+        except MemoryRecallActionNeeded as exc:
+            return _memory_action_needed(
+                started, replay_run(root, run_id, now=now), actions, exc
+            )
 
     projection = replay_run(root, run_id, now=now)
     if projection["state"] == "awaiting-certification":
@@ -1690,6 +1835,21 @@ def _tick_run_once(
         actions.append({"action": "abort", "reason": "budget-exhausted"})
         return _tick_document(started, projection, actions, decision)
 
+    scheduled_agent = any(
+        candidate["kind"] == "claim"
+        and _node_map(compiled)[str(candidate["node_id"])]["type"] == "agent"
+        for candidate in decision["scheduled"]
+    )
+    if scheduled_agent:
+        try:
+            projection, _documents = _run_memory_recall(
+                root, run_id, projection, grant, compiled, actions, now=now
+            )
+        except MemoryRecallActionNeeded as exc:
+            return _memory_action_needed(
+                started, projection, actions, exc, decision
+            )
+
     for candidate in decision["scheduled"]:
         node_id = str(candidate["node_id"])
         node = _node_map(compiled)[node_id]
@@ -1726,11 +1886,16 @@ def _tick_run_once(
         )
         actions.append({"action": "claim", "node_id": node_id, "attempt": attempt})
         _boundary(boundary_hook, "after-claim", {"node_id": node_id, "attempt": attempt})
-        projection = _reconcile_claim(
-            root, run_id, str(claim["claim_id"]), driver_config, adapters,
-            check_manager, rail_manager, actions, now=now,
-            boundary_hook=boundary_hook,
-        )
+        try:
+            projection = _reconcile_claim(
+                root, run_id, str(claim["claim_id"]), driver_config, adapters,
+                check_manager, rail_manager, actions, now=now,
+                boundary_hook=boundary_hook,
+            )
+        except MemoryRecallActionNeeded as exc:
+            return _memory_action_needed(
+                started, replay_run(root, run_id, now=now), actions, exc, decision
+            )
         if projection["state"] != "active":
             break
     return _tick_document(started, projection, actions, decision)
@@ -1756,6 +1921,7 @@ def _tick_document(
         "eligible": decision["eligible"] if decision else [],
         "scheduled": decision["scheduled"] if decision else [],
         "blocked": decision["blocked"] if decision else [],
+        "action_needed": decision.get("action_needed", []) if decision else [],
         "active_claims": len(active),
         "next_poll_seconds": next_poll,
         "terminal": after["state"] in TERMINAL_STATES,

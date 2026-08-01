@@ -83,7 +83,7 @@ _PACKET_KEYS = {
     "claim_id", "idempotency_key", "role", "profile", "prompt",
     "capabilities", "workspace", "resource_groups", "context", "inputs",
     "outputs", "timeout_seconds", "deadline", "max_stream_bytes",
-    "permanent_exclusions", "knowledge",
+    "permanent_exclusions", "knowledge", "memory_recall",
 }
 _RECEIPT_KEYS = {
     "kind", "schema_version", "run_id", "node_id", "attempt", "claim_id",
@@ -742,6 +742,7 @@ def build_work_packet(
     config: dict[str, object],
     *,
     now: datetime | None = None,
+    memory_recall: dict[str, object] | None = None,
 ) -> dict[str, object]:
     projection = replay_run(root, run_id, now=now)
     if not projection["dispatch_allowed"]:
@@ -842,6 +843,8 @@ def build_work_packet(
         "permanent_exclusions": projection["permanent_exclusions"],
         "knowledge": knowledge,
     }
+    if memory_recall is not None:
+        unsigned["memory_recall"] = memory_recall
     if len(canonical_json(unsigned).encode("utf-8")) > MAX_PACKET_BYTES:
         raise DwError("work packet exceeds the absolute byte ceiling")
     return {**unsigned, "packet_hash": _sha(unsigned)}
@@ -851,9 +854,19 @@ def validate_work_packet(packet: object) -> dict[str, object]:
     if not isinstance(packet, dict):
         raise DwError("work packet must be a JSON object")
     keys = set(packet)
-    legacy_keys = _PACKET_KEYS - {"knowledge"}
-    if keys != _PACKET_KEYS and keys != legacy_keys:
-        expected = _PACKET_KEYS if "knowledge" in keys else legacy_keys
+    accepted = (
+        _PACKET_KEYS,
+        _PACKET_KEYS - {"memory_recall"},
+        _PACKET_KEYS - {"knowledge", "memory_recall"},
+    )
+    if keys not in accepted:
+        expected = (
+            _PACKET_KEYS
+            if "memory_recall" in keys
+            else _PACKET_KEYS - {"memory_recall"}
+            if "knowledge" in keys
+            else _PACKET_KEYS - {"knowledge", "memory_recall"}
+        )
         value = _exact_keys(packet, expected, "work packet")
     else:
         value = packet

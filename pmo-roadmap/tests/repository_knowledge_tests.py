@@ -635,8 +635,7 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
                     imports.append("dw_pmo.knowledge")
         store_reads = [needle for needle in (
             "pmo-knowledge", "DerivedFactStore", "EarnedRecordStore",
-            "build_memory_recall", "delivery-workbench-memory-recall",
-            "delivery-workbench-memory-writeback",
+            "build_memory_recall", "delivery-workbench-memory-writeback",
             "delivery-workbench-decision-basis",
         ) if needle in source]
         return imports + store_reads
@@ -805,6 +804,31 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
         ):
             self.assertNotIn("from .%s" % authority, source)
 
+    def test_memory_dispatch_adapter_is_offline_non_spawning_and_non_authoritative(self):
+        source = (LIB_DIR / "memory_dispatch.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        imported = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.append(node.module or "")
+        forbidden = {
+            "socket", "urllib", "http", "ssl", "subprocess", "requests",
+            "aiohttp", "httpx", "random", "secrets", "uuid",
+        }
+        self.assertEqual(
+            sorted(name for name in imported if name.split(".", 1)[0] in forbidden),
+            [],
+        )
+        for authority in (
+            "contract", "gate", "grant", "program_run", "program_verdict",
+            "orchestration_run",
+        ):
+            self.assertNotIn("from .%s" % authority, source)
+        for spawning in ("subprocess", "os.system", "os.popen", "os.spawn"):
+            self.assertNotIn(spawning, source)
+
     def test_writeback_adapter_cannot_import_authority_or_verdict_paths(self):
         source = (LIB_DIR / "knowledge_writeback.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -854,7 +878,7 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
     def test_hook_payload_keeps_knowledge_modules_byte_identical(self):
         for name in (
             "grounding.py", "knowledge.py", "knowledge_packet.py",
-            "knowledge_writeback.py", "memory_recall.py", "repository_map.py",
+            "knowledge_writeback.py", "memory_dispatch.py", "memory_recall.py", "repository_map.py",
             "symbol_map.py",
         ):
             with self.subTest(module=name):

@@ -32,6 +32,12 @@ from .knowledge_packet import (
     build_hint_free_knowledge_packet,
     build_repository_knowledge_packet,
 )
+from .memory_dispatch import (
+    MemoryRecallActionNeeded,
+    persist_recall_slices,
+    recall_audience,
+    recall_event_detail,
+)
 from .knowledge_writeback import (
     LESSON_ARTIFACT_KIND,
     parse_lesson_output,
@@ -76,6 +82,7 @@ from .program_run import (
     record_program_obligation,
     record_program_delivery_facts,
     record_program_dispatch,
+    record_program_memory_event,
     replay_program,
     validate_child_grant,
 )
@@ -153,7 +160,7 @@ TERMINAL_AUTHORITY_STATES = {
 TERMINAL_DRIVER_STATES = {"succeeded", "failed", "cancelled", "lost", "refused"}
 RECONCILIATION_STOPS = {
     "external-operation-uncertain", "driver-session-corrupt",
-    "driver-receipt-missing", "artifact-invalid",
+    "driver-receipt-missing", "artifact-invalid", "memory-recall-action-needed",
 }
 MAX_PACKET_BYTES = 1_500_000
 MAX_RECEIPT_BYTES = 2_000_000
@@ -1031,6 +1038,79 @@ def _packet_outputs(outputs: list[dict[str, object]]) -> list[dict[str, object]]
     return result
 
 
+def _program_knowledge_packet(
+    root: Path,
+    selection: dict[str, object],
+    action: dict[str, object],
+) -> tuple[dict[str, object], str]:
+    grounding = selection.get("grounding")
+    if isinstance(grounding, dict):
+        story_path = grounding.get("story")
+        _require(bool(story_path), "grounded program selection has no story path")
+        path = root / str(story_path)
+        return (
+            build_repository_knowledge_packet(root, path, grounding=grounding),
+            path.read_text(encoding="utf-8"),
+        )
+    criteria = str(selection.get("story") or action.get("story") or "")
+    return build_hint_free_knowledge_packet(root, criteria), criteria
+
+
+def _program_memory_recall(
+    root: Path,
+    run_id: str,
+    action: dict[str, object],
+    selection: dict[str, object],
+    role: dict[str, object],
+    knowledge: dict[str, object],
+    story_criteria: str,
+    *,
+    now: datetime,
+) -> tuple[dict[str, object], dict[str, object]]:
+    scope = str(action.get("story") or action.get("phase") or "program")
+    subject = (run_id + "/" + scope)[:71]
+    projection = replay_program(root, run_id, now=now)
+    require_existing = any(
+        item.get("subject") == subject for item in projection["memory_recalls"]
+    )
+    try:
+        documents, _built = persist_recall_slices(
+            _run_dir(root, run_id),
+            subject=subject,
+            knowledge=knowledge,
+            story_criteria=story_criteria,
+            story_ids=[str(action["story"])] if action.get("story") else [],
+            phase_ids=[str(action["phase"])] if action.get("phase") is not None else [],
+            orchestration_tags=[str(action.get("kind") or "autonomous-program")],
+            scope=scope,
+            require_existing=require_existing,
+        )
+    except MemoryRecallActionNeeded:
+        raise
+    except (DwError, OSError, UnicodeError, ValueError) as exc:
+        raise MemoryRecallActionNeeded(
+            "malformed", "program memory recall could not be assembled: " + str(exc)
+        ) from exc
+    for audience in sorted(documents):
+        document = documents[audience]
+        prior = next((
+            item for item in projection["memory_recalls"]
+            if item["recall_id"] == document["recall_id"]
+            and item["audience"] == audience
+        ), None)
+        if prior is not None:
+            continue
+        projection = record_program_memory_event(
+            root,
+            run_id,
+            "memory-recall-built",
+            recall_event_detail(document),
+            now=now,
+        )
+    audience = recall_audience(role.get("role"))
+    return projection, documents[audience]
+
+
 def _build_packet(
     root: Path,
     run_id: str,
@@ -1042,6 +1122,8 @@ def _build_packet(
     config: dict[str, object],
     projection: dict[str, object],
     selection: dict[str, object],
+    knowledge: dict[str, object],
+    memory_recall: dict[str, object],
     *,
     now: datetime,
     prompt_document: dict[str, object] | None = None,
@@ -1090,17 +1172,6 @@ def _build_packet(
         "action_kind": action["kind"],
         "child_grant_hash": child_grant["grant_hash"],
     })
-    grounding = selection.get("grounding")
-    if isinstance(grounding, dict):
-        story_path = grounding.get("story")
-        _require(bool(story_path), "grounded program selection has no story path")
-        knowledge = build_repository_knowledge_packet(
-            root, root / str(story_path), grounding=grounding
-        )
-    else:
-        knowledge = build_hint_free_knowledge_packet(
-            root, str(selection.get("story") or action.get("story") or "")
-        )
     unsigned = {
         "kind": WORK_PACKET_KIND,
         "schema_version": DRIVER_SCHEMA_VERSION,
@@ -1123,6 +1194,7 @@ def _build_packet(
         "max_stream_bytes": int(capability["max_stream_bytes"]),
         "permanent_exclusions": list(child_grant["permanent_exclusions"]),
         "knowledge": knowledge,
+        "memory_recall": memory_recall,
     }
     _require(len(canonical_json(unsigned).encode("utf-8")) <= MAX_PACKET_BYTES, "program work packet exceeds its byte ceiling")
     return validate_work_packet({**unsigned, "packet_hash": _sha(unsigned)})
@@ -7384,6 +7456,18 @@ def _execute_agent_action(
         now=now,
         boundary_hook=boundary_hook,
     )
+    assignment = context["assignment"]
+    assert isinstance(assignment, dict)
+    role = _role_document(assignment, role_id=str(action["role"]))
+    member = _role_member(role)
+    plan = context.get("plan")
+    _require(isinstance(plan, dict), "program packet assembly has no current plan")
+    selection = plan.get("selection")
+    _require(isinstance(selection, dict), "program packet assembly has no selected story")
+    knowledge, story_criteria = _program_knowledge_packet(root, selection, action)
+    projection, memory_recall = _program_memory_recall(
+        root, run_id, action, selection, role, knowledge, story_criteria, now=now
+    )
     claim = _reserve_claim(
         root,
         run_id,
@@ -7412,15 +7496,7 @@ def _execute_agent_action(
             "claim_id": claim["claim_id"],
             "category": "agent",
         })
-    assignment = context["assignment"]
-    assert isinstance(assignment, dict)
-    role = _role_document(assignment, role_id=str(action["role"]))
-    member = _role_member(role)
     if claim.get("dispatch") is None:
-        plan = context.get("plan")
-        _require(isinstance(plan, dict), "program packet assembly has no current plan")
-        selection = plan.get("selection")
-        _require(isinstance(selection, dict), "program packet assembly has no selected story")
         packet_projection = replay_program(root, run_id, now=now)
         prompt_document = (
             _bound_verdict_prompt(
@@ -7443,8 +7519,19 @@ def _execute_agent_action(
             config,
             packet_projection,
             selection,
+            knowledge,
+            memory_recall,
             now=now,
             prompt_document=prompt_document,
+        )
+        attachment_detail = {
+            **recall_event_detail(memory_recall),
+            "node_id": packet["node_id"],
+            "claim_id": claim["claim_id"],
+            "packet_hash": packet["packet_hash"],
+        }
+        projection = record_program_memory_event(
+            root, run_id, "memory-recall-attached", attachment_detail, now=now
         )
         record = manager.prepare(
             claim,
@@ -7710,16 +7797,24 @@ def tick_program(
             manager = ProgramDriverManager(
                 root, run_id, config, adapters=adapters
             )
-            execution = _execute_agent_action(
-                root,
-                run_id,
-                action,
-                context,
-                manager,
-                config,
-                now=observed,
-                boundary_hook=boundary_hook,
-            )
+            try:
+                execution = _execute_agent_action(
+                    root,
+                    run_id,
+                    action,
+                    context,
+                    manager,
+                    config,
+                    now=observed,
+                    boundary_hook=boundary_hook,
+                )
+            except MemoryRecallActionNeeded as exc:
+                execution = {
+                    "status": "uncertain",
+                    "stop": "memory-recall-action-needed",
+                    "reason": exc.reason + ": " + exc.message,
+                    "projection": replay_program(root, run_id, now=observed),
+                }
         after = replay_program_conductor(root, run_id, now=observed)
         after_projection = after["authority"]
         progressed = (

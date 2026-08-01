@@ -116,6 +116,19 @@ def main():
                      "prompt": "Review", "terminal": "awaiting-certification"},
                 ],
             },
+            "memory-tamper-exam": {
+                "kind": "delivery-workbench-orchestration", "schema_version": 1,
+                "slug": "memory-tamper-exam", "title": "Memory tamper refusal",
+                "project": "sample", "defaults": defaults,
+                "nodes": [
+                    {"id": "memory-agent", "type": "agent", "role": "research",
+                     "profile": "reasoning-readonly",
+                     "capabilities": ["repository-read"],
+                     "workspace": "read-only", "on_failure": {"action": "abort"}},
+                    {"id": "handoff", "type": "approval", "needs": ["memory-agent"],
+                     "prompt": "Review", "terminal": "awaiting-certification"},
+                ],
+            },
             "stale-rail-exam": {
                 "kind": "delivery-workbench-orchestration", "schema_version": 1,
                 "slug": "stale-rail-exam", "title": "Stale rail refusal", "project": "sample",
@@ -415,6 +428,22 @@ def main():
             "research-api", "research-risks"
         ]
         assert first_driver.starts == 2
+        assert {item["audience"] for item in crashed["memory_recalls"]} == {
+            "coordinator", "implementer", "verifier", "judge", "shared",
+        }
+        assert len(crashed["memory_attachments"]) == 2
+        assert len({
+            item["recall_id"] for item in crashed["memory_attachments"]
+        }) == 1
+        assert len({
+            item["source_revision"] for item in crashed["memory_recalls"]
+        }) == 1
+        memory_root = (
+            root / ".git" / "pmo-orchestration" / "runs"
+            / main_run["run_id"] / "memory"
+        )
+        assert (memory_root / "manifest.json").is_file()
+        assert len(list((memory_root / "recalls").glob("*.json"))) == 5
         recovery_driver = FixtureDriver(responses)
         tick_run(
             root, main_run["run_id"], driver_config=config,
@@ -466,6 +495,9 @@ def main():
         implement = next(item for item in sessions
                          if item["receipt"]["node_id"] == "implement")
         packet = json.loads(Path(implement["packet_path"]).read_text(encoding="utf-8"))
+        assert packet["knowledge"]["kind"] == "delivery-workbench-knowledge-packet"
+        assert packet["memory_recall"]["kind"] == "delivery-workbench-memory-recall"
+        assert packet["memory_recall"]["source_revision"] == crashed["memory_recalls"][0]["source_revision"]
         assert packet["workspace"]["mode"] == "isolated-worktree"
         assert any(item["artifact"] == "implementation-brief"
                    for item in packet["inputs"])
@@ -484,6 +516,42 @@ def main():
                 root, candidate, candidate["start_token"], approved=True,
                 approved_by="packaged-exam-operator", now=now,
             )
+
+        tampered_run = start_named("memory-tamper-exam")
+
+        def crash_before_memory_attach(name, _detail):
+            if name == "after-claim":
+                raise RuntimeError("crash-before-memory-attach")
+
+        try:
+            tick_run(
+                root, tampered_run["run_id"], driver_config=config,
+                adapters={"fixture": FixtureDriver(responses)}, now=now,
+                boundary_hook=crash_before_memory_attach,
+            )
+        except RuntimeError as exc:
+            assert "crash-before-memory-attach" in str(exc)
+        else:
+            raise AssertionError("memory tamper fixture did not retain its claim")
+        tampered_path = (
+            root / ".git" / "pmo-orchestration" / "runs"
+            / tampered_run["run_id"] / "memory" / "recalls" / "implementer.json"
+        )
+        tampered_document = json.loads(tampered_path.read_text(encoding="utf-8"))
+        tampered_document["items"].append({"planted": "tamper"})
+        tampered_path.write_text(json.dumps(tampered_document) + "\n", encoding="utf-8")
+        blocked_driver = FixtureDriver(responses)
+        memory_blocked = tick_run(
+            root, tampered_run["run_id"], driver_config=config,
+            adapters={"fixture": blocked_driver}, now=now,
+        )
+        assert memory_blocked["action_needed"] == [{
+            "kind": "memory-recall",
+            "reason": "tampered",
+            "message": "persisted memory recall identity check failed",
+        }]
+        assert blocked_driver.starts == 0
+        assert len(replay_run(root, tampered_run["run_id"], now=now)["active_claims"]) == 1
 
         expired = start_named("expiry-exam", lifetime=1)
         expired_tick = tick_run(root, expired["run_id"], now=now + timedelta(seconds=2))
@@ -591,11 +659,9 @@ def main():
         serialized_summary = json.dumps(summary, sort_keys=True).lower()
         for private in ("prompt", "argv", "packet", "transcript", "artifact content"):
             assert private not in serialized_summary
-        app = "\n".join(f.read_text(encoding="utf-8") for f in sorted((root / ".githooks" / "workbench").glob("*.js")))
-        run_source = app[
-            app.index("function runStateBadge"):
-            app.index("/* ── optional Program / Workflow Studio")
-        ]
+        run_source = (
+            root / ".githooks" / "workbench" / "runs.js"
+        ).read_text(encoding="utf-8")
         for token in (
             "Live delivery", "Technical details", "fail checks",
             "failure routes", "human checkpoints", "Actions and decisions",
@@ -621,7 +687,10 @@ def main():
             "repair_route": route,
             "artifacts": sorted(by_name),
             "compiler_refusals": red_diagnostics,
-            "runtime_refusals": ["expiry", "budget", "stale-rail", "cancel", "stale-token"],
+            "runtime_refusals": [
+                "expiry", "budget", "stale-rail", "cancel", "stale-token",
+                "memory-recall-tampered",
+            ],
             "interop": ["cli", "mcp", "http", "workbench"],
             "operator_tree_clean_before_handoff": not bool(
                 run(["git", "status", "--porcelain"], cwd=root).stdout
@@ -683,7 +752,7 @@ def main():
             "repair_visits": route["visit"],
             "artifact_count": len(artifacts),
             "compiler_red_cases": len(red_diagnostics),
-            "runtime_red_cases": 5,
+            "runtime_red_cases": 6,
             "operator_commit": head,
             "verify_all": "ok",
         }, sort_keys=True))
