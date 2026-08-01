@@ -12,10 +12,26 @@
     <a class="brand" href="#/">Delivery&nbsp;Workbench</a>
     <nav class="primary-nav" aria-label="Primary">
       <a class="navlink" href="#/board" id="work-link">Work</a>
-      <a class="navlink" href="#/program-studio" id="plan-link">Plan</a>
-      <a class="navlink" href="#/orchestration" id="delivery-link">Delivery</a>
-      <a class="navlink" href="#/live" id="live-link">Live</a>
       <a class="navlink" href="#/health" id="health-link">Health</a>
+      <div class="advanced-nav-wrapper">
+        <button class="navlink advanced-toggle" id="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-dropdown">Advanced <span class="advanced-chevron" aria-hidden="true">&#9662;</span></button>
+        <div class="advanced-dropdown" id="advanced-dropdown" role="menu">
+          <div class="advanced-group">
+            <span class="advanced-group-label">Plan</span>
+            <a class="advanced-item" href="#/program-studio" role="menuitem" id="plan-link">Delivery options</a>
+            <a class="advanced-item" href="#/edit" role="menuitem">Roadmap changes</a>
+          </div>
+          <div class="advanced-group">
+            <span class="advanced-group-label">Delivery</span>
+            <a class="advanced-item" href="#/orchestration" role="menuitem" id="delivery-link">Delivery plans</a>
+          </div>
+          <div class="advanced-group">
+            <span class="advanced-group-label">Live</span>
+            <a class="advanced-item" href="#/live" role="menuitem" id="live-link">Mission control</a>
+            <a class="advanced-item" href="#/mc" role="menuitem">Activity</a>
+          </div>
+        </div>
+      </div>
     </nav>
     <a class="project-switcher" id="project-switcher" href="#/projects">Choose project</a>
     <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
@@ -44,6 +60,10 @@
   <script src="orchestration.js"></script>
   <script src="runs.js"></script>
   <script src="studio.js"></script>
+  <script src="session-panel.js"></script>
+  <script src="diff-panel.js"></script>
+  <script src="insights-panel.js"></script>
+  <script src="services-panel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

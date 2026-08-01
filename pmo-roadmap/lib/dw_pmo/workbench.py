@@ -16,6 +16,7 @@ sockets. Mutation endpoints arrive with WLA-5-06/07.
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -42,6 +43,15 @@ from .validate import check_project, health_report, project_warnings
 
 SCHEMA_KIND = "delivery-workbench-workbench-response"
 SCHEMA_VERSION = 1
+
+# ── tracked services (WLA-33-05) ──────────────────────────────────────
+#
+# In-memory registry of child processes started through the terminal
+# panel or dw evidence capture.  Keyed by service name.  For now this
+# starts empty; actual tracking hooks arrive when the terminal runner
+# and evidence-capture paths register their subprocesses here.
+
+_tracked_services: dict[str, dict[str, object]] = {}
 
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -362,6 +372,97 @@ def mission_control_live_layer(sessions_doc: dict) -> tuple[dict, list]:
         else:
             off_belt.append(session)
     return pins, off_belt
+
+
+def _insights(root: Path, query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
+    """GET /api/insights — local analytics: stories, evidence, commits, timeline."""
+    from .evidence import parse_captured_runs
+    from .events import read_events
+
+    slug = query.get("project", [""])[0].strip()
+    if not slug:
+        return _error(400, "insights requires a project parameter")
+    project = get_project(root, slug)
+    phases = discover_phases(project)
+
+    # Stories by phase
+    stories_by_phase: list[dict[str, object]] = []
+    total_evidence = 0
+    for phase in phases:
+        rows = parse_story_rows(phase.path / "current-phase-status.md")
+        done = 0
+        in_progress = 0
+        for row in rows:
+            token = normalize_status(row.status)
+            if token in {"done", "complete", "closed", "shipped"}:
+                done += 1
+            elif token == "in-progress":
+                in_progress += 1
+        stories_by_phase.append({
+            "phase": phase.number,
+            "title": phase.title,
+            "total": len(rows),
+            "done": done,
+            "in_progress": in_progress,
+        })
+        # Count evidence captures in this phase
+        for row in rows:
+            sid = row.story_id or ""
+            # Extract the story number from the id (e.g. WLA-04-03 -> 3)
+            parts_id = sid.split("-")
+            if len(parts_id) >= 3:
+                try:
+                    story_num = int(parts_id[-1])
+                except ValueError:
+                    continue
+                evidence_file = phase.path / f"evidence-story-{story_num:02d}.md"
+                if not evidence_file.is_file():
+                    evidence_file = phase.path / f"evidence-story-{story_num}.md"
+                if evidence_file.is_file():
+                    text = read_text(evidence_file)
+                    total_evidence += len(parse_captured_runs(text))
+
+    # Commit activity from git log (last 90 days)
+    commits: list[dict[str, object]] = []
+    try:
+        result = subprocess.run(
+            ["git", "log", "--format=%aI", "--since=90 days ago"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            day_counts: dict[str, int] = {}
+            for line in result.stdout.strip().splitlines():
+                if not line:
+                    continue
+                day = line[:10]  # YYYY-MM-DD
+                day_counts[day] = day_counts.get(day, 0) + 1
+            for day in sorted(day_counts):
+                commits.append({"date": day, "count": day_counts[day]})
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    # Timeline: last 20 roadmap events from the events log
+    raw_events = read_events(root, tail=50)
+    timeline: list[dict[str, object]] = []
+    for ev in reversed(raw_events):
+        if len(timeline) >= 20:
+            break
+        timeline.append({
+            "timestamp": ev.get("timestamp", ev.get("ts", "")),
+            "event": ev.get("event", ev.get("type", "")),
+            "detail": ev.get("detail", ev.get("message", ev.get("subject", ""))),
+        })
+
+    return 200, envelope({
+        "project": slug,
+        "stories_by_phase": stories_by_phase,
+        "evidence_count": total_evidence,
+        "commits": commits,
+        "timeline": timeline,
+    })
 
 
 def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
@@ -721,6 +822,72 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
         if parts == ["api", "health"]:
             return 200, envelope(health_report(root, discover_projects(root)))
 
+        if parts == ["api", "diff"]:
+            # WLA-33-03: read-only diff of uncommitted changes (working
+            # tree + index) for the repository root. No mutation guard.
+            import subprocess
+
+            project_slug = query.get("project", [""])[0].strip()
+            try:
+                # Combined working-tree and staged changes
+                result = subprocess.run(
+                    ["git", "diff", "HEAD"],
+                    cwd=str(root),
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                raw_diff = result.stdout or ""
+
+                # Also get a name-status summary
+                ns_result = subprocess.run(
+                    ["git", "diff", "HEAD", "--name-status"],
+                    cwd=str(root),
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+
+                # Parse name-status lines into {path: status}
+                status_map: dict[str, str] = {}
+                for line in (ns_result.stdout or "").strip().splitlines():
+                    parts_ns = line.split("\t", 1)
+                    if len(parts_ns) == 2:
+                        status_map[parts_ns[1]] = parts_ns[0]
+
+                # Split raw diff into per-file chunks
+                files: list[dict[str, str]] = []
+                current_path = ""
+                current_lines: list[str] = []
+
+                for line in raw_diff.splitlines(True):
+                    if line.startswith("diff --git "):
+                        if current_path:
+                            files.append({
+                                "path": current_path,
+                                "status": status_map.get(current_path, "M"),
+                                "diff": "".join(current_lines),
+                            })
+                        # Extract b-side path: "diff --git a/foo b/foo"
+                        b_idx = line.find(" b/")
+                        current_path = line[b_idx + 3:].rstrip() if b_idx >= 0 else ""
+                        current_lines = [line]
+                    else:
+                        current_lines.append(line)
+
+                if current_path:
+                    files.append({
+                        "path": current_path,
+                        "status": status_map.get(current_path, "M"),
+                        "diff": "".join(current_lines),
+                    })
+
+                return 200, envelope({"files": files})
+            except subprocess.TimeoutExpired:
+                return _error(504, "git diff timed out")
+            except Exception as exc:
+                return _error(500, f"git diff failed: {exc}")
+
         if parts == ["api", "missioncontrol"]:
             # WLA-15-01: the read-only belt — the workbench is the
             # fourth consumer of the mission-control substrate, via
@@ -745,6 +912,12 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
                     "events": read_events(root, tail=tail),
                 }
             )
+
+        if parts == ["api", "insights"]:
+            return _insights(root, query)
+
+        if parts == ["api", "services"]:
+            return 200, envelope({"services": list(_tracked_services.values())})
 
         if parts == ["api", "file"]:
             return _contained_read(root, query.get("path", [""])[0])
@@ -1532,6 +1705,64 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
         "or exact-token /api/runs/* and /api/programs/* routes",
     )
 
+# ── terminal command runner (WLA-33-04) ────────────────────────────────
+#
+# Command-runner fallback: a full PTY requires WebSocket support the
+# stdlib HTTP server does not provide.  This route runs individual
+# commands scoped to dw and git only, with a 30-second timeout, bound
+# to localhost.
+
+_TERMINAL_ALLOWED_PREFIXES = (".githooks/dw", "dw", "git")
+_TERMINAL_TIMEOUT = 30
+
+
+def handle_terminal_exec(root: Path, body: dict[str, object]) -> tuple[int, dict[str, object]]:
+    """POST /api/terminal/exec — run a dw or git command in the repo root."""
+    command = str(body.get("command", "") or "").strip()
+    if not command:
+        return _error(400, "missing command")
+
+    # Security: only dw and git commands are allowed
+    allowed = False
+    for prefix in _TERMINAL_ALLOWED_PREFIXES:
+        if command == prefix or command.startswith(prefix + " "):
+            allowed = True
+            break
+    if not allowed:
+        return 403, envelope(
+            {"error": "Only dw and git commands are allowed"},
+            ok=False,
+            issues=["Only dw and git commands are allowed"],
+        )
+
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=_TERMINAL_TIMEOUT,
+        )
+        return 200, envelope({
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "exit_code": result.returncode,
+        })
+    except subprocess.TimeoutExpired:
+        return 200, envelope({
+            "stdout": "",
+            "stderr": f"command timed out after {_TERMINAL_TIMEOUT} seconds",
+            "exit_code": 124,
+        })
+    except OSError as err:
+        return 500, envelope(
+            {"error": f"command execution failed: {err}"},
+            ok=False,
+            issues=[f"command execution failed: {err}"],
+        )
+
+
 def create_handler(root: Path, static_dir: Path | None):
     class WorkbenchHandler(BaseHTTPRequestHandler):
         server_version = "dw-workbench"
@@ -1723,6 +1954,10 @@ def create_handler(root: Path, static_dir: Path | None):
                     raise ValueError("body must be a JSON object")
             except (ValueError, UnicodeDecodeError) as err:
                 self._send_json(400, envelope({"error": f"invalid JSON body: {err}"}, ok=False))
+                return
+            if parsed.path.rstrip("/") == "/api/terminal/exec":
+                status, payload = handle_terminal_exec(root, body)
+                self._send_json(status, payload)
                 return
             status, payload = handle_mutation(root, parsed.path, body)
             self._send_json(status, payload)

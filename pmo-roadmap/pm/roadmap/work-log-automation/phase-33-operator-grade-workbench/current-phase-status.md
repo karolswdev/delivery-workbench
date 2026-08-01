@@ -70,13 +70,13 @@ interaction — never the authority model.
 |---|---|---|---|---|
 | WLA-33-00 | Design system and component foundation | done | [story-00-design-system](./story-00-design-system.md) | [evidence-story-00](./evidence-story-00.md) |
 | WLA-33-01 | Workspace home | done | [story-01-workspace-home](./story-01-workspace-home.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-33-02 | Live session stream | backlog | [story-02-live-session-stream](./story-02-live-session-stream.md) | [evidence-story-02](./evidence-story-02.md) |
-| WLA-33-03 | Diff review panel | backlog | [story-03-diff-review-panel](./story-03-diff-review-panel.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-33-04 | Integrated terminal | backlog | [story-04-integrated-terminal](./story-04-integrated-terminal.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-33-05 | Services drawer | backlog | [story-05-services-drawer](./story-05-services-drawer.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-33-06 | Insights dashboard | backlog | [story-06-insights-dashboard](./story-06-insights-dashboard.md) | [evidence-story-06](./evidence-story-06.md) |
-| WLA-33-07 | Progressive disclosure | backlog | [story-07-progressive-disclosure](./story-07-progressive-disclosure.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-33-08 | Multi-panel layout | backlog | [story-08-multi-panel-layout](./story-08-multi-panel-layout.md) | [evidence-story-08](./evidence-story-08.md) |
+| WLA-33-02 | Live session stream | done | [story-02-live-session-stream](./story-02-live-session-stream.md) | [evidence-story-02](./evidence-story-02.md) |
+| WLA-33-03 | Diff review panel | done | [story-03-diff-review-panel](./story-03-diff-review-panel.md) | [evidence-story-03](./evidence-story-03.md) |
+| WLA-33-04 | Integrated terminal | done | [story-04-integrated-terminal](./story-04-integrated-terminal.md) | [evidence-story-04](./evidence-story-04.md) |
+| WLA-33-05 | Services drawer | done | [story-05-services-drawer](./story-05-services-drawer.md) | [evidence-story-05](./evidence-story-05.md) |
+| WLA-33-06 | Insights dashboard | done | [story-06-insights-dashboard](./story-06-insights-dashboard.md) | [evidence-story-06](./evidence-story-06.md) |
+| WLA-33-07 | Progressive disclosure | done | [story-07-progressive-disclosure](./story-07-progressive-disclosure.md) | [evidence-story-07](./evidence-story-07.md) |
+| WLA-33-08 | Multi-panel layout | done | [story-08-multi-panel-layout](./story-08-multi-panel-layout.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-33-09 | Prove it works and looks right | backlog | [story-09-prove-it-works](./story-09-prove-it-works.md) | [evidence-story-09](./evidence-story-09.md) |
 
 ## Sequencing

@@ -377,13 +377,26 @@ function wireArrowGroup(selector, itemSelector = "button:not([disabled])") {
 
 function updatePrimaryNavigation(hash) {
   const surface = hash.split("/").filter(Boolean)[0] || "";
+  const isAdvanced = surface === "program-studio" || surface === "edit"
+    || surface === "orchestration"
+    || surface === "live" || surface === "programs" || surface === "mc";
   const activeId = !surface || surface === "board" || surface === "p" ? "work-link"
-    : surface === "program-studio" || surface === "edit" ? "plan-link"
-      : surface === "orchestration" ? "delivery-link"
-        : surface === "live" || surface === "programs" || surface === "mc" ? "live-link"
-          : surface === "health" ? "health-link" : "";
-  document.querySelectorAll(".primary-nav a").forEach((link) => {
+    : surface === "health" ? "health-link" : "";
+  document.querySelectorAll(".primary-nav > a.navlink").forEach((link) => {
     if (link.id === activeId) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  /* Highlight the Advanced toggle when an advanced route is active */
+  const advToggle = document.getElementById("advanced-toggle");
+  if (advToggle) {
+    if (isAdvanced) advToggle.setAttribute("aria-current", "page");
+    else advToggle.removeAttribute("aria-current");
+  }
+  /* Highlight the specific item inside the dropdown */
+  document.querySelectorAll(".advanced-dropdown a").forEach((link) => {
+    const href = link.getAttribute("href") || "";
+    const linkSurface = href.replace("#/", "").split("/")[0];
+    if (linkSurface === surface) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
   const projectSwitcher = document.getElementById("project-switcher");

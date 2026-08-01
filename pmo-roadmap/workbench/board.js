@@ -454,6 +454,7 @@ async function viewBoard(slug, notice = null) {
     </div>`;
   wireStepControl(step);
   wireBoardMoves(slug);
+  if (window.DW.wireSessionPanelClicks) wireSessionPanelClicks();
   // Deterministic screenshot affordances for board action and refusal states.
   if (SNAPSHOT_MODE) {
     const params = new URLSearchParams(location.search);
