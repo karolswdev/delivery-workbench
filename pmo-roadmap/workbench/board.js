@@ -7,16 +7,30 @@
 const BOARD_STATUSES = ["backlog", "ready", "in-progress", "blocked", "on-hold", "done"];
 const HOLD_COLUMNS = ["on-hold"];
 
-function boardCard(slug, lane, card) {
+function boardCard(slug, lane, card, orthoState) {
   const parked = PARKED_COLUMNS.includes(card.status) || card.status === "paused";
   const movable = !lane.closed && !lane.paused;
+  const ortho = orthoState || {};
+  const exec = ortho.execution || "stopped";
+  const attn = ortho.attention || "none";
+  const auth = ortho.authority || "none";
+  const execDot = exec === "running"
+    ? '<span class="bcard-exec bcard-exec-running" title="Running" aria-label="Execution: running"></span>'
+    : exec === "idle"
+    ? '<span class="bcard-exec bcard-exec-idle" title="Idle" aria-label="Execution: idle"></span>'
+    : "";
+  const attnBadge = attn !== "none"
+    ? `<dw-badge variant="needs-you" count="${esc(attn === "waiting-for-input" ? "Input needed" : attn === "decision-pending" ? "Decision" : "Blocked")}"></dw-badge>`
+    : "";
+  const authRing = auth !== "none" ? ` bcard-auth-${esc(auth)}` : "";
   return `
-    <dw-card class="bcard st-${esc(card.status)}" ${movable ? 'draggable="true"' : ""}
+    <dw-card class="bcard st-${esc(card.status)}${authRing}" ${movable ? 'draggable="true"' : ""}
          data-story="${esc(card.story_id)}" data-phase="${lane.number}"
          data-status="${esc(card.status)}" data-evidence="${card.evidence_exists ? 1 : 0}"
-         aria-label="${esc(card.story_id)}: ${esc(card.title)}. Status ${esc(card.status)}.">
-      <div slot="header" class="bcard-top"><a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}"><code>${esc(card.story_id)}</code></a>
-        <dw-status-pill status="${esc(card.status)}"></dw-status-pill>${card.evidence_exists ? ' <span class="tick">proof saved</span>' : ""}</div>
+         data-execution="${esc(exec)}" data-attention="${esc(attn)}" data-authority="${esc(auth)}"
+         aria-label="${esc(card.story_id)}: ${esc(card.title)}. Status ${esc(card.status)}. Execution ${esc(exec)}.${attn !== "none" ? " Attention: " + esc(attn) + "." : ""}">
+      <div slot="header" class="bcard-top"><a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}"><code>${esc(card.story_id)}</code></a>${execDot}
+        <dw-status-pill status="${esc(card.status)}"></dw-status-pill>${attnBadge}${card.evidence_exists ? ' <span class="tick">proof saved</span>' : ""}</div>
       <div class="bcard-title">${esc(card.title)}</div>
       ${parked ? `<div class="bcard-note"><strong>Waiting:</strong> ${esc(card.note || "no reason recorded")}</div>` : ""}
       ${movable ? `<div slot="footer" class="bcard-actions" role="group" aria-label="Actions for ${esc(card.story_id)}">
@@ -26,12 +40,12 @@ function boardCard(slug, lane, card) {
     </dw-card>`;
 }
 
-function boardLane(slug, columns, lane) {
+function boardLane(slug, columns, lane, orthoMap) {
   const droppable = !lane.closed && !lane.paused;
   const cols = columns.map((col) => `
     <div class="bcol" data-col="${esc(col)}" data-phase="${lane.number}" data-droppable="${droppable ? 1 : 0}">
       <div class="bcol-head">${esc(col)} <span class="bcol-count">${lane.columns[col].length}</span></div>
-      ${lane.columns[col].map((card) => boardCard(slug, lane, card)).join("")}
+      ${lane.columns[col].map((card) => boardCard(slug, lane, card, orthoMap[card.story_id])).join("")}
     </div>`).join("");
   const uncovered = lane.story_count === 0 && lane.uncovered_story_files
     ? `<span class="sub">no story table — ${lane.uncovered_story_files} story file${lane.uncovered_story_files === 1 ? "" : "s"} on disk, unlisted</span>` : "";
@@ -431,15 +445,18 @@ async function viewBoard(slug, notice = null) {
   }
   setCrumbs([{ label: "work", href: "#/" }, { label: slug }]);
   const projectQuery = `?project=${encodeURIComponent(slug)}`;
-  const [boardBody, statusBody, stepBody, setupBody, presentationBody] = await Promise.all([
+  const [boardBody, statusBody, stepBody, setupBody, presentationBody, stateBody] = await Promise.all([
     api(`/api/projects/${encodeURIComponent(slug)}/board`),
     api(`/api/status${projectQuery}`),
     api(`/api/step${projectQuery}`),
     api(`/api/delivery-setup${projectQuery}`),
     api(`/api/presentation/status${projectQuery}`),
+    api(`/api/projects/${encodeURIComponent(slug)}/state`).catch(() => ({ data: { stories: [] } })),
   ]);
   const model = boardBody.data;
   const step = stepBody.data;
+  const orthoMap = {};
+  (stateBody.data.stories || []).forEach((s) => { orthoMap[s.story_id] = s; });
   const open = model.phases.filter((lane) => !lane.closed);
   const closed = model.phases.filter((lane) => lane.closed);
   app.innerHTML = `${destinationNav("work", "#/board")}
@@ -448,9 +465,9 @@ async function viewBoard(slug, notice = null) {
       <div class="board-lanes-head"><div><span>Roadmap</span><h2 id="phase-lanes-title">Phase lanes</h2></div>
         <p>Create and move work here. Every saved change stops for an exact preview.</p></div>
       <div id="board-move"></div>
-      ${open.map((lane) => boardLane(slug, model.columns, lane)).join("") || stateHtml("No open phases")}
+      ${open.map((lane) => boardLane(slug, model.columns, lane, orthoMap)).join("") || stateHtml("No open phases")}
       ${closed.length ? `<details class="board-closed"><summary>Closed phases (${closed.length})</summary>
-        ${closed.map((lane) => boardLane(slug, model.columns, lane)).join("")}</details>` : ""}
+        ${closed.map((lane) => boardLane(slug, model.columns, lane, orthoMap)).join("")}</details>` : ""}
     </div>`;
   wireStepControl(step);
   wireBoardMoves(slug);

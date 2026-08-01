@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -52,6 +53,15 @@ SCHEMA_VERSION = 1
 # and evidence-capture paths register their subprocesses here.
 
 _tracked_services: dict[str, dict[str, object]] = {}
+
+# ── global event stream (WLA-34-01) ─────────────────────────────────
+#
+# Thread-safe subscriber count for the /api/events/global SSE endpoint.
+# Capped at _MAX_GLOBAL_SUBSCRIBERS to bound resource usage.
+
+_MAX_GLOBAL_SUBSCRIBERS = 10
+_global_stream_lock = threading.Lock()
+_global_stream_count = 0
 
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -465,6 +475,329 @@ def _insights(root: Path, query: dict[str, list[str]]) -> tuple[int, dict[str, o
     })
 
 
+def _telemetry(root: Path, query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
+    """GET /api/telemetry — per-turn session metrics derived from the run ledger."""
+    from .orchestration_run import _load_run_documents, _read_events
+
+    run_id = query.get("run", [""])[0].strip()
+    if not run_id:
+        return _error(400, "telemetry requires a run parameter")
+
+    try:
+        run_dir, grant, compiled = _load_run_documents(root, run_id)
+    except DwError as err:
+        return _error(404, err.message)
+
+    events = _read_events(run_dir, run_id)
+
+    # Build node profile lookup from the compiled score.
+    node_profiles: dict[str, str] = {}
+    for node in compiled.get("score", {}).get("nodes", []):
+        node_profiles[str(node["id"])] = str(node.get("profile") or "")
+
+    # Walk events to collect claims, receipts, activity observations,
+    # and their timestamps.
+    claims: dict[str, dict[str, object]] = {}       # claim_id -> claim detail + ts
+    claim_receipts: dict[str, list[dict[str, object]]] = {}
+    claim_sessions: dict[str, str] = {}              # claim_id -> last session_id
+    event_times: dict[int, str] = {}                 # seq -> ts
+
+    for offset, event in enumerate(events):
+        kind = str(event["event"])
+        detail = event["detail"]
+        ts = str(event["ts"])
+        event_times[offset] = ts
+
+        if kind == "node_claimed":
+            cid = str(detail["claim_id"])
+            claims[cid] = {**dict(detail), "claimed_ts": ts}
+            claim_receipts[cid] = []
+        elif kind == "node_receipt":
+            cid = str(detail["claim_id"])
+            claim_receipts.setdefault(cid, []).append({
+                "seq": offset,
+                "ts": ts,
+                **dict(detail),
+            })
+        elif kind == "activity_observed":
+            cid = str(detail["claim_id"])
+            sid = str(detail.get("session_id") or "")
+            if sid:
+                claim_sessions[cid] = sid
+
+    # Build per-turn rows from receipts.
+    turns: list[dict[str, object]] = []
+    total_cost: int = 0
+    total_input: int = 0
+    has_cost: bool = False
+    has_tokens: bool = False
+    models_seen: set[str] = set()
+    first_ts: str | None = None
+    last_ts: str | None = None
+
+    for cid, recs in claim_receipts.items():
+        claim = claims.get(cid)
+        if not claim:
+            continue
+        node_id = str(claim.get("node_id", ""))
+        attempt = claim.get("attempt")
+        profile = node_profiles.get(node_id, "")
+
+        for rec in recs:
+            rec_ts = str(rec.get("ts", ""))
+            claimed_ts = str(claim.get("claimed_ts", ""))
+
+            # Extract token/cost fields, keeping null when absent.
+            usage_status = rec.get("usage_status")
+            raw_total = rec.get("total_tokens")
+            raw_cost = rec.get("cost_microunits")
+
+            total_tokens = int(raw_total) if raw_total is not None else None
+            cost_micro = int(raw_cost) if raw_cost is not None else None
+
+            measurement = (
+                str(usage_status) if usage_status is not None else "unknown"
+            )
+
+            # These granular fields do not exist in the current receipt schema.
+            input_tokens = None
+            output_tokens = None
+            cache_read_tokens = None
+            cache_creation_tokens = None
+
+            state = str(rec.get("state", ""))
+
+            if cost_micro is not None:
+                total_cost += cost_micro
+                has_cost = True
+            if total_tokens is not None:
+                total_input += total_tokens  # best approximation — no split available
+                has_tokens = True
+
+            if profile:
+                models_seen.add(profile)
+
+            if first_ts is None or rec_ts < first_ts:
+                first_ts = rec_ts
+            if last_ts is None or rec_ts > last_ts:
+                last_ts = rec_ts
+
+            turns.append({
+                "node_id": node_id,
+                "attempt": attempt,
+                "session_id": claim_sessions.get(cid) or None,
+                "provider": profile or None,
+                "model": profile or None,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cache_read_tokens": cache_read_tokens,
+                "cache_creation_tokens": cache_creation_tokens,
+                "total_tokens": total_tokens,
+                "cost_microunits": cost_micro,
+                "measurement_status": measurement,
+                "started_at": claimed_ts or None,
+                "ended_at": rec_ts or None,
+                "state": state or None,
+            })
+
+    # Sort turns chronologically by receipt timestamp.
+    turns.sort(key=lambda t: str(t.get("ended_at") or ""))
+
+    # Compute duration.
+    duration: int | None = None
+    if first_ts and last_ts:
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            t0 = _dt.fromisoformat(first_ts.replace("Z", "+00:00"))
+            t1 = _dt.fromisoformat(last_ts.replace("Z", "+00:00"))
+            duration = max(0, int((t1 - t0).total_seconds()))
+        except (ValueError, TypeError):
+            pass
+
+    summary: dict[str, object] = {
+        "total_cost_microunits": total_cost if has_cost else None,
+        "total_input_tokens": total_input if has_tokens else None,
+        "total_output_tokens": None,  # not available at receipt granularity
+        "total_turns": len(turns),
+        "models_used": sorted(models_seen) if models_seen else [],
+        "duration_seconds": duration,
+    }
+
+    return 200, envelope({"turns": turns, "summary": summary})
+
+
+def _session_outcomes(root: Path, query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
+    """GET /api/session-outcomes — per-session outcome projection from the run ledger."""
+    from .orchestration_run import _load_run_documents, _read_events, replay_run
+
+    run_id = query.get("run", [""])[0].strip()
+    if not run_id:
+        return _error(400, "session-outcomes requires a run parameter")
+
+    try:
+        run_dir, grant, compiled = _load_run_documents(root, run_id)
+    except DwError as err:
+        return _error(404, err.message)
+
+    events = _read_events(run_dir, run_id)
+
+    # Build node profile lookup from the compiled score.
+    node_profiles: dict[str, str] = {}
+    for node in compiled.get("score", {}).get("nodes", []):
+        node_profiles[str(node["id"])] = str(node.get("profile") or "")
+
+    # Walk events to collect claims, receipts, activity observations,
+    # releases, rail advances, and external commits.
+    claims: dict[str, dict[str, object]] = {}       # claim_id -> claim detail + ts
+    claim_receipts: dict[str, list[dict[str, object]]] = {}
+    claim_sessions: dict[str, str] = {}              # claim_id -> last session_id
+    claim_releases: dict[str, dict[str, object]] = {}
+    rail_advances: list[dict[str, object]] = []
+    external_commits: list[dict[str, object]] = []
+    checkpoints: list[dict[str, object]] = []
+
+    for offset, event in enumerate(events):
+        kind = str(event["event"])
+        detail = event["detail"]
+        ts = str(event["ts"])
+
+        if kind == "node_claimed":
+            cid = str(detail["claim_id"])
+            claims[cid] = {**dict(detail), "claimed_ts": ts, "claimed_seq": offset}
+            claim_receipts[cid] = []
+        elif kind == "node_receipt":
+            cid = str(detail["claim_id"])
+            claim_receipts.setdefault(cid, []).append({
+                "seq": offset, "ts": ts, **dict(detail),
+            })
+        elif kind == "activity_observed":
+            cid = str(detail["claim_id"])
+            sid = str(detail.get("session_id") or "")
+            if sid:
+                claim_sessions[cid] = sid
+        elif kind == "node_released":
+            cid = str(detail["claim_id"])
+            claim_releases[cid] = {
+                "seq": offset, "ts": ts, **dict(detail),
+            }
+        elif kind == "rail_advanced":
+            rail_advances.append({"seq": offset, "ts": ts, **dict(detail)})
+        elif kind == "external_commit_observed":
+            external_commits.append({"seq": offset, "ts": ts, **dict(detail)})
+        elif kind == "checkpoint_reached":
+            checkpoints.append({"seq": offset, "ts": ts, **dict(detail)})
+
+    # Build per-session rows.
+    sessions: list[dict[str, object]] = []
+    total_cost: int = 0
+    total_artifacts: int = 0
+    total_evidence: int = 0
+
+    for cid, claim in claims.items():
+        node_id = str(claim.get("node_id", ""))
+        attempt = claim.get("attempt")
+        session_id = claim_sessions.get(cid)
+
+        # Determine outcome state from release or receipts.
+        release = claim_releases.get(cid)
+        if release:
+            state = str(release.get("outcome", "unknown"))
+        else:
+            # Still active — check last receipt.
+            recs = claim_receipts.get(cid, [])
+            last = recs[-1] if recs else None
+            state = str(last.get("state", "running")) if last else "running"
+
+        # Aggregate cost and tokens from receipts.
+        cost_micro = 0
+        for rec in claim_receipts.get(cid, []):
+            raw_cost = rec.get("cost_microunits")
+            if raw_cost is not None:
+                cost_micro += int(raw_cost)
+
+        # Compute duration from claim to release (or last receipt).
+        duration: int | None = None
+        claimed_ts = str(claim.get("claimed_ts", ""))
+        end_ts = ""
+        if release:
+            end_ts = str(release.get("ts", ""))
+        else:
+            recs = claim_receipts.get(cid, [])
+            if recs:
+                end_ts = str(recs[-1].get("ts", ""))
+        if claimed_ts and end_ts:
+            try:
+                t0 = datetime.fromisoformat(claimed_ts.replace("Z", "+00:00"))
+                t1 = datetime.fromisoformat(end_ts.replace("Z", "+00:00"))
+                duration = max(0, int((t1 - t0).total_seconds()))
+            except (ValueError, TypeError):
+                pass
+
+        # Artifacts: derive from release artifact_bytes.
+        artifacts: list[dict[str, object]] = []
+        artifact_bytes = 0
+        if release:
+            artifact_bytes = int(release.get("artifact_bytes", 0))
+            if artifact_bytes > 0:
+                artifacts.append({
+                    "name": f"{node_id}-output",
+                    "hash": None,
+                    "type": node_profiles.get(node_id) or "unknown",
+                })
+                total_artifacts += 1
+
+        # Evidence captures, check results, story transitions, and
+        # file-change stats are not available in the ledger — return
+        # empty arrays rather than fabricated data.
+        evidence_captures: list[dict[str, object]] = []
+        check_results: list[dict[str, object]] = []
+        story_transitions: list[dict[str, object]] = []
+
+        # Check results: for check-type nodes, derive from outcome.
+        node_type = str(claim.get("node_type", ""))
+        if node_type == "check" and release:
+            outcome = str(release.get("outcome", ""))
+            check_results.append({
+                "check": node_id,
+                "passed": outcome == "succeeded",
+            })
+
+        if cost_micro:
+            total_cost += cost_micro
+
+        sessions.append({
+            "session_id": session_id,
+            "node_id": node_id,
+            "attempt": attempt,
+            "state": state,
+            "produced": {
+                "artifacts": artifacts,
+                "evidence_captures": evidence_captures,
+                "check_results": check_results,
+                "story_transitions": story_transitions,
+                "files_changed": None,
+                "lines_added": None,
+                "lines_deleted": None,
+            },
+            "cost_microunits": cost_micro if cost_micro else None,
+            "duration_seconds": duration,
+        })
+
+    # Sort by claim sequence (order of node claims).
+    sessions.sort(key=lambda s: str(s.get("session_id") or ""))
+
+    return 200, envelope({
+        "run_id": run_id,
+        "sessions": sessions,
+        "summary": {
+            "session_count": len(sessions),
+            "artifact_count": total_artifacts,
+            "evidence_count": total_evidence,
+            "total_cost_microunits": total_cost if total_cost else None,
+        },
+    })
+
+
 def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
     parts = [part for part in path.strip("/").split("/") if part]
     try:
@@ -754,6 +1087,26 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
             payload = build_context_payload(root, discover_projects(root), include_trace=include_trace)
             return 200, envelope(payload)
 
+        if (
+            len(parts) == 4
+            and parts[:2] == ["api", "context"]
+            and parts[3] == "current"
+        ):
+            from .project_context import ProjectContext
+
+            ctx = ProjectContext(root)
+            return 200, envelope(ctx.current(parts[2]))
+
+        if (
+            len(parts) == 4
+            and parts[:2] == ["api", "context"]
+            and parts[3] == "history"
+        ):
+            from .project_context import ProjectContext
+
+            ctx = ProjectContext(root)
+            return 200, envelope(ctx.history(parts[2]))
+
         if parts == ["api", "projects"]:
             summaries = [_project_summary(p, root) for p in discover_projects(root)]
             return 200, envelope({
@@ -771,6 +1124,11 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
 
             project = get_project(root, parts[2])
             return 200, envelope(board_model(project, root))
+
+        if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "state":
+            from .orthogonal_state import build_orthogonal_state
+
+            return 200, envelope(build_orthogonal_state(root, parts[2]))
 
         if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3] == "phases":
             project = get_project(root, parts[2])
@@ -916,11 +1274,31 @@ def handle_api(root: Path, path: str, query: dict[str, list[str]]) -> tuple[int,
         if parts == ["api", "insights"]:
             return _insights(root, query)
 
+        if parts == ["api", "suggestions"]:
+            from .suggestions import SuggestionStore
+
+            slug = query.get("project", [""])[0].strip()
+            if not slug:
+                return _error(400, "suggestions requires a project parameter")
+            state_filter = query.get("state", [""])[0].strip() or None
+            store = SuggestionStore(root)
+            return 200, envelope({
+                "project": slug,
+                "suggestions": store.list(slug, state=state_filter),
+                "pending_count": store.pending_count(slug),
+            })
+
         if parts == ["api", "services"]:
             return 200, envelope({"services": list(_tracked_services.values())})
 
         if parts == ["api", "file"]:
             return _contained_read(root, query.get("path", [""])[0])
+
+        if parts == ["api", "telemetry"]:
+            return _telemetry(root, query)
+
+        if parts == ["api", "session-outcomes"]:
+            return _session_outcomes(root, query)
 
         return _error(404, f"unknown API route: {path}")
     except DwError as err:
@@ -1359,6 +1737,84 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
         except DwError as err:
             return _run_error(err)
 
+    if route == "/api/requests/respond":
+        # WLA-34-04: inline ask-and-resume convenience endpoint.
+        # Resolves a correlation id to its run or program, previews the
+        # request action, and applies it in one atomic step.  The browser
+        # session panel uses this so the operator can answer a typed
+        # question without manually navigating to the control room.
+        allowed = {"correlation_id", "decision", "reason"}
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(
+                400,
+                f"unknown request respond parameter(s): {', '.join(unknown)}",
+            )
+        try:
+            correlation_id = str(body.get("correlation_id", "") or "")
+            decision = str(body.get("decision", "") or "")
+            reason = str(body.get("reason", "") or "")
+            if not correlation_id:
+                raise DwError("request respond requires a correlation_id")
+            if not decision:
+                raise DwError("request respond requires a decision")
+
+            from .notifications import resolve_correlation
+
+            match = resolve_correlation(root, correlation_id)
+            kind = str(match.get("kind", ""))
+            run_id = str(match.get("run_id", ""))
+
+            if kind == "program-intervention-required":
+                from .program_surface import (
+                    apply_program_act,
+                    build_program_act_preview,
+                )
+
+                preview = build_program_act_preview(
+                    root, run_id, "request",
+                    reason=reason, decision=decision,
+                    request_id=correlation_id,
+                )
+                if not preview.get("applicable"):
+                    issues = preview.get("issues", ["preview refused"])
+                    return 409, envelope(
+                        preview, ok=False,
+                        issues=[str(i) for i in issues],
+                    )
+                result = apply_program_act(
+                    root, run_id, "request",
+                    str(preview["act_token"]),
+                    reason=reason, decision=decision,
+                    request_id=correlation_id,
+                )
+            else:
+                from .orchestration_surface import (
+                    apply_run_act,
+                    build_run_act_preview,
+                )
+
+                preview = build_run_act_preview(
+                    root, run_id, "request",
+                    reason=reason, decision=decision,
+                    correlation_id=correlation_id,
+                )
+                if not preview.get("applicable"):
+                    issues = preview.get("issues", ["preview refused"])
+                    return 409, envelope(
+                        preview, ok=False,
+                        issues=[str(i) for i in issues],
+                    )
+                result = apply_run_act(
+                    root, run_id, "request",
+                    str(preview["act_token"]),
+                    reason=reason, decision=decision,
+                    correlation_id=correlation_id,
+                )
+            return 200, envelope(result)
+        except DwError as err:
+            return _run_error(err)
+
     if route == "/api/runs/preview":
         unknown = sorted(set(body) - {
             "run_id", "action", "reason", "decision", "correlation_id",
@@ -1697,6 +2153,116 @@ def handle_mutation(root: Path, path: str, body: dict[str, object]) -> tuple[int
                 issues=[f"apply failed and was rolled back: {err}"],
             )
 
+    if route == "/api/suggestions":
+        from .suggestions import SuggestionStore
+
+        allowed = {"project", "title", "description", "priority", "session_id", "run_id", "rationale"}
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(400, f"unknown suggestion parameter(s): {', '.join(unknown)}")
+        try:
+            project, title = _require(body, "project", "title")
+            store = SuggestionStore(root)
+            result = store.suggest(
+                project,
+                title,
+                str(body.get("description", "") or ""),
+                priority=str(body.get("priority", "normal") or "normal"),
+                session_id=str(body.get("session_id", "") or "") or None,
+                run_id=str(body.get("run_id", "") or "") or None,
+                rationale=str(body.get("rationale", "") or ""),
+            )
+            return 200, envelope(result)
+        except DwError as err:
+            return _run_error(err)
+
+    parts = [part for part in route.strip("/").split("/") if part]
+    if (
+        len(parts) == 4
+        and parts[:2] == ["api", "suggestions"]
+        and parts[3] == "accept"
+    ):
+        from .suggestions import SuggestionStore
+
+        try:
+            store = SuggestionStore(root)
+            project = str(body.get("project", "") or "")
+            if not project:
+                return _error(400, "accept requires a project parameter")
+            decided_by = str(body.get("decided_by", "operator") or "operator")
+            materialized = str(body.get("materialized_story_id", "") or "") or None
+            result = store.accept(project, parts[2], decided_by=decided_by, materialized_story_id=materialized)
+            return 200, envelope(result)
+        except DwError as err:
+            return _run_error(err)
+
+    if (
+        len(parts) == 4
+        and parts[:2] == ["api", "suggestions"]
+        and parts[3] == "dismiss"
+    ):
+        from .suggestions import SuggestionStore
+
+        try:
+            store = SuggestionStore(root)
+            project = str(body.get("project", "") or "")
+            if not project:
+                return _error(400, "dismiss requires a project parameter")
+            decided_by = str(body.get("decided_by", "operator") or "operator")
+            result = store.dismiss(project, parts[2], decided_by=decided_by)
+            return 200, envelope(result)
+        except DwError as err:
+            return _run_error(err)
+
+    # ── revisioned project context (WLA-34-09) ──────────────────────────
+    if (
+        len(parts) == 4
+        and parts[:2] == ["api", "context"]
+        and parts[3] == "draft"
+    ):
+        from .project_context import ProjectContext
+
+        allowed = {"content", "session_id", "based_on_index_tree"}
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(400, f"unknown context draft parameter(s): {', '.join(unknown)}")
+        try:
+            content = str(body.get("content", "") or "")
+            if not content.strip():
+                raise DwError("context draft content must be non-empty Markdown")
+            ctx = ProjectContext(root)
+            result = ctx.draft(
+                parts[2],
+                content,
+                session_id=str(body.get("session_id", "") or ""),
+                based_on_index_tree=str(body.get("based_on_index_tree", "") or ""),
+            )
+            return 200, envelope(result)
+        except DwError as err:
+            return _run_error(err)
+
+    if (
+        len(parts) == 4
+        and parts[:2] == ["api", "context"]
+        and parts[3] == "accept"
+    ):
+        from .project_context import ProjectContext
+
+        allowed = {"revision", "fingerprint"}
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return _error(400, f"unknown context accept parameter(s): {', '.join(unknown)}")
+        try:
+            revision = body.get("revision")
+            if not isinstance(revision, int) or isinstance(revision, bool):
+                raise DwError("context accept requires an integer revision")
+            fingerprint = str(body.get("fingerprint", "") or "")
+            ctx = ProjectContext(root)
+            result = ctx.accept(parts[2], revision, fingerprint=fingerprint)
+            return 200, envelope(result)
+        except DwError as err:
+            return _run_error(err)
+
     return _error(
         405,
         "unsupported method or route; use /api/step/apply, guarded roadmap "
@@ -1861,6 +2427,8 @@ def create_handler(root: Path, static_dir: Path | None):
                 def fetch(cursor: int) -> dict[str, object]:
                     return tail_signal_events(root, remote, branch, cursor)
                 default_cursor = "-1"
+            elif parts == ["api", "events", "global"]:
+                return self._global_stream(root, query)
             else:
                 return False
             raw_cursor = (
@@ -1887,6 +2455,25 @@ def create_handler(root: Path, static_dir: Path | None):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
+
+            # ── snapshot-then-tail for per-run/program streams (WLA-34-05)
+            # Emit a snapshot of the current state so reconnecting clients
+            # can rebuild without duplicating incremental events.
+            if event_name == "ledger":
+                try:
+                    snap = self._run_snapshot(root, run_id)
+                    if not self._sse_frame("snapshot", 0, snap):
+                        return True
+                except Exception:
+                    pass
+            elif event_name == "program-ledger":
+                try:
+                    snap = self._program_snapshot(root, run_id)
+                    if not self._sse_frame("snapshot", 0, snap):
+                        return True
+                except Exception:
+                    pass
+
             for event in first["events"]:
                 if not self._sse_frame(event_name, event["seq"], event):
                     return True
@@ -1911,6 +2498,376 @@ def create_handler(root: Path, static_dir: Path | None):
                 else:
                     quiet_beats += 1
                     if quiet_beats >= 15:
+                        quiet_beats = 0
+                        try:
+                            self.wfile.write(b": keepalive\n\n")
+                            self.wfile.flush()
+                        except OSError:
+                            return True
+
+        def _global_stream(self, repo_root: Path, query: dict[str, list[str]]) -> bool:
+            """Read-only SSE endpoint for coarse lifecycle events (WLA-34-01).
+
+            Synthesises a unified stream from the rail event log and the
+            current run/program/notification inventories. Each event
+            carries a minimal JSON payload and a monotonic sequence id
+            suitable for Last-Event-ID replay.
+            """
+            global _global_stream_count
+            with _global_stream_lock:
+                if _global_stream_count >= _MAX_GLOBAL_SUBSCRIBERS:
+                    self._send_json(503, envelope(
+                        {"error": "global event stream subscriber limit reached"},
+                        ok=False,
+                    ))
+                    return True
+                _global_stream_count += 1
+            try:
+                return self._global_stream_body(repo_root, query)
+            finally:
+                with _global_stream_lock:
+                    _global_stream_count -= 1
+
+        def _run_snapshot(self, repo_root: Path, run_id: str) -> dict[str, object]:
+            """Build a snapshot of a single run's current state (WLA-34-05).
+
+            Derived entirely from the existing replay projection and
+            view -- no new persistence.  The snapshot is idempotent:
+            connecting twice produces the same state.
+            """
+            from .orchestration_surface import build_run_view
+
+            view = build_run_view(repo_root, run_id)
+            nodes = []
+            for node in (view.get("graph", {}).get("nodes") or []):
+                nodes.append({
+                    "id": str(node.get("id", "")),
+                    "state": str(node.get("state", "")),
+                    "attempt": node.get("attempt", 0),
+                })
+            return {
+                "run_id": run_id,
+                "state": str(view.get("state", "")),
+                "ledger_events": view.get("ledger_events", 0),
+                "ledger_head": str(view.get("ledger_head", "")),
+                "nodes": nodes,
+                "outstanding_requests": [
+                    {
+                        "correlation_id": str(r.get("correlation_id", "")),
+                        "kind": str(r.get("kind", "")),
+                    }
+                    for r in (view.get("outstanding_requests") or [])
+                ],
+                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+
+        def _program_snapshot(self, repo_root: Path, run_id: str) -> dict[str, object]:
+            """Build a snapshot of a single program run's current state (WLA-34-05)."""
+            from .program_surface import build_program_view
+
+            view = build_program_view(repo_root, run_id)
+            return {
+                "run_id": run_id,
+                "state": str(view.get("state", "")),
+                "operational_state": str(view.get("operational_state", "")),
+                "event_count": view.get("event_count", 0),
+                "ledger_head": str(view.get("ledger_head", "")),
+                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+
+        def _global_snapshot(self, repo_root: Path) -> dict[str, object]:
+            """Build a full state snapshot from existing data sources.
+
+            The snapshot is idempotent -- connecting twice produces the same
+            state, not doubled entries.  It is derivable entirely from the
+            rail event log, run/program inventories, and notification store.
+            """
+            from .events import read_events
+            from .notifications import build_notifications
+            from .orchestration_run import run_inventory
+
+            def _now_ts() -> str:
+                return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            snapshot: dict[str, object] = {
+                "timestamp": _now_ts(),
+                "pending_requests": [],
+                "active_runs": [],
+                "programs": [],
+                "story_statuses": {},
+            }
+
+            # Story statuses from the rail event log (last status wins)
+            try:
+                all_events = read_events(repo_root)
+                for raw in all_events:
+                    event_type = str(raw.get("event", ""))
+                    if event_type == "story_status":
+                        story_id = str(raw.get("story") or "")
+                        detail = raw.get("detail") or {}
+                        if story_id:
+                            snapshot["story_statuses"][story_id] = {
+                                "status": str(detail.get("to") or ""),
+                                "project": str(raw.get("project") or ""),
+                            }
+            except Exception:
+                pass
+
+            # Active runs with their state and outstanding requests
+            try:
+                inventory = run_inventory(repo_root)
+                for entry in inventory.get("runs", []):
+                    if not entry.get("valid"):
+                        continue
+                    run = entry.get("run") or {}
+                    run_summary: dict[str, object] = {
+                        "id": str(entry.get("run_id", "")),
+                        "project": str(run.get("story", {}).get("project", "")),
+                        "story_id": str(run.get("story", {}).get("id", "")),
+                        "state": str(run.get("state", "")),
+                    }
+                    snapshot["active_runs"].append(run_summary)
+                    for req in run.get("outstanding_requests", []):
+                        snapshot["pending_requests"].append({
+                            "id": str(req.get("correlation_id", "")),
+                            "run_id": str(entry.get("run_id", "")),
+                            "project": str(run.get("story", {}).get("project", "")),
+                            "kind": str(req.get("kind", "")),
+                        })
+            except Exception:
+                pass
+
+            # Program states
+            try:
+                from .program_surface import program_summary_inventory
+
+                prog_inv = program_summary_inventory(repo_root)
+                for summary in prog_inv.get("runs", []):
+                    if not summary.get("valid"):
+                        continue
+                    snapshot["programs"].append({
+                        "id": str(summary.get("run_id", "")),
+                        "state": str(summary.get("state", "")),
+                        "operational_state": str(summary.get("operational_state", "")),
+                    })
+            except Exception:
+                pass
+
+            # Notification-derived pending requests
+            try:
+                notifs = build_notifications(repo_root)
+                for notif in notifs.get("notifications", []):
+                    kind = str(notif.get("kind", ""))
+                    if kind in {
+                        "request-pending", "checkpoint-pending",
+                        "request-republished",
+                        "program-intervention-required",
+                    }:
+                        snapshot["pending_requests"].append({
+                            "id": str(notif.get("id", "")),
+                            "run_id": str(notif.get("run_id", "")),
+                            "kind": kind,
+                        })
+            except Exception:
+                pass
+
+            return snapshot
+
+        def _global_stream_body(self, repo_root: Path, query: dict[str, list[str]]) -> bool:
+            import time as _time
+
+            from .events import read_events
+            from .notifications import build_notifications
+            from .orchestration_run import run_inventory
+
+            raw_cursor = (
+                self.headers.get("Last-Event-ID", "").strip()
+                or query.get("from", [""])[0].strip()
+                or "0"
+            )
+            try:
+                cursor = int(raw_cursor)
+            except ValueError:
+                self._send_json(400, envelope(
+                    {"error": "stream cursor must be an integer sequence"},
+                    ok=False,
+                ))
+                return True
+
+            follow = query.get("follow", ["1"])[0] != "0"
+
+            # ── map rail event types to global stream event names ────
+            _EVENT_MAP = {
+                "story_status": "story_changed",
+                "evidence_capture": "evidence_captured",
+                "gate_pass": "gate_result",
+                "gate_refusal": "gate_result",
+                "contract_generated": "gate_result",
+                "step_execution": "run_changed",
+            }
+
+            def _now_ts() -> str:
+                return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            def _synthesise(after_seq: int) -> tuple[list[dict[str, object]], int]:
+                """Build coarse events from the rail log + live inventories."""
+                events: list[dict[str, object]] = []
+                seq = after_seq
+
+                # 1. Rail event log lines as coarse events
+                all_events = read_events(repo_root)
+                for idx, raw in enumerate(all_events):
+                    event_seq = idx + 1
+                    if event_seq <= after_seq:
+                        continue
+                    mapped = _EVENT_MAP.get(str(raw.get("event", "")))
+                    if mapped is None:
+                        continue
+                    payload: dict[str, object] = {
+                        "type": mapped,
+                        "id": str(raw.get("story") or ""),
+                        "project": str(raw.get("project") or ""),
+                        "timestamp": str(raw.get("ts") or _now_ts()),
+                    }
+                    if mapped == "story_changed":
+                        payload["status"] = str(
+                            (raw.get("detail") or {}).get("to") or ""
+                        )
+                    elif mapped == "gate_result":
+                        event_type = str(raw.get("event", ""))
+                        payload["outcome"] = (
+                            "pass" if event_type == "gate_pass"
+                            else "refusal" if event_type == "gate_refusal"
+                            else "contract"
+                        )
+                    elif mapped == "evidence_captured":
+                        payload["exit_code"] = (
+                            raw.get("detail") or {}
+                        ).get("exit_code")
+                    events.append({"seq": event_seq, "event": mapped, "data": payload})
+                    seq = event_seq
+
+                # 2. Live run states (additive, idempotent)
+                try:
+                    inventory = run_inventory(repo_root)
+                    for entry in inventory.get("runs", []):
+                        if not entry.get("valid"):
+                            continue
+                        run = entry.get("run") or {}
+                        run_seq = seq + 1
+                        seq = run_seq
+                        events.append({"seq": run_seq, "event": "run_changed", "data": {
+                            "type": "run_changed",
+                            "id": str(entry.get("run_id", "")),
+                            "project": str(run.get("story", {}).get("project", "")),
+                            "status": str(run.get("state", "")),
+                            "timestamp": _now_ts(),
+                        }})
+                        for req in run.get("outstanding_requests", []):
+                            req_seq = seq + 1
+                            seq = req_seq
+                            events.append({"seq": req_seq, "event": "request_pending", "data": {
+                                "type": "request_pending",
+                                "id": str(req.get("correlation_id", "")),
+                                "project": str(run.get("story", {}).get("project", "")),
+                                "kind": str(req.get("kind", "")),
+                                "timestamp": _now_ts(),
+                            }})
+                except Exception:
+                    pass
+
+                # 3. Program states
+                try:
+                    from .program_surface import program_summary_inventory
+
+                    prog_inv = program_summary_inventory(repo_root)
+                    for summary in prog_inv.get("runs", []):
+                        if not summary.get("valid"):
+                            continue
+                        prog_seq = seq + 1
+                        seq = prog_seq
+                        events.append({"seq": prog_seq, "event": "program_changed", "data": {
+                            "type": "program_changed",
+                            "id": str(summary.get("run_id", "")),
+                            "status": str(summary.get("state", "")),
+                            "timestamp": _now_ts(),
+                        }})
+                except Exception:
+                    pass
+
+                # 4. Notification-derived request events
+                try:
+                    notifs = build_notifications(repo_root)
+                    for notif in notifs.get("notifications", []):
+                        kind = str(notif.get("kind", ""))
+                        if kind in {
+                            "request-pending", "checkpoint-pending",
+                            "request-republished",
+                            "program-intervention-required",
+                        }:
+                            n_seq = seq + 1
+                            seq = n_seq
+                            events.append({"seq": n_seq, "event": "request_pending", "data": {
+                                "type": "request_pending",
+                                "id": str(notif.get("id", "")),
+                                "run_id": str(notif.get("run_id", "")),
+                                "kind": kind,
+                                "timestamp": _now_ts(),
+                            }})
+                except Exception:
+                    pass
+
+                return events, seq
+
+            # Initial fetch
+            try:
+                events, high_water = _synthesise(cursor)
+            except Exception:
+                events, high_water = [], cursor
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+
+            # ── snapshot-then-tail (WLA-34-05) ───────────────────────
+            # On every connect (including reconnect), emit a snapshot
+            # event first so the client can rebuild correct state from
+            # it without duplicating incremental events.
+            try:
+                snap = self._global_snapshot(repo_root)
+                if not self._sse_frame("snapshot", 0, snap):
+                    return True
+            except Exception:
+                pass
+
+            for ev in events:
+                if not self._sse_frame(ev["event"], ev["seq"], ev["data"]):
+                    return True
+            if not follow:
+                return True
+
+            quiet_beats = 0
+            prev_water = high_water
+            while True:
+                _time.sleep(2)
+                try:
+                    batch, high_water = _synthesise(0)
+                except Exception:
+                    batch, high_water = [], prev_water
+
+                # Only emit events with seq > prev_water
+                new_events = [ev for ev in batch if ev["seq"] > prev_water]
+                if new_events:
+                    quiet_beats = 0
+                    for ev in new_events:
+                        if not self._sse_frame(ev["event"], ev["seq"], ev["data"]):
+                            return True
+                    prev_water = high_water
+                else:
+                    quiet_beats += 1
+                    if quiet_beats >= 7:  # ~14s at 2s intervals -> keepalive every ~15s
                         quiet_beats = 0
                         try:
                             self.wfile.write(b": keepalive\n\n")

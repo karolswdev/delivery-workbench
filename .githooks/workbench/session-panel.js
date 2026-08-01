@@ -146,6 +146,10 @@ class SessionPanel {
     if (retryBtn) {
       retryBtn.addEventListener("click", () => this._load());
     }
+    // WLA-34-04: wire ask-resume answer controls
+    if (window.DW._askResume) {
+      window.DW._askResume.wireAnswerControls(this._container);
+    }
   }
 
   async _load() {
@@ -169,6 +173,18 @@ class SessionPanel {
       this._events = allEvents.filter(
         (ev) => ev.story_id === this._storyId || ev.detail?.story_id === this._storyId
       );
+
+      // WLA-34-04: load pending typed requests into ask-resume controller
+      try {
+        const ntfRes = await api("/api/notifications");
+        if (window.DW._askResume) {
+          window.DW._askResume.loadFromNotifications(
+            (ntfRes.data || {}).notifications || []
+          );
+        }
+      } catch (_ntfErr) {
+        // Notification fetch failure is non-fatal
+      }
 
       this._detectNeedsYou();
       this._loading = false;
@@ -238,16 +254,28 @@ class SessionPanel {
   }
 
   _transcriptHtml() {
-    if (!this._events.length) {
-      return '<p class="session-empty-transcript">No activity recorded yet. Waiting for events...</p>';
-    }
-
-    return this._events.map((ev) => {
+    const lines = this._events.map((ev) => {
       const type = this._eventType(ev);
       const ts = ev.ts || ev.timestamp || "";
       const body = this._eventBody(ev);
       return `<dw-stream-line type="${esc(type)}" timestamp="${esc(ts)}">${body}</dw-stream-line>`;
     }).join("");
+
+    // WLA-34-04: inline pending requests from the ask-resume controller
+    const askResume = window.DW._askResume;
+    let requestsHtml = "";
+    if (askResume) {
+      const pending = askResume.allRequests().filter(
+        (req) => !this._storyId || req.node === this._storyId || req.runId
+      );
+      requestsHtml = askResume.renderAllRequests(pending);
+    }
+
+    if (!lines && !requestsHtml) {
+      return '<p class="session-empty-transcript">No activity recorded yet. Waiting for events...</p>';
+    }
+
+    return lines + requestsHtml;
   }
 
   _eventType(ev) {
@@ -354,7 +382,26 @@ class SessionPanel {
 
   _startRunSSE(runId) {
     if (this._sse) { this._sse.close(); this._sse = null; }
+    this._sseReconnecting = false;
+    this._sseSeenSeqs = new Set();
+    // Record existing event seqs so reconnect snapshots don't duplicate
+    for (const ev of this._events) {
+      if (ev.seq !== undefined) this._sseSeenSeqs.add(ev.seq);
+    }
     this._sse = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
+
+    // Snapshot-then-tail reconnect (WLA-34-05): the server sends a
+    // snapshot event on every connect.  On reconnect, show "catching
+    // up" until the snapshot arrives, then refresh state.
+    this._sse.addEventListener("snapshot", () => {
+      if (this._sseReconnecting) {
+        this._sseReconnecting = false;
+        this._hideCatchingUp();
+        // Refresh from mission control to rebuild state
+        this._refreshFromMc();
+      }
+    });
+
     this._sse.addEventListener("ledger", (ev) => {
       // A new ledger event arrived; debounce a refresh
       if (this._refreshTimer) return;
@@ -363,10 +410,35 @@ class SessionPanel {
         this._refreshFromMc();
       }, 500);
     });
+    this._sse.onopen = () => {
+      // If we had events before, this is a reconnect
+      if (this._sseSeenSeqs.size > 0) {
+        this._sseReconnecting = true;
+        this._showCatchingUp();
+      }
+    };
     this._sse.onerror = () => {
       // SSE failed; fall back to polling only
       if (this._sse) { this._sse.close(); this._sse = null; }
+      this._hideCatchingUp();
     };
+  }
+
+  _showCatchingUp() {
+    if (!this._container) return;
+    if (this._container.querySelector(".session-catching-up")) return;
+    const banner = document.createElement("div");
+    banner.className = "session-catching-up dw-catching-up";
+    banner.setAttribute("role", "status");
+    banner.setAttribute("aria-live", "polite");
+    banner.textContent = "Catching up...";
+    this._container.prepend(banner);
+  }
+
+  _hideCatchingUp() {
+    if (!this._container) return;
+    const banner = this._container.querySelector(".session-catching-up");
+    if (banner) banner.remove();
   }
 
   _poll() {
@@ -404,6 +476,16 @@ class SessionPanel {
         }
       }
 
+      // WLA-34-04: refresh pending requests on poll
+      try {
+        const ntfRes = await api("/api/notifications");
+        if (window.DW._askResume) {
+          window.DW._askResume.loadFromNotifications(
+            (ntfRes.data || {}).notifications || []
+          );
+        }
+      } catch (_ntfErr) {}
+
       this._detectNeedsYou();
 
       if (sessionsChanged || newEvents.length) {
@@ -424,6 +506,9 @@ class SessionPanel {
     if (this._sse) { this._sse.close(); this._sse = null; }
     if (this._pollTimer) { clearTimeout(this._pollTimer); this._pollTimer = null; }
     if (this._refreshTimer) { clearTimeout(this._refreshTimer); this._refreshTimer = null; }
+    this._sseReconnecting = false;
+    this._sseSeenSeqs = null;
+    this._hideCatchingUp();
   }
 }
 

@@ -245,8 +245,9 @@ function liveConnectionHtml(connection, recovery) {
   }
   const copy = state === "live" ? "Live updates on"
     : state === "verified" ? "Saved history checked"
-      : state === "manual" ? "Check for updates manually"
-        : "Checking for updates";
+      : state === "reconnecting" ? "Reconnecting..."
+        : state === "manual" ? "Check for updates manually"
+          : "Checking for updates";
   return `<div class="live-connection ${esc(state)}" role="group" aria-label="Live update status">${badge(copy, state === "live" || state === "verified" ? "ok" : "")}<span>${esc(recovery?.summary || "The saved history was checked before this view was built.")}</span></div>`;
 }
 
@@ -659,8 +660,11 @@ function stopRunLive() {
   if (runLiveTimer) { clearTimeout(runLiveTimer); runLiveTimer = null; }
 }
 
+let runLiveHadConnection = false;
+
 function startRunLive() {
   stopRunLive();
+  runLiveHadConnection = false;
   if (!orchState.runId || orchState.view !== "run") return;
   if (SNAPSHOT_MODE || typeof EventSource === "undefined") {
     if (SNAPSHOT_LIVE_STATE !== "stale") orchState.runConnection.status = SNAPSHOT_MODE ? "verified" : "manual";
@@ -671,9 +675,30 @@ function startRunLive() {
   runLive = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
   runLive.onopen = () => {
     if (orchState.runId !== runId || orchState.view !== "run") return;
-    orchState.runConnection.status = "live";
+    if (runLiveHadConnection) {
+      // Reconnect: show catching-up until snapshot arrives
+      orchState.runConnection.status = "reconnecting";
+      showRunCatchingUp(true);
+    } else {
+      orchState.runConnection.status = "live";
+    }
+    runLiveHadConnection = true;
     renderOrchestration();
   };
+  // Snapshot-then-tail (WLA-34-05): the server sends a snapshot on
+  // every connect.  On reconnect the snapshot lets us verify we are
+  // current before re-entering the "live" state.
+  runLive.addEventListener("snapshot", async () => {
+    if (orchState.runId !== runId || orchState.view !== "run") return;
+    try {
+      orchState.runView = (await api(`/api/runs/${encodeURIComponent(runId)}/view`)).data;
+      orchState.runConnection.status = "live";
+      try { orchState.notifications = (await api("/api/notifications")).data.notifications; }
+      catch (_err) { /* notifications stay stale until the next refresh */ }
+      renderOrchestration();
+    } catch (_err) { /* view stays as-is */ }
+    showRunCatchingUp(false);
+  });
   runLive.addEventListener("ledger", () => {
     if (runLiveTimer) return;
     runLiveTimer = setTimeout(async () => {
@@ -704,6 +729,7 @@ function startRunLive() {
   runLive.onerror = () => {
     orchState.runConnection.status = "stale";
     stopRunLive();
+    showRunCatchingUp(false);
     announceLiveUpdate(
       "run-connection",
       `stale:${runId}:${orchState.runView?.ledger_head || ""}`,
@@ -711,6 +737,25 @@ function startRunLive() {
     );
     renderOrchestration();
   };
+}
+
+function showRunCatchingUp(show) {
+  const existing = document.querySelector(".orch-run-shell > .dw-catching-up");
+  if (show) {
+    if (!existing) {
+      const shell = document.querySelector(".orch-run-shell");
+      if (shell) {
+        const banner = document.createElement("div");
+        banner.className = "dw-catching-up";
+        banner.setAttribute("role", "status");
+        banner.setAttribute("aria-live", "polite");
+        banner.textContent = "Catching up...";
+        shell.prepend(banner);
+      }
+    }
+  } else if (existing) {
+    existing.remove();
+  }
 }
 
 async function previewRunGrant(form) {
@@ -1113,8 +1158,11 @@ async function refreshProgramView() {
   startProgramLive();
 }
 
+let programLiveHadConnection = false;
+
 function startProgramLive() {
   stopProgramLive();
+  programLiveHadConnection = false;
   if (!programState.runId || !programState.view) return;
   if (SNAPSHOT_MODE || typeof EventSource === "undefined") {
     if (SNAPSHOT_LIVE_STATE !== "stale") programState.connection.status = SNAPSHOT_MODE ? "verified" : "manual";
@@ -1126,9 +1174,27 @@ function startProgramLive() {
   programLive = new EventSource(`/api/programs/${encodeURIComponent(runId)}/events?from=${cursor}&follow=1`);
   programLive.onopen = () => {
     if (programState.runId !== runId) return;
-    programState.connection.status = "live";
+    if (programLiveHadConnection) {
+      programState.connection.status = "reconnecting";
+      showProgramCatchingUp(true);
+    } else {
+      programState.connection.status = "live";
+    }
+    programLiveHadConnection = true;
     renderPrograms();
   };
+  // Snapshot-then-tail (WLA-34-05): refresh state from snapshot on reconnect
+  programLive.addEventListener("snapshot", async () => {
+    if (programState.runId !== runId) return;
+    try {
+      programState.view = (await api(`/api/programs/${encodeURIComponent(runId)}/view`)).data;
+      programState.connection.status = "live";
+      programState.inventory = (await api("/api/programs")).data;
+      programState.notifications = (await api("/api/notifications")).data.notifications || [];
+      renderPrograms();
+    } catch (_err) { /* view stays as-is */ }
+    showProgramCatchingUp(false);
+  });
   programLive.addEventListener("program-ledger", () => {
     if (programLiveTimer) return;
     programLiveTimer = setTimeout(async () => {
@@ -1159,6 +1225,7 @@ function startProgramLive() {
   programLive.onerror = () => {
     programState.connection.status = "stale";
     stopProgramLive();
+    showProgramCatchingUp(false);
     announceLiveUpdate(
       "program-connection",
       `stale:${runId}:${programState.view?.event_count || ""}`,
@@ -1166,6 +1233,25 @@ function startProgramLive() {
     );
     renderPrograms();
   };
+}
+
+function showProgramCatchingUp(show) {
+  const existing = document.querySelector(".program-room > .dw-catching-up");
+  if (show) {
+    if (!existing) {
+      const room = document.querySelector(".program-room");
+      if (room) {
+        const banner = document.createElement("div");
+        banner.className = "dw-catching-up";
+        banner.setAttribute("role", "status");
+        banner.setAttribute("aria-live", "polite");
+        banner.textContent = "Catching up...";
+        room.prepend(banner);
+      }
+    }
+  } else if (existing) {
+    existing.remove();
+  }
 }
 
 async function requestProgramPermission(request) {
