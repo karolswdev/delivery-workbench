@@ -85,8 +85,8 @@ function boardCard(slug, lane, card, orthoState) {
       ${attnPreview}
       ${parked ? `<div class="bcard-note"><strong>Waiting:</strong> ${esc(card.note || "no reason recorded")}</div>` : ""}
       ${movable ? `<div slot="footer" class="bcard-actions" role="group" aria-label="Actions for ${esc(card.story_id)}">
-        <dw-button variant="ghost" class="bmove" id="board-move-${esc(card.story_id)}" data-board-move>Move</dw-button>
-        <dw-button variant="ghost" class="bmove" id="board-park-${esc(card.story_id)}" data-board-park>Park</dw-button>
+        <dw-button variant="ghost" class="bmove" data-board-move>Move</dw-button>
+        <dw-button variant="ghost" class="bmove" data-board-park>Park</dw-button>
       </div>` : ""}
     </dw-card>`;
 }

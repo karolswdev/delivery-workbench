@@ -15,6 +15,8 @@ let semanticId = 0;
 const returnFocus = new Map();
 const liveAnnouncementKeys = new Map();
 const PROJECT_STORAGE_KEY = "delivery-workbench.selected-project";
+const DENSITY_STORAGE_KEY = "delivery-workbench.density";
+const DENSITIES = new Set(["comfortable", "compact"]);
 let projectInventory = null;
 let selectedProject = "";
 let projectReturnHash = "#/board";
@@ -22,6 +24,36 @@ let projectReturnHash = "#/board";
 function storedProject() {
   try { return localStorage.getItem(PROJECT_STORAGE_KEY) || ""; }
   catch (_err) { return ""; }
+}
+
+function storedDensity() {
+  try {
+    const value = localStorage.getItem(DENSITY_STORAGE_KEY) || "comfortable";
+    return DENSITIES.has(value) ? value : "comfortable";
+  } catch (_err) {
+    return "comfortable";
+  }
+}
+
+function applyDensity(value, persist = true) {
+  const density = DENSITIES.has(value) ? value : "comfortable";
+  document.documentElement.dataset.density = density;
+  const toggle = document.getElementById("density-toggle");
+  if (toggle) {
+    const compact = density === "compact";
+    toggle.textContent = compact ? "Compact" : "Comfortable";
+    toggle.setAttribute("aria-pressed", String(compact));
+    toggle.setAttribute("aria-label", compact
+      ? "Use comfortable density" : "Use compact density");
+  }
+  if (persist) {
+    try { localStorage.setItem(DENSITY_STORAGE_KEY, density); }
+    catch (_err) {
+      // A hardened browser may block storage. The visible setting still works
+      // for this page and never changes repository data.
+    }
+  }
+  return density;
 }
 
 function rememberProject(slug) {
@@ -78,12 +110,13 @@ function projectSelectorHtml(projects, unavailable = "") {
     <h1 id="project-selector-title">Choose a project</h1>
     ${explanation}
     <form id="project-selector-form">
-      <fieldset><legend>Available projects</legend>
+      <fieldset aria-describedby="project-selector-error"><legend>Available projects</legend>
         <div class="project-options">${projects.map((project) => `<label>
-          <input type="radio" name="project" value="${esc(project.slug)}"${project.slug === selectedProject ? " checked" : ""}>
+          <input type="radio" name="project" value="${esc(project.slug)}" aria-describedby="project-selector-error"${project.slug === selectedProject ? " checked" : ""}>
           <span><strong>${esc(project.slug)}</strong><small>${project.next_story ? `${esc(project.next_story.title)} is next` : "No next work is available"}</small></span>
         </label>`).join("")}</div>
       </fieldset>
+      <p id="project-selector-error" class="fielderr" role="alert" hidden>Choose a project before continuing.</p>
       <button class="primary" type="submit">Open this project</button>
     </form>
     <details><summary>Technical details</summary><p>The exact project slug is kept only in this browser. Choosing a project starts no work and changes no files.</p></details>
@@ -98,6 +131,9 @@ function wireProjectSelector(returnHash) {
     const choice = new FormData(form).get("project");
     if (!choice) {
       form.querySelector("fieldset")?.setAttribute("aria-invalid", "true");
+      form.querySelectorAll("input[name='project']").forEach((input) => input.setAttribute("aria-invalid", "true"));
+      const error = form.querySelector("#project-selector-error");
+      if (error) error.hidden = false;
       form.querySelector("input")?.focus();
       return;
     }
@@ -134,7 +170,8 @@ const FOCUS_IDENTITY_ATTRIBUTES = [
   "data-studio-technical", "data-plan-section", "data-run-act",
   "data-program-act", "data-bounded-read", "data-studio-scenario",
   "data-studio-node", "data-node-id", "data-adoption-mark",
-  "data-adoption-objection", "data-memory-open", "name", "href",
+  "data-adoption-objection", "data-memory-open", "data-board-create",
+  "data-board-move", "data-board-park", "name", "href",
 ];
 
 function esc(s) {
@@ -156,6 +193,14 @@ function focusSelector(element) {
     if (value !== null && value !== "") {
       return `${element.localName}[${attribute}="${selectorEscape(value)}"]`;
     }
+    if (value === "" && attribute.startsWith("data-board-")) {
+      const story = element.closest("[data-story]")?.getAttribute("data-story");
+      if (story) {
+        return `[data-story="${selectorEscape(story)}"] ${element.localName}[${attribute}]`;
+      }
+      const phase = element.getAttribute("data-phase");
+      return `${element.localName}[${attribute}]${phase !== null ? `[data-phase="${selectorEscape(phase)}"]` : ""}`;
+    }
   }
   return "";
 }
@@ -171,6 +216,15 @@ function captureAppFocus() {
   };
 }
 
+function focusElement(element) {
+  if (!(element instanceof Element)) return false;
+  const target = element.matches(FOCUSABLE_SELECTOR)
+    ? element : element.querySelector(FOCUSABLE_SELECTOR);
+  if (!target || typeof target.focus !== "function") return false;
+  target.focus({ preventScroll: true });
+  return document.activeElement === target || document.activeElement === element;
+}
+
 function restoreAppFocus(identity) {
   if (!identity) return false;
   let target = identity.selector
@@ -181,9 +235,7 @@ function restoreAppFocus(identity) {
     const candidate = focusable[identity.index];
     if (candidate?.localName === identity.tag) target = candidate;
   }
-  if (!target || typeof target.focus !== "function") return false;
-  target.focus({ preventScroll: true });
-  return document.activeElement === target;
+  return focusElement(target);
 }
 
 function rememberReturnFocus(key, element = document.activeElement) {
@@ -195,7 +247,8 @@ function restoreReturnFocus(key, fallback = "") {
   const selector = returnFocus.get(key) || fallback;
   returnFocus.delete(key);
   requestAnimationFrame(() => {
-    document.querySelector(selector)?.focus({ preventScroll: true });
+    const candidates = [...document.querySelectorAll(selector)];
+    focusElement(candidates.find((element) => element.offsetParent !== null) || candidates[0]);
   });
 }
 
@@ -261,6 +314,29 @@ function wireTechnicalFolds(root = app) {
   });
 }
 
+function looksCopyableIdentifier(value) {
+  const text = String(value || "").trim();
+  return text.length >= 24 && !/\s/.test(text)
+    && (/^[a-f0-9]{24,}$/i.test(text) || /(?:receipt|run|program|session|correlation|digest|hash|token)[-_:/]/i.test(text));
+}
+
+function enhanceCopyableIdentifiers(root = app) {
+  root.querySelectorAll("code").forEach((code) => {
+    if (code.closest("pre, button, a, .copyable-id") || !looksCopyableIdentifier(code.textContent)) return;
+    const wrapper = document.createElement("span");
+    wrapper.className = "copyable-id";
+    code.parentNode.insertBefore(wrapper, code);
+    wrapper.appendChild(code);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "copy-id-action";
+    button.dataset.copyText = code.textContent.trim();
+    button.setAttribute("aria-label", "Copy identifier");
+    button.textContent = "Copy";
+    wrapper.appendChild(button);
+  });
+}
+
 function enhanceSemantics(root = app) {
   semanticLabel(root, "section", "section-title");
   wireTechnicalFolds(root);
@@ -298,6 +374,7 @@ function enhanceSemantics(root = app) {
   });
   root.querySelectorAll(".guard:not([role]), .state.error:not([role])")
     .forEach((error) => error.setAttribute("role", "alert"));
+  enhanceCopyableIdentifiers(root);
 }
 
 function finishDynamicRender(identity = null) {
@@ -410,7 +487,11 @@ function updatePrimaryNavigation(hash) {
  * that capture at the window load event see fully rendered data. Not
  * for interactive use. */
 const SNAPSHOT_MODE = new URLSearchParams(location.search).has("snapshot");
+window.SNAPSHOT_MODE = SNAPSHOT_MODE;
 const SNAPSHOT_LIVE_STATE = new URLSearchParams(location.search).get("liveconnection");
+const SNAPSHOT_MEMORY_SCENARIO = new URLSearchParams(location.search).get("memoryscenario") || "";
+const SNAPSHOT_DENSITY = new URLSearchParams(location.search).get("density") || "";
+const SNAPSHOT_DESIGN_FOCUS = new URLSearchParams(location.search).has("designfocus");
 const LIVE_TECHNICAL_OPEN = new URLSearchParams(location.search).has("livetechnical");
 const SNAPSHOT_BOUNDED_FOCUS = new URLSearchParams(location.search).get("boundedfocus");
 const SNAPSHOT_BOUNDED_PREVIEW = new URLSearchParams(location.search).get("boundedpreview");
@@ -420,6 +501,7 @@ const ADOPTION_PROPOSAL_FILE = new URLSearchParams(location.search).get("proposa
 const ADOPTION_PROPOSAL_ID = new URLSearchParams(location.search).get("setuppreview") || "";
 
 function syncGet(path) {
+  if (!SNAPSHOT_MODE) throw new Error("Synchronous reads are limited to deterministic snapshots");
   const xhr = new XMLHttpRequest();
   xhr.open("GET", path, false);
   xhr.send();
@@ -495,6 +577,46 @@ function setCrumbs(parts) {
 
 function stateHtml(text, isError) {
   return `<div class="state${isError ? " error" : ""}" role="${isError ? "alert" : "status"}">${esc(text)}</div>`;
+}
+
+function routeSkeletonHtml(label = "Loading view") {
+  return `<section class="route-skeleton" aria-label="${esc(label)}">
+    <div class="route-skeleton-head"><dw-skeleton lines="2" variant="text"></dw-skeleton></div>
+    <div class="route-skeleton-grid">
+      <dw-skeleton lines="5" variant="card"></dw-skeleton>
+      <dw-skeleton lines="5" variant="card"></dw-skeleton>
+    </div>
+    <span class="visually-hidden" data-route-loading>Loading saved repository facts…</span>
+  </section>`;
+}
+
+function updateRouteSkeleton(message) {
+  const status = app.querySelector("[data-route-loading]");
+  if (status) status.textContent = message;
+}
+
+async function copyToClipboard(text, button) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const helper = document.createElement("textarea");
+      helper.value = text;
+      helper.setAttribute("readonly", "");
+      helper.className = "copy-helper";
+      document.body.appendChild(helper);
+      helper.select();
+      const copied = document.execCommand("copy");
+      helper.remove();
+      if (!copied) throw new Error("copy unavailable");
+    }
+    const previous = button.textContent;
+    button.textContent = "Copied";
+    announceLiveUpdate("copy-identifier", Date.now(), "Identifier copied.");
+    window.setTimeout(() => { if (button.isConnected) button.textContent = previous; }, 1600);
+  } catch (_err) {
+    announceLiveUpdate("copy-identifier-error", Date.now(), "Could not copy the identifier. Select it and copy it manually.");
+  }
 }
 
 function badge(text, cls) {
@@ -646,7 +768,7 @@ function wireStepControl(step) {
     };
     document.getElementById("step-cancel").addEventListener("click", close);
     wireDismissibleRegion(".step-confirmation", close, "step-confirm", "#step-review");
-    focusRegion(".step-confirmation");
+    if (!SNAPSHOT_MODE) focusRegion(".step-confirmation");
   };
   review.addEventListener("click", openConfirmation);
   if (SNAPSHOT_MODE && new URLSearchParams(location.search).has("confirmstep")) {

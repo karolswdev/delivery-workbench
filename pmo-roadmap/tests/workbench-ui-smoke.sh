@@ -15,7 +15,7 @@ CAPTURE_DIR="${DW_UI_CAPTURE_DIR:-}"
 CAPTURE_PATTERN="${DW_UI_CAPTURE_PATTERN:-}"
 FAST_A11Y="${DW_UI_FAST_A11Y:-}"
 REQUIRE_FIREFOX="${DW_UI_REQUIRE_FIREFOX:-0}"
-EXPECTED_RENDER_COUNT=304
+EXPECTED_RENDER_COUNT=352
 RENDER_DESKTOP_LIGHT=0
 RENDER_DESKTOP_DARK=0
 RENDER_MOBILE_LIGHT=0
@@ -51,38 +51,55 @@ fi
 # Renderer contract runs even when no browser is installed. It keeps the
 # recommendation separate from the deliberate act boundary: argv stays
 # tokenized, apply has only project+token, and prohibited states get no button.
-python3 - "$PMO_DIR/workbench/app.js" "$PMO_DIR/workbench/style.css" \
-  "$PMO_DIR/workbench/index.html" <<'PY' \
+python3 - "$PMO_DIR/workbench" <<'PY' \
   || fail "status-panel renderer contract failed"
 import sys
+from pathlib import Path
 
-app = open(sys.argv[1], encoding="utf-8").read()
-css = open(sys.argv[2], encoding="utf-8").read()
-index = open(sys.argv[3], encoding="utf-8").read()
-action = app[app.index("function statusActionHtml"):app.index("function stepArgvHtml")]
-controls = app[app.index("function stepControlHtml"):app.index("function statusPanel")]
-apply = app[app.index("async function applyReviewedStep"):app.index("function wireStepControl")]
-panel = app[app.index("function statusPanel"):app.index("/* ── mission control")]
-overview = app[app.index("async function viewOverview"):app.index("async function viewProject")]
-board = app[app.index("const BOARD_STATUSES"):app.index("/* ── structured editor")]
+workbench = Path(sys.argv[1])
+source = {path.name: path.read_text(encoding="utf-8") for path in workbench.glob("*.js")}
+app = "\n".join(source.values())
+css = (workbench / "style.css").read_text(encoding="utf-8")
+index = (workbench / "index.html").read_text(encoding="utf-8")
+core = source["core.js"]
+views = source["views.js"]
+board = source["board.js"]
+router = source["app.js"]
+orch = source["orchestration.js"]
+runs = source["runs.js"]
+studio_source = source["studio.js"]
+editor = source["editor.js"]
+interactions = source["interactions.js"]
+global_events = source["global-events.js"]
+memory = source["memory-panel.js"]
+action = core[core.index("function statusActionHtml"):core.index("function stepArgvHtml")]
+controls = core[core.index("function stepControlHtml"):core.index("async function applyReviewedStep")]
+apply = core[core.index("async function applyReviewedStep"):core.index("function wireStepControl")]
+panel = core[core.index("function statusPanel"):]
+overview = views[views.index("async function viewOverview"):views.index("async function viewProject")]
 board_wiring = board[board.index("function wireBoardMoves"):]
-router = app[app.index("/* ── router"):]
-preflight = app[app.index("function validateView"):app.index("function jsonView")]
-run = app[app.index("function runStateBadge"):app.index("/* ── optional Program / Workflow Studio")]
-program = app[app.index("/* ── autonomous program control room"):app.index("/* ── optional Program / Workflow Studio")]
-setup = app[app.index("delivery-shaped front door"):app.index("optional Program / Workflow Studio")]
-studio = app[app.index("optional Program / Workflow Studio"):app.index("/* ── router")]
-adoption = app[app.index("const adoptionReviewMarks"):app.index("const STATUS_VOCAB")]
-assert index.count('class="navlink"') == 5
-for label in ("Work", "Plan", "Delivery", "Live", "Health"):
+view_board = board[board.index("async function viewBoard"):]
+preflight = orch[orch.index("function validateView"):orch.index("function jsonView")]
+program_start = runs.index("/* ── autonomous program control room")
+run = runs[:program_start]
+program = runs[program_start:]
+studio_start = studio_source.index("optional Program / Workflow Studio")
+setup = studio_source[:studio_start]
+studio = studio_source[studio_start:]
+adoption = editor[editor.index("const adoptionReviewMarks"):editor.index("const STATUS_VOCAB")]
+assert index.count('class="navlink"') == 2
+assert 'class="navlink advanced-toggle"' in index
+for label in ("Work", "Health"):
     assert f">{label}</a>" in index, label
-assert "Browsing adds no authority" in index
-assert "browser-confirmed program action may use pre-granted delivery permission" in index
+for destination in ("plan-link", "delivery-link", "live-link"):
+    assert f'id="{destination}"' in index, destination
+assert "The browser adds no authority" in app
+assert "browser-confirmed program action may use pre-granted delivery permission" in app
 for token in ("project-switcher", "PROJECT_STORAGE_KEY", "viewProjectSelector",
               "viewUnavailableProject", "wireTechnicalFolds", "destinationNav"):
     assert token in index + app, token
 assert "projects.length > 1 && !selectedProject" in app
-assert "projects[0].slug" not in app[app.index("async function viewBoard"):app.index("const ADOPTION_TECHNICAL_LABEL")]
+assert "projects[0].slug" not in view_board
 assert "data-argv-index" in action and "manual act" in action
 assert "<button" not in action and "JSON.stringify" not in action
 for token in ("step-review", "step-confirm", "step-apply", "step-cancel",
@@ -102,7 +119,7 @@ assert '/api/delivery-setup' in overview and "Promise.all" in overview
 assert '/api/presentation/status' in overview
 assert 'presentationBody.data' in overview
 assert "else if (!parts.length) await viewBoard(selectedProject)" in router
-for token in ("boardOverviewStrip", "Needs attention", "Next step", "Phase lanes",
+for token in ("boardOverviewStrip", "Needs attention", "Stories", "Phase lanes",
               "openCreatePanel", "openMovePanel", "openPhasePanel",
               'kind: "create_story"', 'kind: "update_story_status"',
               '"pause_phase"', '"resume_phase"',
@@ -265,6 +282,31 @@ for token in (":focus-visible", ".skip-link", "overflow-x: clip",
               "@media (prefers-reduced-motion: reduce)",
               "@media (forced-colors: active)"):
     assert token in css, token
+# WLA-35-09: fast shell, shared motion, persisted density, recovery, and IDs.
+for token in ("routeSkeletonHtml", "updateRouteSkeleton", "presentationPromise", "projectsPromise"):
+    assert token in router, token
+assert "if (!SNAPSHOT_MODE)" in core
+assert 'xhr.open("GET", path, false)' in core  # deterministic snapshot path only
+for token in ('id="density-toggle"', 'aria-label="Use compact density"'):
+    assert token in index, token
+for token in ("DENSITY_STORAGE_KEY", "storedDensity", "applyDensity", "localStorage.setItem"):
+    assert token in core, token
+for token in ("--motion-short", "--motion-panel", "--motion-route", "--motion-ease",
+              ':root[data-density="compact"]', "--target-min"):
+    assert token in css, token
+assert "motionDuration" in interactions and "--motion-panel" in interactions
+reduced = css[css.index("@media (prefers-reduced-motion: reduce)"):]
+for token in ("animation: none !important", "transition-duration: 0s !important",
+              "transition-delay: 0s !important"):
+    assert token in reduced, token
+for token in ("disconnected", "retrying", "caught-up", "restored",
+              "response.status === 503", "Retry in a moment", "dw-stream-state"):
+    assert token in global_events, token
+for token in ("copyToClipboard", "dataset.copyText", "Identifier copied."):
+    assert token in core, token
+assert "copyableIdentifierHtml" in memory and "originating_receipt_ref" in memory
+assert "aria-describedby" in editor and "aria-invalid" in editor
+assert ".copyable-id" in css and ".slide-over[hidden]" in css
 PY
 
 FF=""
@@ -555,19 +597,8 @@ EOF
     wait "$ffpid" 2>/dev/null || true
     rm -rf "$profile"
     [ -s "$out" ] || fail "no $theme screenshot produced for $1"
-    # a data-bearing render is markedly larger than the empty shell
-    size=$(wc -c < "$out" | tr -d ' ')
-    [ "$size" -gt 20000 ] || fail "$1-$theme appears unrendered (only $size bytes)"
-    case "$1-$theme" in
-      *-desktop-light) RENDER_DESKTOP_LIGHT=$((RENDER_DESKTOP_LIGHT + 1)) ;;
-      *-desktop-dark) RENDER_DESKTOP_DARK=$((RENDER_DESKTOP_DARK + 1)) ;;
-      *-mobile-light) RENDER_MOBILE_LIGHT=$((RENDER_MOBILE_LIGHT + 1)) ;;
-      *-mobile-dark) RENDER_MOBILE_DARK=$((RENDER_MOBILE_DARK + 1)) ;;
-      *) fail "screenshot name must identify desktop or mobile viewport: $1-$theme" ;;
-    esac
     if [ -n "$CAPTURE_DIR" ] && [ -n "$CAPTURE_PATTERN" ]; then
-      # CAPTURE_PATTERN is deliberately an operator-supplied glob such as
-      # orchestration-run-*; quoting it would turn the capture filter literal.
+      # Preserve requested captures even when a later render assertion fails.
       # shellcheck disable=SC2254
       case "$1" in
         $CAPTURE_PATTERN)
@@ -576,6 +607,82 @@ EOF
           ;;
       esac
     fi
+    # A data-bearing render is normally markedly larger than the empty shell.
+    # PNG compression varies by Firefox build, so a smaller file must prove
+    # real visual detail instead of passing on byte count alone.
+    size=$(wc -c < "$out" | tr -d ' ')
+    if [ "$size" -le 20000 ]; then
+      /usr/bin/python3 - "$out" <<'PYPNG' \
+        || fail "$1-$theme appears unrendered (only $size bytes and no visual detail)"
+import struct
+import sys
+import zlib
+
+raw = open(sys.argv[1], "rb").read()
+assert raw.startswith(b"\x89PNG\r\n\x1a\n")
+pos = 8
+idat = bytearray()
+width = height = color_type = bit_depth = None
+while pos < len(raw):
+    length = struct.unpack(">I", raw[pos:pos + 4])[0]
+    kind = raw[pos + 4:pos + 8]
+    data = raw[pos + 8:pos + 8 + length]
+    pos += 12 + length
+    if kind == b"IHDR":
+        width, height, bit_depth, color_type = struct.unpack(">IIBB", data[:10])
+    elif kind == b"IDAT":
+        idat.extend(data)
+    elif kind == b"IEND":
+        break
+assert bit_depth == 8 and color_type in (2, 6)
+channels = 3 if color_type == 2 else 4
+stride = width * channels
+stream = zlib.decompress(bytes(idat))
+previous = bytearray(stride)
+colors = set()
+offset = 0
+for y in range(height):
+    filter_type = stream[offset]
+    offset += 1
+    encoded = stream[offset:offset + stride]
+    offset += stride
+    row = bytearray(stride)
+    for x, value in enumerate(encoded):
+        left = row[x - channels] if x >= channels else 0
+        up = previous[x]
+        upper_left = previous[x - channels] if x >= channels else 0
+        if filter_type == 0:
+            decoded = value
+        elif filter_type == 1:
+            decoded = value + left
+        elif filter_type == 2:
+            decoded = value + up
+        elif filter_type == 3:
+            decoded = value + ((left + up) // 2)
+        elif filter_type == 4:
+            estimate = left + up - upper_left
+            pa, pb, pc = abs(estimate - left), abs(estimate - up), abs(estimate - upper_left)
+            decoded = value + (left if pa <= pb and pa <= pc else up if pb <= pc else upper_left)
+        else:
+            raise AssertionError(f"unsupported PNG filter {filter_type}")
+        row[x] = decoded & 0xFF
+    if y % 4 == 0:
+        for x in range(0, width, 4):
+            start = x * channels
+            colors.add(bytes(row[start:start + 3]))
+            if len(colors) >= 32:
+                break
+    previous = row
+assert width > 0 and height > 0 and len(colors) >= 32
+PYPNG
+    fi
+    case "$1-$theme" in
+      *-desktop-light) RENDER_DESKTOP_LIGHT=$((RENDER_DESKTOP_LIGHT + 1)) ;;
+      *-desktop-dark) RENDER_DESKTOP_DARK=$((RENDER_DESKTOP_DARK + 1)) ;;
+      *-mobile-light) RENDER_MOBILE_LIGHT=$((RENDER_MOBILE_LIGHT + 1)) ;;
+      *-mobile-dark) RENDER_MOBILE_DARK=$((RENDER_MOBILE_DARK + 1)) ;;
+      *) fail "screenshot name must identify desktop or mobile viewport: $1-$theme" ;;
+    esac
   done
 }
 
@@ -796,6 +903,27 @@ for state in empty active awaiting-decision paused revoked cancelled complete; d
 done
 shot "live-stale-disconnected-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&livescenario=stale&liveconnection=stale#/live"
 shot "live-stale-disconnected-mobile" 390,844 "$BASE/?snapshot=1&project=sample&livescenario=stale&liveconnection=stale#/live"
+
+# WLA-35-09 dark-mode journeys: each call renders light and dark. Together
+# these cover the memory pane and decision timeline, its empty and error
+# states, Needs you, focus rings, status pills, skeletons, both densities,
+# and every global reconnect announcement at wide and 390px viewports.
+for state in rich empty error; do
+  shot "memory-$state-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&memoryscenario=$state#/board/sample"
+  shot "memory-$state-mobile" 390,844 "$BASE/?snapshot=1&project=sample&memoryscenario=$state#/board/sample"
+done
+shot "needs-you-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&needsyouopen=1#/board/sample"
+shot "needs-you-mobile" 390,844 "$BASE/?snapshot=1&project=sample&needsyouopen=1#/board/sample"
+shot "design-focus-desktop" 1440,900 "$BASE/?snapshot=1&designfocus=1#/design"
+shot "design-focus-mobile" 390,844 "$BASE/?snapshot=1&designfocus=1#/design"
+for state in disconnected retrying caught-up restored capacity; do
+  shot "global-$state-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&liveconnection=global-$state#/board/sample"
+  shot "global-$state-mobile" 390,844 "$BASE/?snapshot=1&project=sample&liveconnection=global-$state#/board/sample"
+done
+for density in comfortable compact; do
+  shot "density-$density-desktop" 1440,900 "$BASE/?snapshot=1&project=sample&density=$density#/board/sample"
+  shot "density-$density-mobile" 390,844 "$BASE/?snapshot=1&project=sample&density=$density#/board/sample"
+done
 
 # WLA-27-07 action journeys: focus the real canonical decision model, its
 # exact pure preview, and the structured stale refusal without applying an

@@ -541,12 +541,9 @@ function focusBoundedSnapshot() {
     if (center && target !== center && hero) hero.after(target);
     const header = live?.querySelector(".live-header");
     if (center && header) header.after(center);
-    const top = target.getBoundingClientRect().top + window.scrollY - 8;
-    window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+    window.scrollTo({ top: 0, behavior: "auto" });
   };
   focus();
-  requestAnimationFrame(() => requestAnimationFrame(focus));
-  setTimeout(focus, 100);
 }
 
 function liveDetailRoute() {

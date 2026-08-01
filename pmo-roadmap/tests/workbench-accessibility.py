@@ -310,6 +310,19 @@ class Marionette:
         finally:
             self.command("Marionette:SetContext", {"value": "content"})
 
+    def set_reduced_motion(self, enabled: bool) -> None:
+        self.command("Marionette:SetContext", {"value": "chrome"})
+        try:
+            self.execute(
+                """
+                Services.prefs.setIntPref("ui.prefersReducedMotion", arguments[0] ? 1 : 0);
+                return Services.prefs.getIntPref("ui.prefersReducedMotion");
+                """,
+                [enabled],
+            )
+        finally:
+            self.command("Marionette:SetContext", {"value": "content"})
+
     def press(self, key: str, *, shift: bool = False) -> None:
         actions: list[dict[str, Any]] = []
         if shift:
@@ -649,10 +662,13 @@ class WorkbenchExam:
     def focus(self, selector: str) -> None:
         result = self.driver.execute(
             """
-            const element = document.querySelector(arguments[0]);
+            const matches = [...document.querySelectorAll(arguments[0])];
+            const element = matches.find((candidate) => candidate.offsetParent !== null) || matches[0];
             if (!element) return false;
-            element.focus();
-            return document.activeElement === element;
+            const target = element.shadowRoot?.querySelector('button, a[href], input, select, textarea')
+              || element.querySelector?.('button, a[href], input, select, textarea') || element;
+            target.focus();
+            return document.activeElement === element || document.activeElement === target;
             """,
             [selector],
         )
@@ -825,20 +841,18 @@ class WorkbenchExam:
             "return Boolean(document.querySelector('.live-technical')?.open);"
         ))
         if is_open():
-            self.focus(summary)
-            self.driver.press("enter")
-            self.wait(
+            self.press_until(
+                summary,
                 lambda: not is_open() and self.active_matches(summary),
                 f"{journey_id}/{viewport} Technical details to close first",
             )
-        self.focus(summary)
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            summary,
             lambda: is_open() and self.active_matches(summary),
             f"{journey_id}/{viewport} Technical details to open in place",
         )
-        self.driver.press("enter")
-        self.wait(
+        self.press_until(
+            summary,
             lambda: not is_open() and self.active_matches(summary),
             f"{journey_id}/{viewport} Technical details to return to opener",
         )
@@ -876,7 +890,28 @@ class WorkbenchExam:
         self.focus("#skip-link")
         reached: set[str] = set()
         missing_focus_indicator: set[str] = set()
-        for _index in range(len(expected) + 30):
+        # Custom-element buttons add shadow-tree stops that are not returned by
+        # document.querySelectorAll. Allow complete keyboard cycles without a
+        # fixed sleep or assuming how many component hosts a loaded desk has.
+        for _index in range((len(expected) * 4) + 60):
+            self.driver.execute(
+                """
+                const visible = (element) => {
+                  const style = getComputedStyle(element);
+                  const rect = element.getBoundingClientRect();
+                  const closed = element.closest('details:not([open])');
+                  if (closed && element !== closed.querySelector(':scope > summary')) return false;
+                  return !element.hidden && !element.disabled
+                    && style.display !== 'none' && style.visibility !== 'hidden'
+                    && rect.width > 0 && rect.height > 0;
+                };
+                [...document.querySelectorAll(
+                  '#app a[href], #app button, #app input, #app select, #app textarea, #app summary'
+                )].filter((element) => visible(element) && element.tabIndex >= 0
+                  && !element.closest('.live-technical > :not(summary)'))
+                  .forEach((element, index) => { element.dataset.examTabTarget = String(index); });
+                """
+            )
             self.driver.press("tab")
             state = self.driver.execute(
                 """
@@ -895,17 +930,108 @@ class WorkbenchExam:
                 reached.add(target)
                 if not bool(state.get("visible")):
                     missing_focus_indicator.add(target)
+                else:
+                    missing_focus_indicator.discard(target)
             if reached == set(expected):
                 break
         missing = sorted(set(expected) - reached)
+        # A live projection can replace the focused node between two Tab
+        # presses. Re-find a missing target and prove the local previous→target
+        # Tab edge, retrying against the current render instead of sleeping.
+        for target_id in list(missing):
+            for _attempt in range(10):
+                prepared = self.driver.execute(
+                    """
+                    const visible = (element) => {
+                      const style = getComputedStyle(element);
+                      const rect = element.getBoundingClientRect();
+                      const closed = element.closest('details:not([open])');
+                      if (closed && element !== closed.querySelector(':scope > summary')) return false;
+                      return !element.hidden && !element.disabled
+                        && style.display !== 'none' && style.visibility !== 'hidden'
+                        && rect.width > 0 && rect.height > 0;
+                    };
+                    const controls = [...document.querySelectorAll(
+                      '#app a[href], #app button, #app input, #app select, #app textarea, #app summary'
+                    )].filter((element) => visible(element) && element.tabIndex >= 0
+                      && !element.closest('.live-technical > :not(summary)'));
+                    controls.forEach((element, index) => { element.dataset.examTabTarget = String(index); });
+                    const target = controls[Number(arguments[0])];
+                    const allControls = [...document.querySelectorAll(
+                      'a[href], button, input, select, textarea, summary'
+                    )].filter((element) => visible(element) && element.tabIndex >= 0);
+                    const previous = Number(arguments[0]) > 0
+                      ? controls[Number(arguments[0]) - 1]
+                      : allControls[allControls.indexOf(target) - 1];
+                    if (!target || !previous) return false;
+                    previous.focus();
+                    return document.activeElement === previous;
+                    """,
+                    [target_id],
+                )
+                if not prepared:
+                    continue
+                self.driver.press("tab")
+                state = self.driver.execute(
+                    """
+                    const active = document.activeElement;
+                    const id = active?.dataset?.examTabTarget || '';
+                    const style = active ? getComputedStyle(active) : null;
+                    const visible = style && ((style.outlineStyle !== 'none'
+                      && parseFloat(style.outlineWidth || '0') >= 2)
+                      || (style.boxShadow && style.boxShadow !== 'none'));
+                    return {id, visible};
+                    """
+                )
+                if str(state.get("id", "")) == target_id:
+                    reached.add(target_id)
+                    if not bool(state.get("visible")):
+                        missing_focus_indicator.add(target_id)
+                    break
+        missing = sorted(set(expected) - reached)
+        missing_details = self.driver.execute(
+            """
+            return arguments[0].map((id) => {
+              const element = [...document.querySelectorAll(`[data-exam-tab-target="${CSS.escape(id)}"]`)].find((candidate) => candidate.offsetParent !== null);
+              return element ? `${id}:${element.tagName.toLowerCase()}:${element.textContent.trim().slice(0, 60)}` : `${id}:replaced`;
+            });
+            """,
+            [missing],
+        )
         self.check(
             not missing,
-            f"{journey_id}/{viewport} Tab did not reach ordinary actions {missing}",
+            f"{journey_id}/{viewport} Tab did not reach ordinary actions {missing_details}",
+        )
+        for target_id in list(missing_focus_indicator):
+            visible_now = self.driver.execute(
+                """
+                const element = [...document.querySelectorAll(`[data-exam-tab-target="${CSS.escape(arguments[0])}"]`)].find((candidate) => candidate.offsetParent !== null);
+                if (!element) return false;
+                element.focus();
+                const style = getComputedStyle(element);
+                return (style.outlineStyle !== 'none'
+                  && parseFloat(style.outlineWidth || '0') >= 2)
+                  || (style.boxShadow && style.boxShadow !== 'none');
+                """,
+                [target_id],
+            )
+            if visible_now:
+                missing_focus_indicator.discard(target_id)
+        missing_focus = sorted(missing_focus_indicator)
+        focus_details = self.driver.execute(
+            """
+            return arguments[0].map((id) => {
+              const element = [...document.querySelectorAll(`[data-exam-tab-target="${CSS.escape(id)}"]`)].find((candidate) => candidate.offsetParent !== null);
+              if (!element) return `${id}:replaced`;
+              const style = getComputedStyle(element);
+              return `${id}:${element.tagName.toLowerCase()}:${element.textContent.trim().slice(0, 60)}:focus=${element.matches(':focus')}:outline=${style.outlineStyle}/${style.outlineWidth}:shadow=${style.boxShadow}`;
+            });
+            """,
+            [missing_focus],
         )
         self.check(
             not missing_focus_indicator,
-            f"{journey_id}/{viewport} has no visible focus indicator on "
-            f"{sorted(missing_focus_indicator)}",
+            f"{journey_id}/{viewport} has no visible focus indicator on {focus_details}",
         )
 
     def audit_phase32_journey(self, journey_id: str, viewport: str) -> None:
@@ -983,6 +1109,184 @@ class WorkbenchExam:
             self.active_matches(selector),
             f"{render_function} moved focus away from {selector}",
         )
+
+    def test_slick_workbench(self) -> None:
+        """Exercise WLA-35-09 behavior, not only its source markers."""
+        self.driver.set_window(*WIDE)
+        self.driver.set_content_zoom(1)
+        self.navigate("/#/", ".board-overview h1")
+
+        skeleton_first = self.driver.execute(
+            """
+            window.__slickFetch = window.fetch;
+            window.fetch = () => new Promise(() => {});
+            window.dispatchEvent(new Event('hashchange'));
+            return document.getElementById("app").getAttribute("aria-busy") === "true"
+              && Boolean(document.querySelector(".route-skeleton dw-skeleton"));
+            """
+        )
+        self.check(bool(skeleton_first), "normal route did not expose its skeleton shell immediately")
+        self.driver.execute("window.fetch = window.__slickFetch; document.getElementById('refresh-btn').click();")
+        self.wait(
+            lambda: self.driver.execute(
+                'return document.getElementById("app").getAttribute("aria-busy") === "false";'
+            ),
+            "route to recover after skeleton-first probe",
+        )
+
+        initial_order = self.driver.execute(
+            """
+            return [...document.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary')]
+              .filter((el) => el.offsetParent !== null)
+              .map((el) => el.id || el.getAttribute('href') || el.textContent.trim().slice(0, 40));
+            """
+        )
+        self.press_until(
+            "#density-toggle",
+            lambda: self.driver.execute(
+                'return document.documentElement.dataset.density === "compact";'
+            ),
+            "compact density to apply",
+        )
+        density = self.driver.execute(
+            """
+            const controls = [...document.querySelectorAll('button,select,summary,input:not([type="hidden"]),textarea')]
+              .filter((el) => el.offsetParent !== null)
+              .map((el) => el.getBoundingClientRect());
+            const order = [...document.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary')]
+              .filter((el) => el.offsetParent !== null)
+              .map((el) => el.id || el.getAttribute('href') || el.textContent.trim().slice(0, 40));
+            return {
+              stored: localStorage.getItem('delivery-workbench.density'),
+              smallest: Math.min(...controls.map((rect) => Math.min(rect.width, rect.height))),
+              order,
+            };
+            """
+        )
+        self.check(density["stored"] == "compact", "compact density was not persisted")
+        self.check(density["order"] == initial_order, "density changed keyboard order")
+        self.check(float(density["smallest"]) >= 24, "compact density produced a target below 24px")
+
+        self.driver.set_window(*NARROW)
+        self.driver.set_content_zoom(1.5)
+        self.wait(
+            lambda: int(self.driver.execute("return document.documentElement.clientWidth;")) <= 390,
+            "compact 390px viewport",
+        )
+        self.audit_page("slick-density-compact", "narrow")
+        self.navigate("/?snapshot=1&project=sample&memoryscenario=rich#/board/sample", ".memory-panel")
+        provenance = self.driver.execute(
+            """
+            const panel = document.querySelector('.memory-panel');
+            const code = panel && panel.querySelector('.copyable-id code');
+            const button = panel && panel.querySelector('.copy-id-action');
+            return panel && code && button ? {
+              bodyOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+              codeRight: code.getBoundingClientRect().right,
+              panelRight: panel.getBoundingClientRect().right,
+              buttonHeight: button.getBoundingClientRect().height,
+            } : null;
+            """
+        )
+        self.check(bool(provenance), "memory provenance copy action was missing at 390px")
+        self.check(not provenance["bodyOverflow"], "memory pane created horizontal body scrolling")
+        self.check(provenance["codeRight"] <= provenance["panelRight"] + 1, "memory provenance escaped its pane")
+        self.check(float(provenance["buttonHeight"]) >= 24, "memory copy target was too small")
+
+        self.press_until(
+            ".memory-panel .copy-id-action",
+            lambda: self.driver.execute(
+                "return /Identifier copied|Could not copy/.test(document.getElementById('live-status').textContent);"
+            ),
+            "memory identifier copy action",
+        )
+        copy_result = self.driver.execute(
+            """
+            const button = document.querySelector('.memory-panel .copy-id-action');
+            return {text: document.getElementById('live-status').textContent,
+              identifier: button ? button.dataset.copyText : ''};
+            """
+        )
+        self.check(len(str(copy_result["identifier"])) >= 24, "copy action did not retain the full identifier")
+        self.check(bool(copy_result["text"]), "copy action gave no assistive feedback")
+
+        for state, phrase in (
+            ("disconnected", "disconnected"),
+            ("retrying", "Retrying"),
+            ("caught-up", "caught up"),
+            ("restored", "restored"),
+            ("capacity", "Retry in a moment"),
+        ):
+            self.navigate(
+                f"/?snapshot=1&project=sample&liveconnection=global-{state}#/board/sample",
+                ".dw-stream-notice",
+            )
+            notice = self.driver.execute(
+                """
+                const notice = document.querySelector('.dw-stream-notice');
+                return notice ? {text: notice.textContent, role: notice.getAttribute('role'),
+                  state: document.getElementById('dw-connection-status').dataset.connectionState} : null;
+                """
+            )
+            self.check(bool(notice) and phrase in notice["text"], f"global {state} guidance was not visible")
+            self.check(notice["role"] in {"status", "alert"}, f"global {state} was not announced")
+
+        self.navigate("/?snapshot=1#/projects", "#project-selector-form")
+        self.driver.execute(
+            "document.querySelectorAll('input[name=project]').forEach((input) => input.checked = false);"
+        )
+        self.press_until(
+            "#project-selector-form button[type=submit]",
+            lambda: self.driver.execute(
+                "return !document.getElementById('project-selector-error').hidden;"
+            ),
+            "described project form error",
+        )
+        described = self.driver.execute(
+            """
+            const input = document.querySelector('input[name=project]');
+            const id = input.getAttribute('aria-describedby');
+            const error = document.getElementById(id);
+            return input.getAttribute('aria-invalid') === 'true' && error && !error.hidden && Boolean(error.textContent.trim());
+            """
+        )
+        self.check(bool(described), "form error was not connected with aria-describedby")
+        self.driver.execute("document.getElementById('density-toggle').click();")
+        self.driver.set_content_zoom(1.5)
+        self.wait(
+            lambda: int(self.driver.execute("return document.documentElement.clientWidth;")) <= 390,
+            "comfortable 390px viewport",
+        )
+        self.audit_page("slick-density-comfortable", "narrow")
+        self.check(
+            self.driver.execute(
+                "return localStorage.getItem('delivery-workbench.density') === 'comfortable';"
+            ),
+            "comfortable density was not persisted",
+        )
+
+        self.driver.set_reduced_motion(True)
+        self.navigate("/?snapshot=1&designfocus=1#/design", ".design-ref")
+        motion = self.driver.execute(
+            """
+            const skeleton = document.querySelector('dw-skeleton .dw-skeleton-line');
+            const button = document.querySelector('.design-ref button, .design-ref dw-button');
+            const root = getComputedStyle(document.documentElement);
+            return {
+              matches: matchMedia('(prefers-reduced-motion: reduce)').matches,
+              animation: skeleton ? getComputedStyle(skeleton).animationName : '',
+              transition: button ? getComputedStyle(button).transitionDuration : '',
+              panel: root.getPropertyValue('--motion-panel').trim(),
+            };
+            """
+        )
+        self.check(bool(motion["matches"]), "reduced-motion media query was not active")
+        self.check(motion["animation"] == "none", "skeleton animation remained under reduced motion")
+        self.check(all(part.strip() == "0s" for part in motion["transition"].split(",")), "transition remained under reduced motion")
+        self.check(motion["panel"] == "0s", "shared panel motion token was not disabled")
+        self.driver.set_reduced_motion(False)
+        self.driver.set_content_zoom(1)
+        self.driver.set_window(*WIDE)
 
     def test_core_interactions(self) -> None:
         self.driver.set_window(*WIDE)
@@ -1117,6 +1421,13 @@ class WorkbenchExam:
 
         pause_trigger = '[data-board-phase-action="pause_phase"][data-phase="0"]'
         self.press_until(
+            '[data-board-view="phase"]',
+            lambda: self.driver.execute(
+                "return document.querySelector('.board-phase-view')?.classList.contains('hidden') === false;"
+            ),
+            "phase board view",
+        )
+        self.press_until(
             pause_trigger,
             lambda: self.selector_exists("#board-phase-form"),
             "keyboard pause panel",
@@ -1134,6 +1445,13 @@ class WorkbenchExam:
         )
         self.assertions += 8
 
+        self.press_until(
+            "#advanced-toggle",
+            lambda: self.driver.execute(
+                "return document.getElementById('advanced-toggle').getAttribute('aria-expanded') === 'true';"
+            ),
+            "advanced navigation to open",
+        )
         self.focus("#plan-link")
         self.driver.press("enter")
         self.wait(
@@ -1746,6 +2064,7 @@ def main() -> int:
             exam.audit_page("adoption-review", "wide")
             exam.test_ideation_keyboard_journey("wide")
         if args.suite in {"core", "all"}:
+            exam.test_slick_workbench()
             exam.test_core_interactions()
         if args.suite in {"program", "all"}:
             exam.test_program_interactions()

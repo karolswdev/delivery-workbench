@@ -815,8 +815,14 @@ async function viewAdoptionReview() {
 const STATUS_VOCAB = ["backlog", "ready", "in-progress", "blocked", "on-hold", "done"];
 
 function field(label, inner, err) {
-  return `<label><b>${esc(label)}</b>${inner}
-    <span class="fielderr" data-err="${esc(label)}">${err ? esc(err) : ""}</span></label>`;
+  const fieldId = `edit-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+  const errorId = `${fieldId}-error`;
+  const describedControl = inner.replace(
+    /^<(input|select|textarea)\b/,
+    `<$1 id="${fieldId}" aria-describedby="${errorId}"${err ? ' aria-invalid="true"' : ""}`,
+  );
+  return `<label for="${fieldId}"><b>${esc(label)}</b>${describedControl}
+    <span id="${errorId}" class="fielderr" data-err="${esc(label)}">${err ? esc(err) : ""}</span></label>`;
 }
 
 function selectHtml(name, options, selected) {

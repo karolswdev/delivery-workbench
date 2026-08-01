@@ -78,6 +78,11 @@ window.DW = window.DW || {};
       || item.record_hash || item.source_ref || "Source unavailable";
   }
 
+  function copyableIdentifierHtml(value, label = "identifier") {
+    const text = String(value || "Source unavailable");
+    return `<span class="copyable-id"><code title="${esc(text)}">${esc(text)}</code><button type="button" class="copy-id-action" data-copy-text="${esc(text)}" aria-label="Copy ${esc(label)}">Copy</button></span>`;
+  }
+
   function technicalItem(item) {
     const { _audiences, ...saved } = item;
     return saved;
@@ -176,7 +181,8 @@ window.DW = window.DW || {};
       this._panel.setAttribute("aria-hidden", "false");
       this._render();
       requestAnimationFrame(() => this._panel.querySelector(".memory-close")?.focus());
-      this._load();
+      if (window.SNAPSHOT_MODE && SNAPSHOT_MEMORY_SCENARIO) this._loadSnapshot(SNAPSHOT_MEMORY_SCENARIO);
+      else this._load();
     }
 
     close() {
@@ -235,6 +241,47 @@ window.DW = window.DW || {};
         event.preventDefault();
         this.close();
       });
+    }
+
+    _loadSnapshot(scenario) {
+      this._loading = false;
+      if (scenario === "error") {
+        this._error = "The saved memory service is unavailable. Retry when the repository service is ready.";
+        this._document = null;
+        this._render();
+        return;
+      }
+      this._error = "";
+      const groups = {
+        recalled: [], "used-as-basis": [], "written-back": [], superseded: [], excluded: [],
+      };
+      const decisions = [];
+      if (scenario === "rich") {
+        const recordHash = "9c7d4e8f1029384756abcdef0123456789abcdef0123456789abcdef01234567";
+        const receipt = "receipt-run-2026-08-01-9c7d4e8f1029384756abcdef0123456789abcdef";
+        groups.recalled.push({
+          recall_id: "recall-fixture-001", source_kind: "lesson", record_hash: recordHash,
+          summary: "A prior delivery found that narrow layouts need bounded provenance.",
+          confidence: "confirmed", match_reasons: ["story term overlap", "shared file path"],
+          ledger_coordinates: { receipt_path: `pm/knowledge/earned/${receipt}.json` },
+          memory_state: "confirmed", audience: "implementer",
+        });
+        groups["used-as-basis"].push({ ...groups.recalled[0], audience: "verifier" });
+        decisions.push({
+          event_id: "event-fixture-001", decision_id: "decision-fixture-001",
+          decision_kind: "quality gate", outcome: "continue with bounded layout",
+          basis_type: "mechanical", reason_code: "viewport-contract-met",
+          rule_ref: "workbench-no-horizontal-overflow", score_ref: "",
+          memory_refs: ["recall-fixture-001"], dissent_refs: [],
+          originating_receipt_ref: receipt, resulting_ledger_event: receipt,
+          origin_kind: "run", origin: "run-fixture-memory-glass",
+          ledger_coordinates: { result_seq: 7 },
+        });
+      }
+      this._reconcileDocument({
+        kind: "delivery-workbench-memory-view", schema_version: 1, status: "ok", groups, decisions,
+      });
+      this._render();
     }
 
     async _load() {
@@ -304,7 +351,7 @@ window.DW = window.DW || {};
           <div>
             <span class="memory-eyebrow">${esc(this._kind === "program" ? "Multi-phase program" : "Bounded run")}</span>
             <h2 id="memory-panel-title">What the agent could know</h2>
-            <code>${esc(this._id)}</code>
+            ${copyableIdentifierHtml(this._id, this._kind === "program" ? "program identifier" : "run identifier")}
           </div>
           <button type="button" class="memory-close" aria-label="Close memory pane">Close</button>
         </div>
@@ -434,7 +481,8 @@ window.DW = window.DW || {};
               <dl><div><dt>Reason code</dt><dd><code>${esc(decision.reason_code)}</code></dd></div>
               <div><dt>Rule or score</dt><dd><code>${esc(decision.rule_ref || decision.score_ref)}</code></dd></div>
               <div><dt>Recalled memory</dt><dd>${esc(decision.memory_refs.length ? decision.memory_refs.join(", ") : "None referenced")}</dd></div>
-              <div><dt>Dissent</dt><dd>${esc(decision.dissent_refs.length ? decision.dissent_refs.join(", ") : "None recorded")}</dd></div></dl>
+              <div><dt>Dissent</dt><dd>${esc(decision.dissent_refs.length ? decision.dissent_refs.join(", ") : "None recorded")}</dd></div>
+              <div><dt>Saved record</dt><dd>${copyableIdentifierHtml(origin, "saved record identifier")}</dd></div></dl>
               <a class="decision-origin-link" href="${sourceRoute}" data-source-ref="${esc(origin)}">Open saved source</a>
             </div>` : ""}
           </li>`;
@@ -473,7 +521,7 @@ window.DW = window.DW || {};
         <p class="memory-factual-summary">${esc(factualSummary(item, group))}</p>
         <dl class="memory-card-facts">
           <div><dt>Why recalled</dt><dd><ul>${reasons.map((reason) => `<li>${esc(plainLabel(reason))}</li>`).join("")}</ul></dd></div>
-          <div><dt>Source</dt><dd><code>${esc(sourceText(item))}</code></dd></div>
+          <div><dt>Source</dt><dd>${copyableIdentifierHtml(sourceText(item), "source identifier")}</dd></div>
           <div><dt>Supersession</dt><dd>${esc(supersessionText(item))}</dd></div>
           ${audiences.length ? `<div><dt>Available to</dt><dd>${esc(audiences.map(plainLabel).join(", "))}</dd></div>` : ""}
         </dl>
@@ -486,7 +534,7 @@ window.DW = window.DW || {};
         <div class="memory-section-head"><div><span>Not sent to the agent</span><h3 id="memory-excluded-title">Excluded records</h3></div><dw-badge count="${esc(items.length)}"></dw-badge></div>
         <div class="memory-exclusion-list">${items.map((item) => `<article>
           <div><strong>${esc(capital(item.source_kind || "record"))}</strong><span>${esc(plainLabel(item.reason || "not selected"))}</span></div>
-          <code>${esc(item.source_ref || "Source unavailable")}</code>
+          ${copyableIdentifierHtml(item.source_ref || "Source unavailable", "source identifier")}
           <dw-fold label="Technical details"><pre>${esc(JSON.stringify(technicalItem(item), null, 2))}</pre></dw-fold>
         </article>`).join("")}</div>
       </section>`;
@@ -524,6 +572,15 @@ window.DW = window.DW || {};
     panel().open(kind, id, opener);
   }
 
+  function openMemorySnapshot() {
+    if (!window.SNAPSHOT_MODE || !SNAPSHOT_MEMORY_SCENARIO) return;
+    panel().open(
+      "run",
+      "run-memory-glass-9c7d4e8f1029384756abcdef0123456789abcdef",
+      document.querySelector("h1") || app,
+    );
+  }
+
   document.addEventListener("click", (event) => {
     const trigger = event.target.closest?.("[data-memory-open]");
     if (!trigger || trigger.closest(".cp-overlay")) return;
@@ -540,4 +597,5 @@ window.DW = window.DW || {};
 
   window.DW.MemoryPanel = MemoryPanel;
   window.DW.openMemoryPanel = openMemoryPanel;
+  window.DW.openMemorySnapshot = openMemorySnapshot;
 })();

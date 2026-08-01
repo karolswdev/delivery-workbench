@@ -25,6 +25,11 @@ INDEX_PATH = ROOT / "pmo-roadmap" / "workbench" / "index.html"
 APP_DIR = ROOT / "pmo-roadmap" / "workbench"
 CSS_PATH = ROOT / "pmo-roadmap" / "workbench" / "style.css"
 MEMORY_PATH = ROOT / "pmo-roadmap" / "workbench" / "memory-panel.js"
+CORE_PATH = ROOT / "pmo-roadmap" / "workbench" / "core.js"
+ROUTER_PATH = ROOT / "pmo-roadmap" / "workbench" / "app.js"
+INTERACTIONS_PATH = ROOT / "pmo-roadmap" / "workbench" / "interactions.js"
+GLOBAL_EVENTS_PATH = ROOT / "pmo-roadmap" / "workbench" / "global-events.js"
+EDITOR_PATH = ROOT / "pmo-roadmap" / "workbench" / "editor.js"
 DOC_PATH = ROOT / "docs" / "accessibility.md"
 
 REQUIRED_JOURNEY_FIELDS = {
@@ -311,6 +316,42 @@ def validate_memory_panel() -> list[str]:
     return issues
 
 
+def validate_slick_workbench() -> list[str]:
+    """Pin the WLA-35-09 speed, motion, density, and recovery contracts."""
+    index = INDEX_PATH.read_text(encoding="utf-8")
+    css = CSS_PATH.read_text(encoding="utf-8")
+    core = CORE_PATH.read_text(encoding="utf-8")
+    router = ROUTER_PATH.read_text(encoding="utf-8")
+    interactions = INTERACTIONS_PATH.read_text(encoding="utf-8")
+    events = GLOBAL_EVENTS_PATH.read_text(encoding="utf-8")
+    memory = MEMORY_PATH.read_text(encoding="utf-8")
+    editor = EDITOR_PATH.read_text(encoding="utf-8")
+    browser = BROWSER_PATH.read_text(encoding="utf-8")
+    checks = {
+        "slick-shell-skeleton": "route-skeleton" in index and "routeSkeletonHtml" in router,
+        "slick-incremental-route": "updateRouteSkeleton" in router and "Promise" in router,
+        "slick-sync-snapshot-guard": "if (!SNAPSHOT_MODE)" in core and 'xhr.open("GET", path, false)' in core,
+        "slick-density-control": 'id="density-toggle"' in index and "applyDensity" in core,
+        "slick-density-persistence": "DENSITY_STORAGE_KEY" in core and "localStorage.setItem" in core and "test_slick_workbench" in browser,
+        "slick-density-modes": ':root[data-density="compact"]' in css and '"comfortable"' in core,
+        "slick-density-targets": "--target-min" in css and "min-block-size: var(--target-min)" in css,
+        "slick-motion-tokens": all(token in css for token in ("--motion-short", "--motion-panel", "--motion-route", "--motion-ease")),
+        "slick-motion-manager": "motionDuration" in interactions and "--motion-panel" in interactions,
+        "slick-reduced-motion": "animation: none !important" in css and "transition-duration: 0s !important" in css and "set_reduced_motion" in browser,
+        "slick-reconnect-states": all(state in events for state in ("disconnected", "retrying", "caught-up", "restored")),
+        "slick-reconnect-announcement": "announceLiveUpdate" in events and 'new CustomEvent("dw-stream-state"' in events,
+        "slick-subscriber-cap": "response.status === 503" in events and "Retry in a moment" in events,
+        "slick-copy-action": "dataset.copyText" in core and "copyToClipboard" in core,
+        "slick-memory-copy": "copyableIdentifierHtml" in memory and "originating_receipt_ref" in memory,
+        "slick-copy-feedback": "Identifier copied." in core and "Could not copy" in core,
+        "slick-form-description": "aria-describedby" in editor and "aria-invalid" in editor,
+        "slick-project-error-description": 'aria-describedby="project-selector-error"' in core,
+        "slick-bounded-identifiers": ".copyable-id" in css and "overflow-wrap: anywhere" in css,
+        "slick-no-body-overflow": "overflow-x: clip" in css and "max-width: 100%" in css,
+    }
+    return [f"{name}-missing" for name, passed in checks.items() if not passed]
+
+
 def planted_red_cases(
     manifest: dict[str, Any],
     journey_contract: dict[str, Any],
@@ -361,6 +402,7 @@ def main() -> int:
     issues = validate(manifest, journey_contract, states_contract)
     issues.extend(validate_sources(expected_ids))
     issues.extend(validate_memory_panel())
+    issues.extend(validate_slick_workbench())
     issues.extend(
         f"red-case-failed:{item}"
         for item in planted_red_cases(manifest, journey_contract, states_contract)
@@ -372,7 +414,7 @@ def main() -> int:
     print(
         "workbench-accessibility-contract.py: ok "
         f"({len(expected_ids)} journeys, 2 viewports, 45 memory-pane checks, "
-        "keyboard/focus/semantics/manual evidence)"
+        "20 slick-workbench checks, keyboard/focus/semantics/manual evidence)"
     )
     return 0
 

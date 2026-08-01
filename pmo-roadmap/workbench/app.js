@@ -7,17 +7,29 @@
 
 async function route({ focusMain = false } = {}) {
   const routeFocus = focusMain ? null : captureAppFocus();
+  const hash = decodeURIComponent(location.hash.replace(/^#/, "")) || "/";
+  const parts = hash.split("/").filter(Boolean);
   stopMcPoll();
   stopRunLive();
   stopProgramLive();
   app.setAttribute("aria-busy", "true");
-  app.classList.remove("board-action-snapshot");
-  app.innerHTML = stateHtml("Loading…");
-  const hash = decodeURIComponent(location.hash.replace(/^#/, "")) || "/";
-  const parts = hash.split("/").filter(Boolean);
+  app.classList.remove("board-action-snapshot", "route-ready");
+  app.innerHTML = routeSkeletonHtml(`Loading ${parts[0] || "work"}`);
   try {
-    await loadPresentationCatalog();
-    const projects = await loadProjects();
+    let projects;
+    if (SNAPSHOT_MODE) {
+      // Preserve the deterministic screenshot path: each synchronous read
+      // completes before the next starts, matching the load-event harness.
+      await loadPresentationCatalog();
+      projects = await loadProjects();
+    } else {
+      const presentationPromise = loadPresentationCatalog();
+      const projectsPromise = loadProjects();
+      await presentationPromise;
+      updateRouteSkeleton("Presentation ready. Loading project facts…");
+      projects = await projectsPromise;
+      updateRouteSkeleton("Project facts ready. Opening view…");
+    }
     const requestedProject = new URLSearchParams(location.search).get("project")
       || routeProject(parts);
     let blockedByProjectChoice = false;
@@ -68,10 +80,15 @@ async function route({ focusMain = false } = {}) {
     else if (parts[0] === "design") { app.innerHTML = window.DW.designReferencePage(); }
     else handled = false;
     if (!handled) app.innerHTML = stateHtml(`Unknown view: ${hash}`, true);
+    else if (SNAPSHOT_MODE && SNAPSHOT_MEMORY_SCENARIO) window.DW.openMemorySnapshot();
   } catch (err) {
     app.innerHTML = stateHtml(err.message, true);
   } finally {
     enhanceSemantics(app);
+    app.classList.add("route-ready");
+    if (SNAPSHOT_MODE && SNAPSHOT_DESIGN_FOCUS && parts[0] === "design") {
+      app.querySelector("button, dw-button")?.focus();
+    }
     updatePrimaryNavigation(hash);
     announceRoute();
     app.setAttribute("aria-busy", "false");
@@ -95,6 +112,16 @@ document.getElementById("skip-link").addEventListener("click", () => {
   target.scrollIntoView({ block: "start" });
 });
 document.getElementById("refresh-btn").addEventListener("click", () => route());
+document.getElementById("density-toggle").addEventListener("click", () => {
+  const current = document.documentElement.dataset.density || "comfortable";
+  applyDensity(current === "compact" ? "comfortable" : "compact");
+});
+document.addEventListener("click", (event) => {
+  const copy = event.target.closest?.("[data-copy-text]");
+  if (!copy) return;
+  event.preventDefault();
+  copyToClipboard(copy.dataset.copyText || "", copy);
+});
 document.getElementById("project-switcher").addEventListener("click", () => {
   projectReturnHash = location.hash && location.hash !== "#/projects"
     ? location.hash : `#/board/${encodeURIComponent(selectedProject)}`;
@@ -149,6 +176,7 @@ window.addEventListener("hashchange", () => route({ focusMain: true }));
   });
 })();
 
+applyDensity(SNAPSHOT_MODE && DENSITIES.has(SNAPSHOT_DENSITY) ? SNAPSHOT_DENSITY : storedDensity(), false);
 api("/api/context").then((body) => {
   footRoot.textContent = body.data.root;
 }).catch(() => {});

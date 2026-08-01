@@ -14,8 +14,15 @@
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  /** Resolve a transition duration respecting reduced-motion. */
-  function dur(ms) { return prefersReducedMotion() ? 0 : ms; }
+  /** Resolve a shared CSS duration token while respecting reduced motion. */
+  function motionDuration(token, fallback) {
+    if (prefersReducedMotion()) return 0;
+    var raw = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    if (!raw) return fallback;
+    if (raw.endsWith("ms")) return Number.parseFloat(raw);
+    if (raw.endsWith("s")) return Number.parseFloat(raw) * 1000;
+    return fallback;
+  }
 
   /** Return a promise that resolves after a CSS transition/animation finishes. */
   function afterTransition(el, ms) {
@@ -580,7 +587,7 @@
    * @returns {Promise<void>}
    */
   TransitionManager.prototype.slideIn = function (element, direction) {
-    var ms = dur(180);
+    var ms = motionDuration("--motion-panel", 180);
     var axis = direction === "bottom" ? "translateY" : "translateX";
     var sign = direction === "left" ? "-100%" : "100%";
 
@@ -589,7 +596,7 @@
     element.hidden = false;
     /* Force reflow so the start state is painted. */
     void element.offsetHeight;
-    element.style.transition = "transform " + ms + "ms ease-out, opacity " + ms + "ms ease-out";
+    element.style.transition = "transform " + ms + "ms var(--motion-ease), opacity " + ms + "ms var(--motion-ease)";
     element.style.transform = "translate(0, 0)";
     element.style.opacity = "1";
 
@@ -606,11 +613,11 @@
    * @returns {Promise<void>}
    */
   TransitionManager.prototype.slideOut = function (element, direction) {
-    var ms = dur(150);
+    var ms = motionDuration("--motion-short", 150);
     var axis = direction === "bottom" ? "translateY" : "translateX";
     var sign = direction === "left" ? "-100%" : "100%";
 
-    element.style.transition = "transform " + ms + "ms ease-out, opacity " + ms + "ms ease-out";
+    element.style.transition = "transform " + ms + "ms var(--motion-ease), opacity " + ms + "ms var(--motion-ease)";
     element.style.transform = axis + "(" + sign + ")";
     element.style.opacity = "0";
 
@@ -628,11 +635,11 @@
    * @returns {Promise<void>}
    */
   TransitionManager.prototype.fadeIn = function (element) {
-    var ms = dur(180);
+    var ms = motionDuration("--motion-panel", 180);
     element.style.opacity = "0";
     element.hidden = false;
     void element.offsetHeight;
-    element.style.transition = "opacity " + ms + "ms ease-out";
+    element.style.transition = "opacity " + ms + "ms var(--motion-ease)";
     element.style.opacity = "1";
 
     return afterTransition(element, ms).then(function () {
@@ -646,8 +653,8 @@
    * @returns {Promise<void>}
    */
   TransitionManager.prototype.fadeOut = function (element) {
-    var ms = dur(150);
-    element.style.transition = "opacity " + ms + "ms ease-out";
+    var ms = motionDuration("--motion-short", 150);
+    element.style.transition = "opacity " + ms + "ms var(--motion-ease)";
     element.style.opacity = "0";
 
     return afterTransition(element, ms).then(function () {
@@ -665,7 +672,7 @@
    * @returns {Promise<void>}
    */
   TransitionManager.prototype.cardMove = function (element, fromRect, toRect) {
-    var ms = dur(200);
+    var ms = motionDuration("--motion-route", 200);
     var dx = fromRect.left - toRect.left;
     var dy = fromRect.top - toRect.top;
     var sx = fromRect.width / (toRect.width || 1);
@@ -674,7 +681,7 @@
     element.style.transform = "translate(" + dx + "px, " + dy + "px) scale(" + sx + ", " + sy + ")";
     element.style.transformOrigin = "0 0";
     void element.offsetHeight;
-    element.style.transition = "transform " + ms + "ms ease-out";
+    element.style.transition = "transform " + ms + "ms var(--motion-ease)";
     element.style.transform = "translate(0, 0) scale(1, 1)";
 
     return afterTransition(element, ms).then(function () {
@@ -690,12 +697,12 @@
    * @returns {Promise<void>}
    */
   TransitionManager.prototype.collapse = function (element) {
-    var ms = dur(180);
+    var ms = motionDuration("--motion-panel", 180);
     var h = element.scrollHeight;
     element.style.height = h + "px";
     element.style.overflow = "hidden";
     void element.offsetHeight;
-    element.style.transition = "height " + ms + "ms ease-out, opacity " + ms + "ms ease-out";
+    element.style.transition = "height " + ms + "ms var(--motion-ease), opacity " + ms + "ms var(--motion-ease)";
     element.style.height = "0";
     element.style.opacity = "0";
 
@@ -714,14 +721,14 @@
    * @returns {Promise<void>}
    */
   TransitionManager.prototype.expand = function (element) {
-    var ms = dur(180);
+    var ms = motionDuration("--motion-panel", 180);
     element.hidden = false;
     element.style.height = "0";
     element.style.overflow = "hidden";
     element.style.opacity = "0";
     void element.offsetHeight;
     var targetH = element.scrollHeight;
-    element.style.transition = "height " + ms + "ms ease-out, opacity " + ms + "ms ease-out";
+    element.style.transition = "height " + ms + "ms var(--motion-ease), opacity " + ms + "ms var(--motion-ease)";
     element.style.height = targetH + "px";
     element.style.opacity = "1";
 

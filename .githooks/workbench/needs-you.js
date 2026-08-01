@@ -67,7 +67,21 @@
   NeedsYouInbox.prototype.mount = function () {
     this._buildDOM();
     this._listen();
-    this._fetchInitial();
+    if (window.SNAPSHOT_MODE && new URLSearchParams(location.search).has("needsyouopen")) {
+      this._items.set("request-memory-glass", {
+        id: "request-memory-glass",
+        run_id: "run-memory-glass-9c7d4e8f1029384756abcdef0123456789abcdef",
+        project: "sample",
+        kind: "request-pending",
+        node: "independent-review",
+        detail: "Choose whether the saved review is enough to continue.",
+        timestamp: new Date().toISOString()
+      });
+      this._sync();
+      this._openDropdown();
+    } else {
+      this._fetchInitial();
+    }
     // Refresh "ago" labels every 30 s
     var self = this;
     this._agoTimer = setInterval(function () { self._renderList(); }, 30000);

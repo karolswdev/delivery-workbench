@@ -36,12 +36,17 @@
     <a class="project-switcher" id="project-switcher" href="#/projects">Choose project</a>
     <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
     <div class="refresh">
+      <button id="density-toggle" class="density-toggle" type="button" aria-label="Use compact density" aria-pressed="false">Comfortable</button>
       <span id="refresh-time" title="last refresh" aria-hidden="true">—</span>
       <button id="refresh-btn" type="button" title="Re-read saved repository facts">↻ refresh</button>
     </div>
   </header>
   <main id="app" class="app" tabindex="-1" aria-busy="true">
-    <div class="state">Loading…</div>
+    <section class="route-skeleton" aria-label="Loading view">
+      <div class="route-skeleton-head"><dw-skeleton lines="2" variant="text"></dw-skeleton></div>
+      <div class="route-skeleton-grid"><dw-skeleton lines="5" variant="card"></dw-skeleton><dw-skeleton lines="5" variant="card"></dw-skeleton></div>
+      <span class="visually-hidden" data-route-loading>Loading saved repository facts…</span>
+    </section>
   </main>
   <div id="route-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="live-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
