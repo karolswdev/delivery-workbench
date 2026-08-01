@@ -271,30 +271,36 @@
         ? esc(item.detail)
         : esc(kindLabel(item.kind));
       var timeAgo = ago(item.timestamp);
+      var memoryKind = item.kind === "program-intervention-required" ? "program" : "run";
+      var memoryAction = item.run_id
+        ? '<button type="button" class="needs-you-memory" role="menuitem" data-memory-open="' + esc(memoryKind + ":" + item.run_id) + '" data-memory-kind="' + esc(memoryKind) + '" data-memory-id="' + esc(item.run_id) + '">Memory</button>'
+        : "";
       return (
-        '<a class="needs-you-item" href="' + esc(href) + '" role="menuitem" data-id="' + esc(item.id) + '">' +
-          '<span class="needs-you-item-kind">' + esc(kindLabel(item.kind)) + "</span>" +
-          (project
-            ? ' <span class="needs-you-item-project">' + project + "</span>"
-            : "") +
-          (context
-            ? ' <span class="needs-you-item-context">' + esc(context) + "</span>"
-            : "") +
-          '<span class="needs-you-item-detail">' + detail + "</span>" +
-          (timeAgo
-            ? '<span class="needs-you-item-ago">' + esc(timeAgo) + "</span>"
-            : "") +
-        "</a>"
+        '<div class="needs-you-row" role="none">' +
+          '<a class="needs-you-item" href="' + esc(href) + '" role="menuitem" data-id="' + esc(item.id) + '">' +
+            '<span class="needs-you-item-kind">' + esc(kindLabel(item.kind)) + "</span>" +
+            (project
+              ? ' <span class="needs-you-item-project">' + project + "</span>"
+              : "") +
+            (context
+              ? ' <span class="needs-you-item-context">' + esc(context) + "</span>"
+              : "") +
+            '<span class="needs-you-item-detail">' + detail + "</span>" +
+            (timeAgo
+              ? '<span class="needs-you-item-ago">' + esc(timeAgo) + "</span>"
+              : "") +
+          "</a>" + memoryAction +
+        "</div>"
       );
     }).join("");
 
     dd.innerHTML = html;
 
-    // Close dropdown on navigation
+    // Close after navigation or opening the related memory pane.
     var self = this;
-    var links = dd.querySelectorAll("a");
-    for (var i = 0; i < links.length; i++) {
-      links[i].addEventListener("click", function () {
+    var actions = dd.querySelectorAll("a, .needs-you-memory");
+    for (var i = 0; i < actions.length; i++) {
+      actions[i].addEventListener("click", function () {
         self._close(false);
       });
     }

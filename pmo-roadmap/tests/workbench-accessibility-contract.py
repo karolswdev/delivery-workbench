@@ -24,6 +24,7 @@ BROWSER_PATH = TESTS / "workbench-accessibility.py"
 INDEX_PATH = ROOT / "pmo-roadmap" / "workbench" / "index.html"
 APP_DIR = ROOT / "pmo-roadmap" / "workbench"
 CSS_PATH = ROOT / "pmo-roadmap" / "workbench" / "style.css"
+MEMORY_PATH = ROOT / "pmo-roadmap" / "workbench" / "memory-panel.js"
 DOC_PATH = ROOT / "docs" / "accessibility.md"
 
 REQUIRED_JOURNEY_FIELDS = {
@@ -230,6 +231,70 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
     return issues
 
 
+def validate_memory_panel() -> list[str]:
+    """Keep the AgentGlass pane connected to every promised shell surface."""
+    issues: list[str] = []
+    if not MEMORY_PATH.is_file():
+        return ["memory-panel-missing"]
+
+    memory = MEMORY_PATH.read_text(encoding="utf-8")
+    index = INDEX_PATH.read_text(encoding="utf-8")
+    css = CSS_PATH.read_text(encoding="utf-8")
+    sources = {
+        name: (APP_DIR / name).read_text(encoding="utf-8")
+        for name in (
+            "runs.js", "session-panel.js", "outcomes-panel.js",
+            "needs-you.js", "command-palette.js",
+        )
+    }
+
+    checks = {
+        "memory-shell-load": 'src="memory-panel.js"' in index,
+        "memory-custom-panel": 'document.createElement("dw-panel")' in memory,
+        "memory-dialog-label": 'setAttribute("role", "dialog")' in memory,
+        "memory-non-modal": 'setAttribute("aria-modal", "false")' in memory,
+        "memory-focus-return": "rememberReturnFocus(\"memory-panel\"" in memory,
+        "memory-escape-close": 'event.key !== "Escape"' in memory,
+        "memory-run-route": "/api/${kind === \"program\" ? \"programs\" : \"runs\"}" in memory,
+        "memory-summary-recall-time": "Recall time" in memory,
+        "memory-summary-freshness": "Freshness" in memory,
+        "memory-summary-included": "Included" in memory,
+        "memory-summary-excluded": "Excluded" in memory,
+        "memory-summary-sources": "Sources" in memory,
+        "memory-summary-writeback": "Writeback" in memory,
+        "memory-available-language": "Available to the agent" in memory,
+        "memory-decision-language": "Referenced by a decision" in memory,
+        "memory-writeback-language": "Written after completion" in memory,
+        "memory-no-causation": "never caused or permitted an action" in memory,
+        "memory-match-reasons": "match_reasons" in memory,
+        "memory-source-path": "receipt_path" in memory and "ledger_coordinates" in memory,
+        "memory-supersession": "Supersession" in memory,
+        "memory-refusal-missing": "missing:" in memory,
+        "memory-refusal-stale": "stale:" in memory,
+        "memory-refusal-tampered": "tampered:" in memory,
+        "memory-empty-state": "No memory records yet" in memory,
+        "memory-technical-fold": '<dw-fold label=\"Technical details\">' in memory,
+        "memory-run-entry": 'data-memory-kind=\"run\"' in sources["runs.js"],
+        "memory-program-entry": 'data-memory-kind=\"program\"' in sources["runs.js"],
+        "memory-session-entry": "session-memory-btn" in sources["session-panel.js"],
+        "memory-outcomes-entry": "outcomes-memory" in sources["outcomes-panel.js"],
+        "memory-needs-you-entry": "needs-you-memory" in sources["needs-you.js"],
+        "memory-palette-entry": 'category: "memory"' in sources["command-palette.js"],
+        "memory-narrow-layout": "@media (max-width: 520px)" in css and ".memory-panel" in css,
+        "memory-theme-tokens": all(
+            marker in css
+            for marker in (
+                ".memory-panel", "var(--color-surface)",
+                "var(--color-text)", "var(--color-border)",
+            )
+        ),
+    }
+    for name, passed in checks.items():
+        if not passed:
+            issues.append(f"{name}-missing")
+    return issues
+
+
 def planted_red_cases(
     manifest: dict[str, Any],
     journey_contract: dict[str, Any],
@@ -279,6 +344,7 @@ def main() -> int:
     }
     issues = validate(manifest, journey_contract, states_contract)
     issues.extend(validate_sources(expected_ids))
+    issues.extend(validate_memory_panel())
     issues.extend(
         f"red-case-failed:{item}"
         for item in planted_red_cases(manifest, journey_contract, states_contract)
@@ -289,7 +355,7 @@ def main() -> int:
         return 1
     print(
         "workbench-accessibility-contract.py: ok "
-        f"({len(expected_ids)} journeys, 2 viewports, "
+        f"({len(expected_ids)} journeys, 2 viewports, 34 memory-pane checks, "
         "keyboard/focus/semantics/manual evidence)"
     )
     return 0

@@ -151,6 +151,7 @@ window.DW = window.DW || {};
 
     return (
       '<div class="outcomes-summary">' +
+      '<button type="button" class="outcomes-memory" data-memory-open="run:' + esc(this._runId) + '" data-memory-kind="run" data-memory-id="' + esc(this._runId) + '">Memory</button>' +
       '<span class="outcomes-stat">' +
       '<strong>' + sessionCount + "</strong> sessions" +
       "</span>" +

@@ -329,8 +329,21 @@ rm -rf "$REPO/.git/pmo-orchestration" "$REPO/.git/pmo-programs" \
 # ── static shell + supplemental file reads ───────────────────────────
 curl -s "$BASE/" > "$TMP_ROOT/index.html"
 curl -s "$BASE/app.js" > "$TMP_ROOT/app.js"
+curl -s "$BASE/memory-panel.js" > "$TMP_ROOT/memory-panel.js"
 grep -q 'id="app"' "$TMP_ROOT/index.html" || fail "index.html should serve the app shell"
 grep -q "async function route" "$TMP_ROOT/app.js" || fail "app.js should be served"
+grep -q 'src="memory-panel.js"' "$TMP_ROOT/index.html" \
+  || fail "app shell should load the memory pane"
+for marker in 'class MemoryPanel' 'Available to the agent' 'Referenced by a decision' \
+  'Written after completion' 'match_reasons' 'Technical details' \
+  'data-memory-open' 'aria-modal", "false'; do
+  grep -q "$marker" "$TMP_ROOT/memory-panel.js" \
+    || fail "memory pane is missing $marker"
+done
+for surface in runs.js session-panel.js outcomes-panel.js needs-you.js command-palette.js; do
+  grep -q 'memory' "$PMO_DIR/workbench/$surface" \
+    || fail "$surface should open the memory pane"
+done
 grep -q "read-only" "$PMO_DIR"/workbench/*.js \
   || fail "workbench modules should preserve the read-only boundary"
 [ "$(grep -o 'class="navlink"' "$TMP_ROOT/index.html" | wc -l | tr -d ' ')" = "2" ] \
@@ -1322,6 +1335,8 @@ git -C "$INSTALL_REPO" config user.email t@t
 "$PMO_DIR/install.sh" "$INSTALL_REPO" --project-name Demo --project-slug demo --project-prefix DEMO >/dev/null 2>&1
 [ -x "$INSTALL_REPO/.githooks/dw-workbench" ] || fail "install should ship dw-workbench"
 [ -f "$INSTALL_REPO/.githooks/workbench/index.html" ] || fail "install should ship the workbench UI"
+[ -f "$INSTALL_REPO/.githooks/workbench/memory-panel.js" ] \
+  || fail "install should ship the memory pane"
 IPORT=$(( PORT + 1 ))
 "$INSTALL_REPO/.githooks/dw-workbench" --root "$INSTALL_REPO" --port "$IPORT" --quiet &
 IPID=$!

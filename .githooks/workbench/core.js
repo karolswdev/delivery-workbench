@@ -134,7 +134,7 @@ const FOCUS_IDENTITY_ATTRIBUTES = [
   "data-studio-technical", "data-plan-section", "data-run-act",
   "data-program-act", "data-bounded-read", "data-studio-scenario",
   "data-studio-node", "data-node-id", "data-adoption-mark",
-  "data-adoption-objection", "name", "href",
+  "data-adoption-objection", "data-memory-open", "name", "href",
 ];
 
 function esc(s) {

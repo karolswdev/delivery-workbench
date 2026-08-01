@@ -18,6 +18,7 @@
     program: "\u{2699}",   // gear
     score: "\u{1F3BC}",    // musical score
     request: "\u{1F514}",  // bell
+    memory: "\u{1F9E0}",   // memory
   };
 
   /* ── Recent items ───────────────────────────────────── */
@@ -122,6 +123,16 @@
         route: `#/live/run/${encodeURIComponent(r.run_id)}`,
         search: `${r.run_id} ${runStory}`.toLowerCase(),
       });
+      items.push({
+        category: "memory",
+        id: `run:${r.run_id}`,
+        title: `Memory: ${runStory || r.run_id}`,
+        subtitle: `Bounded run ${r.run_id.slice(0, 12)}`,
+        status: "",
+        memoryKind: "run",
+        memoryId: r.run_id,
+        search: `memory recalled recall ${r.run_id} ${runStory}`.toLowerCase(),
+      });
     }
 
     // Programs
@@ -135,6 +146,16 @@
         status: p.operational_state || p.state || "",
         route: `#/programs/${encodeURIComponent(p.run_id)}`,
         search: `${p.program || ""} ${p.run_id}`.toLowerCase(),
+      });
+      items.push({
+        category: "memory",
+        id: `program:${p.run_id}`,
+        title: `Memory: ${p.program || p.run_id}`,
+        subtitle: `Multi-phase program ${p.run_id.slice(0, 12)}`,
+        status: "",
+        memoryKind: "program",
+        memoryId: p.run_id,
+        search: `memory recalled recall ${p.program || ""} ${p.run_id}`.toLowerCase(),
       });
     }
 
@@ -190,13 +211,14 @@
   }
 
   /* ── Category grouping ──────────────────────────────── */
-  const CATEGORY_ORDER = ["project", "story", "phase", "run", "program", "score", "request"];
+  const CATEGORY_ORDER = ["project", "story", "phase", "run", "program", "memory", "score", "request"];
   const CATEGORY_LABELS = {
     project: "Projects",
     story: "Stories",
     phase: "Phases",
     run: "Runs",
     program: "Programs",
+    memory: "Memory",
     score: "Scores",
     request: "Requests",
   };
@@ -230,7 +252,9 @@
           data-item-id="${esc(item.id)}"
           data-title="${esc(item.title)}"
           data-subtitle="${esc(item.subtitle)}"
-          data-status="${esc(item.status)}">
+          data-status="${esc(item.status)}"
+          data-memory-kind="${esc(item.memoryKind || "")}"
+          data-memory-id="${esc(item.memoryId || "")}">
           <span class="cp-icon" aria-hidden="true">${ICONS[item.category] || ""}</span>
           <div class="cp-item-text">
             <span class="cp-item-title">${esc(item.title)}</span>
@@ -257,6 +281,7 @@
       this._selectedIndex = 0;
       this._open = false;
       this._loading = false;
+      this._returnFocus = null;
       this._boundKeydown = this._onGlobalKeydown.bind(this);
       document.addEventListener("keydown", this._boundKeydown);
     }
@@ -275,6 +300,8 @@
       if (this._open) return;
       this._open = true;
       this._selectedIndex = 0;
+      this._returnFocus = document.activeElement instanceof Element
+        ? document.activeElement : null;
 
       // Build overlay
       const overlay = document.createElement("div");
@@ -385,6 +412,14 @@
     }
 
     _navigate(el) {
+      const memoryKind = el.dataset.memoryKind;
+      const memoryId = el.dataset.memoryId;
+      if (memoryKind && memoryId && window.DW.openMemoryPanel) {
+        const returnFocus = this._returnFocus;
+        this.close();
+        window.DW.openMemoryPanel(memoryKind, memoryId, returnFocus);
+        return;
+      }
       const route = el.dataset.route;
       if (!route) return;
       pushRecent({

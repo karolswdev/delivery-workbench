@@ -87,6 +87,7 @@ class SessionPanel {
 
     const detail = this._detail || {};
     const hasAgent = this._sessions.length > 0;
+    const memoryRun = this._findPinnedRun();
 
     const header = `
       <div class="session-header">
@@ -97,6 +98,7 @@ class SessionPanel {
         </div>
         <h3 class="session-story-title">${esc(detail.title || this._storyId)}</h3>
         <div class="session-controls">
+          ${memoryRun ? `<button type="button" class="session-memory-btn" data-memory-open="run:${esc(memoryRun)}" data-memory-kind="run" data-memory-id="${esc(memoryRun)}">Memory</button>` : ""}
           <button type="button" class="session-close-btn" aria-label="Close session panel">Close</button>
         </div>
       </div>`;

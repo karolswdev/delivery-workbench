@@ -403,6 +403,14 @@ def main() -> int:
             ORDINARY_PANEL_FUNCTIONS if use_default else None
         ),
     )
+    if use_default:
+        memory_path = DEFAULT_SOURCE_DIR / "memory-panel.js"
+        errors.extend(lint_source(
+            memory_path.read_text(encoding="utf-8"),
+            display_path=str(memory_path.relative_to(ROOT)),
+            technical_label=technical_label,
+            reserved=reserved,
+        ))
     fixture_proof = "not run"
     if not args.no_self_test:
         fixture_ok, fixture_proof = negative_fixture_check(technical_label, reserved)

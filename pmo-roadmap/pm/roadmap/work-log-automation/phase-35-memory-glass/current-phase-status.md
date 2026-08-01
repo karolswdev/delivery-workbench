@@ -29,7 +29,7 @@ Make memory a visible, testable part of every bounded run and autonomous program
 | WLA-35-03 | Recall before dispatch | done | [story-03-recall-before-dispatch](./story-03-recall-before-dispatch.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-35-04 | Terminal writeback | done | [story-04-terminal-writeback](./story-04-terminal-writeback.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-35-05 | Memory read surfaces | done | [story-05-memory-read-surfaces](./story-05-memory-read-surfaces.md) | [evidence-story-05](./evidence-story-05.md) |
-| WLA-35-06 | AgentGlass memory pane | backlog | [story-06-agentglass-memory-pane](./story-06-agentglass-memory-pane.md) | - |
+| WLA-35-06 | AgentGlass memory pane | done | [story-06-agentglass-memory-pane](./story-06-agentglass-memory-pane.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-35-07 | Decision basis timeline | backlog | [story-07-decision-basis-timeline](./story-07-decision-basis-timeline.md) | - |
 | WLA-35-08 | Compounding multi-agent memory | backlog | [story-08-compounding-multi-agent-memory](./story-08-compounding-multi-agent-memory.md) | - |
 | WLA-35-09 | Slick workbench | backlog | [story-09-slick-workbench](./story-09-slick-workbench.md) | - |
@@ -37,7 +37,7 @@ Make memory a visible, testable part of every bounded run and autonomous program
 
 ## Where we are
 
-WLA-35-05 done (2026-08-01): one memory read model behind three transports — `dw knowledge recall`/`writebacks` on the CLI, `dw_knowledge_recall`/`dw_knowledge_writebacks` over MCP (byte-identical payloads), and three read-only GET memory endpoints (200/404/409, no mutation form, reads proven side-effect free). Also repaired guard rot from the post-phase-34 board-redesign commits (POST census 17 → 19, explorer nav assertions). Stories 01-04 landed earlier. Next: WLA-35-06 (the AgentGlass memory pane).
+WLA-35-06 done (2026-08-01): the AgentGlass memory pane renders what an agent knew — summary-first, provenance-carded, three honest groups (available / referenced by a decision / written after completion), nine states with typed refusals under folds — reachable from runs, programs, sessions, outcomes, needs-you, and the command palette, keyboard- and screen-reader-clean at wide and 390px in both themes. Accessibility contract +34 checks, explorer +15 assertions. Stories 01-05 landed earlier. Next: WLA-35-07 (decision-basis timeline).
 
 ## Active risks
 
