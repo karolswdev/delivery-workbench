@@ -16,10 +16,11 @@ from unittest import mock
 TESTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TESTS_DIR.parent / "lib"))
 
-from dw_pmo import knowledge  # noqa: E402
+from dw_pmo import decision_basis, knowledge  # noqa: E402
 from dw_pmo.knowledge_packet import build_knowledge_packet  # noqa: E402
 from dw_pmo.memory_dispatch import persist_recall_slices  # noqa: E402
 from dw_pmo.memory_read import (  # noqa: E402
+    _decision_entries,
     build_memory_recall_projection,
     build_memory_record_projection,
     build_memory_writeback_projection,
@@ -196,6 +197,105 @@ class KnowledgeWritebackTest(unittest.TestCase):
         )
         map_patch.start()
         self.addCleanup(map_patch.stop)
+
+    def test_decision_basis_persistence_is_content_addressed_and_restart_safe(self):
+        run_dir = self.git_dir / "pmo-orchestration" / "runs" / ("run-" + "1" * 24)
+        run_dir.mkdir(parents=True)
+        document = decision_basis.build_decision_basis(
+            subject="sha256:" + "1" * 64,
+            decision_kind="failure-route",
+            basis_type="mechanical",
+            outcome="retry",
+            reason_code="declared-failure-policy",
+            rule_ref="score:on_failure",
+            score_ref="sha256:" + "2" * 64,
+            input_receipt_refs=["sha256:" + "3" * 64],
+            memory_refs=["sha256:" + "4" * 64],
+            resulting_ledger_event="sha256:" + "5" * 64,
+            source_revision="sha256:" + "6" * 64,
+        )
+        first, created = decision_basis.persist_decision_basis(run_dir, document)
+        second, recreated = decision_basis.persist_decision_basis(run_dir, document)
+        self.assertTrue(created)
+        self.assertFalse(recreated)
+        self.assertEqual(first, second)
+        self.assertEqual(decision_basis.read_decision_bases(run_dir), [document])
+        receipt = run_dir / "memory" / "decisions" / (
+            document["decision_id"][7:] + ".json"
+        )
+        planted = dict(document, outcome="abort")
+        receipt.write_text(json.dumps(planted) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(DwError, "identity"):
+            decision_basis.read_decision_bases(run_dir)
+
+    def test_recall_freeze_preserves_an_earlier_decision_directory(self):
+        run_dir = self.git_dir / "pmo-orchestration" / "runs" / ("run-" + "9" * 24)
+        run_dir.mkdir(parents=True)
+        document = decision_basis.build_decision_basis(
+            subject="sha256:" + "1" * 64,
+            decision_kind="scheduler",
+            basis_type="mechanical",
+            outcome="claim:check:1",
+            reason_code="dependencies-satisfied",
+            rule_ref="scheduler:eligibility-and-capacity",
+            resulting_ledger_event="sha256:" + "2" * 64,
+            source_revision="sha256:" + "3" * 64,
+        )
+        decision_basis.persist_decision_basis(run_dir, document)
+        documents, created = persist_recall_slices(
+            run_dir,
+            subject="sha256:" + "1" * 64,
+            knowledge={"index_tree": TREE, "verified_locations": [], "snippets": [], "test_references": [], "lessons": []},
+            story_criteria="Change delivery.",
+            story_ids=["WLA-35-07"],
+            phase_ids=["35"],
+            orchestration_tags=["decision-basis"],
+        )
+        self.assertTrue(created)
+        self.assertTrue(documents)
+        self.assertEqual(decision_basis.read_decision_bases(run_dir), [document])
+
+    def test_decision_basis_read_model_populates_used_group_and_ledger_links(self):
+        run_id = "run-" + "2" * 24
+        run_dir = self.git_dir / "pmo-orchestration" / "runs" / run_id
+        run_dir.mkdir(parents=True)
+        result_event = "sha256:" + "3" * 64
+        recall_id = "sha256:" + "4" * 64
+        document = decision_basis.build_decision_basis(
+            subject=decision_basis.decision_subject("run", run_id),
+            decision_kind="scheduler",
+            basis_type="mechanical",
+            outcome="claim:implement:1",
+            reason_code="dependencies-satisfied",
+            rule_ref="scheduler:eligibility-and-capacity",
+            input_receipt_refs=["sha256:" + "5" * 64],
+            memory_refs=[recall_id],
+            resulting_ledger_event=result_event,
+            source_revision="sha256:" + "6" * 64,
+        )
+        decision_basis.persist_decision_basis(run_dir, document)
+        events = [
+            {"seq": 0, "event": "node_claimed", "event_hash": result_event},
+            {
+                "seq": 1,
+                "event": decision_basis.DECISION_BASIS_EVENT,
+                "event_hash": "sha256:" + "7" * 64,
+                "detail": decision_basis.ledger_event_detail(document),
+            },
+        ]
+        recalled = [{
+            "recall_id": recall_id,
+            "source_ref": "sha256:" + "8" * 64,
+            "ledger_coordinates": {"path": "memory/recalls/implementer.json"},
+        }]
+        with mock.patch("dw_pmo.orchestration_run._read_events", return_value=events):
+            decisions, used = _decision_entries(
+                self.root, run_dir, "run", run_id, recalled
+            )
+        self.assertEqual([item["decision_id"] for item in decisions], [document["decision_id"]])
+        self.assertEqual(used[0]["decision_refs"], [document["decision_id"]])
+        self.assertEqual(decisions[0]["event_id"], document["decision_id"])
+        self.assertEqual(decisions[0]["ledger_coordinates"]["result_seq"], 0)
 
     def test_typed_output_is_closed_and_bounded(self):
         from dw_pmo.program_conductor import _packet_outputs

@@ -28,6 +28,7 @@ import tempfile
 import time
 from typing import Callable, Iterator
 
+from .decision_basis import record_program_decision_basis
 from .knowledge_packet import (
     build_hint_free_knowledge_packet,
     build_repository_knowledge_packet,
@@ -1358,6 +1359,21 @@ def _reserve_claim(
         now=now,
         driver_config=driver_config,
     )
+    _basis, _after_basis = record_program_decision_basis(
+        root,
+        run_id,
+        applied,
+        decision_kind="scheduler",
+        basis_type="mechanical",
+        outcome="reserve:" + str(action["kind"]),
+        reason_code="frontier-next-action",
+        rule_ref="program-frontier:" + str(action["kind"]),
+        score_ref=str(applied["plan_hash"]),
+        input_receipt_refs=[str(applied["grant_hash"])],
+        memory_refs=[],
+        node_id=str(action.get("address") or "") or None,
+        now=now,
+    )
     claim = applied.get("claim")
     _require(isinstance(claim, dict), "program act claim produced no reservation")
     return claim
@@ -2642,6 +2658,22 @@ def _execute_scope_completion(
         proof_hash=str(action["subject_hash"]),
         completed_stories=list(payload["completed_stories"]),
         completed_phases=list(payload["completed_phases"]),
+        now=now,
+    )
+    _basis, projection = record_program_decision_basis(
+        root,
+        run_id,
+        projection,
+        decision_kind="terminal",
+        basis_type="mechanical",
+        outcome="complete",
+        reason_code="scope-proof-complete",
+        rule_ref="program-state-machine:scope-completion",
+        score_ref=str(projection["plan_hash"]),
+        input_receipt_refs=[
+            str(receipt["receipt_hash"]), str(action["subject_hash"]),
+        ],
+        memory_refs=[],
         now=now,
     )
     knowledge_result = _persist_completed_knowledge(
@@ -6652,10 +6684,31 @@ def _issue_bound_verdict(
         "receipt_hash": receipt["receipt_hash"],
         "receipt_kind": receipt["action_kind"],
     })
-    _complete_claim(
+    completed = _complete_claim(
         root, run_id, verdict_claim, str(receipt["receipt_hash"]),
         result="succeeded",
         reason=f"Issued one rubric-bound {verdict_type}.",
+        now=now,
+    )
+    record_program_decision_basis(
+        root,
+        run_id,
+        completed,
+        decision_kind="verdict",
+        basis_type="agent-reported",
+        outcome=str(verdict["result"]),
+        reason_code="rubric-bound-verdict",
+        rule_ref="rubric:" + str(verdict["rubric"]["semantic_hash"]),
+        score_ref=str(completed["plan_hash"]),
+        input_receipt_refs=[
+            str(receipt["receipt_hash"]), str(verdict["verdict_hash"]),
+        ],
+        dissent_refs=[
+            "%s#criterion:%s" % (verdict["verdict_hash"], item["source"])
+            for item in verdict.get("dissent", [])
+            if isinstance(item, dict) and item.get("source")
+        ],
+        node_id=_driver_node_id(str(action["address"]), int(action["attempt"])),
         now=now,
     )
     return verdict, receipt, artifacts + [verdict_artifact]
@@ -6901,6 +6954,32 @@ def _execute_deliberation_issuance(
         str(receipt["receipt_hash"]),
         result="succeeded",
         reason=f"Issued the exact pure-core {artifact_kind}.",
+        now=now,
+    )
+    _basis, projection = record_program_decision_basis(
+        root,
+        run_id,
+        projection,
+        decision_kind="council" if kind == "council-decision" else "verdict",
+        basis_type="panel-derived",
+        outcome=str(document["result"]),
+        reason_code=(
+            "declared-council-protocol" if kind == "council-decision"
+            else "panel-verdict-protocol"
+        ),
+        rule_ref="deliberation:" + str(
+            document.get("protocol_ledger_head")
+            or document.get("receipt_hash")
+            or content_hash
+        ),
+        score_ref=str(projection["plan_hash"]),
+        input_receipt_refs=[str(receipt["receipt_hash"]), content_hash],
+        dissent_refs=[
+            str(item["receipt_hash"])
+            for item in document.get("dissent", [])
+            if isinstance(item, dict) and item.get("receipt_hash")
+        ],
+        node_id=str(action.get("address") or "") or None,
         now=now,
     )
     return {"status": "complete", "projection": projection, "receipt": receipt}
@@ -7216,6 +7295,22 @@ def respond_program_request(
             str(receipt["receipt_hash"]),
             result="succeeded",
             reason="Recorded one closed typed program checkpoint response.",
+            now=observed,
+        )
+        _basis, after = record_program_decision_basis(
+            root,
+            run_id,
+            after,
+            decision_kind="council",
+            basis_type="operator-supplied",
+            outcome=decision,
+            reason_code="typed-checkpoint-response",
+            rule_ref="checkpoint-port:" + str(claim["request_port"]),
+            score_ref=str(after["plan_hash"]),
+            input_receipt_refs=[
+                str(receipt["receipt_hash"]), str(claim["request_hash"]),
+            ],
+            memory_refs=[],
             now=observed,
         )
     # Rebuild once so a corrupt/mismatched response cannot hide until the next

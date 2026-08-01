@@ -280,6 +280,22 @@ def validate_memory_panel() -> list[str]:
         "memory-outcomes-entry": "outcomes-memory" in sources["outcomes-panel.js"],
         "memory-needs-you-entry": "needs-you-memory" in sources["needs-you.js"],
         "memory-palette-entry": 'category: "memory"' in sources["command-palette.js"],
+        "decision-timeline-heading": 'id="decision-basis-title"' in memory,
+        "decision-timeline-list": 'class="decision-basis-list"' in memory,
+        "decision-native-button": 'type="button" class="decision-basis-select"' in memory,
+        "decision-selection-state": 'aria-pressed=' in memory,
+        "decision-selected-region": 'role="region" aria-label="Selected decision basis"' in memory,
+        "decision-origin-link": 'class="decision-origin-link"' in memory,
+        "decision-authority-labels": all(
+            marker in memory
+            for marker in (
+                "mechanical", "agent-reported", "panel-derived", "operator-supplied",
+            )
+        ),
+        "decision-authority-distinction": "mechanical checks are not model or council judgments" in memory,
+        "decision-memory-highlight": "decision-memory-highlight" in memory and "data-recall-id" in memory,
+        "decision-sse-event-id-dedup": "_decisionByEventId" in memory and "event_id" in memory,
+        "decision-session-stream": "_refreshDecisions" in sources["session-panel.js"] and "_eventId" in sources["session-panel.js"],
         "memory-narrow-layout": "@media (max-width: 520px)" in css and ".memory-panel" in css,
         "memory-theme-tokens": all(
             marker in css
@@ -355,7 +371,7 @@ def main() -> int:
         return 1
     print(
         "workbench-accessibility-contract.py: ok "
-        f"({len(expected_ids)} journeys, 2 viewports, 34 memory-pane checks, "
+        f"({len(expected_ids)} journeys, 2 viewports, 45 memory-pane checks, "
         "keyboard/focus/semantics/manual evidence)"
     )
     return 0

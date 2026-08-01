@@ -346,7 +346,7 @@ def persist_recall_slices(
         raise MemoryRecallActionNeeded(
             "missing", "persisted memory recall store is missing"
         )
-    if memory.exists():
+    if manifest_path.exists():
         manifest = _validate_manifest(_read_json(manifest_path, "memory recall manifest"))
         source = _read_json(source_path, "memory recall source snapshot")
         if _sha(source) != manifest.get("source_hash"):
@@ -400,7 +400,14 @@ def persist_recall_slices(
         },
     }
     manifest = {**unsigned_manifest, "manifest_hash": _sha(unsigned_manifest)}
-    memory.mkdir(parents=True, exist_ok=False, mode=0o700)
+    if memory.exists():
+        allowed = {"decisions"} if scope is None else set()
+        entries = {path.name for path in memory.iterdir()}
+        if entries - allowed:
+            raise MemoryRecallActionNeeded(
+                "malformed", "memory recall store has unexpected pre-existing entries"
+            )
+    memory.mkdir(parents=True, exist_ok=True, mode=0o700)
     _write_json(source_path, knowledge)
     for audience in AUDIENCES:
         _write_json(memory / _RECALL_DIR / (audience + ".json"), documents[audience])

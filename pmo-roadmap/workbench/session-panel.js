@@ -16,6 +16,7 @@ class SessionPanel {
     this._detail = null;
     this._sessions = [];
     this._events = [];
+    this._decisions = [];
     this._loading = true;
     this._error = "";
     this._needsYou = false;
@@ -34,6 +35,7 @@ class SessionPanel {
     this._detail = null;
     this._sessions = [];
     this._events = [];
+    this._decisions = [];
     this._loading = true;
     this._error = "";
     this._needsYou = false;
@@ -49,6 +51,7 @@ class SessionPanel {
     this._detail = null;
     this._sessions = [];
     this._events = [];
+    this._decisions = [];
     this._loading = false;
     this._error = "";
     this._needsYou = false;
@@ -170,11 +173,12 @@ class SessionPanel {
       const pins = mcRes.data.pins || {};
       const pinned = pins[this._storyId] || [];
       this._sessions = pinned;
+      await this._refreshDecisions(this._findPinnedRun());
 
       const allEvents = mcRes.data.events || [];
-      this._events = allEvents.filter(
+      this._events = [...new Map(allEvents.filter(
         (ev) => ev.story_id === this._storyId || ev.detail?.story_id === this._storyId
-      );
+      ).map((event) => [this._eventId(event), event])).values()];
 
       // WLA-34-04: load pending typed requests into ask-resume controller
       try {
@@ -256,12 +260,22 @@ class SessionPanel {
   }
 
   _transcriptHtml() {
-    const lines = this._events.map((ev) => {
+    const eventLines = this._events.map((ev) => {
       const type = this._eventType(ev);
       const ts = ev.ts || ev.timestamp || "";
       const body = this._eventBody(ev);
       return `<dw-stream-line type="${esc(type)}" timestamp="${esc(ts)}">${body}</dw-stream-line>`;
     }).join("");
+    const decisionLines = this._decisions.map((decision) => {
+      const origin = decision.originating_receipt_ref || decision.resulting_ledger_event;
+      return `<dw-stream-line type="decision" timestamp="">
+        <strong>${esc(decision.decision_kind)} decision</strong>
+        ${esc(decision.outcome)}
+        <span class="session-decision-authority basis-${esc(decision.basis_type)}">${esc(decision.basis_type)}</span>
+        <a href="#/live/run/${encodeURIComponent(decision.origin)}/technical" data-source-ref="${esc(origin)}">Open saved source</a>
+      </dw-stream-line>`;
+    }).join("");
+    const lines = eventLines + decisionLines;
 
     // WLA-34-04: inline pending requests from the ask-resume controller
     const askResume = window.DW._askResume;
@@ -382,13 +396,39 @@ class SessionPanel {
     return null;
   }
 
+  _eventId(event) {
+    return event.event_id || event.event_hash || event.decision_id
+      || (event.seq !== undefined ? `seq:${event.seq}` : JSON.stringify(event));
+  }
+
+  async _refreshDecisions(runId) {
+    if (!runId) { this._decisions = []; return; }
+    try {
+      const response = await api(`/api/runs/${encodeURIComponent(runId)}/memory`);
+      const incoming = response.data?.decisions || [];
+      const byEventId = new Map(
+        this._decisions.map((decision) => [this._eventId(decision), decision]),
+      );
+      for (const decision of incoming) {
+        byEventId.set(this._eventId(decision), decision);
+      }
+      this._decisions = [...byEventId.values()].sort((left, right) => {
+        const leftSeq = left.ledger_coordinates?.result_seq ?? 0;
+        const rightSeq = right.ledger_coordinates?.result_seq ?? 0;
+        return leftSeq - rightSeq || String(left.decision_id).localeCompare(String(right.decision_id));
+      });
+    } catch (_err) {
+      // Decision basis is additive; the activity stream remains usable without it.
+    }
+  }
+
   _startRunSSE(runId) {
     if (this._sse) { this._sse.close(); this._sse = null; }
     this._sseReconnecting = false;
-    this._sseSeenSeqs = new Set();
+    this._sseSeenEventIds = new Set();
     // Record existing event seqs so reconnect snapshots don't duplicate
-    for (const ev of this._events) {
-      if (ev.seq !== undefined) this._sseSeenSeqs.add(ev.seq);
+    for (const event of [...this._events, ...this._decisions]) {
+      this._sseSeenEventIds.add(this._eventId(event));
     }
     this._sse = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
 
@@ -414,7 +454,7 @@ class SessionPanel {
     });
     this._sse.onopen = () => {
       // If we had events before, this is a reconnect
-      if (this._sseSeenSeqs.size > 0) {
+      if (this._sseSeenEventIds.size > 0) {
         this._sseReconnecting = true;
         this._showCatchingUp();
       }
@@ -461,14 +501,16 @@ class SessionPanel {
 
       const sessionsChanged = JSON.stringify(pinned) !== JSON.stringify(this._sessions);
       this._sessions = pinned;
+      await this._refreshDecisions(this._findPinnedRun());
 
       const allEvents = mcRes.data.events || [];
       const storyEvents = allEvents.filter(
         (ev) => ev.story_id === this._storyId || ev.detail?.story_id === this._storyId
       );
 
+      const seenEventIds = new Set(this._events.map((event) => this._eventId(event)));
       const newEvents = storyEvents.filter(
-        (ev) => !this._events.some((old) => old.seq === ev.seq)
+        (event) => !seenEventIds.has(this._eventId(event))
       );
 
       if (newEvents.length) {
@@ -509,7 +551,7 @@ class SessionPanel {
     if (this._pollTimer) { clearTimeout(this._pollTimer); this._pollTimer = null; }
     if (this._refreshTimer) { clearTimeout(this._refreshTimer); this._refreshTimer = null; }
     this._sseReconnecting = false;
-    this._sseSeenSeqs = null;
+    this._sseSeenEventIds = null;
     this._hideCatchingUp();
   }
 }

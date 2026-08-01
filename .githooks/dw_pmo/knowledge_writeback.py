@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Optional
 
 from . import repofacts
+from .decision_basis import read_decision_bases
 from .knowledge import (
     CERTIFIED_LESSON_KIND,
     DELIVERY_RECORD_KIND,
@@ -907,6 +908,12 @@ def persist_terminal_writeback(
     })
     decisions, evidence, checks, failures = _projection_references(
         projection, terminal_state
+    )
+    decisions = _bounded_identifiers(
+        decisions + [
+            document["decision_id"] for document in read_decision_bases(run_dir)
+        ],
+        "decision_refs",
     )
     delivery = projection.get("delivery_facts")
     files = (

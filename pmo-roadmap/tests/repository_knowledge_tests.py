@@ -20,6 +20,7 @@ REPOSITORY_ROOT = TESTS_DIR.parent.parent
 sys.path.insert(0, str(TESTS_DIR.parent / "lib"))
 
 import dw_pmo.knowledge as knowledge
+from dw_pmo import decision_basis
 from dw_pmo import DwError
 
 
@@ -275,6 +276,80 @@ class RepositoryKnowledgeTest(unittest.TestCase):
                     declaration["authority_fields"], required_authority
                 )
                 self.assertLessEqual(set(required_authority), fields)
+
+    def test_decision_basis_emission_is_closed_stable_and_authority_free(self):
+        values = {
+            "subject": "sha256:" + "1" * 64,
+            "decision_kind": "scheduler",
+            "basis_type": "mechanical",
+            "outcome": "claim:implement:1",
+            "reason_code": "dependencies-satisfied",
+            "rule_ref": "scheduler:eligibility-and-capacity",
+            "score_ref": "sha256:" + "2" * 64,
+            "input_receipt_refs": ["sha256:" + "3" * 64],
+            "memory_refs": ["sha256:" + "4" * 64],
+            "dissent_refs": [],
+            "resulting_ledger_event": "sha256:" + "5" * 64,
+            "source_revision": "sha256:" + "6" * 64,
+        }
+        first = decision_basis.build_decision_basis(**values)
+        second = decision_basis.build_decision_basis(**values)
+        self.assertEqual(first, second)
+        self.assertEqual(
+            set(first), set(knowledge.MEMORY_DOCUMENT_FIELDS[knowledge.DECISION_BASIS_KIND])
+        )
+        self.assertEqual(first["decision_id"], second["decision_id"])
+        self.assertTrue(all(first[key] is False for key in (
+            "starts_work", "authorizes", "satisfies_gate",
+            "substitutes_for_evidence",
+        )))
+        self.assertEqual(
+            decision_basis.validate_decision_basis(first), first
+        )
+
+    def test_decision_basis_supports_each_decision_and_authority_kind(self):
+        for index, (kind, basis_type) in enumerate(zip(
+            decision_basis.DECISION_KINDS,
+            (
+                "mechanical", "mechanical", "agent-reported",
+                "panel-derived", "operator-supplied",
+            ),
+        )):
+            with self.subTest(kind=kind, basis_type=basis_type):
+                document = decision_basis.build_decision_basis(
+                    subject="sha256:" + "1" * 64,
+                    decision_kind=kind,
+                    basis_type=basis_type,
+                    outcome="outcome-%d" % index,
+                    reason_code="closed-reason",
+                    rule_ref="rule:closed",
+                    resulting_ledger_event="sha256:" + "%x" % (index + 2) * 64,
+                    source_revision="sha256:" + "9" * 64,
+                )
+                self.assertEqual(document["decision_kind"], kind)
+                self.assertEqual(document["basis_type"], basis_type)
+
+    def test_decision_basis_fitness_rejects_private_reasoning_channels(self):
+        base = decision_basis.build_decision_basis(
+            subject="sha256:" + "1" * 64,
+            decision_kind="verdict",
+            basis_type="agent-reported",
+            outcome="repair",
+            reason_code="rubric-bound-verdict",
+            rule_ref="rubric:sha256:" + "2" * 64,
+            resulting_ledger_event="sha256:" + "3" * 64,
+            source_revision="sha256:" + "4" * 64,
+        )
+        planted = (
+            {**base, "thinking": "private"},
+            {**base, "outcome": "Here is my chain of thought"},
+            {**base, "outcome": "User: do this\nAssistant: done"},
+            {**base, "reason_code": "hidden thinking"},
+        )
+        for document in planted:
+            with self.subTest(document=document):
+                with self.assertRaisesRegex(DwError, "private-reasoning|transcript-shaped"):
+                    decision_basis.validate_decision_basis(document)
 
     def test_memory_contract_identity_is_deterministic_and_returned_by_value(self):
         first = knowledge.contract_document()

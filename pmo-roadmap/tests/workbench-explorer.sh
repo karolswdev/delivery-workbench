@@ -336,6 +336,8 @@ grep -q 'src="memory-panel.js"' "$TMP_ROOT/index.html" \
   || fail "app shell should load the memory pane"
 for marker in 'class MemoryPanel' 'Available to the agent' 'Referenced by a decision' \
   'Written after completion' 'match_reasons' 'Technical details' \
+  'decision-basis-timeline' 'mechanical' 'agent-reported' 'panel-derived' \
+  'operator-supplied' 'decision-memory-highlight' '_decisionByEventId' \
   'data-memory-open' 'aria-modal", "false'; do
   grep -q "$marker" "$TMP_ROOT/memory-panel.js" \
     || fail "memory pane is missing $marker"
@@ -343,6 +345,10 @@ done
 for surface in runs.js session-panel.js outcomes-panel.js needs-you.js command-palette.js; do
   grep -q 'memory' "$PMO_DIR/workbench/$surface" \
     || fail "$surface should open the memory pane"
+done
+for marker in '_eventId' '_refreshDecisions' 'decision_id' 'Open saved source'; do
+  grep -q "$marker" "$PMO_DIR/workbench/session-panel.js" \
+    || fail "session stream is missing decision reconciliation marker $marker"
 done
 grep -q "read-only" "$PMO_DIR"/workbench/*.js \
   || fail "workbench modules should preserve the read-only boundary"

@@ -1075,6 +1075,7 @@ def main():
         sys.path.insert(0, str(root / ".githooks"))
         from dw_pmo import DwError  # noqa: E402
         import dw_pmo.mcpserver as mcpserver  # noqa: E402
+        from dw_pmo.decision_basis import read_decision_bases  # noqa: E402
         import dw_pmo.orchestration_conductor as run_conductor  # noqa: E402
         import dw_pmo.orchestration_run as run_authority  # noqa: E402
         import dw_pmo.orchestration_surface as run_surface  # noqa: E402
@@ -3134,6 +3135,20 @@ def main():
         assert mcpserver.TOOLS["dw_status"]["inputSchema"][
             "additionalProperties"
         ] is False
+
+        decision_documents = read_decision_bases(
+            root / ".git" / "pmo-programs" / "runs" / run_id
+        )
+        decision_kinds = {item["decision_kind"] for item in decision_documents}
+        decision_authorities = {item["basis_type"] for item in decision_documents}
+        assert {"scheduler", "verdict", "council", "terminal"} <= decision_kinds
+        assert {"mechanical", "agent-reported", "panel-derived"} <= decision_authorities
+        assert {
+            item["decision_id"] for item in decision_documents
+        } == {
+            item["decision_id"] for item in final_authority["decision_bases"]
+        }
+        assert any(item["dissent_refs"] for item in decision_documents)
 
         phase27_delivery = {
             "review_results": [

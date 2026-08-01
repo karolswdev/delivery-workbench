@@ -140,6 +140,9 @@ window.DW = window.DW || {};
       this._returnElement = null;
       this._returnSelector = "";
       this._route = "";
+      this._selectedDecisionId = "";
+      this._decisionByEventId = new Map();
+      this._sse = null;
     }
 
     isOpen() {
@@ -166,6 +169,8 @@ window.DW = window.DW || {};
       this._document = null;
       this._loading = true;
       this._error = "";
+      this._selectedDecisionId = "";
+      this._decisionByEventId = new Map();
       this._ensurePanel();
       this._panel.hidden = false;
       this._panel.setAttribute("aria-hidden", "false");
@@ -178,6 +183,8 @@ window.DW = window.DW || {};
       if (!this.isOpen()) return;
       if (this._controller) this._controller.abort();
       this._controller = null;
+      if (this._sse) this._sse.close();
+      this._sse = null;
       this._panel.hidden = true;
       this._panel.setAttribute("aria-hidden", "true");
       this._kind = "";
@@ -245,9 +252,10 @@ window.DW = window.DW || {};
           const issue = envelope?.issues?.[0] || `Memory could not be read (${response.status})`;
           throw new Error(issue);
         }
-        this._document = document;
+        this._reconcileDocument(document);
         this._loading = false;
         this._error = "";
+        this._startSse(kind, id);
       } catch (error) {
         if (error.name === "AbortError") return;
         this._document = null;
@@ -257,6 +265,35 @@ window.DW = window.DW || {};
         if (this._controller === controller) this._controller = null;
         if (this._kind === kind && this._id === id) this._render();
       }
+    }
+
+    _reconcileDocument(document) {
+      const decisions = Array.isArray(document?.decisions) ? document.decisions : [];
+      for (const decision of decisions) {
+        const eventId = decision.event_id || decision.decision_id;
+        if (eventId) this._decisionByEventId.set(eventId, decision);
+      }
+      this._document = {
+        ...document,
+        decisions: [...this._decisionByEventId.values()].sort((left, right) => {
+          const leftSeq = left.ledger_coordinates?.result_seq ?? 0;
+          const rightSeq = right.ledger_coordinates?.result_seq ?? 0;
+          return leftSeq - rightSeq || String(left.decision_id).localeCompare(String(right.decision_id));
+        }),
+      };
+    }
+
+    _startSse(kind, id) {
+      if (typeof EventSource === "undefined" || window.SNAPSHOT_MODE || this._sse) return;
+      const collection = kind === "program" ? "programs" : "runs";
+      this._sse = new EventSource(`/api/${collection}/${encodeURIComponent(id)}/events`);
+      const refresh = () => {
+        if (this._controller || this._kind !== kind || this._id !== id) return;
+        this._load();
+      };
+      this._sse.addEventListener("snapshot", refresh);
+      this._sse.addEventListener("ledger", refresh);
+      this._sse.addEventListener("program", refresh);
     }
 
     _render() {
@@ -274,7 +311,13 @@ window.DW = window.DW || {};
         <p class="memory-boundary">Memory is advisory. A recalled record never caused or permitted an action, started work, or replaced evidence.</p>
         ${this._bodyHtml()}`;
       this._wire();
-      if (hadFocus) requestAnimationFrame(() => this._content.querySelector(".memory-close")?.focus());
+      if (hadFocus) requestAnimationFrame(() => {
+        const selected = this._selectedDecisionId
+          ? this._content.querySelector(
+            `.decision-basis-select[data-decision-id="${CSS.escape(this._selectedDecisionId)}"]`,
+          ) : null;
+        (selected || this._content.querySelector(".memory-close"))?.focus();
+      });
     }
 
     _wire() {
@@ -285,6 +328,15 @@ window.DW = window.DW || {};
         this._render();
         this._load();
       });
+      for (const button of this._content.querySelectorAll(".decision-basis-select")) {
+        button.addEventListener("click", () => {
+          this._selectedDecisionId = button.dataset.decisionId || "";
+          this._render();
+          this._content.querySelector(
+            `.decision-basis-select[data-decision-id="${CSS.escape(this._selectedDecisionId)}"]`,
+          )?.focus();
+        });
+      }
     }
 
     _bodyHtml() {
@@ -304,10 +356,11 @@ window.DW = window.DW || {};
       const total = included.length + groups["written-back"].length + groups.superseded.length;
       const summary = this._summaryHtml(groups, included);
       const meanings = this._meaningHtml();
-      if (!total && !groups.excluded.length) {
-        return `${summary}${meanings}${this._emptyHtml()}`;
+      const timeline = this._decisionTimelineHtml(this._document.decisions || []);
+      if (!total && !groups.excluded.length && !this._document.decisions?.length) {
+        return `${summary}${meanings}${timeline}${this._emptyHtml()}`;
       }
-      return `${summary}${meanings}${this._groupsHtml(groups)}`;
+      return `${summary}${meanings}${timeline}${this._groupsHtml(groups)}`;
     }
 
     _normalizedGroups(raw) {
@@ -348,6 +401,47 @@ window.DW = window.DW || {};
       </section>`;
     }
 
+    _decisionTimelineHtml(decisions) {
+      const authorityMeaning = {
+        "mechanical": "Computed from declared rules and saved checks",
+        "agent-reported": "A model judgment recorded in a bounded verdict",
+        "panel-derived": "Derived by the declared council protocol",
+        "operator-supplied": "Supplied through a typed operator response",
+      };
+      if (!decisions.length) {
+        return `<section class="decision-basis-timeline" aria-labelledby="decision-basis-title">
+          <div class="memory-section-head"><div><span>Decision basis</span><h3 id="decision-basis-title">What affected the next step</h3></div><dw-badge count="0"></dw-badge></div>
+          <p class="decision-basis-empty">No saved decision basis is available yet.</p>
+        </section>`;
+      }
+      return `<section class="decision-basis-timeline" aria-labelledby="decision-basis-title">
+        <div class="memory-section-head"><div><span>Decision basis</span><h3 id="decision-basis-title">What affected the next step</h3></div><dw-badge count="${esc(decisions.length)}"></dw-badge></div>
+        <p class="decision-authority-note">Authority labels are intentionally distinct: mechanical checks are not model or council judgments.</p>
+        <ol class="decision-basis-list">${decisions.map((decision) => {
+          const selected = decision.decision_id === this._selectedDecisionId;
+          const origin = decision.originating_receipt_ref || decision.resulting_ledger_event;
+          const sourceRoute = decision.origin_kind === "program"
+            ? `#/live/program/${encodeURIComponent(decision.origin)}/technical`
+            : `#/live/run/${encodeURIComponent(decision.origin)}/technical`;
+          return `<li class="decision-basis-item basis-${esc(decision.basis_type)}">
+            <button type="button" class="decision-basis-select" data-decision-id="${esc(decision.decision_id)}" aria-pressed="${selected ? "true" : "false"}">
+              <span class="decision-basis-kind">${esc(capital(decision.decision_kind))}</span>
+              <strong>${esc(decision.outcome)}</strong>
+              <span class="decision-authority-label">${esc(decision.basis_type)}</span>
+              <small>${esc(authorityMeaning[decision.basis_type] || "Saved structured basis")}</small>
+            </button>
+            ${selected ? `<div class="decision-basis-detail" role="region" aria-label="Selected decision basis">
+              <dl><div><dt>Reason code</dt><dd><code>${esc(decision.reason_code)}</code></dd></div>
+              <div><dt>Rule or score</dt><dd><code>${esc(decision.rule_ref || decision.score_ref)}</code></dd></div>
+              <div><dt>Recalled memory</dt><dd>${esc(decision.memory_refs.length ? decision.memory_refs.join(", ") : "None referenced")}</dd></div>
+              <div><dt>Dissent</dt><dd>${esc(decision.dissent_refs.length ? decision.dissent_refs.join(", ") : "None recorded")}</dd></div></dl>
+              <a class="decision-origin-link" href="${sourceRoute}" data-source-ref="${esc(origin)}">Open saved source</a>
+            </div>` : ""}
+          </li>`;
+        }).join("")}</ol>
+      </section>`;
+    }
+
     _groupsHtml(groups) {
       let html = "";
       for (const name of ["recalled", "used-as-basis", "written-back", "superseded"]) {
@@ -365,7 +459,13 @@ window.DW = window.DW || {};
     _cardHtml(item, group) {
       const reasons = reasonsFor(item, group);
       const audiences = item._audiences || [];
-      return `<dw-card class="memory-card" data-memory-group="${esc(group)}">
+      const selected = (this._document?.decisions || []).find(
+        (decision) => decision.decision_id === this._selectedDecisionId,
+      );
+      const highlighted = Boolean(
+        selected && selected.memory_refs.includes(item.recall_id),
+      );
+      return `<dw-card class="memory-card${highlighted ? " decision-memory-highlight" : ""}" data-memory-group="${esc(group)}" data-recall-id="${esc(item.recall_id || "")}">
         <div class="memory-card-head">
           <dw-badge variant="default" count="${esc(capital(item.source_kind || item.origin_kind || "record"))}"></dw-badge>
           <span class="memory-confidence"><strong>Confidence</strong> ${esc(confidenceText(item))}</span>

@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterator
 
+from .decision_basis import record_run_decision_basis
 from .gitio import head_sha, in_rewrite_state
 from .knowledge_packet import build_repository_knowledge_packet
 from .knowledge_writeback import ensure_terminal_writeback
@@ -43,6 +44,7 @@ from .orchestration_run import (
     _format_time,
     _load_run_documents,
     _parse_time,
+    _read_events,
     _run_dir,
     _sha,
     claim_node,
@@ -99,6 +101,64 @@ def record_runtime_event(
     projection = _record_runtime_event(
         root, run_id, event, detail, expect, now=now
     )
+    if event == "failure_routed":
+        source_receipts = [
+            str(item["receipt_hash"])
+            for item in projection.get("node_receipts", [])
+            if item.get("node_id") == detail.get("node_id")
+            and item.get("attempt") == detail.get("attempt")
+            and item.get("receipt_hash")
+        ]
+        _basis, projection = record_run_decision_basis(
+            root,
+            run_id,
+            projection,
+            decision_kind="failure-route",
+            basis_type="mechanical",
+            outcome=str(detail["action"]),
+            reason_code="declared-failure-policy",
+            rule_ref="score:on_failure",
+            score_ref=str(projection["score"]["semantic_hash"]),
+            input_receipt_refs=source_receipts,
+            memory_refs=[],
+            node_id=str(detail["node_id"]),
+            now=now,
+        )
+    elif event in {"run_aborted", "run_terminal"} or (
+        projection.get("terminal_event_ref") == projection.get("ledger_head")
+        and projection.get("state") in TERMINAL_STATES
+    ):
+        outcome = str(
+            detail.get("meaning") or detail.get("decision")
+            or detail.get("reason") or projection.get("state") or event
+        )
+        operator_supplied = event in {"checkpoint_decided", "request_decided"}
+        input_refs = [
+            str(item["receipt_hash"])
+            for item in projection.get("node_receipts", [])
+            if item.get("receipt_hash")
+        ][-64:]
+        if detail.get("response_hash"):
+            input_refs.append(str(detail["response_hash"]))
+        _basis, projection = record_run_decision_basis(
+            root,
+            run_id,
+            projection,
+            decision_kind="terminal",
+            basis_type="operator-supplied" if operator_supplied else "mechanical",
+            outcome=outcome,
+            reason_code=(
+                "typed-checkpoint-response" if operator_supplied
+                else "terminal-checkpoint" if event == "run_terminal"
+                else str(detail.get("reason") or "terminal-transition")
+            ),
+            rule_ref="run-state-machine:" + event,
+            score_ref=str(projection["score"]["semantic_hash"]),
+            input_receipt_refs=input_refs,
+            memory_refs=[],
+            node_id=str(detail.get("node_id") or "") or None,
+            now=now,
+        )
     if projection.get("terminal_event_ref") is None:
         return projection
     observed = (now or datetime.now(timezone.utc)).astimezone(
@@ -1785,6 +1845,55 @@ def _tick_run_once(
             root, run_id, projection, compiled, grant, actions,
             driver_config=driver_config, adapters=adapters, now=now,
         )
+    if (
+        projection["state"] in TERMINAL_STATES
+        and projection.get("terminal_event_ref")
+        and not any(
+            item.get("decision_kind") == "terminal"
+            and item.get("resulting_ledger_event") == projection.get("terminal_event_ref")
+            for item in projection.get("decision_bases", [])
+        )
+    ):
+        terminal_event = next(
+            event for event in _read_events(_run_dir(root, run_id), run_id)
+            if event["event_hash"] == projection["terminal_event_ref"]
+        )
+        terminal_detail = terminal_event["detail"]
+        operator_supplied = terminal_event["event"] in {
+            "checkpoint_decided", "request_decided",
+        }
+        input_refs = [str(terminal_detail["response_hash"])] if terminal_detail.get("response_hash") else []
+        _basis, projection = record_run_decision_basis(
+            root,
+            run_id,
+            projection,
+            decision_kind="terminal",
+            basis_type="operator-supplied" if operator_supplied else "mechanical",
+            outcome=str(
+                terminal_detail.get("meaning") or terminal_detail.get("decision")
+                or terminal_detail.get("reason") or projection["state"]
+            ),
+            reason_code=(
+                "typed-checkpoint-response" if operator_supplied
+                else "terminal-transition"
+            ),
+            rule_ref="run-state-machine:" + str(terminal_event["event"]),
+            score_ref=str(projection["score"]["semantic_hash"]),
+            input_receipt_refs=input_refs,
+            memory_refs=[],
+            now=now,
+        )
+        observed_terminal = (now or datetime.now(timezone.utc)).astimezone(
+            timezone.utc
+        ).replace(microsecond=0)
+        ensure_terminal_writeback(
+            root,
+            _run_dir(root, run_id),
+            projection=projection,
+            origin_kind="run",
+            timestamp=observed_terminal,
+        )
+        projection = replay_run(root, run_id, now=observed_terminal)
     if projection["state"] in TERMINAL_STATES:
         projection, observed = _observe_external_commit(
             root, run_id, projection, grant, now=now
@@ -1897,6 +2006,21 @@ def _tick_run_once(
                 str(projection["ledger_head"]),
                 now=now,
             )
+            _basis, projection = record_run_decision_basis(
+                root,
+                run_id,
+                projection,
+                decision_kind="scheduler",
+                basis_type="mechanical",
+                outcome="checkpoint:" + node_id,
+                reason_code="dependencies-satisfied",
+                rule_ref="scheduler:eligibility-and-capacity",
+                score_ref=str(projection["score"]["semantic_hash"]),
+                input_receipt_refs=[str(projection["grant_hash"])],
+                memory_refs=[],
+                node_id=node_id,
+                now=now,
+            )
             actions.append({"action": "checkpoint", "node_id": node_id, "state": projection["state"]})
             break
         attempt = int(candidate["attempt"])
@@ -1907,6 +2031,21 @@ def _tick_run_once(
             attempt,
             f"conduct-{node_id}-{attempt}",
             str(projection["ledger_head"]),
+            now=now,
+        )
+        _basis, projection = record_run_decision_basis(
+            root,
+            run_id,
+            projection,
+            decision_kind="scheduler",
+            basis_type="mechanical",
+            outcome="claim:%s:%d" % (node_id, attempt),
+            reason_code=str(candidate.get("reason") or "eligible"),
+            rule_ref="scheduler:eligibility-and-capacity",
+            score_ref=str(projection["score"]["semantic_hash"]),
+            input_receipt_refs=[str(projection["grant_hash"])],
+            memory_refs=[],
+            node_id=node_id,
             now=now,
         )
         claim = next(

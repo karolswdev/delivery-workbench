@@ -15,6 +15,11 @@ from pathlib import Path
 from typing import Iterable, Mapping, Optional
 
 from . import repofacts
+from .decision_basis import (
+    DECISION_BASIS_EVENT,
+    decision_subject,
+    read_decision_bases,
+)
 from .knowledge import (
     EARNED_RECORD_KINDS,
     MEMORY_DOCUMENT_BYTE_CAPS,
@@ -482,6 +487,95 @@ def _group_writebacks(entries: Iterable[dict]) -> tuple[list[dict], list[dict]]:
     return written, superseded
 
 
+def _decision_entries(
+    root: Path,
+    run_dir: Path,
+    origin_kind: str,
+    origin: str,
+    recalled: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """Verify receipt/ledger pairing and project recalled items actually cited."""
+    documents = read_decision_bases(run_dir)
+    if not documents:
+        return [], []
+    if origin_kind == "run":
+        from .orchestration_run import _read_events
+        events = _read_events(run_dir, origin)
+    else:
+        from .program_run import _events
+        events = _events(run_dir, origin)
+    event_by_hash = {str(event["event_hash"]): event for event in events}
+    references = [
+        event for event in events if event.get("event") == DECISION_BASIS_EVENT
+    ]
+    documents_by_id = {document["decision_id"]: document for document in documents}
+    referenced_ids = []
+    entries = []
+    expected_subject = decision_subject(origin_kind, origin)
+    for event in references:
+        detail = event.get("detail")
+        if not isinstance(detail, Mapping):
+            raise MemoryReadRefusal("malformed", "decision basis ledger reference is malformed")
+        decision_id = str(detail.get("decision_id") or "")
+        document = documents_by_id.get(decision_id)
+        if document is None:
+            raise MemoryReadRefusal("tampered", "decision basis ledger reference is orphaned")
+        if decision_id in referenced_ids:
+            raise MemoryReadRefusal("tampered", "decision basis is referenced more than once")
+        referenced_ids.append(decision_id)
+        if (
+            detail.get("decision_kind") != document["decision_kind"]
+            or detail.get("basis_type") != document["basis_type"]
+            or detail.get("resulting_ledger_event") != document["resulting_ledger_event"]
+        ):
+            raise MemoryReadRefusal("tampered", "decision basis differs from its ledger reference")
+        result_event = event_by_hash.get(document["resulting_ledger_event"])
+        if result_event is None or int(result_event["seq"]) >= int(event["seq"]):
+            raise MemoryReadRefusal("tampered", "decision basis resulting event is absent or out of order")
+        if document["subject"] != expected_subject:
+            raise MemoryReadRefusal("stale", "decision basis belongs to a different subject")
+        entries.append({
+            **document,
+            "event_id": decision_id,
+            "origin_kind": origin_kind,
+            "origin": origin,
+            "originating_receipt_ref": (
+                document["input_receipt_refs"][0]
+                if document["input_receipt_refs"] else document["resulting_ledger_event"]
+            ),
+            "ledger_coordinates": {
+                "path": _display_path(root, run_dir / "ledger.jsonl"),
+                "result_seq": result_event["seq"],
+                "reference_seq": event["seq"],
+                "reference_event": event["event_hash"],
+                "receipt_path": _display_path(
+                    root,
+                    run_dir / "memory" / "decisions" / (decision_id[7:] + ".json"),
+                ),
+            },
+        })
+    if set(referenced_ids) != set(documents_by_id):
+        raise MemoryReadRefusal("tampered", "decision basis receipt inventory is orphaned")
+    recalled_ids = {str(item.get("recall_id") or "") for item in recalled}
+    for document in documents:
+        if not set(document["memory_refs"]) <= recalled_ids:
+            raise MemoryReadRefusal(
+                "tampered", "decision basis cites memory outside frozen recall"
+            )
+    decisions_for_recall: dict[str, list[str]] = {}
+    for document in documents:
+        for recall_id in document["memory_refs"]:
+            decisions_for_recall.setdefault(recall_id, []).append(document["decision_id"])
+    used = []
+    for item in recalled:
+        refs = sorted(set(decisions_for_recall.get(str(item.get("recall_id") or ""), [])))
+        if refs:
+            used.append({**item, "decision_refs": refs})
+    return sorted(entries, key=lambda item: (
+        int(item["ledger_coordinates"]["result_seq"]), item["decision_id"]
+    )), used
+
+
 def _entry_matches(
     entry: Mapping[str, object],
     *,
@@ -531,6 +625,9 @@ def build_memory_recall_projection(
         )
         _validate_writeback_status(root, run_dir, entries)
         written, superseded = _group_writebacks(entries)
+        decisions, used_as_basis = _decision_entries(
+            root, run_dir, str(scope["kind"]), origin, recalled
+        )
         return {
             "kind": MEMORY_READ_KIND,
             "schema_version": MEMORY_READ_SCHEMA_VERSION,
@@ -539,15 +636,18 @@ def build_memory_recall_projection(
             "refusal": None,
             "groups": {
                 "recalled": recalled,
-                "used-as-basis": [],
+                "used-as-basis": used_as_basis,
                 "written-back": written,
                 "superseded": superseded,
                 "excluded": excluded,
             },
+            "decisions": decisions,
             **_AUTHORITY_MARKERS,
         }
     except (DwError, KnowledgeRefusal, MemoryRecallActionNeeded, OSError, UnicodeError, ValueError) as exc:
-        return _refusal(MEMORY_READ_KIND, scope, exc)
+        refused = _refusal(MEMORY_READ_KIND, scope, exc)
+        refused["decisions"] = []
+        return refused
 
 
 def build_memory_writeback_projection(

@@ -208,6 +208,7 @@ def main():
             run_summary_inventory, score_mutation_preview, start_run,
             tick_run, validate_score,
         )
+        from dw_pmo.decision_basis import read_decision_bases
         from dw_pmo.orchestration_driver import artifact_inventory
         from dw_pmo.workbench import handle_api
 
@@ -761,6 +762,18 @@ def main():
         assert observed["state"] == "awaiting-certification"
         observed_projection = replay_run(root, main_run["run_id"])
         assert observed_projection["external_commits"][-1]["head"] == head
+        decision_documents = read_decision_bases(
+            root / ".git" / "pmo-orchestration" / "runs" / main_run["run_id"]
+        )
+        decision_kinds = {item["decision_kind"] for item in decision_documents}
+        assert {"scheduler", "failure-route", "terminal"} <= decision_kinds
+        assert all(item["basis_type"] == "mechanical" for item in decision_documents)
+        assert all(item["resulting_ledger_event"].startswith("sha256:") for item in decision_documents)
+        assert {
+            item["decision_id"] for item in decision_documents
+        } == {
+            item["decision_id"] for item in observed_projection["decision_bases"]
+        }
 
         print(json.dumps({
             "exam": "packaged multi-agent orchestration",

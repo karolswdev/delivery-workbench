@@ -156,6 +156,9 @@ _EVENT_DETAIL_KEYS = {
         "included_item_count", "exclusion_count", "node_id", "claim_id",
         "packet_hash",
     },
+    "decision-basis-recorded": {
+        "decision_id", "decision_kind", "basis_type", "resulting_ledger_event",
+    },
 }
 
 _RUNTIME_EVENTS = {
@@ -164,7 +167,7 @@ _RUNTIME_EVENTS = {
     "checkpoint_reached", "checkpoint_decided", "run_aborted",
     "request_republished", "request_decided", "request_refused",
     "run_terminal", "rail_advanced", "external_commit_observed",
-    "memory-recall-built", "memory-recall-attached",
+    "memory-recall-built", "memory-recall-attached", "decision-basis-recorded",
 }
 
 # The driver activity vocabulary (docs/signals.md). This is a separate
@@ -879,6 +882,7 @@ def replay_run(
     nudges: list[dict[str, object]] = []
     memory_recalls: list[dict[str, object]] = []
     memory_attachments: list[dict[str, object]] = []
+    decision_bases: list[dict[str, object]] = []
     terminal_event_ref: str | None = None
     counters = {
         "agent_starts": 0, "check_starts": 0, "artifact_bytes": 0,
@@ -1320,6 +1324,18 @@ def replay_run(
             if any(item["claim_id"] == detail["claim_id"] for item in memory_attachments):
                 raise DwError("node claim received more than one memory recall")
             memory_attachments.append({"seq": offset, **dict(detail)})
+        elif kind == "decision-basis-recorded":
+            if any(
+                item["decision_id"] == detail["decision_id"]
+                for item in decision_bases
+            ):
+                raise DwError("decision basis was referenced more than once")
+            earlier_hashes = {
+                str(prior["event_hash"]) for prior in events[:offset]
+            }
+            if detail["resulting_ledger_event"] not in earlier_hashes:
+                raise DwError("decision basis resulting event is not earlier in the ledger")
+            decision_bases.append({"seq": offset, **dict(detail)})
         else:
             raise DwError(f"unsupported event transition: {kind}")
 
@@ -1389,6 +1405,7 @@ def replay_run(
         "nudges": nudges,
         "memory_recalls": memory_recalls,
         "memory_attachments": memory_attachments,
+        "decision_bases": decision_bases,
         "active_claims": sorted(
             active.values(),
             key=lambda item: (node_order[str(item["node_id"])], int(item["attempt"])),

@@ -217,6 +217,9 @@ _EVENT_DETAIL_KEYS = {
         "included_item_count", "exclusion_count", "node_id", "claim_id",
         "packet_hash",
     },
+    "decision-basis-recorded": {
+        "decision_id", "decision_kind", "basis_type", "resulting_ledger_event",
+    },
 }
 
 _OBLIGATION_KEYS = {
@@ -1416,6 +1419,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
     dispatches: list[dict[str, object]] = []
     memory_recalls: list[dict[str, object]] = []
     memory_attachments: list[dict[str, object]] = []
+    decision_bases: list[dict[str, object]] = []
     controls: list[dict[str, object]] = []
     obligations: dict[str, dict[str, object]] = {}
     obligation_history: list[dict[str, object]] = []
@@ -1487,6 +1491,21 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
                 "program claim received more than one memory recall",
             )
             memory_attachments.append({"seq": event["seq"], **dict(detail)})
+        elif event_name == "decision-basis-recorded":
+            _require(event_generation == generation, "decision basis uses the wrong revocation generation")
+            _require(
+                not any(item["decision_id"] == detail["decision_id"] for item in decision_bases),
+                "decision basis was referenced more than once",
+            )
+            earlier_hashes = {
+                str(prior["event_hash"])
+                for prior in events if int(prior["seq"]) < int(event["seq"])
+            }
+            _require(
+                detail["resulting_ledger_event"] in earlier_hashes,
+                "decision basis resulting event is not earlier in the ledger",
+            )
+            decision_bases.append({"seq": event["seq"], **dict(detail)})
         elif event_name == "claim_reserved":
             _require(event_generation == generation, "claim uses the wrong revocation generation")
             _require(state == "running", "claim was reserved while program was not running")
@@ -1994,6 +2013,7 @@ def replay_program(root: Path, run_id: str, *, now: str | datetime | None = None
         "dispatches": dispatches,
         "memory_recalls": memory_recalls,
         "memory_attachments": memory_attachments,
+        "decision_bases": decision_bases,
         "active_claims": sorted(active.values(), key=lambda item: str(item["claim_id"])),
         "completed_claims": completed,
         "outstanding_requests": outstanding_requests,
@@ -2042,6 +2062,37 @@ def _append_event(path: Path, event: dict[str, object]) -> None:
         handle.write((canonical_json(event) + "\n").encode("utf-8"))
         handle.flush()
         os.fsync(handle.fileno())
+
+
+def record_program_decision_basis(
+    root: Path,
+    run_id: str,
+    detail: dict[str, object],
+    expect: str,
+    *,
+    now: str | datetime | None = None,
+) -> dict[str, object]:
+    """Reference one persisted decision receipt in the program ledger."""
+    root = root.resolve()
+    observed = _time(now, "now")
+    path, _grant, _plan = _load_documents(root, run_id)
+    with _lock(path / "ledger.lock"):
+        projection = replay_program(root, run_id, now=observed)
+        _require(
+            str(expect or "") == projection["ledger_head"],
+            "stale decision basis event token refused",
+        )
+        event = _event_document(
+            run_id,
+            int(projection["event_count"]) + 1,
+            "decision-basis-recorded",
+            int(projection["generation"]),
+            observed,
+            detail,
+            str(projection["ledger_head"]),
+        )
+        _append_event(path, event)
+    return replay_program(root, run_id, now=observed)
 
 
 def _record_program_test_baseline(
