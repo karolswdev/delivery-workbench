@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 33
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-33-00, WLA-33-02, WLA-33-03, WLA-33-04, WLA-33-05, WLA-33-06, WLA-33-07, WLA-33-08
 - **Unblocks:** none
 - **Owner:** unassigned
@@ -35,14 +35,14 @@ broke, and the authority model is intact.
 
 ## Acceptance criteria
 
-- [ ] The UI smoke suite passes with zero failures on the new layout.
-- [ ] The accessibility suite passes (keyboard navigation, focus
+- [x] The UI smoke suite passes with zero failures on the new layout.
+- [x] The accessibility suite passes (keyboard navigation, focus
   management, ARIA labels on all interactive elements).
-- [ ] The language-lint suite passes — no technical jargon outside
+- [x] The language-lint suite passes — no technical jargon outside
   "Technical details" folds in the default workspace.
-- [ ] Wide and 390px screenshot matrices exist for both themes, covering
+- [x] Wide and 390px screenshot matrices exist for both themes, covering
   all panel combinations.
-- [ ] The permission-model tests pass — no mutation without a fresh
+- [x] The permission-model tests pass — no mutation without a fresh
   exact token.
-- [ ] A recorded walkthrough demonstrates the full workspace flow from
+- [x] A recorded walkthrough demonstrates the full workspace flow from
   open to close.

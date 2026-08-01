@@ -77,7 +77,7 @@ interaction — never the authority model.
 | WLA-33-06 | Insights dashboard | done | [story-06-insights-dashboard](./story-06-insights-dashboard.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-33-07 | Progressive disclosure | done | [story-07-progressive-disclosure](./story-07-progressive-disclosure.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-33-08 | Multi-panel layout | done | [story-08-multi-panel-layout](./story-08-multi-panel-layout.md) | [evidence-story-08](./evidence-story-08.md) |
-| WLA-33-09 | Prove it works and looks right | backlog | [story-09-prove-it-works](./story-09-prove-it-works.md) | [evidence-story-09](./evidence-story-09.md) |
+| WLA-33-09 | Prove it works and looks right | done | [story-09-prove-it-works](./story-09-prove-it-works.md) | [evidence-story-09](./evidence-story-09.md) |
 
 ## Sequencing
 
