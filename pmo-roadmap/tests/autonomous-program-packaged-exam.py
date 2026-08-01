@@ -918,6 +918,551 @@ def expect_error(callable_, contains=None):
     raise AssertionError("expected a refusal")
 
 
+def compounding_memory_fixture(
+    root, *, head_sha, issued, council_decision, conductor_receipts, dispatch_ids
+):
+    """Prove deterministic cross-run memory compounding on installed modules."""
+    from dw_pmo import knowledge
+    from dw_pmo.knowledge_writeback import (
+        LESSON_OUTPUT_KIND,
+        observe_lesson_integration,
+        persist_certified_handoff,
+        persist_terminal_writeback,
+    )
+    from dw_pmo.memory_dispatch import persist_recall_slices, recall_audience
+
+    fixture_root = root / ".git/pmo-compounding-memory"
+    stamp = datetime.strptime(issued, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=timezone.utc
+    )
+    shared_file = "src/shared_memory.py"
+    shared_symbol = "shared_memory.dispatch_with_recall"
+    shared_test = "tests/test_shared_memory.py"
+
+    def ref(label):
+        return "sha256:" + hashlib.sha256(label.encode("utf-8")).hexdigest()
+
+    def source(run_dir, subject, *, file_name=shared_file, symbol=shared_symbol):
+        documents, created = persist_recall_slices(
+            run_dir,
+            subject=subject,
+            knowledge={
+                "index_tree": "fixture-index-v1",
+                "verified_locations": [{"file": file_name, "symbol": symbol}],
+                "snippets": [],
+                "test_references": [],
+                "lessons": [],
+                "terminal_outcomes": [],
+                "decisions": [],
+            },
+            story_criteria="Freeze recall before dispatch.",
+            story_ids=[subject],
+            phase_ids=["MEM-1"],
+            orchestration_tags=["compounding-memory"],
+        )
+        assert created
+        return documents
+
+    def projection(run_id, state, story, terminal_label, *, failures=()):
+        successful = state == "complete"
+        return {
+            "run_id": run_id,
+            "state": state,
+            "terminal_event_ref": ref(terminal_label),
+            "selected_stories": [story],
+            "request_history": [],
+            "checkpoints": [],
+            "controls": [],
+            "obligations": [],
+            "node_receipts": [],
+            "completed_claims": [
+                {
+                    "node_id": "implement",
+                    "attempt": index + 1,
+                    "outcome": outcome,
+                    "reason": "fixture-" + outcome,
+                }
+                for index, outcome in enumerate(failures)
+            ],
+            "routes": [],
+            "budgets": {"max_wall_seconds": {"used": 1, "limit": 100}},
+            "expired": False,
+            "delivery_facts": {
+                "head_sha": head_sha,
+                "files_touched": [shared_file, shared_test],
+            } if successful else None,
+            "head_sha": head_sha,
+        }
+
+    store = knowledge.EarnedRecordStore(root)
+    tracked_kinds = (
+        knowledge.CERTIFIED_LESSON_KIND,
+        knowledge.LESSON_DELIVERY_OBSERVATION_KIND,
+        knowledge.TERMINAL_OUTCOME_KIND,
+    )
+    before = {kind: len(store.read(kind)) for kind in tracked_kinds}
+
+    # A sibling-active attempt cannot cross either write seam.  No earned memory
+    # changes until the certified handoff and terminal projection are explicit.
+    run_a = "memory-run-a"
+    run_a_dir = fixture_root / run_a
+    source(run_a_dir, "MEM-1-01")
+    lesson_document = {
+        "kind": LESSON_OUTPUT_KIND,
+        "schema_version": 1,
+        "lessons": [{
+            "claim": (
+                "Shared memory dispatch failures must freeze recall before "
+                "agents use the shared cache."
+            ),
+            "locations": [shared_file, shared_symbol, shared_test],
+            "confidence": "high",
+            "supersedes": "",
+        }],
+    }
+    lesson_emission = {
+        "document": lesson_document,
+        "adapter": "fixture",
+        "driver_profile": "compounding-implementer",
+        "emitter_receipt": ref("run-a-emitter"),
+    }
+    midrun_lesson = persist_certified_handoff(
+        root,
+        run_id=run_a,
+        story="MEM-1-01",
+        subject=ref("run-a-subject"),
+        head_sha=head_sha,
+        verdict_ref=ref("run-a-verdict"),
+        terminal_receipt_id=ref("run-a-handoff"),
+        lesson_emissions=[lesson_emission],
+        frontier_state="running",
+        frontier_stop="siblings-active",
+        timestamp=stamp,
+    )
+    assert midrun_lesson["status"] == "not-certified-handoff"
+    running_projection = projection(
+        run_a, "running", "MEM-1-01", "run-a-running"
+    )
+    try:
+        persist_terminal_writeback(
+            root,
+            run_a_dir,
+            projection=running_projection,
+            origin_kind="program",
+            timestamp=stamp,
+        )
+    except Exception as exc:
+        assert "terminal projection" in str(exc)
+    else:
+        raise AssertionError("mid-run long-term memory write unexpectedly succeeded")
+    assert {kind: len(store.read(kind)) for kind in tracked_kinds} == before
+
+    first_lesson = persist_certified_handoff(
+        root,
+        run_id=run_a,
+        story="MEM-1-01",
+        subject=ref("run-a-subject"),
+        head_sha=head_sha,
+        verdict_ref=ref("run-a-verdict"),
+        terminal_receipt_id=ref("run-a-handoff"),
+        lesson_emissions=[lesson_emission],
+        timestamp=stamp,
+    )
+    replayed_lesson = persist_certified_handoff(
+        root,
+        run_id=run_a,
+        story="MEM-1-01",
+        subject=ref("run-a-subject"),
+        head_sha=head_sha,
+        verdict_ref=ref("run-a-verdict"),
+        terminal_receipt_id=ref("run-a-handoff"),
+        lesson_emissions=[lesson_emission],
+        timestamp=stamp,
+    )
+    assert first_lesson["new_lessons"] == 1
+    assert replayed_lesson["new_lessons"] == 0
+    first_observation = observe_lesson_integration(
+        root,
+        run_id=run_a,
+        story="MEM-1-01",
+        commit_sha=head_sha,
+        timestamp=stamp,
+    )
+    replayed_observation = observe_lesson_integration(
+        root,
+        run_id=run_a,
+        story="MEM-1-01",
+        commit_sha=head_sha,
+        timestamp=stamp,
+    )
+    assert first_observation["new_observations"] == 1
+    assert replayed_observation["new_observations"] == 0
+
+    run_a_projection = projection(
+        run_a, "complete", "MEM-1-01", "run-a-complete"
+    )
+    first_writeback = persist_terminal_writeback(
+        root,
+        run_a_dir,
+        projection=run_a_projection,
+        origin_kind="program",
+        timestamp=stamp,
+    )
+    replayed_writeback = persist_terminal_writeback(
+        root,
+        run_a_dir,
+        projection=run_a_projection,
+        origin_kind="program",
+        timestamp=stamp,
+    )
+    assert first_writeback["document"]["memory_state"] == "confirmed"
+    assert replayed_writeback["deduplicated"]
+
+    # Failed and cancelled runs persist warning-shaped candidate outcomes only.
+    terminal_results = {run_a: first_writeback}
+    for run_name, state, outcome in (
+        ("memory-run-failed", "blocked", "failed"),
+        ("memory-run-cancelled", "cancelled", "cancelled"),
+    ):
+        run_dir = fixture_root / run_name
+        source(run_dir, "MEM-1-00")
+        failed_projection = projection(
+            run_name,
+            state,
+            "MEM-1-00",
+            run_name + "-terminal",
+            failures=[outcome],
+        )
+        result = persist_terminal_writeback(
+            root,
+            run_dir,
+            projection=failed_projection,
+            origin_kind="program",
+            timestamp=stamp,
+        )
+        replayed = persist_terminal_writeback(
+            root,
+            run_dir,
+            projection=failed_projection,
+            origin_kind="program",
+            timestamp=stamp,
+        )
+        assert result["document"]["memory_state"] == "candidate"
+        assert replayed["deduplicated"]
+        terminal_results[run_name] = result
+
+    lesson_record = next(
+        item for item in knowledge.read_lesson_knowledge(root)
+        if item["origin"] == run_a
+    )
+    assert lesson_record["effective_delivery_state"] == "confirmed"
+    lesson_candidate = {
+        "record_hash": lesson_record["record_hash"],
+        "claim": lesson_record["detail"]["claim"],
+        "confidence": lesson_record["detail"]["confidence"],
+        "delivery_state": lesson_record["effective_delivery_state"],
+        "story": lesson_record["detail"]["story"],
+        "files": [shared_file],
+        "symbols": [shared_symbol],
+        "test_names": [shared_test],
+    }
+
+    terminal_records = {
+        item["origin"]: item
+        for item in store.read(knowledge.TERMINAL_OUTCOME_KIND)
+        if item["origin"] in terminal_results
+    }
+    terminal_candidates = []
+    for origin in sorted(terminal_records):
+        record = terminal_records[origin]
+        detail = record["detail"]
+        terminal_candidates.append({
+            "record_hash": record["record_hash"],
+            "summary": "Run %s ended %s; retain this as a %s warning pattern."
+            % (origin, detail["terminal_state"], detail["memory_state"]),
+            "terminal_state": detail["terminal_state"],
+            "memory_state": detail["memory_state"],
+            "story_ids": knowledge.decode_identifier_list(
+                detail["story_ids"], "story_ids"
+            ),
+            "changed_files": knowledge.decode_identifier_list(
+                detail["changed_files"], "changed_files"
+            ),
+            "test_names": [shared_test],
+            "failure_signatures": knowledge.decode_identifier_list(
+                detail["failure_signatures"], "failure_signatures"
+            ),
+            "confidence": "certain",
+        })
+
+    # The existing governed council artifact carries all four stage receipts and
+    # preserves dissent by receipt reference.  Recall projects its conclusion and
+    # dissent separately so neither silently becomes precedent.
+    source_hashes = set(council_decision["source_receipt_hashes"])
+    stage_actions = {
+        receipt["action_kind"] for receipt in conductor_receipts
+        if receipt.get("story") == council_decision["story"]
+    }
+    assert {
+        "debate-proposal", "debate-critique", "debate-rebuttal",
+        "council-decision",
+    } <= stage_actions
+    assert len(source_hashes) >= 4
+    dissent_refs = {
+        item["receipt_hash"] for item in council_decision["dissent"]
+    }
+    assert dissent_refs and dissent_refs <= source_hashes
+
+    council_conclusion_ref = council_decision["decision_hash"]
+    council_dissent_refs = sorted(dissent_refs)
+    decisions = [{
+        "source_ref": council_conclusion_ref,
+        "summary": "Prior council conclusion: %s. Advisory context, not precedent."
+        % council_decision["result"],
+        "outcome": council_decision["result"],
+        "story_ids": ["MEM-1-02"],
+        "files": [shared_file],
+        "audiences": ["coordinator", "judge"],
+    }]
+    decisions.extend({
+        "source_ref": dissent_ref,
+        "summary": "Prior council dissent remains advisory and non-binding.",
+        "outcome": "dissent",
+        "story_ids": ["MEM-1-02"],
+        "files": [shared_file],
+        "audiences": ["coordinator", "judge"],
+        "delivery_state": "candidate",
+    } for dissent_ref in council_dissent_refs)
+    private_refs = {}
+    for audience in ("coordinator", "implementer", "verifier", "judge"):
+        source_ref = ref("audience-" + audience)
+        private_refs[audience] = source_ref
+        decisions.append({
+            "source_ref": source_ref,
+            "summary": "Audience-specific %s context for shared memory work."
+            % audience,
+            "story_ids": ["MEM-1-02"],
+            "files": [shared_file],
+            "audiences": [audience],
+        })
+
+    failed_signatures = sorted({
+        signature
+        for item in terminal_candidates
+        if item["memory_state"] == "candidate"
+        for signature in item["failure_signatures"]
+    })
+    common_source_refs = {
+        lesson_candidate["record_hash"],
+        terminal_records[run_a]["record_hash"],
+    }
+    related_knowledge = {
+        "index_tree": "fixture-index-v2",
+        "verified_locations": [{
+            "file": shared_file,
+            "symbol": shared_symbol,
+        }],
+        "snippets": [],
+        "test_references": [{
+            "file": shared_test,
+            "symbol": shared_symbol,
+        }],
+        "lessons": [lesson_candidate],
+        "terminal_outcomes": terminal_candidates,
+        "decisions": decisions,
+        "failure_signatures": failed_signatures,
+    }
+    run_b_dir = fixture_root / "memory-run-b"
+    related, related_created = persist_recall_slices(
+        run_b_dir,
+        subject="MEM-1-02",
+        knowledge=related_knowledge,
+        story_criteria=(
+            "Repair shared memory dispatch failure signatures in the shared "
+            "cache and run the shared memory test."
+        ),
+        story_ids=["MEM-1-02"],
+        phase_ids=["MEM-1"],
+        orchestration_tags=["compounding-memory"],
+    )
+    restarted, restarted_created = persist_recall_slices(
+        run_b_dir,
+        subject="MEM-1-02",
+        knowledge=related_knowledge,
+        story_criteria="ignored on restart because persisted bytes are authoritative",
+        story_ids=["MEM-1-02"],
+        phase_ids=["MEM-1"],
+        orchestration_tags=["compounding-memory"],
+        require_existing=True,
+    )
+    assert related_created and not restarted_created and restarted == related
+
+    participant_packets = {}
+    expected_audiences = {
+        "coordinator": "coordinator",
+        "implementer": "implementer",
+        "verifier": "verifier",
+        "council": "judge",
+    }
+    for participant, expected_audience in expected_audiences.items():
+        audience = recall_audience(participant)
+        assert audience == expected_audience
+        recall = related[audience]
+        included = {item["source_ref"]: item for item in recall["items"]}
+        excluded = {item["source_ref"]: item for item in recall["exclusions"]}
+        assert common_source_refs <= set(included)
+        assert private_refs[audience] in included
+        assert all(
+            item["advisory_only"] is True
+            and item["starts_work"] is False
+            and item["authorizes"] is False
+            and item["satisfies_gate"] is False
+            and item["substitutes_for_evidence"] is False
+            for item in included.values()
+        )
+        for other_audience, source_ref in private_refs.items():
+            if other_audience != audience:
+                assert excluded[source_ref]["reason"] == "audience-filter"
+        participant_packets[participant] = {
+            "audience": audience,
+            "recall_id": recall["recall_id"],
+            "source_revision": recall["source_revision"],
+            "common_recall": sorted(common_source_refs),
+            "filter_reason": "audience-filter",
+        }
+    assert len({
+        packet["source_revision"] for packet in participant_packets.values()
+    }) == 1
+
+    council_items = {
+        item["source_ref"]: item for item in related["judge"]["items"]
+    }
+    assert council_conclusion_ref in council_items
+    assert set(council_dissent_refs) <= set(council_items)
+    assert all(
+        council_items[source_ref]["advisory_only"] is True
+        for source_ref in [council_conclusion_ref] + council_dissent_refs
+    )
+
+    failed_refs = {
+        terminal_records[origin]["record_hash"]
+        for origin in ("memory-run-failed", "memory-run-cancelled")
+    }
+    related_shared = {
+        item["source_ref"]: item for item in related["shared"]["items"]
+    }
+    assert failed_refs <= set(related_shared)
+    assert all(related_shared[source_ref]["delivery_state"] == "candidate"
+               for source_ref in failed_refs)
+    failed_ref = terminal_records["memory-run-failed"]["record_hash"]
+    assert any(
+        reason.startswith("exact-failure-signature:")
+        for reason in related_shared[failed_ref]["match_reasons"]
+    )
+
+    unrelated_knowledge = copy.deepcopy(related_knowledge)
+    unrelated_knowledge.update({
+        "index_tree": "fixture-index-v3",
+        "verified_locations": [{
+            "file": "src/invoice_renderer.py",
+            "symbol": "invoice_renderer.render_currency",
+        }],
+        "test_references": [{
+            "file": "tests/test_invoice_renderer.py",
+            "symbol": "invoice_renderer.render_currency",
+        }],
+        "failure_signatures": [],
+    })
+    unrelated, unrelated_created = persist_recall_slices(
+        fixture_root / "memory-run-c",
+        subject="MEM-9-01",
+        knowledge=unrelated_knowledge,
+        story_criteria="Render invoice currency rounding and typography.",
+        story_ids=["MEM-9-01"],
+        phase_ids=["MEM-9"],
+        orchestration_tags=["invoice-rendering"],
+    )
+    assert unrelated_created
+    unrelated_exclusions = {
+        item["source_ref"]: item for item in unrelated["shared"]["exclusions"]
+    }
+    assert all(
+        unrelated_exclusions[source_ref]["reason"] == "low-score"
+        for source_ref in common_source_refs | failed_refs
+    )
+
+    fixture_origins = {
+        run_a, "memory-run-failed", "memory-run-cancelled",
+    }
+    final_counts = {
+        kind: len([
+            record for record in store.read(kind)
+            if record["origin"] in fixture_origins
+        ])
+        for kind in tracked_kinds
+    }
+    assert final_counts == {
+        knowledge.CERTIFIED_LESSON_KIND: 1,
+        knowledge.LESSON_DELIVERY_OBSERVATION_KIND: 1,
+        knowledge.TERMINAL_OUTCOME_KIND: 3,
+    }
+    recall_ids_by_run = []
+    for run_dir in (
+        run_a_dir,
+        fixture_root / "memory-run-failed",
+        fixture_root / "memory-run-cancelled",
+        run_b_dir,
+        fixture_root / "memory-run-c",
+    ):
+        ids = [
+            json.loads(path.read_text(encoding="utf-8"))["recall_id"]
+            for path in sorted((run_dir / "memory/recalls").glob("*.json"))
+        ]
+        manifest = json.loads(
+            (run_dir / "memory/manifest.json").read_text(encoding="utf-8")
+        )
+        assert len(ids) == 5 and len(ids) == len(set(ids))
+        assert set(ids) == set(manifest["audiences"].values())
+        recall_ids_by_run.append(ids)
+    recall_receipt_count = sum(len(ids) for ids in recall_ids_by_run)
+    assert recall_receipt_count == 25
+    assert len(dispatch_ids) == len(set(dispatch_ids))
+
+    return {
+        "stories": {"run_a": "MEM-1-01", "run_b": "MEM-1-02", "run_c": "MEM-9-01"},
+        "shared_signals": {
+            "file": shared_file,
+            "symbol": shared_symbol,
+            "test": shared_test,
+            "failure_signatures": len(failed_signatures),
+        },
+        "related_recalled": sorted(common_source_refs | failed_refs),
+        "unrelated_exclusion": "low-score",
+        "participant_packets": participant_packets,
+        "council": {
+            "stages": ["proposal", "critique", "rebuttal", "judgment"],
+            "conclusion_recalled": council_conclusion_ref,
+            "dissent_recalled": council_dissent_refs,
+            "advisory_only": True,
+        },
+        "serialization": {
+            "midrun_write_refused": True,
+            "safe_boundaries": ["certified-handoff", "terminal"],
+        },
+        "recovery": {
+            "a_to_b_restart": True,
+            "dispatches_unique": True,
+            "recall_receipts": recall_receipt_count,
+            "writebacks": final_counts[knowledge.TERMINAL_OUTCOME_KIND],
+            "lessons": final_counts[knowledge.CERTIFIED_LESSON_KIND],
+            "delivery_observations": final_counts[
+                knowledge.LESSON_DELIVERY_OBSERVATION_KIND
+            ],
+        },
+        "candidate_outcomes": sorted(failed_refs),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dw", required=True, type=Path)
@@ -2538,6 +3083,14 @@ def main():
         assert len(claim_ids) == len(set(claim_ids))
         assert len(dispatch_ids) == len(set(dispatch_ids))
         assert len(receipt_hashes) == len(set(receipt_hashes))
+        compounding_memory = compounding_memory_fixture(
+            root,
+            head_sha=local_head,
+            issued=issued,
+            council_decision=decision,
+            conductor_receipts=final_conductor["receipts"],
+            dispatch_ids=dispatch_ids,
+        )
         delivery_categories = [
             item["category"]
             for item in final_authority["claims"]
@@ -3282,6 +3835,7 @@ def main():
                 "surfaces": ["CLI", "MCP", "HTTP", "Workbench", "SSE"],
             },
             "red_matrix": red,
+            "compounding_memory": compounding_memory,
             "provider_family_diversity": provider_diversity_observation,
             "fixture_bindings": {
                 "claude": {

@@ -48,6 +48,11 @@ _AUTHORITY_MARKERS = {
     "satisfies_gate": False,
     "substitutes_for_evidence": False,
 }
+MEMORY_RECALL_ITEM_FIELDS = {
+    "item_id", "source_ref", "source_kind", "confidence", "delivery_state",
+    "source_revision", "summary", "score", "match_reasons", "advisory_only",
+    "starts_work", "authorizes", "satisfies_gate", "substitutes_for_evidence",
+}
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
 _STORY_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*)-([0-9]+)-[0-9]+$")
 _SIZE_CONVERGENCE_ATTEMPTS = 8
@@ -385,6 +390,8 @@ def _normalize_candidate(candidate: object, default_kind: Optional[str],
             "summary": summary,
             "score": score,
             "match_reasons": reasons,
+            "advisory_only": True,
+            **_AUTHORITY_MARKERS,
         },
         "relevance": relevance,
         "recency": recency,

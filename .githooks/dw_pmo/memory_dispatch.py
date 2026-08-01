@@ -15,7 +15,12 @@ import tempfile
 from pathlib import Path
 from typing import Mapping
 
-from .memory_recall import AUDIENCES, MEMORY_RECALL_KIND, build_memory_recall
+from .memory_recall import (
+    AUDIENCES,
+    MEMORY_RECALL_ITEM_FIELDS,
+    MEMORY_RECALL_KIND,
+    build_memory_recall,
+)
 from .model import DwError
 
 
@@ -125,16 +130,38 @@ def _bounded_summary(value: object) -> str:
 
 
 def _candidate_ref(kind: str, payload: Mapping[str, object]) -> str:
-    explicit = payload.get("record_hash") or payload.get("receipt_id")
+    explicit = (
+        payload.get("source_ref")
+        or payload.get("record_hash")
+        or payload.get("receipt_id")
+        or payload.get("decision_id")
+    )
     return str(explicit) if explicit else _sha({"kind": kind, "payload": payload})
 
 
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value else []
+    if not isinstance(value, (list, tuple)):
+        return []
+    return sorted(set(
+        str(item) for item in value
+        if isinstance(item, (str, int)) and str(item)
+    ))
+
+
 def _location_fields(payload: Mapping[str, object]) -> dict:
-    result = {}
+    files = _string_list(payload.get("files", payload.get("changed_files", [])))
+    symbols = _string_list(payload.get("symbols", []))
     if payload.get("file"):
-        result["files"] = [str(payload["file"])]
+        files.append(str(payload["file"]))
     if payload.get("symbol"):
-        result["symbols"] = [str(payload["symbol"])]
+        symbols.append(str(payload["symbol"]))
+    result = {}
+    if files:
+        result["files"] = sorted(set(files))
+    if symbols:
+        result["symbols"] = sorted(set(symbols))
     locations = payload.get("locations")
     if isinstance(locations, list):
         result["locations"] = locations
@@ -151,6 +178,7 @@ def _recall_inputs(knowledge: Mapping[str, object]) -> tuple[list[dict], dict]:
     query_files = []
     query_symbols = []
     query_tests = []
+    query_failures = _string_list(knowledge.get("failure_signatures", []))
 
     for location in knowledge.get("verified_locations", []):
         if not isinstance(location, Mapping):
@@ -210,6 +238,9 @@ def _recall_inputs(knowledge: Mapping[str, object]) -> tuple[list[dict], dict]:
     for lesson in knowledge.get("lessons", []):
         if not isinstance(lesson, Mapping):
             continue
+        stories = _string_list(lesson.get("story_ids", []))
+        if lesson.get("story"):
+            stories.append(str(lesson["story"]))
         candidates.append({
             "source_kind": "lesson",
             "source_ref": _candidate_ref("lesson", lesson),
@@ -217,14 +248,68 @@ def _recall_inputs(knowledge: Mapping[str, object]) -> tuple[list[dict], dict]:
             "summary": _bounded_summary(lesson.get("claim")),
             "delivery_state": str(lesson.get("delivery_state") or "candidate"),
             "confidence": lesson.get("confidence") or "unknown",
-            "story_ids": [str(lesson["story"])] if lesson.get("story") else [],
+            "story_ids": sorted(set(stories)),
+            "test_names": _string_list(lesson.get("test_names", [])),
+            "failure_signatures": _string_list(
+                lesson.get("failure_signatures", [])
+            ),
+            "audiences": lesson.get("audiences") or AUDIENCES,
             **_location_fields(lesson),
+        })
+
+    for outcome in knowledge.get("terminal_outcomes", []):
+        if not isinstance(outcome, Mapping):
+            continue
+        terminal_state = str(outcome.get("terminal_state") or "unknown")
+        memory_state = str(outcome.get("memory_state") or "candidate")
+        candidates.append({
+            "source_kind": "terminal-outcome",
+            "source_ref": _candidate_ref("terminal-outcome", outcome),
+            "source_revision": revision,
+            "summary": _bounded_summary(
+                outcome.get("summary")
+                or "Terminal %s outcome retained as %s memory."
+                % (terminal_state, memory_state)
+            ),
+            "delivery_state": memory_state,
+            "confidence": outcome.get("confidence") or "certain",
+            "story_ids": _string_list(outcome.get("story_ids", [])),
+            "test_names": _string_list(outcome.get("test_names", [])),
+            "failure_signatures": _string_list(
+                outcome.get("failure_signatures", [])
+            ),
+            "audiences": outcome.get("audiences") or AUDIENCES,
+            **_location_fields(outcome),
+        })
+
+    for decision in knowledge.get("decisions", []):
+        if not isinstance(decision, Mapping):
+            continue
+        candidates.append({
+            "source_kind": "decision",
+            "source_ref": _candidate_ref("decision", decision),
+            "source_revision": revision,
+            "summary": _bounded_summary(
+                decision.get("summary") or decision.get("outcome")
+            ),
+            "delivery_state": str(
+                decision.get("delivery_state") or "confirmed"
+            ),
+            "confidence": decision.get("confidence") or "certain",
+            "story_ids": _string_list(decision.get("story_ids", [])),
+            "test_names": _string_list(decision.get("test_names", [])),
+            "failure_signatures": _string_list(
+                decision.get("failure_signatures", [])
+            ),
+            "audiences": decision.get("audiences") or AUDIENCES,
+            **_location_fields(decision),
         })
 
     query = {
         "grounded_files": sorted(set(query_files)),
         "grounded_symbols": sorted(set(query_symbols)),
         "test_names": sorted(set(query_tests)),
+        "failure_signatures": sorted(set(query_failures)),
     }
     return candidates, query
 
@@ -287,6 +372,17 @@ def _validate_recall(document: object, manifest: Mapping[str, object], audience:
         raise MemoryRecallActionNeeded(
             "tampered", "persisted memory recall differs from its manifest"
         )
+    for item in items:
+        if not isinstance(item, dict) or set(item) != MEMORY_RECALL_ITEM_FIELDS:
+            raise MemoryRecallActionNeeded(
+                "malformed", "persisted memory recall item has a non-exact shape"
+            )
+        if item.get("advisory_only") is not True or any(
+            item.get(key) is not False for key in _AUTHORITY_KEYS
+        ):
+            raise MemoryRecallActionNeeded(
+                "malformed", "persisted memory recall item claims forbidden authority"
+            )
     return document
 
 
@@ -382,6 +478,7 @@ def persist_recall_slices(
             grounded_files=query["grounded_files"],
             grounded_symbols=query["grounded_symbols"],
             test_names=query["test_names"],
+            failure_signatures=query["failure_signatures"],
             story_ids=story_ids,
             phase_ids=phase_ids,
             orchestration_tags=orchestration_tags,
@@ -419,9 +516,9 @@ def recall_audience(role: object) -> str:
     folded = str(role or "").casefold()
     if any(marker in folded for marker in ("judge", "verdict", "architect", "council")):
         return "judge"
-    if any(marker in folded for marker in ("verify", "review", "test", "quality")):
+    if any(marker in folded for marker in ("verif", "review", "test", "quality")):
         return "verifier"
-    if any(marker in folded for marker in ("coordinate", "lead", "manage", "orchestrat")):
+    if any(marker in folded for marker in ("coordin", "lead", "manage", "orchestrat")):
         return "coordinator"
     return "implementer"
 

@@ -24,6 +24,7 @@ from dw_pmo.live_progress import _budget_rows, _usage_budget_overlay  # noqa: E4
 from dw_pmo.memory_dispatch import (  # noqa: E402
     MemoryRecallActionNeeded,
     persist_recall_slices,
+    recall_audience,
 )
 from dw_pmo.memory_recall import (  # noqa: E402
     SOURCE_KINDS,
@@ -412,6 +413,42 @@ class MemoryDispatchTest(unittest.TestCase):
         self.assertTrue(all(document["items"] == [] for document in first.values()))
         self.assertTrue(all(document["exclusions"] == [] for document in first.values()))
         self.assertTrue((self.run_dir / "memory" / "manifest.json").is_file())
+
+    def test_cross_run_outcomes_decisions_and_role_stems_reach_recall(self):
+        failure = "sha256:" + "f" * 64
+        source = {
+            **self.knowledge,
+            "verified_locations": [{"file": "pkg.py", "symbol": "pkg.alpha"}],
+            "failure_signatures": [failure],
+            "terminal_outcomes": [{
+                "record_hash": "sha256:" + "a" * 64,
+                "terminal_state": "failed",
+                "memory_state": "candidate",
+                "story_ids": ["WLA-35-02"],
+                "changed_files": ["pkg.py"],
+                "failure_signatures": [failure],
+            }],
+            "decisions": [{
+                "decision_id": "sha256:" + "b" * 64,
+                "summary": "Prior dissent remains advisory.",
+                "files": ["pkg.py"],
+                "audiences": ["judge"],
+            }],
+        }
+        documents, created = self.persist(source)
+        self.assertTrue(created)
+        self.assertEqual(recall_audience("coordinator"), "coordinator")
+        self.assertEqual(recall_audience("verifier"), "verifier")
+        shared = {item["source_kind"]: item for item in documents["shared"]["items"]}
+        self.assertEqual(shared["terminal-outcome"]["delivery_state"], "candidate")
+        self.assertTrue(shared["terminal-outcome"]["advisory_only"])
+        judge_kinds = {item["source_kind"] for item in documents["judge"]["items"]}
+        self.assertIn("decision", judge_kinds)
+        shared_exclusions = {
+            item["source_kind"]: item["reason"]
+            for item in documents["shared"]["exclusions"]
+        }
+        self.assertEqual(shared_exclusions["decision"], "audience-filter")
 
     def test_missing_slice_is_typed_action_needed(self):
         self.persist()

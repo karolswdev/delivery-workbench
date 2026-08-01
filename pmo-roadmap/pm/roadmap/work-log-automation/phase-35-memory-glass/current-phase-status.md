@@ -31,13 +31,13 @@ Make memory a visible, testable part of every bounded run and autonomous program
 | WLA-35-05 | Memory read surfaces | done | [story-05-memory-read-surfaces](./story-05-memory-read-surfaces.md) | [evidence-story-05](./evidence-story-05.md) |
 | WLA-35-06 | AgentGlass memory pane | done | [story-06-agentglass-memory-pane](./story-06-agentglass-memory-pane.md) | [evidence-story-06](./evidence-story-06.md) |
 | WLA-35-07 | Decision basis timeline | done | [story-07-decision-basis-timeline](./story-07-decision-basis-timeline.md) | [evidence-story-07](./evidence-story-07.md) |
-| WLA-35-08 | Compounding multi-agent memory | backlog | [story-08-compounding-multi-agent-memory](./story-08-compounding-multi-agent-memory.md) | - |
+| WLA-35-08 | Compounding multi-agent memory | done | [story-08-compounding-multi-agent-memory](./story-08-compounding-multi-agent-memory.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-35-09 | Slick workbench | backlog | [story-09-slick-workbench](./story-09-slick-workbench.md) | - |
 | WLA-35-10 | Prove it works | backlog | [story-10-prove-it-works](./story-10-prove-it-works.md) | - |
 
 ## Where we are
 
-WLA-35-07 done (2026-08-01): decision-basis receipts now explain scheduler, failure-route, verdict, council, terminal, and operator-checkpoint decisions through recorded facts and rules — persisted content-addressed, ledger-referenced, surfaced in the read model's `used-as-basis` group, and rendered as a timeline in the memory pane and session stream with honest mechanical/agent-reported/panel-derived/operator-supplied labels. Private-reasoning shapes are rejected by planted-violation tests. Knowledge 30 → 33, writeback 18 → 21, accessibility 45 memory checks, program-exam events 238 → 308. Next: WLA-35-08 (compounding multi-agent memory proof).
+WLA-35-08 done (2026-08-01): memory compounding is proven in the packaged program exam — a related run recalls the prior run's confirmed lesson and terminal outcome with visible match reasons, an unrelated run excludes them explainably, audience slices freeze from one source revision, planted mid-run writes are refused at both seams, and crash replay yields exactly one of every record. Failed outcomes stay candidate warnings. Stories 01-07 landed earlier. Next: WLA-35-09 (slick workbench polish), then the exit exam.
 
 ## Active risks
 
