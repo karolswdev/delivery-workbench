@@ -118,6 +118,7 @@ function flatColumnHtml(slug, id, label, items, orthoMap, opts) {
   const collapseMax = opts && opts.collapseMax;
   const count       = items.length;
   const droppable   = 1;
+  const activeClass = (opts && opts.activeWhenNonEmpty && count > 0) ? " flat-col-active" : "";
 
   let cardsHtml = "";
   let displayItems = items;
@@ -138,7 +139,7 @@ function flatColumnHtml(slug, id, label, items, orthoMap, opts) {
   ).join("");
 
   return `
-    <div class="bcol flat-col flat-col-${esc(id)}${count === 0 ? " bcol-empty flat-col-empty" : ""}" data-flat-col="${esc(id)}" data-droppable="${droppable}">
+    <div class="bcol flat-col flat-col-${esc(id)}${count === 0 ? " bcol-empty flat-col-empty" : ""}${activeClass}" data-flat-col="${esc(id)}" data-droppable="${droppable}">
       <div class="bcol-head">${esc(label)} <span class="bcol-count">${count}</span></div>
       ${cardsHtml}
     </div>`;
@@ -153,7 +154,7 @@ function flatBoardHtml(slug, model, orthoMap) {
   const cols = [
     flatColumnHtml(slug, FLAT_BACKLOG,    "Backlog",     buckets[FLAT_BACKLOG],    orthoMap, { collapsed: true, collapseMax: 5 }),
     flatColumnHtml(slug, FLAT_INPROGRESS, "In progress", buckets[FLAT_INPROGRESS], orthoMap, {}),
-    flatColumnHtml(slug, FLAT_NEEDSYOU,   "Needs you",   buckets[FLAT_NEEDSYOU],   orthoMap, {}),
+    flatColumnHtml(slug, FLAT_NEEDSYOU,   "Needs you",   buckets[FLAT_NEEDSYOU],   orthoMap, { activeWhenNonEmpty: true }),
     flatColumnHtml(slug, FLAT_DONE,       "Done",        buckets[FLAT_DONE],       orthoMap, { collapsed: true, collapseMax: 3 }),
   ];
 
@@ -668,6 +669,25 @@ function wireBoardLiveUpdates() {
 
 /* ── overview strip ───────────────────────────────────────── */
 
+/* Status summaries come from the roadmap engine as machine-flavored
+ * strings, e.g. "attention — pmo-roadmap/pm/roadmap/<project>/phase-33-
+ * operator-grade-workbench: all stories are done but final-summary.md is
+ * missing". Strip the path noise and repeated "attention" jargon so the
+ * overview strip reads like a sentence, not a log line. */
+function _cleanStatusSummary(summary) {
+  if (!summary) return "";
+  let text = String(summary).replace(/^attention\s*[—-]\s*/i, "").trim();
+  const phaseMatch = text.match(/phase-(\d+)[^:]*:\s*(.*)$/i);
+  if (phaseMatch) {
+    let msg = phaseMatch[2].trim();
+    msg = msg.replace(/\bfinal-summary\.md\b/gi, "final summary");
+    msg = msg.replace(/\ball stories are done\b/gi, "all stories done");
+    msg = msg.replace(/done but final summary is missing/i, "done, final summary missing");
+    text = `Phase ${phaseMatch[1]}: ${msg}`;
+  }
+  return text;
+}
+
 function boardOverviewStrip(slug, setup, status, step, presentation, notice, flatStats) {
   const next = presentation.next_step || {};
   const work = setup.delivery_scope?.current_work;
@@ -677,8 +697,8 @@ function boardOverviewStrip(slug, setup, status, step, presentation, notice, fla
   );
 
   const statusSentence = needsAttention
-    ? `Needs attention. ${status.summary || ""}`
-    : `Ready. ${status.summary || ""}`;
+    ? `Needs attention. ${_cleanStatusSummary(status.summary)}`
+    : `Ready. ${_cleanStatusSummary(status.summary)}`;
 
   const statsLine = flatStats
     ? `${flatStats.totalStories} stor${flatStats.totalStories === 1 ? "y" : "ies"}, ${flatStats.inProgressCount} in progress, ${flatStats.needsYouCount} need you`
