@@ -41,18 +41,40 @@ DELIVERY_RECORD_KIND = "delivery-record"
 LESSON_KIND = "lesson"
 CERTIFIED_LESSON_KIND = "certified-handoff-lesson"
 LESSON_DELIVERY_OBSERVATION_KIND = "lesson-delivery-observation"
+TERMINAL_OUTCOME_KIND = "terminal-outcome"
 LESSON_INVENTORY_KIND = "delivery-workbench-knowledge-lessons"
+MEMORY_RECALL_KIND = "delivery-workbench-memory-recall"
+MEMORY_WRITEBACK_KIND = "delivery-workbench-memory-writeback"
+DECISION_BASIS_KIND = "delivery-workbench-decision-basis"
+MEMORY_DOCUMENT_SCHEMA_VERSION = 1
 EARNED_RECORD_KINDS = (
     DELIVERY_RECORD_KIND,
     LESSON_KIND,
     CERTIFIED_LESSON_KIND,
     LESSON_DELIVERY_OBSERVATION_KIND,
+    TERMINAL_OUTCOME_KIND,
 )
 LESSON_DELIVERY_STATES = (
     "certified-not-integrated",
     "confirmed",
     "superseded",
 )
+MEMORY_STATES = ("confirmed", "candidate", "superseded")
+TERMINAL_OUTCOME_STATES = (
+    "complete",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "revoked",
+    "lost",
+    "timed-out",
+    "exhausted",
+    "expired",
+    "blocked",
+    "refused",
+    "awaiting-certification",
+)
+_SUCCESSFUL_TERMINAL_OUTCOMES = {"complete", "succeeded"}
 
 DERIVED = "derived"
 EARNED = "earned"
@@ -63,6 +85,7 @@ KNOWLEDGE_ITEM_CLASSES = {
     LESSON_KIND: EARNED,
     CERTIFIED_LESSON_KIND: EARNED,
     LESSON_DELIVERY_OBSERVATION_KIND: EARNED,
+    TERMINAL_OUTCOME_KIND: EARNED,
 }
 
 _DERIVED_DOCUMENT_KIND = "delivery-workbench-derived-fact"
@@ -117,6 +140,13 @@ EARNED_RECORD_FIELDS = {
         "receipt_id", "lesson_receipt_id", "lesson_record_hash", "story",
         "subject", "delivery_state", "observed_commit",
     ),
+    TERMINAL_OUTCOME_KIND: (
+        "receipt_id", "subject", "terminal_state", "memory_state",
+        "story_ids", "recalled_memory_ids", "decision_refs",
+        "evidence_refs", "check_refs", "changed_files",
+        "failure_signatures", "accepted_lesson_hashes",
+        "discarded_lesson_count", "supersedes",
+    ),
 }
 EARNED_FIELD_CAPS = {
     "story_ids": 2048,
@@ -140,6 +170,16 @@ EARNED_FIELD_CAPS = {
     "verdict_ref": 71,
     "delivery_state": 32,
     "observed_commit": 64,
+    "terminal_state": 32,
+    "memory_state": 16,
+    "recalled_memory_ids": 8192,
+    "decision_refs": 8192,
+    "evidence_refs": 8192,
+    "check_refs": 8192,
+    "changed_files": 8192,
+    "failure_signatures": 8192,
+    "accepted_lesson_hashes": 8192,
+    "discarded_lesson_count": 8,
 }
 _ORIGIN_KINDS = ("run", "operator")
 _AUTHORITY_MARKERS = {
@@ -147,6 +187,114 @@ _AUTHORITY_MARKERS = {
     "authorizes": False,
     "satisfies_gate": False,
     "substitutes_for_evidence": False,
+}
+
+# These are contract declarations for the documents built and persisted by the
+# later memory stories. Closed top-level shapes and budgets live here so those
+# adapters cannot invent broader or unbounded channels.
+MEMORY_DOCUMENT_FIELDS = {
+    MEMORY_RECALL_KIND: (
+        "kind", "schema_version", "recall_id", "subject", "audience",
+        "source_revision", "source_heads", "items", "exclusions",
+        "byte_budget", "used_bytes", "starts_work", "authorizes",
+        "satisfies_gate", "substitutes_for_evidence",
+    ),
+    MEMORY_WRITEBACK_KIND: (
+        "kind", "schema_version", "writeback_id", "origin_kind", "origin",
+        "terminal_state", "memory_state", "subject", "head_sha",
+        "terminal_event_ref", "story_ids", "recalled_memory_ids",
+        "decision_refs", "evidence_refs", "check_refs", "changed_files",
+        "failure_signatures", "accepted_lesson_hashes",
+        "discarded_lesson_count", "source_revision", "starts_work",
+        "authorizes", "satisfies_gate", "substitutes_for_evidence",
+    ),
+    DECISION_BASIS_KIND: (
+        "kind", "schema_version", "decision_id", "subject", "decision_kind",
+        "basis_type", "outcome", "reason_code", "rule_ref", "score_ref",
+        "input_receipt_refs", "memory_refs", "dissent_refs",
+        "resulting_ledger_event", "source_revision", "starts_work",
+        "authorizes", "satisfies_gate", "substitutes_for_evidence",
+    ),
+}
+MEMORY_DOCUMENT_ID_FIELDS = {
+    MEMORY_RECALL_KIND: "recall_id",
+    MEMORY_WRITEBACK_KIND: "writeback_id",
+    DECISION_BASIS_KIND: "decision_id",
+}
+MEMORY_DOCUMENT_BYTE_CAPS = {
+    MEMORY_RECALL_KIND: {
+        "document": 65536,
+        "subject": 71,
+        "audience": 32,
+        "source_revision": 71,
+        "source_heads": 8192,
+        "items": 49152,
+        "exclusions": 12288,
+    },
+    MEMORY_WRITEBACK_KIND: {
+        "document": 65536,
+        "origin": 200,
+        "subject": 71,
+        "terminal_event_ref": 200,
+        "story_ids": 8192,
+        "recalled_memory_ids": 8192,
+        "decision_refs": 8192,
+        "evidence_refs": 8192,
+        "check_refs": 8192,
+        "changed_files": 8192,
+        "failure_signatures": 8192,
+        "accepted_lesson_hashes": 8192,
+        "source_revision": 71,
+    },
+    DECISION_BASIS_KIND: {
+        "document": 32768,
+        "subject": 71,
+        "decision_kind": 64,
+        "basis_type": 32,
+        "outcome": 200,
+        "reason_code": 80,
+        "rule_ref": 200,
+        "score_ref": 200,
+        "input_receipt_refs": 8192,
+        "memory_refs": 8192,
+        "dissent_refs": 8192,
+        "resulting_ledger_event": 200,
+        "source_revision": 71,
+    },
+}
+MEMORY_DOCUMENT_ITEM_CAPS = {
+    MEMORY_RECALL_KIND: {
+        "source_heads": 32,
+        "items": 64,
+        "match_reasons_per_item": 16,
+        "exclusions": 128,
+    },
+    MEMORY_WRITEBACK_KIND: {
+        "story_ids": 64,
+        "recalled_memory_ids": 64,
+        "decision_refs": 64,
+        "evidence_refs": 64,
+        "check_refs": 64,
+        "changed_files": 256,
+        "failure_signatures": 64,
+        "accepted_lesson_hashes": 64,
+    },
+    DECISION_BASIS_KIND: {
+        "input_receipt_refs": 64,
+        "memory_refs": 64,
+        "dissent_refs": 32,
+    },
+}
+MEMORY_DOCUMENT_PROVENANCE_FIELDS = {
+    MEMORY_RECALL_KIND: ("subject", "source_revision", "source_heads"),
+    MEMORY_WRITEBACK_KIND: (
+        "origin_kind", "origin", "subject", "head_sha",
+        "terminal_event_ref", "source_revision",
+    ),
+    DECISION_BASIS_KIND: (
+        "subject", "input_receipt_refs", "memory_refs",
+        "resulting_ledger_event", "source_revision",
+    ),
 }
 
 
@@ -529,7 +677,7 @@ def _validate_detail(record_kind: str, detail: object) -> dict:
                     or any(char not in "0123456789abcdef" for char in detail[field][7:])
                 ):
                     raise DwError("certified lesson %s must be a sha256 reference" % field)
-    else:
+    elif record_kind == LESSON_DELIVERY_OBSERVATION_KIND:
         if detail["delivery_state"] not in {"confirmed", "superseded"}:
             raise DwError("lesson delivery observation state must be confirmed or superseded")
         for field in (
@@ -542,6 +690,47 @@ def _validate_detail(record_kind: str, detail: object) -> dict:
             ):
                 raise DwError("lesson delivery observation %s must be a sha256 reference" % field)
         _validate_git_object(detail["observed_commit"], "observed_commit")
+    else:
+        for field in ("receipt_id", "subject"):
+            if (
+                not detail[field].startswith("sha256:")
+                or len(detail[field]) != 71
+                or any(char not in "0123456789abcdef" for char in detail[field][7:])
+            ):
+                raise DwError("terminal outcome %s must be a sha256 reference" % field)
+        if detail["terminal_state"] not in TERMINAL_OUTCOME_STATES:
+            raise DwError("terminal outcome has an unknown terminal state")
+        if detail["memory_state"] not in MEMORY_STATES:
+            raise DwError("terminal outcome memory state must be confirmed, candidate, or superseded")
+        if (
+            detail["memory_state"] == "confirmed"
+            and detail["terminal_state"] not in _SUCCESSFUL_TERMINAL_OUTCOMES
+        ):
+            raise DwError("unsuccessful terminal outcome cannot confirm a lesson")
+        if detail["memory_state"] == "superseded" and not detail["supersedes"]:
+            raise DwError("superseded terminal outcome must reference an earlier outcome")
+        for field in (
+            "story_ids", "recalled_memory_ids", "decision_refs",
+            "evidence_refs", "check_refs", "changed_files",
+            "failure_signatures", "accepted_lesson_hashes",
+        ):
+            values = decode_identifier_list(detail[field], field)
+            if field == "accepted_lesson_hashes":
+                for value in values:
+                    if (
+                        not value.startswith("sha256:")
+                        or len(value) != 71
+                        or any(char not in "0123456789abcdef" for char in value[7:])
+                    ):
+                        raise DwError(
+                            "terminal outcome accepted lesson must be a sha256 reference"
+                        )
+        try:
+            discarded = int(detail["discarded_lesson_count"])
+        except ValueError:
+            raise DwError("terminal outcome discarded lesson count must be an integer")
+        if discarded < 0 or str(discarded) != detail["discarded_lesson_count"]:
+            raise DwError("terminal outcome discarded lesson count must be non-negative")
     return detail
 
 
@@ -736,6 +925,12 @@ class EarnedRecordStore:
                     raise DwError(
                         "lesson supersedes must reference an earlier lesson"
                     )
+            if record_kind == TERMINAL_OUTCOME_KIND and detail["supersedes"]:
+                earlier = {record["record_hash"] for record in records}
+                if detail["supersedes"] not in earlier:
+                    raise DwError(
+                        "terminal outcome supersedes must reference an earlier outcome"
+                    )
             seq = len(records)
             prev_hash = records[-1]["record_hash"] if records else None
             # Whole-second UTC timestamps sort in chronological order.
@@ -857,6 +1052,35 @@ def contract_document() -> dict:
             for kind, fields in sorted(EARNED_RECORD_FIELDS.items())
         },
         "earned_field_caps": dict(sorted(EARNED_FIELD_CAPS.items())),
+        "memory_documents": {
+            "%s@%d" % (kind, MEMORY_DOCUMENT_SCHEMA_VERSION): {
+                "kind": kind,
+                "schema_version": MEMORY_DOCUMENT_SCHEMA_VERSION,
+                "closed_fields": list(MEMORY_DOCUMENT_FIELDS[kind]),
+                "identity": {
+                    "field": MEMORY_DOCUMENT_ID_FIELDS[kind],
+                    "algorithm": "sha256-canonical-json",
+                    "inputs": [
+                        field for field in MEMORY_DOCUMENT_FIELDS[kind]
+                        if field != MEMORY_DOCUMENT_ID_FIELDS[kind]
+                    ],
+                },
+                "byte_caps": dict(MEMORY_DOCUMENT_BYTE_CAPS[kind]),
+                "item_caps": dict(MEMORY_DOCUMENT_ITEM_CAPS[kind]),
+                "provenance_references": list(
+                    MEMORY_DOCUMENT_PROVENANCE_FIELDS[kind]
+                ),
+                "authority_fields": dict(_AUTHORITY_MARKERS),
+            }
+            for kind in sorted(MEMORY_DOCUMENT_FIELDS)
+        },
+        "memory_states": list(MEMORY_STATES),
+        "memory_state_rules": {
+            "terminal_states": list(TERMINAL_OUTCOME_STATES),
+            "confirmed_terminal_states": sorted(_SUCCESSFUL_TERMINAL_OUTCOMES),
+            "unsuccessful_terminal_states": "candidate-or-superseded-only",
+            "superseded_requires": "earlier-terminal-outcome-record-hash",
+        },
         "freshness": "derived-index-tree-must-equal-current-index-tree",
         "authority_exclusion": {
             "mints_authority": False,

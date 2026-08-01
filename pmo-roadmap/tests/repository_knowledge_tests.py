@@ -77,6 +77,43 @@ class RepositoryKnowledgeTest(unittest.TestCase):
         detail.update(updates)
         return detail
 
+    @staticmethod
+    def terminal_detail(**updates):
+        detail = {
+            "receipt_id": "sha256:" + "1" * 64,
+            "subject": "sha256:" + "2" * 64,
+            "terminal_state": "succeeded",
+            "memory_state": "confirmed",
+            "story_ids": knowledge.encode_identifier_list(
+                ["WLA-35-01"], "story_ids"
+            ),
+            "recalled_memory_ids": knowledge.encode_identifier_list(
+                ["sha256:" + "3" * 64], "recalled_memory_ids"
+            ),
+            "decision_refs": knowledge.encode_identifier_list(
+                ["decision-1"], "decision_refs"
+            ),
+            "evidence_refs": knowledge.encode_identifier_list(
+                ["evidence-story-01.md"], "evidence_refs"
+            ),
+            "check_refs": knowledge.encode_identifier_list(
+                ["check-1"], "check_refs"
+            ),
+            "changed_files": knowledge.encode_identifier_list(
+                ["dw_pmo/knowledge.py"], "changed_files"
+            ),
+            "failure_signatures": knowledge.encode_identifier_list(
+                [], "failure_signatures"
+            ),
+            "accepted_lesson_hashes": knowledge.encode_identifier_list(
+                ["sha256:" + "4" * 64], "accepted_lesson_hashes"
+            ),
+            "discarded_lesson_count": "0",
+            "supersedes": "",
+        }
+        detail.update(updates)
+        return detail
+
     def append_delivery(self, **updates):
         arguments = {
             "origin_kind": "run",
@@ -91,12 +128,26 @@ class RepositoryKnowledgeTest(unittest.TestCase):
             **arguments,
         )
 
+    def append_terminal(self, detail=None, **updates):
+        arguments = {
+            "origin_kind": "run",
+            "origin": "run-35-01",
+            "head_sha": HEAD,
+            "timestamp": STAMP,
+        }
+        arguments.update(updates)
+        return self.earned.append(
+            knowledge.TERMINAL_OUTCOME_KIND,
+            detail or self.terminal_detail(),
+            **arguments,
+        )
+
     def earned_path(self, kind=knowledge.DELIVERY_RECORD_KIND):
         return (self.git_dir / "pmo-knowledge" / "earned"
                 / (kind + ".jsonl"))
 
-    def rewrite_single_record(self, mutate):
-        path = self.earned_path()
+    def rewrite_single_record(self, mutate, kind=knowledge.DELIVERY_RECORD_KIND):
+        path = self.earned_path(kind)
         record = json.loads(path.read_text(encoding="utf-8"))
         mutate(record)
         unsigned = {key: value for key, value in record.items()
@@ -116,6 +167,7 @@ class RepositoryKnowledgeTest(unittest.TestCase):
                 knowledge.LESSON_KIND,
                 knowledge.CERTIFIED_LESSON_KIND,
                 knowledge.LESSON_DELIVERY_OBSERVATION_KIND,
+                knowledge.TERMINAL_OUTCOME_KIND,
             },
         )
         self.assertEqual(
@@ -152,6 +204,112 @@ class RepositoryKnowledgeTest(unittest.TestCase):
             },
         )
         json.dumps(contract)
+
+    def test_memory_document_contracts_are_closed_bounded_and_provenance_bound(self):
+        expected_fields = {
+            "delivery-workbench-memory-recall@1": {
+                "kind", "schema_version", "recall_id", "subject", "audience",
+                "source_revision", "source_heads", "items", "exclusions",
+                "byte_budget", "used_bytes", "starts_work", "authorizes",
+                "satisfies_gate", "substitutes_for_evidence",
+            },
+            "delivery-workbench-memory-writeback@1": {
+                "kind", "schema_version", "writeback_id", "origin_kind",
+                "origin", "terminal_state", "memory_state", "subject",
+                "head_sha", "terminal_event_ref", "story_ids",
+                "recalled_memory_ids", "decision_refs", "evidence_refs",
+                "check_refs", "changed_files", "failure_signatures",
+                "accepted_lesson_hashes", "discarded_lesson_count",
+                "source_revision", "starts_work", "authorizes",
+                "satisfies_gate", "substitutes_for_evidence",
+            },
+            "delivery-workbench-decision-basis@1": {
+                "kind", "schema_version", "decision_id", "subject",
+                "decision_kind", "basis_type", "outcome", "reason_code",
+                "rule_ref", "score_ref", "input_receipt_refs",
+                "memory_refs", "dissent_refs", "resulting_ledger_event",
+                "source_revision", "starts_work", "authorizes",
+                "satisfies_gate", "substitutes_for_evidence",
+            },
+        }
+        required_authority = {
+            "starts_work": False,
+            "authorizes": False,
+            "satisfies_gate": False,
+            "substitutes_for_evidence": False,
+        }
+        documents = knowledge.contract_document()["memory_documents"]
+        self.assertEqual(set(documents), set(expected_fields))
+        for versioned_kind, expected in expected_fields.items():
+            with self.subTest(kind=versioned_kind):
+                declaration = documents[versioned_kind]
+                fields = set(declaration["closed_fields"])
+                self.assertEqual(fields, expected)
+                self.assertEqual(
+                    versioned_kind,
+                    "%s@%d" % (
+                        declaration["kind"], declaration["schema_version"]
+                    ),
+                )
+                identity = declaration["identity"]
+                self.assertIn(identity["field"], fields)
+                self.assertEqual(identity["algorithm"], "sha256-canonical-json")
+                self.assertEqual(
+                    set(identity["inputs"]), fields - {identity["field"]}
+                )
+                self.assertGreater(declaration["byte_caps"]["document"], 0)
+                self.assertTrue(declaration["item_caps"])
+                self.assertTrue(all(
+                    isinstance(cap, int) and cap > 0
+                    for cap in declaration["byte_caps"].values()
+                ))
+                self.assertTrue(all(
+                    isinstance(cap, int) and cap > 0
+                    for cap in declaration["item_caps"].values()
+                ))
+                self.assertLessEqual(
+                    set(declaration["provenance_references"]), fields
+                )
+                self.assertTrue(declaration["provenance_references"])
+                self.assertEqual(
+                    declaration["authority_fields"], required_authority
+                )
+                self.assertLessEqual(set(required_authority), fields)
+
+    def test_memory_contract_identity_is_deterministic_and_returned_by_value(self):
+        first = knowledge.contract_document()
+        second = knowledge.contract_document()
+        self.assertEqual(
+            knowledge._canonical_json(first), knowledge._canonical_json(second)
+        )
+        first["memory_documents"]["delivery-workbench-memory-recall@1"][
+            "closed_fields"
+        ].append("smuggled")
+        self.assertNotIn(
+            "smuggled",
+            knowledge.contract_document()["memory_documents"][
+                "delivery-workbench-memory-recall@1"
+            ]["closed_fields"],
+        )
+        self.assertEqual(
+            knowledge.contract_document()["memory_states"],
+            ["confirmed", "candidate", "superseded"],
+        )
+        rules = knowledge.contract_document()["memory_state_rules"]
+        self.assertEqual(
+            rules["confirmed_terminal_states"], ["complete", "succeeded"]
+        )
+        self.assertEqual(
+            set(rules["terminal_states"]), set(knowledge.TERMINAL_OUTCOME_STATES)
+        )
+        self.assertEqual(
+            rules["unsuccessful_terminal_states"],
+            "candidate-or-superseded-only",
+        )
+        self.assertEqual(
+            rules["superseded_requires"],
+            "earlier-terminal-outcome-record-hash",
+        )
 
     # -- derived facts ------------------------------------------------------
 
@@ -285,6 +443,103 @@ class RepositoryKnowledgeTest(unittest.TestCase):
             self.assertIs(record["satisfies_gate"], False)
             self.assertIs(record["substitutes_for_evidence"], False)
 
+    def test_terminal_outcomes_are_typed_bounded_hash_chained_records(self):
+        candidate = self.append_terminal(self.terminal_detail(
+            receipt_id="sha256:" + "5" * 64,
+            terminal_state="failed",
+            memory_state="candidate",
+            accepted_lesson_hashes=knowledge.encode_identifier_list(
+                [], "accepted_lesson_hashes"
+            ),
+        ))
+        confirmed = self.append_terminal(self.terminal_detail(
+            receipt_id="sha256:" + "6" * 64,
+            terminal_state="succeeded",
+            memory_state="confirmed",
+            supersedes=candidate["record_hash"],
+        ))
+        superseded = self.append_terminal(self.terminal_detail(
+            receipt_id="sha256:" + "7" * 64,
+            terminal_state="failed",
+            memory_state="superseded",
+            accepted_lesson_hashes=knowledge.encode_identifier_list(
+                [], "accepted_lesson_hashes"
+            ),
+            supersedes=confirmed["record_hash"],
+        ))
+        self.assertEqual(
+            self.earned.read(knowledge.TERMINAL_OUTCOME_KIND),
+            [candidate, confirmed, superseded],
+        )
+        self.assertEqual([candidate["seq"], confirmed["seq"], superseded["seq"]],
+                         [0, 1, 2])
+        self.assertIsNone(candidate["prev_hash"])
+        self.assertEqual(confirmed["prev_hash"], candidate["record_hash"])
+        self.assertEqual(superseded["prev_hash"], confirmed["record_hash"])
+        self.assertEqual(
+            {record["detail"]["memory_state"]
+             for record in (candidate, confirmed, superseded)},
+            {"confirmed", "candidate", "superseded"},
+        )
+        for record in (candidate, confirmed, superseded):
+            for field in (
+                "starts_work", "authorizes", "satisfies_gate",
+                "substitutes_for_evidence",
+            ):
+                self.assertIs(record[field], False)
+
+    def test_unsuccessful_terminal_outcomes_cannot_claim_confirmation(self):
+        unsuccessful = set(knowledge.TERMINAL_OUTCOME_STATES) - {
+            "complete", "succeeded"
+        }
+        self.assertGreaterEqual(
+            unsuccessful,
+            {"failed", "cancelled", "revoked", "lost", "timed-out", "exhausted"},
+        )
+        for state in sorted(unsuccessful):
+            with self.subTest(state=state), self.assertRaisesRegex(
+                    DwError, "cannot confirm"):
+                self.append_terminal(self.terminal_detail(
+                    terminal_state=state,
+                    memory_state="confirmed",
+                ))
+        self.assertEqual(self.earned.read(knowledge.TERMINAL_OUTCOME_KIND), [])
+
+    def test_terminal_outcome_shape_caps_lists_and_supersession_are_validated(self):
+        invalid = (
+            dict(self.terminal_detail(), prompt="raw transcript"),
+            self.terminal_detail(memory_state="agent-says-confirmed"),
+            self.terminal_detail(memory_state="superseded"),
+            self.terminal_detail(terminal_state="maybe-finished"),
+            self.terminal_detail(story_ids='["b","a"]'),
+            self.terminal_detail(discarded_lesson_count="-1"),
+            self.terminal_detail(accepted_lesson_hashes="[\"not-a-hash\"]"),
+            self.terminal_detail(failure_signatures="x" * (
+                knowledge.EARNED_FIELD_CAPS["failure_signatures"] + 1
+            )),
+            self.terminal_detail(supersedes="sha256:" + "8" * 64),
+        )
+        for detail in invalid:
+            with self.subTest(detail=detail), self.assertRaises(DwError):
+                self.append_terminal(detail)
+        self.assertEqual(self.earned.read(knowledge.TERMINAL_OUTCOME_KIND), [])
+
+    def test_terminal_outcome_read_revalidates_status_and_chain_integrity(self):
+        self.append_terminal(self.terminal_detail(
+            terminal_state="failed",
+            memory_state="candidate",
+            accepted_lesson_hashes=knowledge.encode_identifier_list(
+                [], "accepted_lesson_hashes"
+            ),
+        ))
+        self.rewrite_single_record(
+            lambda record: record["detail"].update({"memory_state": "confirmed"}),
+            knowledge.TERMINAL_OUTCOME_KIND,
+        )
+        with self.assertRaisesRegex(
+                knowledge.MalformedKnowledge, "cannot confirm"):
+            self.earned.read(knowledge.TERMINAL_OUTCOME_KIND)
+
     def test_read_revalidates_closed_fields_caps_and_provenance(self):
         mutations = (
             lambda record: record["detail"].update({"prompt": "smuggled"}),
@@ -353,24 +608,36 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
                                if alias.name in {
                                    "dw_pmo.knowledge", "dw_pmo.knowledge_packet",
                                    "dw_pmo.knowledge_writeback",
+                                   "dw_pmo.memory_recall",
                                }
-                               or alias.name.startswith("dw_pmo.knowledge."))
+                               or alias.name.startswith((
+                                   "dw_pmo.knowledge.", "dw_pmo.memory_",
+                               )))
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
-                if module in {
-                    "knowledge", "knowledge_packet", "knowledge_writeback",
-                } or module.endswith((
-                    ".knowledge", ".knowledge_packet", ".knowledge_writeback",
-                )):
+                if (
+                    module in {
+                        "knowledge", "knowledge_packet", "knowledge_writeback",
+                    }
+                    or module.startswith("memory_")
+                    or ".memory_" in module
+                    or module.endswith((
+                        ".knowledge", ".knowledge_packet",
+                        ".knowledge_writeback",
+                    ))
+                ):
                     imports.append(module)
                 if module == "dw_pmo" and any(
                         alias.name in {
                             "knowledge", "knowledge_packet", "knowledge_writeback",
-                        }
+                        } or alias.name.startswith("memory_")
                         for alias in node.names):
                     imports.append("dw_pmo.knowledge")
         store_reads = [needle for needle in (
-            "pmo-knowledge", "DerivedFactStore", "EarnedRecordStore"
+            "pmo-knowledge", "DerivedFactStore", "EarnedRecordStore",
+            "build_memory_recall", "delivery-workbench-memory-recall",
+            "delivery-workbench-memory-writeback",
+            "delivery-workbench-decision-basis",
         ) if needle in source]
         return imports + store_reads
 
@@ -387,11 +654,18 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
             "verdict paths: %r" % offenders,
         )
 
-    def test_authority_guard_rejects_a_planted_knowledge_read(self):
-        planted = "from dw_pmo.knowledge import DerivedFactStore\n"
-        self.assertTrue(self.authority_knowledge_reads(planted))
-        planted = 'path = root / ".git" / "pmo-knowledge"\n'
-        self.assertTrue(self.authority_knowledge_reads(planted))
+    def test_authority_guard_rejects_planted_knowledge_and_memory_reads(self):
+        planted_reads = (
+            "from dw_pmo.knowledge import DerivedFactStore\n",
+            "from dw_pmo.memory_recall import build_memory_recall\n",
+            "from dw_pmo import memory_recall\n",
+            'path = root / ".git" / "pmo-knowledge"\n',
+            'kind = "delivery-workbench-memory-writeback"\n',
+            'kind = "delivery-workbench-decision-basis"\n',
+        )
+        for planted in planted_reads:
+            with self.subTest(planted=planted):
+                self.assertTrue(self.authority_knowledge_reads(planted))
 
     def test_knowledge_imports_are_stdlib_offline_and_non_spawning(self):
         path = LIB_DIR / "knowledge.py"
