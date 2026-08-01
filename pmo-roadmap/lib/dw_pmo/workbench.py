@@ -410,7 +410,7 @@ def _insights(root: Path, query: dict[str, list[str]]) -> tuple[int, dict[str, o
                 in_progress += 1
         stories_by_phase.append({
             "phase": phase.number,
-            "title": phase.title,
+            "title": phase.slug,
             "total": len(rows),
             "done": done,
             "in_progress": in_progress,
