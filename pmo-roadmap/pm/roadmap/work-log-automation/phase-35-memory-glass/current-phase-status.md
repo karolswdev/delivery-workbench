@@ -25,7 +25,7 @@ Make memory a visible, testable part of every bounded run and autonomous program
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-35-01 | Memory contract | done | [story-01-memory-contract](./story-01-memory-contract.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-35-02 | Explainable recall | backlog | [story-02-explainable-recall](./story-02-explainable-recall.md) | - |
+| WLA-35-02 | Explainable recall | done | [story-02-explainable-recall](./story-02-explainable-recall.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-35-03 | Recall before dispatch | backlog | [story-03-recall-before-dispatch](./story-03-recall-before-dispatch.md) | - |
 | WLA-35-04 | Terminal writeback | backlog | [story-04-terminal-writeback](./story-04-terminal-writeback.md) | - |
 | WLA-35-05 | Memory read surfaces | backlog | [story-05-memory-read-surfaces](./story-05-memory-read-surfaces.md) | - |
@@ -37,7 +37,7 @@ Make memory a visible, testable part of every bounded run and autonomous program
 
 ## Where we are
 
-WLA-35-01 done (2026-08-01): the memory contract exists — three document kinds in `contract_document()` with false-authority fields, a `terminal-outcome` earned record kind with confirmed/candidate/superseded states, and an extended authority import guard. Knowledge suites 22 → 28 tests. Next: WLA-35-02 (the pure recall builder).
+WLA-35-02 done (2026-08-01): `memory_recall.py` exists — pure deterministic recall with seven source kinds, additive integer ranking, 32 KiB budget with whole-item drops, five typed exclusion reasons, audience slices, honest empty recall; packet suite 8 → 14 tests. WLA-35-01 landed the memory contract earlier the same day (knowledge suite 22 → 28). Next: WLA-35-03 (recall before dispatch in both conductors).
 
 ## Active risks
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import sys
@@ -19,6 +20,10 @@ from dw_pmo.knowledge_packet import (  # noqa: E402
     build_knowledge_packet,
 )
 from dw_pmo.live_progress import _budget_rows, _usage_budget_overlay  # noqa: E402
+from dw_pmo.memory_recall import (  # noqa: E402
+    SOURCE_KINDS,
+    build_memory_recall,
+)
 from dw_pmo.orchestration_driver import normalize_driver_usage  # noqa: E402
 
 
@@ -146,6 +151,224 @@ class KnowledgePacketTest(unittest.TestCase):
                 "alpha", stale, DOCUMENT, {"pkg.py": SOURCE}, [],
                 story="story.md",
             )
+
+
+class MemoryRecallTest(unittest.TestCase):
+    HEADS = {
+        "repository_index": TREE,
+        "earned_record_chains": "sha256:" + "4" * 64,
+        "referenced_ledgers": "sha256:" + "5" * 64,
+    }
+
+    @staticmethod
+    def candidate(source_kind, source_ref, **values):
+        return {
+            "source_kind": source_kind,
+            "source_ref": source_ref,
+            "source_revision": TREE,
+            "confidence": "unknown",
+            "delivery_state": "candidate",
+            "summary": "One bounded factual recall item.",
+            **values,
+        }
+
+    def recall(self, candidates=(), **values):
+        arguments = {
+            "subject": "run:recall-1",
+            "source_revision": TREE,
+            "source_heads": self.HEADS,
+            "audience": "implementer",
+            "story_ids": ["WLA-35-02"],
+            "grounded_files": ["dw_pmo/memory.py"],
+            "grounded_symbols": ["dw_pmo.memory.build_memory_recall"],
+            "test_names": ["test_explainable_recall"],
+            "failure_signatures": ["RecallError:E42"],
+            "orchestration_tags": ["memory-glass"],
+        }
+        arguments.update(values)
+        return build_memory_recall("Explain bounded recall.", candidates, **arguments)
+
+    def test_recall_is_byte_identical_and_matches_the_closed_contract(self):
+        candidate = self.candidate(
+            "lesson", "sha256:" + "6" * 64, story_ids=["WLA-35-02"],
+            confidence="high", delivery_state="confirmed", recency=99,
+        )
+        tied = self.candidate(
+            "lesson", "sha256:" + "7" * 64, story_ids=["WLA-35-02"],
+            confidence="high", delivery_state="confirmed", recency=99,
+        )
+        first = self.recall([candidate, tied])
+        second = self.recall([dict(tied), dict(candidate)])
+        first_bytes = json.dumps(
+            first, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        second_bytes = json.dumps(
+            second, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        self.assertEqual(first_bytes, second_bytes)
+        self.assertEqual(first["used_bytes"], len(first_bytes))
+        self.assertEqual(set(first), {
+            "kind", "schema_version", "recall_id", "subject", "audience",
+            "source_revision", "source_heads", "items", "exclusions",
+            "byte_budget", "used_bytes", "starts_work", "authorizes",
+            "satisfies_gate", "substitutes_for_evidence",
+        })
+        self.assertEqual(first["source_heads"], self.HEADS)
+        self.assertTrue(first["recall_id"].startswith("sha256:"))
+        self.assertFalse(first["starts_work"])
+        self.assertFalse(first["authorizes"])
+        self.assertFalse(first["satisfies_gate"])
+        self.assertFalse(first["substitutes_for_evidence"])
+
+    def test_structural_formula_ranks_all_supported_source_kinds(self):
+        candidates = [
+            self.candidate(
+                "repository-snippet", "repo:symbol",
+                symbols=["dw_pmo.memory.build_memory_recall"],
+            ),
+            self.candidate(
+                "terminal-outcome", "outcome:failure",
+                failure_signatures=["RecallError:E42"],
+            ),
+            self.candidate(
+                "evidence-digest", "evidence:file",
+                files=["dw_pmo/memory.py"],
+            ),
+            self.candidate("lesson", "lesson:story", story_ids=["WLA-35-02"]),
+            self.candidate("decision", "decision:phase", phase_ids=["WLA-35"]),
+            self.candidate(
+                "test-reference", "test:exact",
+                test_names=["test_explainable_recall"],
+            ),
+            self.candidate(
+                "grounding", "grounding:tag", orchestration_tags=["memory-glass"]
+            ),
+        ]
+        recall = self.recall(candidates)
+        self.assertEqual(set(item["source_kind"] for item in recall["items"]), set(SOURCE_KINDS))
+        self.assertEqual([item["source_ref"] for item in recall["items"]], [
+            "lesson:story", "repo:symbol", "outcome:failure", "evidence:file",
+            "decision:phase", "test:exact", "grounding:tag",
+        ])
+        self.assertEqual(
+            [item["score"] for item in recall["items"]],
+            sorted((item["score"] for item in recall["items"]), reverse=True),
+        )
+        for item in recall["items"]:
+            self.assertIsInstance(item["score"], int)
+            self.assertTrue(item["match_reasons"])
+            self.assertIn("source_kind", item)
+
+    def test_every_typed_exclusion_is_explained_and_budget_drops_whole_items(self):
+        candidates = [
+            self.candidate(
+                "terminal-outcome", "keep:failure",
+                failure_signatures=["RecallError:E42"], summary="Keep this fact whole.",
+            ),
+            self.candidate(
+                "lesson", "drop:budget", orchestration_tags=["memory-glass"],
+                summary="B" * 1_000,
+            ),
+            self.candidate(
+                "repository-snippet", "drop:stale", story_ids=["WLA-35-02"],
+                source_head="repository_index", source_revision="9" * 40,
+            ),
+            self.candidate(
+                "lesson", "drop:superseded", story_ids=["WLA-35-02"],
+                delivery_state="superseded",
+            ),
+            self.candidate(
+                "decision", "drop:audience", story_ids=["WLA-35-02"],
+                audiences=["verifier"],
+            ),
+            self.candidate(
+                "grounding", "drop:low-score", summary="Opaque datum."
+            ),
+        ]
+        recall = self.recall(candidates, byte_budget=2_500)
+        reasons = {item["reason"] for item in recall["exclusions"]}
+        self.assertEqual(reasons, {
+            "byte-budget", "stale-source", "superseded", "low-score",
+            "audience-filter",
+        })
+        self.assertEqual(
+            [item["source_ref"] for item in recall["items"]], ["keep:failure"]
+        )
+        self.assertEqual(recall["items"][0]["summary"], "Keep this fact whole.")
+        budget_drop = next(
+            item for item in recall["exclusions"] if item["reason"] == "byte-budget"
+        )
+        self.assertEqual(budget_drop["source_ref"], "drop:budget")
+        self.assertLessEqual(recall["used_bytes"], recall["byte_budget"])
+
+    def test_empty_inputs_produce_honest_bounded_empty_recall(self):
+        recall = self.recall([])
+        self.assertEqual(recall["items"], [])
+        self.assertEqual(recall["exclusions"], [])
+        self.assertEqual(recall["used_bytes"], len(json.dumps(
+            recall, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")))
+
+    def test_audience_slice_filters_without_changing_the_source_snapshot(self):
+        candidates = [
+            self.candidate(
+                "lesson", "lesson:implementer", story_ids=["WLA-35-02"],
+                audiences=["implementer", "shared"],
+            ),
+            self.candidate(
+                "decision", "decision:verifier", story_ids=["WLA-35-02"],
+                audiences=["verifier"],
+            ),
+        ]
+        recall = self.recall(candidates)
+        self.assertEqual(
+            [item["source_ref"] for item in recall["items"]],
+            ["lesson:implementer"],
+        )
+        self.assertEqual(recall["exclusions"], [{
+            "source_ref": "decision:verifier", "source_kind": "decision",
+            "score": recall["exclusions"][0]["score"],
+            "reason": "audience-filter",
+        }])
+        self.assertEqual(recall["source_revision"], TREE)
+        self.assertEqual(recall["source_heads"], self.HEADS)
+
+    def test_builder_imports_only_pure_stdlib_and_has_no_ambient_read_calls(self):
+        source = (LIB_DIR / "dw_pmo" / "memory_recall.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        allowed = {"__future__", "hashlib", "json", "re", "typing"}
+        forbidden_imports = {
+            "socket", "urllib", "http", "subprocess", "random", "secrets",
+            "uuid", "os", "pathlib", "datetime", "time", "tempfile",
+        }
+        unexpected = []
+        forbidden = []
+        ambient_calls = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                modules = [node.module or ""]
+            else:
+                modules = []
+            for module in modules:
+                root = module.split(".", 1)[0]
+                if root in forbidden_imports:
+                    forbidden.append(module)
+                if root not in allowed:
+                    unexpected.append(module)
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Name) and node.func.id in {
+                    "open", "getenv", "urandom",
+                }:
+                    ambient_calls.append(node.func.id)
+                if isinstance(node.func, ast.Attribute) and node.func.attr in {
+                    "read_text", "read_bytes", "open", "system", "popen",
+                }:
+                    ambient_calls.append(node.func.attr)
+        self.assertEqual(forbidden, [])
+        self.assertEqual(unexpected, [])
+        self.assertEqual(ambient_calls, [])
 
 
 class HonestUsageTest(unittest.TestCase):

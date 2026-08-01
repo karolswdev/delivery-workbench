@@ -854,7 +854,8 @@ class RepositoryKnowledgeFitnessTest(unittest.TestCase):
     def test_hook_payload_keeps_knowledge_modules_byte_identical(self):
         for name in (
             "grounding.py", "knowledge.py", "knowledge_packet.py",
-            "knowledge_writeback.py", "repository_map.py", "symbol_map.py",
+            "knowledge_writeback.py", "memory_recall.py", "repository_map.py",
+            "symbol_map.py",
         ):
             with self.subTest(module=name):
                 canonical = LIB_DIR / name
