@@ -95,7 +95,7 @@ uses `--no-verify`.
 | WLA-34-08 | Command palette | backlog | [story-08](./story-08-command-palette.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-34-09 | Revisioned project context | backlog | [story-09](./story-09-project-context.md) | [evidence-story-09](./evidence-story-09.md) |
 | WLA-34-10 | Agent suggestion inbox | backlog | [story-10](./story-10-suggestion-inbox.md) | [evidence-story-10](./evidence-story-10.md) |
-| WLA-34-11 | Prove it works | backlog | [story-11](./story-11-prove-it-works.md) | [evidence-story-11](./evidence-story-11.md) |
+| WLA-34-11 | Prove it works | done | [story-11](./story-11-prove-it-works.md) | [evidence-story-11](./evidence-story-11.md) |
 
 ## Sequencing
 
