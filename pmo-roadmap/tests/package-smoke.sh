@@ -149,7 +149,7 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/workbench/style.css" ] || fail "wheel omitted the Workbench styles"
 grep -q 'id="skip-link"' "$FIXTURE/.githooks/workbench/index.html" \
   || fail "packaged Workbench omitted its keyboard skip control"
-grep -q 'wireDismissibleRegion' "$FIXTURE/.githooks/workbench/app.js" \
+grep -q 'wireDismissibleRegion' "$FIXTURE/.githooks/workbench/core.js" \
   || fail "packaged Workbench omitted focus-return behavior"
 grep -q '@media (prefers-reduced-motion: reduce)' "$FIXTURE/.githooks/workbench/style.css" \
   || fail "packaged Workbench omitted reduced-motion behavior"

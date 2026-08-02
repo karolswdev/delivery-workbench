@@ -5,16 +5,23 @@ script — never edited by hand.
 
 | Asset | Used by | Regenerate with |
 |---|---|---|
-| `workbench-overview.png` | root README | `demos/scripts/capture-workbench-demo.sh` |
-| `workbench-trace.png` | root README | `demos/scripts/capture-workbench-demo.sh` |
-| `workbench-editor.png` | root README | `demos/scripts/capture-workbench-demo.sh` |
+| `workbench-board.png` | root README | the browser exam's capture mode (below) |
+| `workbench-memory.png` | root README | the browser exam's capture mode (below) |
 | `social-preview.png` | GitHub social preview | `demos/scripts/render-social-preview.sh` |
 
 The workbench stills are headless-Firefox captures of the live UI
-serving a fixture roadmap (the same capture session that produces
-`demos/rendered/workbench-tour.gif`). The social preview is a
-1280×640 card rendered from a self-contained HTML template inside the
-script.
+serving the exam's fixture roadmap, exported straight from the
+browser exam:
+
+```bash
+DW_UI_CAPTURE_DIR=/tmp/shots DW_UI_CAPTURE_PATTERN='*desktop*' \
+  bash pmo-roadmap/tests/workbench-ui-smoke.sh
+# workbench-board.png   <- board-home-desktop-light.png
+# workbench-memory.png  <- memory-rich-desktop-light.png
+```
+
+The social preview is a 1280×640 card rendered from a self-contained
+HTML template inside the script.
 
 GitHub has no API for the social-preview setting: after regenerating
 `social-preview.png`, upload it once by hand under

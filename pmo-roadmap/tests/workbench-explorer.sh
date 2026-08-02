@@ -371,6 +371,7 @@ for marker in 'function liveMissionInventoryHtml' 'Bounded run' 'Multi-phase pro
   'else if (parts\[0\] === "live")'; do
   grep -q "$marker" "$PMO_DIR"/workbench/*.js || fail "combined Live view is missing $marker"
 done
+# shellcheck disable=SC2016  # the ${...} markers are literal JS source text
 for marker in '/api/runs/${encodeURIComponent(preview.action)}' \
   '/api/programs/${encodeURIComponent(preview.action)}' \
   'max_ticks: preview.max_ticks' 'will not retry automatically'; do

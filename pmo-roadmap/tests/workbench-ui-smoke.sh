@@ -295,7 +295,11 @@ for token in ("--motion-short", "--motion-panel", "--motion-route", "--motion-ea
               ':root[data-density="compact"]', "--target-min"):
     assert token in css, token
 assert "motionDuration" in interactions and "--motion-panel" in interactions
+assert 'classList.add("reduced-motion")' in index
+assert ":root.reduced-motion" in css and ".reduced-motion *" in css
+assert 'classList.contains("reduced-motion")' in interactions
 reduced = css[css.index("@media (prefers-reduced-motion: reduce)"):]
+
 for token in ("animation: none !important", "transition-duration: 0s !important",
               "transition-delay: 0s !important"):
     assert token in reduced, token
@@ -609,16 +613,24 @@ EOF
     fi
     # A data-bearing render is normally markedly larger than the empty shell.
     # PNG compression varies by Firefox build, so a smaller file must prove
-    # real visual detail instead of passing on byte count alone.
+    # real visual detail instead of passing on byte count alone. Representative
+    # desktop shots also prove the content region has full-strength contrast;
+    # this catches both transparent routes and captures taken mid fade-in.
     size=$(wc -c < "$out" | tr -d ' ')
-    if [ "$size" -le 20000 ]; then
-      /usr/bin/python3 - "$out" <<'PYPNG' \
-        || fail "$1-$theme appears unrendered (only $size bytes and no visual detail)"
+    check_content=0
+    case "$1" in
+      board-home-desktop|memory-rich-desktop|adoption-review-existing-desktop) check_content=1 ;;
+    esac
+    if [ "$size" -le 20000 ] || [ "$check_content" = "1" ]; then
+      /usr/bin/python3 - "$out" "$check_content" <<'PYPNG' \
+        || fail "$1-$theme appears unrendered ($size bytes; content detail check failed)"
+import math
 import struct
 import sys
 import zlib
 
 raw = open(sys.argv[1], "rb").read()
+check_content = sys.argv[2] == "1"
 assert raw.startswith(b"\x89PNG\r\n\x1a\n")
 pos = 8
 idat = bytearray()
@@ -640,6 +652,7 @@ stride = width * channels
 stream = zlib.decompress(bytes(idat))
 previous = bytearray(stride)
 colors = set()
+content_luminance = []
 offset = 0
 for y in range(height):
     filter_type = stream[offset]
@@ -670,10 +683,15 @@ for y in range(height):
         for x in range(0, width, 4):
             start = x * channels
             colors.add(bytes(row[start:start + 3]))
-            if len(colors) >= 32:
-                break
+            if check_content and 80 <= y < min(520, height) and 20 <= x < width - 20:
+                red, green, blue = row[start:start + 3]
+                content_luminance.append((299 * red + 587 * green + 114 * blue) / 1000)
     previous = row
 assert width > 0 and height > 0 and len(colors) >= 32
+if check_content:
+    mean = sum(content_luminance) / len(content_luminance)
+    variance = sum((value - mean) ** 2 for value in content_luminance) / len(content_luminance)
+    assert math.sqrt(variance) >= 10
 PYPNG
     fi
     case "$1-$theme" in

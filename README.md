@@ -112,6 +112,8 @@ A multi-panel workspace for managing delivery — inspired by
 [Operator](https://github.com/iishyfishyy/operator-oss), built on
 DW's evidence-first model.
 
+![The board: a four-column work dashboard with story cards carrying execution dots and attention badges](./assets/workbench-board.png)
+
 - **Kanban board** as the home view — drag stories, create inline,
   park with a reason
 - **Live session stream** — watch agents work in real time (tool
@@ -126,10 +128,19 @@ DW's evidence-first model.
 - **Session telemetry** — per-turn tokens, cache hits, cost
 - **Insights dashboard** — stories shipped, evidence captured,
   commit activity over time
+- **Memory pane** — for any run or program, see exactly what the
+  agent recalled before it acted, why each item matched, and what it
+  wrote back when it finished
+- **Decision timeline** — every scheduling, routing, verdict, and
+  council decision explained from recorded facts and rules, with
+  mechanical checks and model judgments labeled differently
 - **Command palette** — Ctrl+K to jump to any project, story, run,
   or request
 - **Reconnect-safe** — close your laptop, reopen, pick up where you
-  left off
+  left off; the stream announces disconnected, retrying, and
+  caught-up states instead of going silently stale
+- **Comfortable or compact** — a density setting that sticks, honest
+  dark mode, and reduced-motion support throughout
 
 Panels coexist side-by-side (board + session + diff + terminal),
 resize with dividers, and remember their layout. On mobile they
@@ -140,7 +151,41 @@ need them.
 The workbench never commits for you. Every mutation goes through
 preview, exact token, apply.
 
-![Workbench overview: repository briefing followed by project status and the next actionable story](./assets/workbench-overview.png)
+## Memory that compounds
+
+Every bounded run and autonomous program is memory-driven:
+
+- **Recall before dispatch.** Before any agent acts, the workbench
+  assembles a bounded recall from what the repository has learned —
+  earned lessons, prior outcomes, evidence digests, past decisions,
+  grounded code locations. The ranking is deterministic and
+  explainable: every included item says why it matched, every
+  excluded item says why it was dropped. No embeddings, no services.
+- **A glass pane, not a black box.** The memory pane shows what the
+  agent knew; the decision timeline shows which facts and rules
+  produced each decision. Neither ever shows (or stores) hidden
+  model reasoning.
+- **Writeback at the end.** Every outcome — success or failure —
+  leaves a distilled, provenance-bound receipt. Failures become
+  candidate warnings future runs can see; only evidence-backed
+  outcomes become confirmed lessons. The next related run recalls
+  them; an unrelated run provably does not.
+- **Memory informs, never authorizes.** No memory document can start
+  work, widen a grant, satisfy evidence, or alter a verdict — the
+  test suite proves it at every seam.
+
+![Memory pane: the recall an agent received before acting, each card with its match reasons and provenance](./assets/workbench-memory.png)
+
+Inspect it anywhere:
+
+```bash
+dw knowledge recall --run <run-id>     # what a run recalled, and why
+dw knowledge writebacks --story <id>   # what past runs left behind
+```
+
+The same projections are byte-identical over MCP
+(`dw_knowledge_recall`, `dw_knowledge_writebacks`) and read-only
+HTTP (`/api/runs/{id}/memory`).
 
 ## AI agents
 
@@ -184,6 +229,8 @@ The full trail is in
 
 - [Everyday delivery](./docs/everyday-delivery.md) — the full walkthrough
 - [Architecture](./docs/architecture.md) — how it works, with the test that proves each claim
+- [Repository knowledge](./docs/repository-knowledge.md) — the memory layer's contract
+- [Product language](./docs/product-language.md) — the words the product uses, pinned
 - [MCP surface](./docs/mcp.md) — tool schemas and design
 - [The contract rules](./pmo-roadmap/templates/PMO-CONTRACT.md)
 - [Contributing](./CONTRIBUTING.md) and [changelog](./CHANGELOG.md)

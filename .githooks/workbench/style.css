@@ -3072,6 +3072,18 @@ details.blane.closed summary, .board-closed > summary { cursor: pointer; color: 
   }
 }
 
+:root.reduced-motion {
+  --motion-short: 0s;
+  --motion-panel: 0s;
+  --motion-route: 0s;
+}
+.reduced-motion *, .reduced-motion *::before, .reduced-motion *::after {
+  scroll-behavior: auto !important;
+  animation: none !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-short: 0s;

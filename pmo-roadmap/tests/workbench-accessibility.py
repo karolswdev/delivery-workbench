@@ -627,6 +627,7 @@ class WorkbenchExam:
         self.recorded_journey_steps = 0
         self.recorded_journey_assertions = 0
         self.phase32_exams: set[tuple[str, str]] = set()
+        self.focus_indicator_negative_control_proven = False
 
     def check(self, condition: bool, message: str) -> None:
         self.assertions += 1
@@ -898,6 +899,142 @@ class WorkbenchExam:
         )
         self.assertions += 3
 
+    def install_focus_walk_tracker(self) -> None:
+        self.driver.execute(
+            """
+            window.__examFocusObserver?.disconnect();
+            window.__examFocusGeneration = 0;
+            window.__examFocusObserver = new MutationObserver((records) => {
+              if (records.some((record) => record.type === 'childList')) {
+                window.__examFocusGeneration += 1;
+              }
+            });
+            window.__examFocusObserver.observe(document.getElementById('app'), {
+              childList: true,
+              subtree: true,
+            });
+            """
+        )
+
+    def prepare_focus_walk_step(self) -> int:
+        return int(
+            self.driver.execute(
+                """
+                const visible = (element) => {
+                  const style = getComputedStyle(element);
+                  const rect = element.getBoundingClientRect();
+                  const closed = element.closest('details:not([open])');
+                  if (closed && element !== closed.querySelector(':scope > summary')) return false;
+                  return !element.hidden && !element.disabled
+                    && style.display !== 'none' && style.visibility !== 'hidden'
+                    && rect.width > 0 && rect.height > 0;
+                };
+                [...document.querySelectorAll(
+                  '#app a[href], #app button, #app input, #app select, #app textarea, #app summary'
+                )].filter((element) => visible(element) && element.tabIndex >= 0
+                  && !element.closest('.live-technical > :not(summary)'))
+                  .forEach((element, index) => { element.dataset.examTabTarget = String(index); });
+                return window.__examFocusGeneration;
+                """
+            )
+        )
+
+    def measure_focus_walk_step(self) -> dict[str, Any]:
+        state = self.driver.execute(
+            """
+            const visible = (element) => {
+              const style = getComputedStyle(element);
+              const rect = element.getBoundingClientRect();
+              const closed = element.closest('details:not([open])');
+              if (closed && element !== closed.querySelector(':scope > summary')) return false;
+              return !element.hidden && !element.disabled
+                && style.display !== 'none' && style.visibility !== 'hidden'
+                && rect.width > 0 && rect.height > 0;
+            };
+            const controls = [...document.querySelectorAll(
+              '#app a[href], #app button, #app input, #app select, #app textarea, #app summary'
+            )].filter((element) => visible(element) && element.tabIndex >= 0
+              && !element.closest('.live-technical > :not(summary)'));
+            controls.forEach((element, index) => {
+              element.dataset.examTabTarget = String(index);
+            });
+            const active = document.activeElement;
+            const id = active?.dataset?.examTabTarget || '';
+            const current = id !== '' && active === controls[Number(id)]
+              && active.isConnected;
+            if (!current) {
+              return {generation: window.__examFocusGeneration, id, current: false,
+                visible: true};
+            }
+            const style = getComputedStyle(active);
+            const width = parseFloat(style.outlineWidth || '0');
+            const ring = (style.outlineStyle !== 'none' && width >= 2)
+              || (style.boxShadow && style.boxShadow !== 'none');
+            return {generation: window.__examFocusGeneration, id, current: true,
+              visible: Boolean(ring)};
+            """
+        )
+        return state if isinstance(state, dict) else {}
+
+    def tab_to_current_target(
+        self, target_id: str, step_budget: int
+    ) -> dict[str, Any] | None:
+        # Begin from the real predecessor chain rather than guessing that the
+        # preceding light-DOM control is one Tab away. Custom-element shadow
+        # buttons can add stops between two controls returned by querySelectorAll.
+        for _attempt in range(5):
+            self.focus("#skip-link")
+            for _step in range(step_budget):
+                generation = self.prepare_focus_walk_step()
+                self.driver.press("tab")
+                state = self.measure_focus_walk_step()
+                if int(state.get("generation", -1)) != generation:
+                    # The key event crossed a live redraw. Start this proof again
+                    # on one DOM generation; do not score the replaced node.
+                    break
+                if not bool(state.get("current")):
+                    continue
+                if str(state.get("id", "")) == target_id:
+                    return state
+        return None
+
+    def assert_focus_indicator_negative_control(
+        self, target_id: str, step_budget: int
+    ) -> None:
+        if self.focus_indicator_negative_control_proven:
+            return
+        planted = self.driver.execute(
+            """
+            const target = document.querySelector(
+              `[data-exam-tab-target="${CSS.escape(arguments[0])}"]`
+            );
+            if (!target) return false;
+            const style = document.createElement('style');
+            style.id = 'exam-missing-focus-ring';
+            style.textContent = `html body .app [data-exam-tab-target="${CSS.escape(arguments[0])}"]:focus { outline: none !important; box-shadow: none !important; }`;
+            document.head.appendChild(style);
+            return true;
+            """,
+            [target_id],
+        )
+        self.check(bool(planted), "could not plant missing focus-ring violation")
+        try:
+            state = self.tab_to_current_target(target_id, step_budget)
+            self.check(
+                bool(state) and not bool(state.get("visible")),
+                "focus-ring assertion did not catch planted outline:none violation",
+            )
+        finally:
+            self.driver.execute(
+                "document.getElementById('exam-missing-focus-ring')?.remove();"
+            )
+        restored = self.tab_to_current_target(target_id, step_budget)
+        self.check(
+            bool(restored) and bool(restored.get("visible")),
+            "focus ring did not recover after planted violation was removed",
+        )
+        self.focus_indicator_negative_control_proven = True
+
     def assert_ordinary_tab_reachability(
         self, journey_id: str, viewport: str
     ) -> None:
@@ -952,46 +1089,25 @@ class WorkbenchExam:
             bool(expected),
             f"{journey_id}/{viewport} exposes no ordinary keyboard controls",
         )
+        self.install_focus_walk_tracker()
         self.focus("#skip-link")
         reached: set[str] = set()
         missing_focus_indicator: set[str] = set()
         # Custom-element buttons add shadow-tree stops that are not returned by
         # document.querySelectorAll. Allow complete keyboard cycles without a
         # fixed sleep or assuming how many component hosts a loaded desk has.
-        for _index in range((len(expected) * 4) + 60):
-            self.driver.execute(
-                """
-                const visible = (element) => {
-                  const style = getComputedStyle(element);
-                  const rect = element.getBoundingClientRect();
-                  const closed = element.closest('details:not([open])');
-                  if (closed && element !== closed.querySelector(':scope > summary')) return false;
-                  return !element.hidden && !element.disabled
-                    && style.display !== 'none' && style.visibility !== 'hidden'
-                    && rect.width > 0 && rect.height > 0;
-                };
-                [...document.querySelectorAll(
-                  '#app a[href], #app button, #app input, #app select, #app textarea, #app summary'
-                )].filter((element) => visible(element) && element.tabIndex >= 0
-                  && !element.closest('.live-technical > :not(summary)'))
-                  .forEach((element, index) => { element.dataset.examTabTarget = String(index); });
-                """
-            )
+        step_budget = (len(expected) * 4) + 60
+        for _index in range(step_budget):
+            generation = self.prepare_focus_walk_step()
             self.driver.press("tab")
-            state = self.driver.execute(
-                """
-                const active = document.activeElement;
-                const id = active?.dataset?.examTabTarget || '';
-                if (!id) return {id: '', visible: true};
-                const style = getComputedStyle(active);
-                const width = parseFloat(style.outlineWidth || '0');
-                const visible = (style.outlineStyle !== 'none' && width >= 2)
-                  || (style.boxShadow && style.boxShadow !== 'none');
-                return {id, visible};
-                """
-            )
-            target = str(state.get("id", "")) if isinstance(state, dict) else ""
-            if target:
+            state = self.measure_focus_walk_step()
+            if int(state.get("generation", -1)) != generation:
+                # The Tab and measurement straddled a redraw. The active node is
+                # not evidence about either generation, so continue without
+                # scoring it as reached or as a missing ring.
+                continue
+            target = str(state.get("id", ""))
+            if target and bool(state.get("current")):
                 reached.add(target)
                 if not bool(state.get("visible")):
                     missing_focus_indicator.add(target)
@@ -1000,59 +1116,15 @@ class WorkbenchExam:
             if reached == set(expected):
                 break
         missing = sorted(set(expected) - reached)
-        # A live projection can replace the focused node between two Tab
-        # presses. Re-find a missing target and prove the local previous→target
-        # Tab edge, retrying against the current render instead of sleeping.
+        # Re-prove a missing target by walking its real Tab chain on one DOM
+        # generation. This includes shadow-tree stops and retries only when a
+        # redraw actually crossed the key event and its measurement.
         for target_id in list(missing):
-            for _attempt in range(50):
-                prepared = self.driver.execute(
-                    """
-                    const visible = (element) => {
-                      const style = getComputedStyle(element);
-                      const rect = element.getBoundingClientRect();
-                      const closed = element.closest('details:not([open])');
-                      if (closed && element !== closed.querySelector(':scope > summary')) return false;
-                      return !element.hidden && !element.disabled
-                        && style.display !== 'none' && style.visibility !== 'hidden'
-                        && rect.width > 0 && rect.height > 0;
-                    };
-                    const controls = [...document.querySelectorAll(
-                      '#app a[href], #app button, #app input, #app select, #app textarea, #app summary'
-                    )].filter((element) => visible(element) && element.tabIndex >= 0
-                      && !element.closest('.live-technical > :not(summary)'));
-                    controls.forEach((element, index) => { element.dataset.examTabTarget = String(index); });
-                    const target = controls[Number(arguments[0])];
-                    const allControls = [...document.querySelectorAll(
-                      'a[href], button, input, select, textarea, summary'
-                    )].filter((element) => visible(element) && element.tabIndex >= 0);
-                    const previous = Number(arguments[0]) > 0
-                      ? controls[Number(arguments[0]) - 1]
-                      : allControls[allControls.indexOf(target) - 1];
-                    if (!target || !previous) return false;
-                    previous.focus();
-                    return document.activeElement === previous;
-                    """,
-                    [target_id],
-                )
-                if not prepared:
-                    continue
-                self.driver.press("tab")
-                state = self.driver.execute(
-                    """
-                    const active = document.activeElement;
-                    const id = active?.dataset?.examTabTarget || '';
-                    const style = active ? getComputedStyle(active) : null;
-                    const visible = style && ((style.outlineStyle !== 'none'
-                      && parseFloat(style.outlineWidth || '0') >= 2)
-                      || (style.boxShadow && style.boxShadow !== 'none'));
-                    return {id, visible};
-                    """
-                )
-                if str(state.get("id", "")) == target_id:
-                    reached.add(target_id)
-                    if not bool(state.get("visible")):
-                        missing_focus_indicator.add(target_id)
-                    break
+            state = self.tab_to_current_target(target_id, step_budget)
+            if state:
+                reached.add(target_id)
+                if not bool(state.get("visible")):
+                    missing_focus_indicator.add(target_id)
         missing = sorted(set(expected) - reached)
         missing_details = self.driver.execute(
             """
@@ -1067,58 +1139,13 @@ class WorkbenchExam:
             not missing,
             f"{journey_id}/{viewport} Tab did not reach ordinary actions {missing_details}",
         )
-        # A target reached just before a live redraw may leave its replacement
-        # carrying the same exam id but no keyboard modality. Re-prove the real
-        # previous→target Tab edge on the current render; direct .focus() would
-        # not activate :focus-visible and is therefore not valid evidence.
+        # Re-prove a reported ring through the same generation-aware Tab walk.
+        # A stable, currently active target with no ring remains a failure.
         for target_id in list(missing_focus_indicator):
-            for _attempt in range(50):
-                prepared = self.driver.execute(
-                    """
-                    const visible = (element) => {
-                      const style = getComputedStyle(element);
-                      const rect = element.getBoundingClientRect();
-                      const closed = element.closest('details:not([open])');
-                      if (closed && element !== closed.querySelector(':scope > summary')) return false;
-                      return !element.hidden && !element.disabled
-                        && style.display !== 'none' && style.visibility !== 'hidden'
-                        && rect.width > 0 && rect.height > 0;
-                    };
-                    const controls = [...document.querySelectorAll(
-                      '#app a[href], #app button, #app input, #app select, #app textarea, #app summary'
-                    )].filter((element) => visible(element) && element.tabIndex >= 0
-                      && !element.closest('.live-technical > :not(summary)'));
-                    controls.forEach((element, index) => { element.dataset.examTabTarget = String(index); });
-                    const target = controls[Number(arguments[0])];
-                    const allControls = [...document.querySelectorAll(
-                      'a[href], button, input, select, textarea, summary'
-                    )].filter((element) => visible(element) && element.tabIndex >= 0);
-                    const previous = Number(arguments[0]) > 0
-                      ? controls[Number(arguments[0]) - 1]
-                      : allControls[allControls.indexOf(target) - 1];
-                    if (!target || !previous) return false;
-                    previous.focus();
-                    return document.activeElement === previous;
-                    """,
-                    [target_id],
-                )
-                if not prepared:
-                    continue
-                self.driver.press("tab")
-                visible_now = self.driver.execute(
-                    """
-                    const active = document.activeElement;
-                    if (active?.dataset?.examTabTarget !== arguments[0]) return false;
-                    const style = getComputedStyle(active);
-                    return (style.outlineStyle !== 'none'
-                      && parseFloat(style.outlineWidth || '0') >= 2)
-                      || (style.boxShadow && style.boxShadow !== 'none');
-                    """,
-                    [target_id],
-                )
-                if visible_now:
-                    missing_focus_indicator.discard(target_id)
-                    break
+            state = self.tab_to_current_target(target_id, step_budget)
+            if state and bool(state.get("visible")):
+                missing_focus_indicator.discard(target_id)
+        self.assert_focus_indicator_negative_control(str(expected[0]), step_budget)
         missing_focus = sorted(missing_focus_indicator)
         focus_details = self.driver.execute(
             """

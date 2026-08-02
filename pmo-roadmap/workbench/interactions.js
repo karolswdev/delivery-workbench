@@ -9,9 +9,10 @@
 
   /* ── helpers ────────────────────────────────────────────────────────── */
 
-  /** True when the user prefers reduced motion. */
+  /** True when the user or deterministic snapshot mode requires reduced motion. */
   function prefersReducedMotion() {
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return document.documentElement.classList.contains("reduced-motion")
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
   /** Resolve a shared CSS duration token while respecting reduced motion. */
