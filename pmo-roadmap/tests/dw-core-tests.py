@@ -5615,9 +5615,21 @@ class OrchestrationRunAuthorityTest(unittest.TestCase):
         import dw_pmo.orchestration_run as runs
 
         store = self.root / ".git" / "pmo-orchestration"
-        before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*"))
+
+        # Git's background auto-maintenance can create and remove its own
+        # transient lock on a loaded runner mid-test; that is git behavior,
+        # not a plan side effect (same class as the signals-observe
+        # maintenance.lock CI flake).
+        def inventory():
+            return sorted(
+                str(path.relative_to(self.root))
+                for path in self.root.rglob("*")
+                if path.name != "maintenance.lock"
+            )
+
+        before = inventory()
         plan = self.plan()
-        after = sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*"))
+        after = inventory()
         self.assertTrue(plan["applicable"], plan["issues"])
         self.assertEqual(before, after)
         self.assertFalse(store.exists())
