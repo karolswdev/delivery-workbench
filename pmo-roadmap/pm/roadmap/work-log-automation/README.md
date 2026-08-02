@@ -197,6 +197,7 @@ Phase 28 adds no new autonomy, hosted authority, release, or publication scope.
 | 33 | Rebuild the web view as a real workspace — kanban home, live agent sessions, diff review, insights, integrated terminal — with Operator's UX density and DW's evidence-first integrity. | not-started | [phase-33-operator-grade-workbench](./phase-33-operator-grade-workbench/) |
 | 34 | Close the interaction loop: a global attention router, per-session telemetry, inline ask-and-resume, fleet-wide visibility, and reconnect-safe execution — combining Operator's interaction immediacy with DW's evidence-first governance. | not-started | [phase-34-multi-agent-command-center](./phase-34-multi-agent-command-center/) |
 | 35 | Make memory a visible, testable part of every bounded run and autonomous program: bounded recall assembled before agents act, transparent decision basis while work is live, distilled provenance-bound writeback when it ends — compounding intelligence across runs while memory stays advisory, local, and dependency-free. | done | [phase-35-memory-glass](./phase-35-memory-glass/) |
+| 36 | Replace the scaffold-grade visual layer with a Linear-grade design language, adopted token-for-token from the popular-web-designs reference: dark-native luminance model, a real type scale on a real grid, disciplined components, and zero misalignments — across every workbench surface, both themes, wide and narrow. | not-started | [phase-36-face-worth-showing](./phase-36-face-worth-showing/) |
 
 ## Operating cadence
 
