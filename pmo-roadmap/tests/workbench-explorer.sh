@@ -394,9 +394,21 @@ grep -q 'else if (!parts.length) await viewBoard(selectedProject)' "$PMO_DIR"/wo
   || fail "home route should open the selected project board"
 for marker in 'kind: "create_story"' 'kind: "update_story_status"' \
   '"pause_phase"' '"resume_phase"' \
+  'class="bcard-id ops-label"' 'class="bcard-meta"' \
+  'class="bcol-empty-copy"' 'class="bcard-attention"' \
   'Cross-phase moves are not supported. The story stays in its original lane.'; do
   grep -q "$marker" "$PMO_DIR"/workbench/*.js || fail "board controls are missing $marker"
 done
+python3 - "$PMO_DIR/workbench/board.js" <<'PY' || fail "board card anatomy drifted"
+import sys
+from pathlib import Path
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+card = source[source.index("function boardCard"):source.index("/* ── flat board rendering")]
+assert "<dw-status-pill" not in card
+assert "<dw-badge" not in card
+assert card.count("${attnBadge}") == 1
+assert card.index('class="bcard-link"') < card.index('class="bcard-title"') < card.index('class="bcard-meta"')
+PY
 curl -s "$BASE/api/file?path=pm/roadmap/sample/README.md" \
   | grep -q 'Sample - Roadmap' || fail "file endpoint should serve roadmap files"
 

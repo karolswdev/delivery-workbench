@@ -2,7 +2,7 @@
 
 - **Project:** work-log-automation
 - **Phase:** 36
-- **Status:** backlog
+- **Status:** done
 - **Depends on:** WLA-36-01
 - **Unblocks:** WLA-36-05
 - **Owner:** unassigned

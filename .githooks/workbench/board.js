@@ -42,6 +42,15 @@ function flatColumn(card, ortho) {
 
 /* ── card rendering (shared between flat and phase views) ─ */
 
+function _boardStatusLabel(status) {
+  const labels = {
+    backlog: "Backlog", ready: "Ready", "in-progress": "In progress",
+    blocked: "Blocked", "on-hold": "On hold", paused: "On hold",
+    done: "Done", complete: "Done", closed: "Done", shipped: "Done",
+  };
+  return labels[status] || status;
+}
+
 function boardCard(slug, lane, card, orthoState) {
   const parked  = PARKED_COLUMNS.includes(card.status) || card.status === "paused";
   const movable = !lane.closed && !lane.paused;
@@ -50,40 +59,39 @@ function boardCard(slug, lane, card, orthoState) {
   const attn    = ortho.attention || "none";
   const auth    = ortho.authority || "none";
   const lastTs  = ortho.last_activity || ortho.updated_at || "";
-
-  const execDot = exec === "running"
-    ? '<span class="bcard-exec bcard-exec-running" title="Running" aria-label="Execution: running"></span>'
-    : exec === "idle"
-    ? '<span class="bcard-exec bcard-exec-idle" title="Idle" aria-label="Execution: idle"></span>'
-    : "";
-
+  const statusLabel = _boardStatusLabel(card.status);
   const attnLabel = attn === "waiting-for-input" ? "Input needed"
-    : attn === "decision-pending" ? "Decision"
-    : attn !== "none" ? "Blocked" : "";
+    : attn === "decision-pending" ? "Decision needed"
+    : attn !== "none" ? "Needs attention" : "";
   const attnBadge = attn !== "none"
-    ? `<dw-badge variant="needs-you" count="${esc(attnLabel)}"></dw-badge>`
+    ? `<span class="bcard-attention">${esc(attnLabel)}</span>`
     : "";
-  const attnPreview = (attn !== "none" && ortho.question)
-    ? `<div class="bcard-question">${esc(ortho.question)}</div>` : "";
-
-  const authRing = auth !== "none" ? ` bcard-auth-${esc(auth)}` : "";
+  const context = (attn !== "none" && ortho.question)
+    ? ortho.question
+    : parked ? `Waiting: ${card.note || "no reason recorded"}` : "";
   const timeLabel = _relativeTime(lastTs);
+  const detailLabel = [
+    `Execution ${exec}`,
+    auth !== "none" ? `authority ${auth}` : "",
+    card.evidence_exists ? "proof saved" : "",
+    timeLabel,
+  ].filter(Boolean).join(", ");
 
   return `
-    <dw-card class="bcard st-${esc(card.status)}${authRing}" ${movable ? 'draggable="true"' : ""}
+    <dw-card class="bcard st-${esc(card.status)}" ${movable ? 'draggable="true"' : ""}
          data-story="${esc(card.story_id)}" data-phase="${lane.number}"
          data-status="${esc(card.status)}" data-evidence="${card.evidence_exists ? 1 : 0}"
          data-execution="${esc(exec)}" data-attention="${esc(attn)}" data-authority="${esc(auth)}"
-         aria-label="${esc(card.story_id)}: ${esc(card.title)}. Status ${esc(card.status)}. Execution ${esc(exec)}.${attn !== "none" ? " Attention: " + esc(attn) + "." : ""}">
-      <div slot="header" class="bcard-top">
-        <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}" class="bcard-link"><code>${esc(card.story_id)}</code></a>${execDot}
-        <span class="bcard-phase-label">Phase ${esc(String(lane.number))}</span>
-        <dw-status-pill status="${esc(card.status)}"></dw-status-pill>${attnBadge}${card.evidence_exists ? ' <span class="tick">proof saved</span>' : ""}
-        ${timeLabel ? `<span class="bcard-time">${esc(timeLabel)}</span>` : ""}
-      </div>
-      <div class="bcard-title">${esc(card.title)}</div>
-      ${attnPreview}
-      ${parked ? `<div class="bcard-note"><strong>Waiting:</strong> ${esc(card.note || "no reason recorded")}</div>` : ""}
+         aria-label="${esc(card.story_id)}: ${esc(card.title)}. Status ${esc(statusLabel)}. ${esc(detailLabel)}${attn !== "none" ? ". Attention: " + esc(attn) : ""}">
+      <a href="#/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(card.story_id)}" class="bcard-link">
+        <div class="bcard-top">
+          <span class="bcard-id ops-label">${esc(card.story_id)}</span>
+          ${attnBadge}
+        </div>
+        <div class="bcard-title">${esc(card.title)}</div>
+        <div class="bcard-meta">Phase ${esc(String(lane.number))} · ${esc(statusLabel)}</div>
+        ${context ? `<p class="bcard-context">${esc(context)}</p>` : ""}
+      </a>
       ${movable ? `<div slot="footer" class="bcard-actions" role="group" aria-label="Actions for ${esc(card.story_id)}">
         <dw-button variant="ghost" class="bmove" data-board-move>Move</dw-button>
         <dw-button variant="ghost" class="bmove" data-board-park>Park</dw-button>
@@ -138,10 +146,14 @@ function flatColumnHtml(slug, id, label, items, orthoMap, opts) {
     boardCard(slug, entry.lane, entry.card, orthoMap[entry.card.story_id])
   ).join("");
 
+  const emptyLabel = id === FLAT_INPROGRESS ? "No stories in progress"
+    : id === FLAT_NEEDSYOU ? "No stories need your attention"
+    : id === FLAT_DONE ? "No completed stories yet" : "No stories waiting";
   return `
     <div class="bcol flat-col flat-col-${esc(id)}${count === 0 ? " bcol-empty flat-col-empty" : ""}${activeClass}" data-flat-col="${esc(id)}" data-droppable="${droppable}">
-      <div class="bcol-head">${esc(label)} <span class="bcol-count">${count}</span></div>
+      <div class="bcol-head"><span class="bcol-label ops-label">${esc(label)}</span><span class="bcol-count">${count}</span></div>
       ${cardsHtml}
+      ${count === 0 ? `<p class="bcol-empty-copy">${esc(emptyLabel)}</p>` : ""}
     </div>`;
 }
 
@@ -169,8 +181,9 @@ function boardLane(slug, columns, lane, orthoMap) {
     const count = lane.columns[col].length;
     return `
     <div class="bcol${count === 0 ? " bcol-empty" : ""}" data-col="${esc(col)}" data-phase="${lane.number}" data-droppable="${droppable ? 1 : 0}">
-      <div class="bcol-head">${esc(col)} <span class="bcol-count">${count}</span></div>
+      <div class="bcol-head"><span class="bcol-label ops-label">${esc(col.replaceAll("-", " "))}</span><span class="bcol-count">${count}</span></div>
       ${lane.columns[col].map((card) => boardCard(slug, lane, card, orthoMap[card.story_id])).join("")}
+      ${count === 0 ? '<p class="bcol-empty-copy">No stories here</p>' : ""}
     </div>`;
   }).join("");
   const uncovered = lane.story_count === 0 && lane.uncovered_story_files
@@ -478,18 +491,37 @@ function wireBoardMoves(slug) {
   const board = document.querySelector(".board");
   if (!board) return;
   let dragging = null;
+  let dragSource = null;
+  let dragColumn = null;
+  const clearDragState = () => {
+    if (dragSource) dragSource.classList.remove("bcard-dragging");
+    if (dragColumn) dragColumn.classList.remove("bcol-drag-over");
+    dragSource = null;
+    dragColumn = null;
+  };
   board.addEventListener("dragstart", (event) => {
     const card = event.target.closest && event.target.closest(".bcard[draggable]");
     if (!card) return;
     dragging = { ...card.dataset };
+    dragSource = card;
+    card.classList.add("bcard-dragging");
     event.dataTransfer.setData("text/plain", card.dataset.story);
     event.dataTransfer.effectAllowed = "move";
   });
-  board.addEventListener("dragend", () => { dragging = null; });
+  board.addEventListener("dragend", () => {
+    dragging = null;
+    clearDragState();
+  });
   board.addEventListener("dragover", (event) => {
     if (!dragging) return;
     const column = event.target.closest && event.target.closest(".bcol");
-    if (column) event.preventDefault();
+    if (!column) return;
+    event.preventDefault();
+    if (dragColumn !== column) {
+      if (dragColumn) dragColumn.classList.remove("bcol-drag-over");
+      dragColumn = column;
+      dragColumn.classList.add("bcol-drag-over");
+    }
   });
   board.addEventListener("drop", (event) => {
     if (!dragging) return;
@@ -498,6 +530,7 @@ function wireBoardMoves(slug) {
     event.preventDefault();
     const from = dragging;
     dragging = null;
+    clearDragState();
     if (column.dataset.phase && column.dataset.phase !== from.phase) {
       boardNotice("Cross-phase moves are not supported. The story stays in its original lane.");
       return;
@@ -648,10 +681,10 @@ function wireBoardLiveUpdates() {
     const card = document.querySelector(`dw-card[data-story="${selectorEscape(detail.story_id || "")}"]`);
     if (!card) return;
     card.dataset.attention = detail.type || "waiting-for-input";
-    if (!card.querySelector(".bcard-top dw-badge[variant='needs-you']")) {
-      const badge = document.createElement("dw-badge");
-      badge.setAttribute("variant", "needs-you");
-      badge.setAttribute("count", "Needs you");
+    if (!card.querySelector(".bcard-attention")) {
+      const badge = document.createElement("span");
+      badge.className = "bcard-attention";
+      badge.textContent = "Needs attention";
       const top = card.querySelector(".bcard-top");
       if (top) top.appendChild(badge);
     }
@@ -662,7 +695,7 @@ function wireBoardLiveUpdates() {
     const card = document.querySelector(`dw-card[data-story="${selectorEscape(detail.story_id || "")}"]`);
     if (!card) return;
     card.dataset.attention = "none";
-    const needsBadge = card.querySelector(".bcard-top dw-badge[variant='needs-you']");
+    const needsBadge = card.querySelector(".bcard-attention");
     if (needsBadge) needsBadge.remove();
   });
 }
@@ -676,7 +709,7 @@ function wireBoardLiveUpdates() {
  * overview strip reads like a sentence, not a log line. */
 function _cleanStatusSummary(summary) {
   if (!summary) return "";
-  let text = String(summary).replace(/^attention\s*[—-]\s*/i, "").trim();
+  let text = String(summary).replace(/^(?:attention|ready)\s*[—-]\s*/i, "").trim();
   const phaseMatch = text.match(/phase-(\d+)[^:]*:\s*(.*)$/i);
   if (phaseMatch) {
     let msg = phaseMatch[2].trim();
@@ -696,9 +729,7 @@ function boardOverviewStrip(slug, setup, status, step, presentation, notice, fla
     notice || (SNAPSHOT_MODE && new URLSearchParams(location.search).has("confirmstep")),
   );
 
-  const statusSentence = needsAttention
-    ? `Needs attention. ${_cleanStatusSummary(status.summary)}`
-    : `Ready. ${_cleanStatusSummary(status.summary)}`;
+  const statusSentence = _cleanStatusSummary(status.summary);
 
   const statsLine = flatStats
     ? `${flatStats.totalStories} stor${flatStats.totalStories === 1 ? "y" : "ies"}, ${flatStats.inProgressCount} in progress, ${flatStats.needsYouCount} need you`
@@ -711,8 +742,8 @@ function boardOverviewStrip(slug, setup, status, step, presentation, notice, fla
         ${statsLine ? `<span class="board-stats-line">${esc(statsLine)}</span>` : ""}
       </div>
       <div class="board-overview-status-line">
-        <dw-badge variant="${needsAttention ? "alert" : "default"}" count="${esc(needsAttention ? "Needs attention" : "Ready")}"></dw-badge>
-        <span class="board-status-sentence">${esc(statusSentence)}</span>
+        <span class="board-readiness-pill ${needsAttention ? "attention" : "ready"}" role="status">${esc(needsAttention ? "Needs attention" : "Ready")}</span>
+        ${statusSentence ? `<span class="board-status-sentence">${esc(statusSentence)}</span>` : ""}
       </div>
     </div>
     <dw-fold class="board-technical" label="Technical details"${technicalOpen ? " open" : ""}>

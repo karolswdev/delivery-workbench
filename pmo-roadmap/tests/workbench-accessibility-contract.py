@@ -30,6 +30,7 @@ ROUTER_PATH = ROOT / "pmo-roadmap" / "workbench" / "app.js"
 INTERACTIONS_PATH = ROOT / "pmo-roadmap" / "workbench" / "interactions.js"
 GLOBAL_EVENTS_PATH = ROOT / "pmo-roadmap" / "workbench" / "global-events.js"
 EDITOR_PATH = ROOT / "pmo-roadmap" / "workbench" / "editor.js"
+BOARD_PATH = ROOT / "pmo-roadmap" / "workbench" / "board.js"
 DOC_PATH = ROOT / "docs" / "accessibility.md"
 
 REQUIRED_JOURNEY_FIELDS = {
@@ -374,6 +375,58 @@ def validate_slick_workbench() -> list[str]:
     return [f"{name}-missing" for name, passed in checks.items() if not passed]
 
 
+def validate_board_cards() -> list[str]:
+    """Pin the board's single-target card anatomy and quiet state system."""
+    board = BOARD_PATH.read_text(encoding="utf-8")
+    css = CSS_PATH.read_text(encoding="utf-8")
+    card = board[
+        board.index("function boardCard"):
+        board.index("/* ── flat board rendering")
+    ]
+    checks = {
+        "board-whole-card-link": (
+            card.index('class="bcard-link"')
+            < card.index('class="bcard-title"')
+            < card.index('class="bcard-meta"')
+        ),
+        "board-quiet-story-id": 'class="bcard-id ops-label"' in card,
+        "board-single-attention-badge": (
+            card.count("${attnBadge}") == 1
+            and "<dw-badge" not in card
+            and "<dw-status-pill" not in card
+        ),
+        "board-card-action-group": (
+            'role="group"' in card
+            and 'variant="ghost"' in card
+            and "data-board-move" in card
+            and "data-board-park" in card
+        ),
+        "board-empty-copy": 'class="bcol-empty-copy"' in board,
+        "board-status-rails": all(
+            marker in css for marker in (
+                ".st-in-progress", ".st-blocked", ".st-done",
+                '[data-attention]:not([data-attention="none"])',
+            )
+        ),
+        "board-hover-focus-actions": (
+            ".bcard:focus-within .dw-card-footer" in css
+            and "pointer-events: auto" in css
+        ),
+        "board-unconditional-focus": (
+            "html body .app :where(a, button, input, select, textarea, summary, [tabindex]):focus" in css
+        ),
+        "board-narrow-layout": (
+            "@media (max-width: 520px)" in css
+            and "grid-template-columns: 1fr" in css
+        ),
+        "board-reduced-motion": (
+            "@media (prefers-reduced-motion: reduce)" in css
+            and "transition-duration: 0s !important" in css
+        ),
+    }
+    return [f"{name}-missing" for name, passed in checks.items() if not passed]
+
+
 def planted_red_cases(
     manifest: dict[str, Any],
     journey_contract: dict[str, Any],
@@ -425,6 +478,7 @@ def main() -> int:
     issues.extend(validate_sources(expected_ids))
     issues.extend(validate_memory_panel())
     issues.extend(validate_slick_workbench())
+    issues.extend(validate_board_cards())
     issues.extend(
         f"red-case-failed:{item}"
         for item in planted_red_cases(manifest, journey_contract, states_contract)
@@ -436,7 +490,8 @@ def main() -> int:
     print(
         "workbench-accessibility-contract.py: ok "
         f"({len(expected_ids)} journeys, 2 viewports, 45 memory-pane checks, "
-        "20 slick-workbench checks, keyboard/focus/semantics/manual evidence)"
+        "20 slick-workbench checks, 10 board-card checks, "
+        "keyboard/focus/semantics/manual evidence)"
     )
     return 0
 

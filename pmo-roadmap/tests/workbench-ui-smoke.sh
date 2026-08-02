@@ -77,6 +77,7 @@ controls = core[core.index("function stepControlHtml"):core.index("async functio
 apply = core[core.index("async function applyReviewedStep"):core.index("function wireStepControl")]
 panel = core[core.index("function statusPanel"):]
 overview = views[views.index("async function viewOverview"):views.index("async function viewProject")]
+board_card = board[board.index("function boardCard"):board.index("/* ── flat board rendering")]
 board_wiring = board[board.index("function wireBoardMoves"):]
 view_board = board[board.index("async function viewBoard"):]
 preflight = orch[orch.index("function validateView"):orch.index("function jsonView")]
@@ -142,9 +143,20 @@ for token in ("boardOverviewStrip", "Needs attention", "Stories", "Phase lanes",
 assert board_wiring.index("column.dataset.phase !== from.phase") < board_wiring.index("openMovePanel(slug")
 assert "Parking on-hold requires a reason" in board
 assert "Preview refused. Nothing changed." in board
-for token in (".board-overview-strip", ".board-action-panel", ".board-preview",
-              ".bcard-status", "@media (max-width: 700px)"):
+for token in ('class="bcard-id ops-label"', 'class="bcard-title"',
+              'class="bcard-meta"', 'class="bcard-link"',
+              'class="bcol-empty-copy"'):
+    assert token in board, token
+assert "<dw-status-pill" not in board_card
+assert "<dw-badge" not in board_card
+assert board_card.count("${attnBadge}") == 1
+assert board_card.index('class="bcard-link"') < board_card.index('class="bcard-title"') < board_card.index('class="bcard-meta"')
+for token in (".board-overview-flat", ".board-action-panel", ".board-preview",
+              ".bcard-meta", ".bcard-attention", ".bcol-empty-copy",
+              ".bcard-dragging", ".bcol-drag-over", "@media (max-width: 700px)"):
     assert token in css, token
+assert "background: var(--accent-interactive)" in css
+assert "content: none" in css
 assert "overflow-wrap: anywhere" in css
 for token in ("--font-sans", "--font-mono", "--weight-medium", "--type-body",
               "--space-4", "--surface-canvas", "--surface-elevated",
