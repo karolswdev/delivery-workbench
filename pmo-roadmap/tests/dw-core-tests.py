@@ -21774,4 +21774,14 @@ class ShardRunnerTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    # Same guard as run-core-tests.py: git background auto-maintenance can
+    # drop a transient maintenance.lock into fixture repos mid-test on slow
+    # runners, tripping purity snapshots. Git behavior, not a dw side effect.
+    _base = int(os.environ.get("GIT_CONFIG_COUNT", "0") or "0")
+    for _offset, (_key, _value) in enumerate(
+        (("maintenance.auto", "false"), ("gc.auto", "0"))
+    ):
+        os.environ["GIT_CONFIG_KEY_{}".format(_base + _offset)] = _key
+        os.environ["GIT_CONFIG_VALUE_{}".format(_base + _offset)] = _value
+    os.environ["GIT_CONFIG_COUNT"] = str(_base + 2)
     unittest.main(verbosity=2)

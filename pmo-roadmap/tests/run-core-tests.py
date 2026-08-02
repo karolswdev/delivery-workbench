@@ -204,7 +204,27 @@ def _run_shard(names: "list[str]") -> "tuple[int, str, float, dict]":
     return proc.returncode, proc.stdout, time.time() - started, summary
 
 
+def _disable_git_background_maintenance() -> None:
+    """Keep git's auto-maintenance out of fixture repositories.
+
+    On slow CI runners git may spawn background maintenance during any
+    fixture git operation, dropping a transient ``maintenance.lock`` into
+    ``.git/objects`` mid-test and tripping before/after purity snapshots
+    (seen twice on macOS runners). That is git behavior, not a dw side
+    effect — turn it off for every test process via GIT_CONFIG_* injection,
+    which child git processes inherit.
+    """
+    base = int(os.environ.get("GIT_CONFIG_COUNT", "0") or "0")
+    for offset, (key, value) in enumerate(
+        (("maintenance.auto", "false"), ("gc.auto", "0"))
+    ):
+        os.environ[f"GIT_CONFIG_KEY_{base + offset}"] = key
+        os.environ[f"GIT_CONFIG_VALUE_{base + offset}"] = value
+    os.environ["GIT_CONFIG_COUNT"] = str(base + 2)
+
+
 def main(argv: "list[str] | None" = None) -> int:
+    _disable_git_background_maintenance()
     parser = argparse.ArgumentParser(description="Run the dw core suite sharded.")
     parser.add_argument("--shards", type=int, default=None)
     parser.add_argument("--serial", action="store_true",
