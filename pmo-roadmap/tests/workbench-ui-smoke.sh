@@ -961,6 +961,8 @@ shot "consent-program-refusal-mobile" 390,844 "$BASE/?snapshot=1&consentpreview=
 # repair, decision, recovery, and technical-inspection journeys.
 python3 "$SCRIPT_DIR/workbench-accessibility.py" \
   --firefox "$FF" --base "$BASE" --suite core \
+  --repository "$REPO" --capture-dir "${CAPTURE_DIR:-$TMP_ROOT}" \
+  --capture-pattern "$CAPTURE_PATTERN" \
   || fail "core accessibility journey exam failed"
 
 # Red-path prominence: the same overview must render a broken rail as

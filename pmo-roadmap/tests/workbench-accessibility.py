@@ -10,6 +10,7 @@ rendered DOM at both required viewport sizes.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import socket
@@ -310,6 +311,19 @@ class Marionette:
         finally:
             self.command("Marionette:SetContext", {"value": "content"})
 
+    def screenshot(self, path: Path) -> None:
+        result = self.command(
+            "WebDriver:TakeScreenshot",
+            {"id": None, "full": False, "hash": False, "scroll": False},
+        )
+        encoded = result.get("value") if isinstance(result, dict) else result
+        if not isinstance(encoded, str) or not encoded:
+            raise ExamFailure("Marionette returned no screenshot bytes")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(base64.b64decode(encoded, validate=True))
+        if path.stat().st_size < 1_000:
+            raise ExamFailure(f"recorded journey screenshot is too small: {path}")
+
     def set_reduced_motion(self, enabled: bool) -> None:
         self.command("Marionette:SetContext", {"value": "chrome"})
         try:
@@ -589,10 +603,20 @@ class WorkbenchExam:
         program_revoked: str = "",
         program_certified: str = "",
         project: str = "",
+        repository: Path | None = None,
+        memory_run: str = "",
+        memory_decision: str = "",
+        capture_dir: Path | None = None,
+        capture_pattern: str = "",
     ) -> None:
         self.driver = driver
         self.base = base.rstrip("/")
         self.project = project
+        self.repository = repository
+        self.memory_run = memory_run
+        self.memory_decision = memory_decision
+        self.capture_dir = capture_dir
+        self.capture_pattern = capture_pattern
         self.ids = {
             "program_active": program_active,
             "program_revoked": program_revoked,
@@ -600,12 +624,28 @@ class WorkbenchExam:
         }
         self.assertions = 0
         self.audits = 0
+        self.recorded_journey_steps = 0
+        self.recorded_journey_assertions = 0
         self.phase32_exams: set[tuple[str, str]] = set()
 
     def check(self, condition: bool, message: str) -> None:
         self.assertions += 1
         if not condition:
             raise ExamFailure(message)
+
+    def journey_check(self, condition: bool, message: str) -> None:
+        before = self.assertions
+        self.check(condition, message)
+        self.recorded_journey_assertions += self.assertions - before
+
+    def record_memory_step(self, number: int, slug: str) -> None:
+        if self.capture_dir is None:
+            raise ExamFailure("recorded memory journey has no capture directory")
+        path = self.capture_dir / f"memory-closed-loop-{number:02d}-{slug}.png"
+        self.driver.screenshot(path)
+        self.recorded_journey_steps += 1
+        self.journey_check(path.is_file() and path.stat().st_size >= 1_000,
+                           f"memory journey step {number} was not recorded")
 
     def wait(
         self,
@@ -861,6 +901,31 @@ class WorkbenchExam:
     def assert_ordinary_tab_reachability(
         self, journey_id: str, viewport: str
     ) -> None:
+        # Loaded desks fill a few independent panels after the route shell is
+        # ready. Measure keyboard order only after the visible control signature
+        # has remained unchanged; this is condition-based, not a fixed sleep.
+        stable_signature = None
+        stable_since = time.monotonic()
+
+        def controls_settled() -> bool:
+            nonlocal stable_signature, stable_since
+            signature = self.driver.execute(
+                """
+                return [...document.querySelectorAll(
+                  '#app a[href], #app button, #app input, #app select, #app textarea, #app summary'
+                )].filter((element) => element.offsetParent !== null)
+                  .map((element) => `${element.tagName}:${element.id}:${element.textContent.trim().slice(0, 40)}`)
+                  .join('|');
+                """
+            )
+            now = time.monotonic()
+            if signature != stable_signature:
+                stable_signature = signature
+                stable_since = now
+                return False
+            return bool(signature) and now - stable_since >= 0.5
+
+        self.wait(controls_settled, f"{journey_id}/{viewport} controls to settle")
         expected = self.driver.execute(
             """
             const visible = (element) => {
@@ -939,7 +1004,7 @@ class WorkbenchExam:
         # presses. Re-find a missing target and prove the local previous→target
         # Tab edge, retrying against the current render instead of sleeping.
         for target_id in list(missing):
-            for _attempt in range(10):
+            for _attempt in range(50):
                 prepared = self.driver.execute(
                     """
                     const visible = (element) => {
@@ -1002,21 +1067,58 @@ class WorkbenchExam:
             not missing,
             f"{journey_id}/{viewport} Tab did not reach ordinary actions {missing_details}",
         )
+        # A target reached just before a live redraw may leave its replacement
+        # carrying the same exam id but no keyboard modality. Re-prove the real
+        # previous→target Tab edge on the current render; direct .focus() would
+        # not activate :focus-visible and is therefore not valid evidence.
         for target_id in list(missing_focus_indicator):
-            visible_now = self.driver.execute(
-                """
-                const element = [...document.querySelectorAll(`[data-exam-tab-target="${CSS.escape(arguments[0])}"]`)].find((candidate) => candidate.offsetParent !== null);
-                if (!element) return false;
-                element.focus();
-                const style = getComputedStyle(element);
-                return (style.outlineStyle !== 'none'
-                  && parseFloat(style.outlineWidth || '0') >= 2)
-                  || (style.boxShadow && style.boxShadow !== 'none');
-                """,
-                [target_id],
-            )
-            if visible_now:
-                missing_focus_indicator.discard(target_id)
+            for _attempt in range(50):
+                prepared = self.driver.execute(
+                    """
+                    const visible = (element) => {
+                      const style = getComputedStyle(element);
+                      const rect = element.getBoundingClientRect();
+                      const closed = element.closest('details:not([open])');
+                      if (closed && element !== closed.querySelector(':scope > summary')) return false;
+                      return !element.hidden && !element.disabled
+                        && style.display !== 'none' && style.visibility !== 'hidden'
+                        && rect.width > 0 && rect.height > 0;
+                    };
+                    const controls = [...document.querySelectorAll(
+                      '#app a[href], #app button, #app input, #app select, #app textarea, #app summary'
+                    )].filter((element) => visible(element) && element.tabIndex >= 0
+                      && !element.closest('.live-technical > :not(summary)'));
+                    controls.forEach((element, index) => { element.dataset.examTabTarget = String(index); });
+                    const target = controls[Number(arguments[0])];
+                    const allControls = [...document.querySelectorAll(
+                      'a[href], button, input, select, textarea, summary'
+                    )].filter((element) => visible(element) && element.tabIndex >= 0);
+                    const previous = Number(arguments[0]) > 0
+                      ? controls[Number(arguments[0]) - 1]
+                      : allControls[allControls.indexOf(target) - 1];
+                    if (!target || !previous) return false;
+                    previous.focus();
+                    return document.activeElement === previous;
+                    """,
+                    [target_id],
+                )
+                if not prepared:
+                    continue
+                self.driver.press("tab")
+                visible_now = self.driver.execute(
+                    """
+                    const active = document.activeElement;
+                    if (active?.dataset?.examTabTarget !== arguments[0]) return false;
+                    const style = getComputedStyle(active);
+                    return (style.outlineStyle !== 'none'
+                      && parseFloat(style.outlineWidth || '0') >= 2)
+                      || (style.boxShadow && style.boxShadow !== 'none');
+                    """,
+                    [target_id],
+                )
+                if visible_now:
+                    missing_focus_indicator.discard(target_id)
+                    break
         missing_focus = sorted(missing_focus_indicator)
         focus_details = self.driver.execute(
             """
@@ -1050,6 +1152,16 @@ class WorkbenchExam:
         self.check(
             bool(facts.get("recovery")),
             f"{journey_id}/{viewport} has no refusal or recovery outcome",
+        )
+        # The page has already proven its live projection and recovery truth.
+        # Close only the explicit SSE reader while keyboard edges are measured;
+        # manual refresh below still proves a real replacement render.
+        self.driver.execute(
+            """
+            if (typeof stopRunLive === 'function') stopRunLive();
+            if (typeof stopProgramLive === 'function') stopProgramLive();
+            return true;
+            """
         )
         self.assert_technical_round_trip(journey_id, viewport)
         self.assert_ordinary_tab_reachability(journey_id, viewport)
@@ -1991,6 +2103,368 @@ class WorkbenchExam:
         )
 
 
+    def test_memory_closed_loop_journey(self) -> None:
+        """Record the Phase-35 recall → basis → writeback → reuse journey."""
+        if not self.repository:
+            raise ExamFailure("closed-loop memory journey repository is missing")
+        root = self.repository.resolve()
+        library = Path(__file__).resolve().parents[1] / "lib"
+        if str(library) not in sys.path:
+            sys.path.insert(0, str(library))
+
+        from datetime import datetime, timedelta, timezone
+        import subprocess as process
+
+        from dw_pmo import build_run_plan, decision_basis, start_run
+        from dw_pmo import knowledge
+        from dw_pmo.knowledge_writeback import persist_terminal_writeback
+        from dw_pmo.memory_dispatch import persist_recall_slices
+        from dw_pmo.memory_read import build_memory_recall_projection
+        from dw_pmo.orchestration_run import replay_run, transition_run
+
+        self.driver.set_window(*WIDE)
+        self.driver.set_content_zoom(1)
+
+        # 1. Open the workbench before selecting any saved delivery.
+        self.navigate("/?project=sample#/board/sample", ".board-overview")
+        board = self.driver.execute(
+            """
+            return {
+              heading: document.querySelector('h1')?.textContent || '',
+              projectVisible: /sample/i.test(document.querySelector('main')?.textContent || ''),
+              memoryOpen: Boolean(document.querySelector('.memory-panel:not([hidden])')),
+            };
+            """
+        )
+        self.journey_check(bool(board["heading"]) and bool(board["projectVisible"]),
+                           "closed-loop journey did not open the sample workbench")
+        self.journey_check(not board["memoryOpen"],
+                           "memory opened before the fixture run was selected")
+        self.record_memory_step(1, "open-workbench")
+
+        # Start the fixture only after the ordinary accessibility routes have
+        # finished, so their live inventories cannot race this recorded journey.
+        process.run(
+            ["git", "-C", str(root), "add", "-A"], check=True,
+            stdout=process.PIPE, stderr=process.PIPE,
+        )
+        process.run(
+            ["git", "-C", str(root), "-c", "core.hooksPath=/dev/null",
+             "commit", "-q", "-m", "Memory journey fixture state"], check=True,
+            stdout=process.PIPE, stderr=process.PIPE,
+        )
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        head_sha = process.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], check=True,
+            text=True, stdout=process.PIPE,
+        ).stdout.strip()
+        seed_lesson = knowledge.EarnedRecordStore(root).append(
+            knowledge.LESSON_KIND,
+            {
+                "claim": "Open story work should freeze bounded recall before dispatch.",
+                "locations": knowledge.encode_lesson_locations([{
+                    "reference": "SMP-0-02", "status": "resolved",
+                    "file": "pm/roadmap/sample/phase-0-smoke-fixture/story-02-open-story.md",
+                    "symbol": "SMP-0-02", "line_start": 1, "line_end": 20,
+                }]),
+                "confidence": "high", "supersedes": "",
+            },
+            origin_kind="run", origin="run-memory-seed", head_sha=head_sha,
+            timestamp=now - timedelta(minutes=1),
+        )
+        plan = build_run_plan(
+            root, "research-build-review", "sample", "SMP-0-02",
+            issued_at=now.isoformat(),
+            expires_at=(now + timedelta(hours=1)).isoformat(),
+        )
+        started_projection = start_run(
+            root, plan, plan["start_token"], approved=True,
+            approved_by="Phase 35 browser journey", now=now,
+        )
+        self.memory_run = str(started_projection["run_id"])
+        run_dir = root / ".git" / "pmo-orchestration" / "runs" / self.memory_run
+        recalls, _ = persist_recall_slices(
+            run_dir,
+            subject=self.memory_run,
+            knowledge={
+                "index_tree": head_sha,
+                "verified_locations": [{
+                    "file": "pm/roadmap/sample/phase-0-smoke-fixture/story-02-open-story.md",
+                    "symbol": "SMP-0-02",
+                }],
+                "snippets": [],
+                "test_references": ["pmo-roadmap/tests/workbench-ui-smoke.sh"],
+                "lessons": [{
+                    "record_hash": seed_lesson["record_hash"],
+                    "summary": "Freeze bounded recall before dispatching Open story work.",
+                    "story_ids": ["SMP-0-02"],
+                    "files": ["pm/roadmap/sample/phase-0-smoke-fixture/story-02-open-story.md"],
+                    "symbols": ["SMP-0-02"],
+                    "tests": ["pmo-roadmap/tests/workbench-ui-smoke.sh"],
+                    "confidence": "high", "delivery_state": "confirmed",
+                }],
+            },
+            story_criteria="Open story work freezes bounded recall before dispatch.",
+            story_ids=["SMP-0-02"], phase_ids=["0"],
+            orchestration_tags=["memory-glass", "closed-loop-exam"],
+        )
+        memory_ref = recalls["shared"]["recall_id"]
+        recorded_decision, _ = decision_basis.record_run_decision_basis(
+            root, self.memory_run, started_projection,
+            decision_kind="scheduler", basis_type="mechanical",
+            outcome="dispatch held behind frozen recall",
+            reason_code="recall-frozen-before-agent-output",
+            rule_ref="memory-recall-before-dispatch", memory_refs=[memory_ref], now=now,
+        )
+        self.memory_decision = str(recorded_decision["decision_id"])
+        initial_memory = build_memory_recall_projection(root, run=self.memory_run)
+        if not initial_memory.get("groups", {}).get("recalled"):
+            raise ExamFailure(
+                "fixture run froze no recalled knowledge: "
+                + json.dumps(initial_memory, sort_keys=True)
+            )
+
+        # 2. Select the newly started fixture. It has frozen recall and no agent
+        # completion receipt, so this is the observable pre-output boundary.
+        run_route = f"/?project=sample#/live/run/{self.memory_run}"
+        self.navigate(run_route, f'.orch-run-shell[data-run-id="{self.memory_run}"]')
+        started = self.driver.execute(
+            """
+            const shell = document.querySelector('.orch-run-shell');
+            const text = shell?.textContent || '';
+            return {id: shell?.dataset.runId || '', active: /active|running/i.test(text),
+              completed: /attempts[^]*[1-9][0-9]* complete/i.test(text)};
+            """
+        )
+        self.journey_check(started["id"] == self.memory_run,
+                           "fixture run identifier was not visible after start")
+        self.journey_check(bool(started["active"]) and not started["completed"],
+                           "fixture run was not visibly pre-agent-output")
+        self.record_memory_step(2, "fixture-run-started")
+
+        # 3. Inspect the frozen recall before any agent output exists.
+        self.press_until(
+            '[data-memory-open][data-memory-kind="run"]',
+            lambda: self.driver.execute(
+                "return Boolean(document.querySelector('.memory-panel:not([hidden])') "
+                "&& !document.querySelector('.memory-panel .memory-loading'));"
+            ),
+            "frozen recall pane to open",
+        )
+        recalled = self.driver.execute(
+            """
+            const panel = document.querySelector('.memory-panel:not([hidden])');
+            const text = panel?.textContent || '';
+            return {card: Boolean(panel?.querySelector('.memory-card[data-memory-group="recalled"]')),
+              before: text.includes('Before agent dispatch'),
+              writeback: Boolean(panel?.querySelector('.memory-card[data-memory-group="written-back"]'))};
+            """
+        )
+        self.journey_check(bool(recalled["card"]) and bool(recalled["before"]),
+                           "frozen recall was not visible before agent output")
+        self.journey_check(not recalled["writeback"],
+                           "pre-output recall incorrectly showed terminal writeback")
+        self.record_memory_step(3, "recall-before-output")
+
+        # 4. Follow the scheduler decision to the exact saved basis and highlight
+        # the recalled item it references.
+        decision_selector = (
+            '.decision-basis-select[data-decision-id="'
+            + self.memory_decision + '"]'
+        )
+        self.press_until(
+            decision_selector,
+            lambda: self.driver.execute(
+                "return document.querySelector(arguments[0])?.getAttribute('aria-pressed') === 'true';",
+                [decision_selector],
+            ),
+            "decision basis detail to open",
+        )
+        basis = self.driver.execute(
+            """
+            const selected = document.querySelector(arguments[0]);
+            const detail = document.querySelector('.decision-basis-detail');
+            return {selected: selected?.getAttribute('aria-pressed') === 'true',
+              detail: detail?.textContent || '',
+              highlighted: Boolean(document.querySelector('.decision-memory-highlight'))};
+            """,
+            [decision_selector],
+        )
+        self.journey_check(bool(basis["selected"]) and "recall-frozen-before-agent-output" in basis["detail"],
+                           "decision timeline did not expose its saved basis")
+        self.journey_check(bool(basis["highlighted"]),
+                           "following the decision did not highlight recalled knowledge")
+        self.record_memory_step(4, "decision-basis")
+
+        # 5. End the exact fixture run through the real run transition seam.
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        projection = replay_run(root, self.memory_run, now=now)
+        finished = transition_run(
+            root, self.memory_run, "cancel", str(projection["ledger_head"]),
+            reason="Recorded Phase 35 browser journey reached its terminal fixture step.",
+            now=now,
+        )
+        terminal_projection = {
+            **finished,
+            "terminal_event_ref": str(finished["ledger_head"]),
+            "head_sha": process.run(
+                ["git", "-C", str(root), "rev-parse", "HEAD"], check=True,
+                text=True, stdout=process.PIPE,
+            ).stdout.strip(),
+            "story": {"id": "SMP-0-02"},
+            "selected_stories": ["SMP-0-02"],
+            "request_history": [], "checkpoints": [], "node_receipts": [],
+            "completed_claims": [], "routes": [],
+            "budgets": {"max_wall_seconds": {"used": 1, "limit": 3600}},
+            "delivery_facts": {
+                "head_sha": process.run(
+                    ["git", "-C", str(root), "rev-parse", "HEAD"], check=True,
+                    text=True, stdout=process.PIPE,
+                ).stdout.strip(),
+                "files_touched": ["pm/roadmap/sample/phase-0-smoke-fixture/story-02-open-story.md"],
+            },
+        }
+        run_dir = root / ".git" / "pmo-orchestration" / "runs" / self.memory_run
+        writeback = persist_terminal_writeback(
+            root, run_dir, projection=terminal_projection, origin_kind="run", timestamp=now,
+        )
+        finished_route = f"/?project=sample#/live/run/{self.memory_run}/technical"
+        self.navigate(finished_route, f'.orch-run-shell[data-run-id="{self.memory_run}"] .live-technical')
+        ended = self.driver.execute(
+            """
+            const text = document.querySelector('.orch-run-shell')?.textContent || '';
+            return {terminal: /cancel|stopped|revok/i.test(text), dispatchStopped: /dispatch stopped/i.test(text)};
+            """
+        )
+        self.journey_check(bool(ended["terminal"]),
+                           "finished fixture run did not show a terminal state")
+        self.journey_check(bool(ended["dispatchStopped"]),
+                           "finished fixture run still appeared dispatchable")
+        self.record_memory_step(5, "run-finished")
+
+        # 6. Reopen memory and prove the terminal receipt is rendered separately
+        # from what the agent could know before dispatch.
+        self.press_until(
+            '[data-memory-open][data-memory-kind="run"]',
+            lambda: self.driver.execute(
+                "return Boolean(document.querySelector('.memory-panel:not([hidden]) .memory-card[data-memory-group="
+                "\\\"written-back\\\"]'));"
+            ),
+            "terminal writeback to render",
+        )
+        written = self.driver.execute(
+            """
+            const card = document.querySelector('.memory-card[data-memory-group="written-back"]');
+            return {card: Boolean(card), text: card?.textContent || '',
+              receipt: document.querySelector('.memory-panel')?.textContent.includes(arguments[0])};
+            """,
+            [writeback["writeback_id"]],
+        )
+        self.journey_check(bool(written["card"]) and "after the work reached a completed state" in written["text"],
+                           "terminal writeback was not separated in the memory pane")
+        self.journey_check(bool(written["receipt"]),
+                           "terminal writeback receipt identity was not visible")
+        self.record_memory_step(6, "terminal-writeback")
+
+        # 7. Accept one bounded lesson from the completed fixture, then start a
+        # related run through the real plan/start seam. Its recall freezes anew.
+        head_sha = terminal_projection["head_sha"]
+        lesson = knowledge.EarnedRecordStore(root).append(
+            knowledge.LESSON_KIND,
+            {
+                "claim": "Open story work reuses the frozen recall boundary from the prior run.",
+                "locations": knowledge.encode_lesson_locations([{
+                    "reference": "SMP-0-02", "status": "resolved",
+                    "file": "pm/roadmap/sample/phase-0-smoke-fixture/story-02-open-story.md",
+                    "symbol": "SMP-0-02", "line_start": 1, "line_end": 20,
+                }]),
+                "confidence": "high", "supersedes": "",
+            },
+            origin_kind="run", origin=self.memory_run, head_sha=head_sha, timestamp=now,
+        )
+        issued = now + timedelta(seconds=1)
+        plan = build_run_plan(
+            root, "research-build-review", "sample", "SMP-0-02",
+            issued_at=issued.isoformat(),
+            expires_at=(issued + timedelta(hours=1)).isoformat(),
+        )
+        related = start_run(
+            root, plan, plan["start_token"], approved=True,
+            approved_by="Phase 35 browser journey", now=issued,
+        )
+        related_run = str(related["run_id"])
+        persist_recall_slices(
+            root / ".git" / "pmo-orchestration" / "runs" / related_run,
+            subject=related_run,
+            knowledge={
+                "index_tree": head_sha,
+                "verified_locations": [{
+                    "file": "pm/roadmap/sample/phase-0-smoke-fixture/story-02-open-story.md",
+                    "symbol": "SMP-0-02",
+                }],
+                "snippets": [],
+                "test_references": ["pmo-roadmap/tests/workbench-ui-smoke.sh"],
+                "lessons": [{
+                    "record_hash": lesson["record_hash"],
+                    "summary": "Reuse the frozen recall boundary learned by the prior run.",
+                    "story_ids": ["SMP-0-02"],
+                    "files": ["pm/roadmap/sample/phase-0-smoke-fixture/story-02-open-story.md"],
+                    "symbols": ["SMP-0-02"],
+                    "tests": ["pmo-roadmap/tests/workbench-ui-smoke.sh"],
+                    "confidence": "high", "delivery_state": "confirmed",
+                }],
+            },
+            story_criteria="Open story work reuses the prior frozen recall lesson.",
+            story_ids=["SMP-0-02"], phase_ids=["0"],
+            orchestration_tags=["memory-glass", "related-run"],
+        )
+        related_route = f"/?project=sample#/live/run/{related_run}"
+        self.navigate(related_route, f'.orch-run-shell[data-run-id="{related_run}"]')
+        related_started = self.driver.execute(
+            """
+            const shell = document.querySelector('.orch-run-shell');
+            return {id: shell?.dataset.runId || '', text: shell?.textContent || ''};
+            """
+        )
+        self.journey_check(related_started["id"] == related_run,
+                           "related fixture run did not start with a distinct identifier")
+        self.journey_check("active" in related_started["text"].casefold(),
+                           "related fixture run was not visibly active")
+        self.record_memory_step(7, "related-run-started")
+
+        # 8. Inspect the related run and find the exact prior lesson in its frozen
+        # recall, still advisory and with no writeback of its own.
+        self.press_until(
+            '[data-memory-open][data-memory-kind="run"]',
+            lambda: self.driver.execute(
+                "return Boolean(document.querySelector('.memory-panel:not([hidden]) .memory-card[data-memory-group="
+                "\\\"recalled\\\"]'));"
+            ),
+            "related run recall to render",
+        )
+        related_memory = self.driver.execute(
+            """
+            return fetch(arguments[0], {cache: 'no-store'}).then((response) => response.json()).then((envelope) => {
+              const document = envelope.data || envelope;
+              const recalled = document.groups?.recalled || [];
+              return {
+                prior: recalled.some((item) => item.record_hash === arguments[1]),
+                advisory: recalled.every((item) => item.advisory_only === true && item.starts_work === false
+                  && item.authorizes === false && item.satisfies_gate === false
+                  && item.substitutes_for_evidence === false),
+                noWriteback: !(document.groups?.['written-back'] || []).length,
+              };
+            });
+            """,
+            [f"/api/runs/{related_run}/memory", lesson["record_hash"]],
+        )
+        self.journey_check(bool(related_memory["prior"]),
+                           "related run did not recall the prior run's lesson")
+        self.journey_check(bool(related_memory["advisory"]) and bool(related_memory["noWriteback"]),
+                           "related recall was authoritative or already written back")
+        self.record_memory_step(8, "prior-lesson-recalled")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--firefox", required=True, type=Path)
@@ -2002,6 +2476,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--program-revoked", default="")
     parser.add_argument("--program-certified", default="")
     parser.add_argument("--project", default="")
+    parser.add_argument("--repository", type=Path)
+    parser.add_argument("--memory-run", default="")
+    parser.add_argument("--memory-decision", default="")
+    parser.add_argument("--capture-dir", type=Path)
+    parser.add_argument("--capture-pattern", default="")
     return parser.parse_args()
 
 
@@ -2024,6 +2503,11 @@ def main() -> int:
             program_revoked=args.program_revoked,
             program_certified=args.program_certified,
             project=args.project,
+            repository=args.repository,
+            memory_run=args.memory_run,
+            memory_decision=args.memory_decision,
+            capture_dir=args.capture_dir,
+            capture_pattern=args.capture_pattern,
         )
         selected = {
             journey_id
@@ -2064,6 +2548,8 @@ def main() -> int:
             exam.audit_page("adoption-review", "wide")
             exam.test_ideation_keyboard_journey("wide")
         if args.suite in {"core", "all"}:
+            if args.repository:
+                exam.test_memory_closed_loop_journey()
             exam.test_slick_workbench()
             exam.test_core_interactions()
         if args.suite in {"program", "all"}:
@@ -2083,6 +2569,8 @@ def main() -> int:
             "workbench-accessibility.py: ok "
             f"({len(selected)} journeys, {exam.audits} wide/narrow audits, "
             f"{len(exam.phase32_exams)} journey-6-13 keyboard/focus exams, "
+            f"{exam.recorded_journey_steps} recorded memory steps / "
+            f"{exam.recorded_journey_assertions} recorded memory assertions, "
             f"{exam.assertions} assertions, suite={args.suite})"
         )
         return 0

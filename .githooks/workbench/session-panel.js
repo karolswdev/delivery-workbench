@@ -252,7 +252,7 @@ class SessionPanel {
           <span class="session-section-label">Active agents</span>
           ${agentInfo}
         </div>
-        <div class="session-transcript" role="log" aria-label="Agent activity transcript" aria-live="polite">
+        <div class="session-transcript" role="log" aria-label="Agent activity transcript">
           <span class="session-section-label">Live activity</span>
           ${transcript}
         </div>

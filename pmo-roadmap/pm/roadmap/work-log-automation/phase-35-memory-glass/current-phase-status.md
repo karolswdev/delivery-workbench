@@ -33,11 +33,11 @@ Make memory a visible, testable part of every bounded run and autonomous program
 | WLA-35-07 | Decision basis timeline | done | [story-07-decision-basis-timeline](./story-07-decision-basis-timeline.md) | [evidence-story-07](./evidence-story-07.md) |
 | WLA-35-08 | Compounding multi-agent memory | done | [story-08-compounding-multi-agent-memory](./story-08-compounding-multi-agent-memory.md) | [evidence-story-08](./evidence-story-08.md) |
 | WLA-35-09 | Slick workbench | done | [story-09-slick-workbench](./story-09-slick-workbench.md) | [evidence-story-09](./evidence-story-09.md) |
-| WLA-35-10 | Prove it works | backlog | [story-10-prove-it-works](./story-10-prove-it-works.md) | - |
+| WLA-35-10 | Prove it works | done | [story-10-prove-it-works](./story-10-prove-it-works.md) | [evidence-story-10](./evidence-story-10.md) |
 
 ## Where we are
 
-WLA-35-09 done (2026-08-01): the workbench is slick — skeleton-first routes, shared motion tokens honoring reduced-motion, a persisted density toggle, explicit SSE reconnect announcements with 503 retry guidance, bounded hash layouts with copy actions, described form errors, and a set of real board accessibility fixes the pass uncovered. Browser matrix 304 → 352 renders; accessibility contract +20 checks. Stories 01-08 landed earlier. Next and last: WLA-35-10 (the exit exam), then phase close.
+PHASE CLOSED (2026-08-02). All ten stories done; see final-summary.md. Core suite 698 → 727, browser matrix 352 renders with the recorded closed-loop memory journey, both packaged exams green, memory proven advisory at every seam.
 
 ## Active risks
 

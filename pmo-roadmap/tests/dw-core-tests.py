@@ -856,7 +856,7 @@ class DwCoreTest(unittest.TestCase):
         wiring = board[board.index("function wireBoardMoves") :]
         self.assertIn("else if (!parts.length) await viewBoard(selectedProject)", router)
         for token in (
-            "boardOverviewStrip", "Needs attention", "Next step", "Phase lanes",
+            "boardOverviewStrip", "Needs attention", "Technical details", "Phase lanes",
             "openCreatePanel", "openMovePanel", "openPhasePanel",
             'kind: "create_story"', 'kind: "update_story_status"',
             '"pause_phase"', '"resume_phase"',
@@ -865,7 +865,7 @@ class DwCoreTest(unittest.TestCase):
         ):
             self.assertIn(token, board)
         cross_phase = wiring[
-            wiring.index("if (column.dataset.phase !== from.phase)") :
+            wiring.index("if (column.dataset.phase && column.dataset.phase !== from.phase)") :
             wiring.index("if (column.dataset.droppable")
         ]
         self.assertIn("Cross-phase moves are not supported", cross_phase)
@@ -873,7 +873,7 @@ class DwCoreTest(unittest.TestCase):
         self.assertNotIn("openMovePanel", cross_phase)
         self.assertIn("Parking on-hold requires a reason", board)
         self.assertLess(
-            wiring.index("if (column.dataset.phase !== from.phase)"),
+            wiring.index("if (column.dataset.phase && column.dataset.phase !== from.phase)"),
             wiring.index("openMovePanel(slug"),
         )
         for token in (
@@ -2490,6 +2490,38 @@ class GateTest(unittest.TestCase):
         self.contract()
         self.assertEqual(self.gate().failure.rule, "evidence-missing")
 
+    def test_memory_document_cannot_replace_contract_evidence_or_gate_verdict(self) -> None:
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "ready")
+        self.commit_all("base")
+        self.story("pm/roadmap/demo/phase-1-alpha/story-01-a.md", "done")
+        self.git("add", "-A")
+
+        memory = {
+            "kind": "delivery-workbench-memory-writeback",
+            "schema_version": 1,
+            "starts_work": True,
+            "authorizes": True,
+            "satisfies_gate": True,
+            "substitutes_for_evidence": True,
+            "certified": True,
+            "verdict": "passed",
+            "evidence_refs": ["evidence-story-01.md"],
+        }
+        path = self.root / ".git/pmo-knowledge/earned/planted-memory.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(memory, sort_keys=True) + "\n", encoding="utf-8")
+
+        without_contract = self.gate()
+        self.assertEqual(without_contract.failure.rule, "contract-missing")
+        self.contract()
+        without_evidence = self.gate()
+        self.assertEqual(without_evidence.failure.rule, "evidence-missing")
+        self.assertFalse(without_evidence.ok)
+        self.assertEqual(
+            without_evidence.shipped_stories,
+            ["pm/roadmap/demo/phase-1-alpha/story-01-a.md"],
+        )
+
     def test_unpadded_numbers_pair_both_ways(self) -> None:
         self.story("pm/roadmap/demo/phase-1-alpha/story-1-a.md", "ready")
         self.commit_all("base")
@@ -2999,7 +3031,7 @@ class MCPServerTest(unittest.TestCase):
         tools = self.rpc("tools/list")["result"]["tools"]
         names = [t["name"] for t in tools]
         self.assertEqual(names, [
-            "dw_status", "dw_knowledge_map", "dw_knowledge_ground", "dw_knowledge_lessons", "dw_step", "dw_step_apply", "dw_setup_preview", "dw_setup_apply", "dw_context", "dw_next",
+            "dw_status", "dw_knowledge_map", "dw_knowledge_ground", "dw_knowledge_lessons", "dw_knowledge_recall", "dw_knowledge_writebacks", "dw_step", "dw_step_apply", "dw_setup_preview", "dw_setup_apply", "dw_context", "dw_next",
             "dw_check", "dw_doctor",
             "dw_verify", "dw_gate", "dw_board", "dw_holds", "dw_story_show",
             "dw_story_status", "dw_evidence_capture", "dw_contract_new",
@@ -7641,8 +7673,14 @@ class OrchestrationConductorTest(unittest.TestCase):
         response, body = get(f"/api/runs/{run_id}/events?follow=0")
         self.assertEqual(response.status, 200)
         self.assertIn("text/event-stream", response.getheader("Content-Type"))
-        frames = self._sse_frames(body)
+        stream_frames = self._sse_frames(body)
         ledger = surface.tail_run_events(self.root, run_id)["events"]
+        snapshot_seq, snapshot = stream_frames[0]
+        self.assertEqual(snapshot_seq, 0)
+        self.assertEqual(snapshot["run_id"], run_id)
+        self.assertEqual(snapshot["ledger_events"], len(ledger))
+        self.assertEqual(snapshot["ledger_head"], ledger[-1]["event_hash"])
+        frames = stream_frames[1:]
         self.assertEqual([data for _seq, data in frames], ledger)
         self.assertEqual([seq for seq, _data in frames],
                          [event["seq"] for event in ledger])
@@ -7657,10 +7695,16 @@ class OrchestrationConductorTest(unittest.TestCase):
             f"/api/runs/{run_id}/events?follow=0",
             headers={"Last-Event-ID": str(head)},
         )
-        resumed = self._sse_frames(body)
+        resumed_frames = self._sse_frames(body)
+        self.assertTrue(resumed_frames)
+        resumed_snapshot_seq, resumed_snapshot = resumed_frames[0]
+        self.assertEqual(resumed_snapshot_seq, 0)
+        self.assertEqual(resumed_snapshot["run_id"], run_id)
+        resumed = resumed_frames[1:]
         self.assertTrue(resumed)
         self.assertEqual(resumed[0][0], head + 1)
         after = surface.tail_run_events(self.root, run_id, head)["events"]
+        self.assertEqual(resumed_snapshot["ledger_events"], head + 1 + len(after))
         self.assertEqual([data for _seq, data in resumed], after)
         self.assertTrue(
             any(data["event"] == "nudge_delivered" for _seq, data in resumed)
@@ -9495,11 +9539,11 @@ class OrchestrationConductorTest(unittest.TestCase):
             self.assertNotIn(forbidden, serialized)
 
     def test_run_view_static_contract_has_consent_privacy_and_no_poller(self):
-        app = "\n".join(f.read_text(encoding="utf-8") for f in sorted((TESTS_DIR.parent / "workbench").glob("*.js")))
+        runs = (TESTS_DIR.parent / "workbench" / "runs.js").read_text(encoding="utf-8")
         css = (TESTS_DIR.parent / "workbench" / "style.css").read_text(encoding="utf-8")
-        run_source = app[
-            app.index("function runStateBadge"):
-            app.index("/* ── optional Program / Workflow Studio")
+        run_source = runs[
+            runs.index("function runStateBadge"):
+            runs.index("/* ── Live mission control")
         ]
         for token in (
             "Live delivery", "Technical details", "fail checks", "Artifact metadata and lineage",
@@ -11302,6 +11346,57 @@ class ProgramRunAuthorityTest(unittest.TestCase):
         denied = self.plan(capabilities=missing, intent="missing-prereq")
         self.assertFalse(denied["applicable"])
         self.assertTrue(any("verdict:issue" in item["message"] for item in denied["issues"]))
+
+    def test_memory_document_cannot_start_or_widen_or_bypass_program_guards(self):
+        baseline = self.plan(intent="memory-authority")
+        planted = {
+            "kind": "delivery-workbench-memory-recall",
+            "schema_version": 1,
+            "starts_work": True,
+            "authorizes": True,
+            "satisfies_gate": True,
+            "substitutes_for_evidence": True,
+            "requested_capabilities": ["git:push", "authority:mint"],
+            "preview_token": baseline["start_token"],
+        }
+        memory_path = self.root / ".git/pmo-programs/planted-memory.json"
+        memory_path.parent.mkdir(parents=True, exist_ok=True)
+        memory_path.write_text(json.dumps(planted, sort_keys=True) + "\n", encoding="utf-8")
+
+        after_plant = self.plan(intent="memory-authority")
+        self.assertEqual(after_plant, baseline, "memory changed the pure grant preview")
+        self.assertFalse((self.root / ".git/pmo-programs/runs").exists())
+
+        forged_preview = json.loads(json.dumps(after_plant))
+        forged_preview["memory_document"] = planted
+        with self.assertRaises(core.DwError):
+            self.core.start_program(
+                self.root, forged_preview,
+                start_token=after_plant["start_token"], now=self.started_at,
+            )
+        self.assertFalse((self.root / ".git/pmo-programs/runs").exists())
+
+        with self.assertRaises(core.DwError):
+            self.core.start_program(
+                self.root, after_plant,
+                start_token="sha256:" + "f" * 64, now=self.started_at,
+            )
+        self.assertFalse((self.root / ".git/pmo-programs/runs").exists())
+
+        projection = self.core.start_program(
+            self.root, after_plant,
+            start_token=after_plant["start_token"], now=self.started_at,
+        )
+        grant = json.loads(
+            (self.root / ".git/pmo-programs/runs" / projection["run_id"] / "grant.json")
+            .read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            grant["authority"]["capabilities"],
+            after_plant["authority"]["capabilities"],
+        )
+        self.assertNotIn("git:push", grant["authority"]["capabilities"])
+        self.assertNotIn("authority:mint", grant["authority"]["capabilities"])
 
     def test_start_is_exact_immutable_idempotent_and_creates_only_local_authority(self):
         plan, projection = self.start()
@@ -16392,6 +16487,85 @@ class ProgramSurfaceTest(unittest.TestCase):
                 frames.append((int(fields["id"]), json.loads(fields["data"])))
         return frames
 
+    def test_ordinary_no_program_paths_create_no_memory_or_runtime_side_effects(self):
+        import dw_pmo.status as status_core
+        import dw_pmo.workbench as wb
+
+        root = Path(tempfile.mkdtemp(prefix="dw-no-program-memory."))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        subprocess.run(
+            ["git", "init", "-q", "-b", "main", str(root)], check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        subprocess.run(
+            [str(TESTS_DIR.parent / "bootstrap/new-project.sh"), str(root),
+             "sample", "Sample", "SMP"], check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+
+        runtime_roots = (
+            root / ".git/pmo-orchestration",
+            root / ".git/pmo-programs",
+            root / ".git/pmo-knowledge",
+            root / ".git/pmo-notifications",
+            root / ".git/pmo-observers",
+        )
+
+        def assert_inert(label):
+            self.assertFalse(
+                any(path.exists() for path in runtime_roots),
+                f"{label} created recall, writeback, decision-basis, observer, "
+                "notification, or run/program state",
+            )
+            inventory = self.core.program_summary_inventory(root)
+            self.assertEqual(inventory["programs"], [], label)
+            self.assertEqual(inventory["runs"], [], label)
+            for key in (
+                "starts_work", "writes_events", "creates_grant",
+                "creates_program_store", "starts_process", "starts_stream",
+                "starts_poller", "sends_notifications",
+            ):
+                self.assertFalse(inventory[key], f"{label}: {key}")
+
+        # Ordinary roadmap edits are deliberate Markdown mutations, not memory or
+        # program starts. Exercise them before installation through the canonical
+        # CLI, matching a first consumer's ordinary setup path.
+        dw = TESTS_DIR.parent / "bin/dw"
+        subprocess.run(
+            [str(dw), "--root", str(root), "story", "create", "sample", "0",
+             "Ordinary story"], check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        assert_inert("ordinary story work")
+
+        # First install and repeated update may refresh vendored code, but neither
+        # may create runtime memory or autonomous activity.
+        subprocess.run(
+            [str(TESTS_DIR.parent / "install.sh"), str(root), "--skip-bootstrap"],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        assert_inert("install")
+        subprocess.run(
+            [str(TESTS_DIR.parent / "update.sh"), str(root)], check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        assert_inert("update")
+
+        # Opening the repository, status, and board are in-process read surfaces.
+        # Refusing socket construction proves these reads cannot hide network or
+        # observer startup behind their otherwise-empty filesystem footprint.
+        with mock.patch("socket.socket", side_effect=AssertionError("network forbidden")):
+            handler = wb.create_handler(root, None)
+            self.assertTrue(isinstance(handler, type))
+            assert_inert("repository open")
+            status = status_core.build_status(root, "sample")
+            self.assertEqual(status["kind"], "delivery-workbench-status")
+            assert_inert("status")
+            code, board = wb.handle_api(root, "/api/projects/sample/board", {})
+            self.assertEqual(code, 200)
+            self.assertEqual(board["data"]["project"], "sample")
+            assert_inert("board browsing")
+
     def test_empty_inventory_is_healthy_dormant_and_creates_nothing(self):
         root = Path(tempfile.mkdtemp(prefix="dw-program-surface-empty."))
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
@@ -16724,7 +16898,13 @@ class ProgramSurfaceTest(unittest.TestCase):
         conn.close()
         self.assertEqual(response.status, 200)
         self.assertIn("text/event-stream", response.getheader("Content-Type"))
-        frames = self._sse_frames(body)
+        stream_frames = self._sse_frames(body)
+        snapshot_seq, snapshot = stream_frames[0]
+        self.assertEqual(snapshot_seq, 0)
+        self.assertEqual(snapshot["run_id"], run_id)
+        self.assertEqual(snapshot["event_count"], expected["event_count"])
+        self.assertEqual(snapshot["ledger_head"], expected["ledger_head"])
+        frames = stream_frames[1:]
         self.assertEqual(
             [document for _seq, document in frames], tail["events"]
         )

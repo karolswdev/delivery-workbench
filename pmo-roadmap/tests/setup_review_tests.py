@@ -284,7 +284,8 @@ class SetupReviewTest(unittest.TestCase):
 
     def test_route_is_contextual_and_does_not_add_primary_navigation(self):
         index = (PMO_ROOT / "workbench" / "index.html").read_text(encoding="utf-8")
-        self.assertEqual(index.count('class="navlink"'), 5)
+        self.assertEqual(index.count('class="navlink"'), 2)
+        self.assertEqual(index.count('class="advanced-item"'), 5)
         self.assertNotIn("adoption", index.lower())
         app_source = "\n".join(f.read_text(encoding="utf-8") for f in sorted((PMO_ROOT / "workbench").glob("*.js")))
         self.assertIn('adoption_review: "review adoption"', app_source)

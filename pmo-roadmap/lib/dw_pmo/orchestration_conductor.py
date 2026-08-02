@@ -1074,15 +1074,31 @@ def _run_memory_recall(
         knowledge = build_repository_knowledge_packet(root, story_path)
         story_id = str(story.get("story_id") or story.get("id") or "")
         phase = str(story.get("phase") or "")
+        scope = None
+        subject = run_id
+        if projection.get("external_commits"):
+            source_tree = str(knowledge.get("index_tree") or "")
+            if not source_tree:
+                raise MemoryRecallActionNeeded(
+                    "malformed", "memory recall has no current index tree"
+                )
+            tree_key = source_tree.rsplit(":", 1)[-1]
+            scope = "external-" + tree_key
+            subject = run_id + "/external-" + tree_key[:12]
+        require_existing = any(
+            item.get("subject") == subject
+            for item in projection.get("memory_recalls", [])
+        )
         documents, _built = persist_recall_slices(
             _run_dir(root, run_id),
-            subject=run_id,
+            subject=subject,
             knowledge=knowledge,
             story_criteria=story_criteria,
             story_ids=[story_id] if story_id else [],
             phase_ids=[phase] if phase else [],
             orchestration_tags=[str(compiled["score"].get("slug") or "bounded-run")],  # type: ignore[union-attr]
-            require_existing=bool(projection.get("memory_recalls")),
+            scope=scope,
+            require_existing=require_existing,
         )
     except MemoryRecallActionNeeded:
         raise
