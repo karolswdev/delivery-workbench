@@ -975,8 +975,9 @@ class WorkbenchExam:
             const width = parseFloat(style.outlineWidth || '0');
             const ring = (style.outlineStyle !== 'none' && width >= 2)
               || (style.boxShadow && style.boxShadow !== 'none');
+            const detail = `${id}:${active.tagName.toLowerCase()}:${active.textContent.trim().slice(0, 60)}:focus=true:outline=${style.outlineStyle}/${style.outlineWidth}:shadow=${style.boxShadow}`;
             return {generation: window.__examFocusGeneration, id, current: true,
-              visible: Boolean(ring)};
+              visible: Boolean(ring), detail};
             """
         )
         return state if isinstance(state, dict) else {}
@@ -989,7 +990,9 @@ class WorkbenchExam:
             """
         )
 
-    def wait_for_focus_stability(self, description: str) -> None:
+    def wait_for_focus_stability(
+        self, description: str, timeout: float = 5
+    ) -> None:
         self.wait(
             lambda: self.driver.execute(
                 """
@@ -1009,22 +1012,36 @@ class WorkbenchExam:
                 """
             ),
             description,
-            timeout=5,
+            timeout=timeout,
         )
 
     def tab_to_current_target(
-        self, target_id: str, step_budget: int
+        self,
+        target_id: str,
+        step_budget: int,
+        deadline: float | None = None,
     ) -> dict[str, Any] | None:
         # Begin from the real predecessor chain rather than guessing that the
         # preceding light-DOM control is one Tab away. Custom-element shadow
         # buttons can add stops between two controls returned by querySelectorAll.
         for _attempt in range(5):
+            if deadline is not None and time.monotonic() >= deadline:
+                return None
             self.focus("#skip-link")
             for _step in range(step_budget):
+                if deadline is not None and time.monotonic() >= deadline:
+                    return None
                 generation = self.prepare_focus_walk_step()
                 self.begin_focus_stability_check()
                 self.driver.press("tab")
-                self.wait_for_focus_stability("Tab focus to remain stable")
+                stability_timeout = 5.0
+                if deadline is not None:
+                    stability_timeout = min(
+                        stability_timeout, max(0.001, deadline - time.monotonic())
+                    )
+                self.wait_for_focus_stability(
+                    "Tab focus to remain stable", timeout=stability_timeout
+                )
                 state = self.measure_focus_walk_step()
                 if int(state.get("generation", -1)) != generation:
                     # The key event crossed a live redraw. Start this proof again
@@ -1035,6 +1052,35 @@ class WorkbenchExam:
                 if str(state.get("id", "")) == target_id:
                     return state
         return None
+
+    def observe_focus_on_target(
+        self,
+        target_id: str,
+        step_budget: int,
+        description: str,
+        timeout: float = 15,
+    ) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout
+
+        def replay() -> dict[str, Any] | bool:
+            try:
+                return (
+                    self.tab_to_current_target(
+                        target_id, step_budget, deadline=deadline
+                    )
+                    or False
+                )
+            except ExamFailure:
+                # A live replacement can invalidate any individual replay. The
+                # enclosing wait owns the one bounded retry budget.
+                return False
+
+        try:
+            return self.wait(replay, description, timeout=timeout)
+        except ExamFailure as exc:
+            raise ExamFailure(
+                f"could not observe focus on {description} within budget"
+            ) from exc
 
     def assert_focus_indicator_negative_control(
         self, target_id: str, step_budget: int
@@ -1057,35 +1103,26 @@ class WorkbenchExam:
         )
         self.check(bool(planted), "could not plant missing focus-ring violation")
         try:
-            state = self.tab_to_current_target(target_id, step_budget)
+            state = self.observe_focus_on_target(
+                target_id,
+                step_budget,
+                "planted focus-ring target",
+            )
             self.check(
-                bool(state) and not bool(state.get("visible")),
+                not bool(state.get("visible")),
                 "focus-ring assertion did not catch planted outline:none violation",
             )
         finally:
             self.driver.execute(
                 "document.getElementById('exam-missing-focus-ring')?.remove();"
             )
-        # Ordinary Tab reachability was already proved above. Refocus the same
-        # control atomically here so this recovery check tests the application's
-        # ring after stylesheet removal, not another long loaded-runner Tab walk.
-        self.begin_focus_stability_check()
-        self.focus(
-            f'[data-exam-tab-target="{target_id}"]'
-        )
-        self.wait_for_focus_stability(
-            "negative-control target focus to remain stable"
-        )
-        restored = self.wait(
-            lambda: (
-                state
-                if (state := self.measure_focus_walk_step())
-                and bool(state.get("current"))
-                and bool(state.get("visible"))
-                else False
-            ),
-            "focus ring to recover after planted violation was removed",
-            timeout=15,
+        # Re-drive the real Tab chain after removing the stylesheet. A concurrent
+        # redraw can invalidate a focus=false measurement, but a focused control
+        # with no restored ring is still a real failure.
+        restored = self.observe_focus_on_target(
+            target_id,
+            step_budget,
+            "negative-control target after planted violation was removed",
         )
         self.check(
             bool(restored.get("visible")),
@@ -1151,6 +1188,7 @@ class WorkbenchExam:
         self.focus("#skip-link")
         reached: set[str] = set()
         missing_focus_indicator: set[str] = set()
+        missing_focus_details: dict[str, str] = {}
         # Custom-element buttons add shadow-tree stops that are not returned by
         # document.querySelectorAll. Allow complete keyboard cycles without a
         # fixed sleep or assuming how many component hosts a loaded desk has.
@@ -1169,8 +1207,10 @@ class WorkbenchExam:
                 reached.add(target)
                 if not bool(state.get("visible")):
                     missing_focus_indicator.add(target)
+                    missing_focus_details[target] = str(state.get("detail", target))
                 else:
                     missing_focus_indicator.discard(target)
+                    missing_focus_details.pop(target, None)
             if reached == set(expected):
                 break
         missing = sorted(set(expected) - reached)
@@ -1183,6 +1223,9 @@ class WorkbenchExam:
                 reached.add(target_id)
                 if not bool(state.get("visible")):
                     missing_focus_indicator.add(target_id)
+                    missing_focus_details[target_id] = str(
+                        state.get("detail", target_id)
+                    )
         missing = sorted(set(expected) - reached)
         missing_details = self.driver.execute(
             """
@@ -1197,45 +1240,27 @@ class WorkbenchExam:
             not missing,
             f"{journey_id}/{viewport} Tab did not reach ordinary actions {missing_details}",
         )
-        # Tab reachability is proved independently above. If a loaded runner
-        # reported a transient ring miss, refocus that same reached control and
-        # score it only after both focus and computed style settle. A real
-        # outline:none defect never satisfies this bounded predicate.
+        # Tab reachability is proved independently above. Re-drive each reported
+        # ring miss through its real Tab chain. A focus=false measurement was
+        # invalidated by concurrent live activity and is retried within one wait
+        # budget; once the expected control is focused, its computed ring result
+        # is final. This keeps a real outline:none defect failing.
         for target_id in list(missing_focus_indicator):
-            try:
-                self.begin_focus_stability_check()
-                self.focus(f'[data-exam-tab-target="{target_id}"]')
-                self.wait_for_focus_stability(
-                    f"Tab target {target_id} focus to remain stable"
-                )
-                state = self.wait(
-                    lambda: (
-                        candidate
-                        if (candidate := self.measure_focus_walk_step())
-                        and bool(candidate.get("current"))
-                        and bool(candidate.get("visible"))
-                        else False
-                    ),
-                    f"focus ring on Tab target {target_id}",
-                    timeout=15,
-                )
-            except ExamFailure:
-                state = None
-            if state:
+            state = self.observe_focus_on_target(
+                target_id,
+                step_budget,
+                f"{journey_id}/{viewport} Tab target {target_id}",
+            )
+            if bool(state.get("visible")):
                 missing_focus_indicator.discard(target_id)
+                missing_focus_details.pop(target_id, None)
+            else:
+                missing_focus_details[target_id] = str(
+                    state.get("detail", target_id)
+                )
         self.assert_focus_indicator_negative_control(str(expected[0]), step_budget)
         missing_focus = sorted(missing_focus_indicator)
-        focus_details = self.driver.execute(
-            """
-            return arguments[0].map((id) => {
-              const element = [...document.querySelectorAll(`[data-exam-tab-target="${CSS.escape(id)}"]`)].find((candidate) => candidate.offsetParent !== null);
-              if (!element) return `${id}:replaced`;
-              const style = getComputedStyle(element);
-              return `${id}:${element.tagName.toLowerCase()}:${element.textContent.trim().slice(0, 60)}:focus=${element.matches(':focus')}:outline=${style.outlineStyle}/${style.outlineWidth}:shadow=${style.boxShadow}`;
-            });
-            """,
-            [missing_focus],
-        )
+        focus_details = [missing_focus_details[target] for target in missing_focus]
         self.check(
             not missing_focus_indicator,
             f"{journey_id}/{viewport} has no visible focus indicator on {focus_details}",
