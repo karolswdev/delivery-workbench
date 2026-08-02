@@ -965,55 +965,23 @@ class WorkbenchExam:
             });
             const active = document.activeElement;
             const id = active?.dataset?.examTabTarget || '';
+            const focused = Boolean(active?.matches(':focus'));
             const current = id !== '' && active === controls[Number(id)]
               && active.isConnected;
             if (!current) {
               return {generation: window.__examFocusGeneration, id, current: false,
-                visible: true};
+                focused, visible: true};
             }
             const style = getComputedStyle(active);
             const width = parseFloat(style.outlineWidth || '0');
-            const ring = (style.outlineStyle !== 'none' && width >= 2)
-              || (style.boxShadow && style.boxShadow !== 'none');
-            const detail = `${id}:${active.tagName.toLowerCase()}:${active.textContent.trim().slice(0, 60)}:focus=true:focus-visible=${active.matches(':focus-visible')}:restored=${active.classList.contains('focus-restored')}:outline=${style.outlineStyle}/${style.outlineWidth}:shadow=${style.boxShadow}`;
+            const ring = focused && ((style.outlineStyle !== 'none' && width >= 2)
+              || (style.boxShadow && style.boxShadow !== 'none'));
+            const detail = `${id}:${active.tagName.toLowerCase()}:${active.textContent.trim().slice(0, 60)}:focus=${active.matches(':focus')}:focus-visible=${active.matches(':focus-visible')}:restored=${active.classList.contains('focus-restored')}:token=${style.getPropertyValue('--color-focus').trim() || 'unset'}:app=${Boolean(active.closest('.app'))}:inline=${active.getAttribute('style') || 'none'}:outline=${style.outlineStyle}/${style.outlineWidth}:shadow=${style.boxShadow}`;
             return {generation: window.__examFocusGeneration, id, current: true,
-              visible: Boolean(ring), detail};
+              focused, visible: Boolean(ring), detail};
             """
         )
         return state if isinstance(state, dict) else {}
-
-    def begin_focus_stability_check(self) -> None:
-        self.driver.execute(
-            """
-            window.__examStableFocusElement = null;
-            window.__examStableFocusChecks = 0;
-            """
-        )
-
-    def wait_for_focus_stability(
-        self, description: str, timeout: float = 5
-    ) -> None:
-        self.wait(
-            lambda: self.driver.execute(
-                """
-                const active = document.activeElement;
-                if (!active || active === document.body) {
-                  window.__examStableFocusElement = null;
-                  window.__examStableFocusChecks = 0;
-                  return false;
-                }
-                if (window.__examStableFocusElement === active) {
-                  window.__examStableFocusChecks += 1;
-                } else {
-                  window.__examStableFocusElement = active;
-                  window.__examStableFocusChecks = 1;
-                }
-                return window.__examStableFocusChecks >= 2;
-                """
-            ),
-            description,
-            timeout=timeout,
-        )
 
     def tab_to_current_target(
         self,
@@ -1032,16 +1000,7 @@ class WorkbenchExam:
                 if deadline is not None and time.monotonic() >= deadline:
                     return None
                 generation = self.prepare_focus_walk_step()
-                self.begin_focus_stability_check()
                 self.driver.press("tab")
-                stability_timeout = 5.0
-                if deadline is not None:
-                    stability_timeout = min(
-                        stability_timeout, max(0.001, deadline - time.monotonic())
-                    )
-                self.wait_for_focus_stability(
-                    "Tab focus to remain stable", timeout=stability_timeout
-                )
                 state = self.measure_focus_walk_step()
                 if int(state.get("generation", -1)) != generation:
                     # The key event crossed a live redraw. Start this proof again
@@ -1049,7 +1008,10 @@ class WorkbenchExam:
                     break
                 if not bool(state.get("current")):
                     continue
-                if str(state.get("id", "")) == target_id:
+                if (
+                    str(state.get("id", "")) == target_id
+                    and bool(state.get("focused"))
+                ):
                     return state
         return None
 
@@ -1093,10 +1055,14 @@ class WorkbenchExam:
               `[data-exam-tab-target="${CSS.escape(arguments[0])}"]`
             );
             if (!target) return false;
-            const style = document.createElement('style');
-            style.id = 'exam-missing-focus-ring';
-            style.textContent = `html body .app [data-exam-tab-target="${CSS.escape(arguments[0])}"]:focus { outline: none !important; box-shadow: none !important; }`;
-            document.head.appendChild(style);
+            let style = document.getElementById('exam-missing-focus-ring');
+            if (!style) {
+              style = document.createElement('style');
+              style.id = 'exam-missing-focus-ring';
+              document.head.appendChild(style);
+            }
+            style.textContent = `html[data-exam-missing-focus-ring="true"] body .app [data-exam-tab-target="${CSS.escape(arguments[0])}"]:focus { outline: none !important; box-shadow: none !important; }`;
+            document.documentElement.dataset.examMissingFocusRing = 'true';
             return true;
             """,
             [target_id],
@@ -1115,19 +1081,13 @@ class WorkbenchExam:
         finally:
             self.driver.execute(
                 """
-                const style = document.getElementById('exam-missing-focus-ring');
-                if (style) {
-                  style.disabled = true;
-                  if (style.sheet) style.sheet.disabled = true;
-                  style.textContent = '';
-                  style.remove();
-                }
+                delete document.documentElement.dataset.examMissingFocusRing;
                 void document.documentElement.offsetWidth;
                 """
             )
-        # Re-drive the real Tab chain after removing the stylesheet. Style
-        # invalidation from the planted rule can lag under load, so require a
-        # fresh, current target with a visible ring within one bounded window.
+        # Re-drive the real Tab chain after disabling the planted reset. The
+        # stylesheet stays installed so replacement controls are covered while
+        # planted without relying on stylesheet removal under load.
         # A persistent outline:none defect still exhausts the window and fails.
         deadline = time.monotonic() + 15
         last_restored_state: dict[str, Any] = {}
@@ -1399,12 +1359,9 @@ class WorkbenchExam:
             f"{render_function} did not mark restored focus",
         )
         self.check(
-            bool(restored.get("focusVisible")),
-            f"{render_function} did not restore Firefox focus-visible state",
-        )
-        self.check(
             bool(restored.get("ring")),
-            f"{render_function} restored focus without a visible ring",
+            f"{render_function} restored focus without a visible ring "
+            f"(focus-visible={restored.get('focusVisible')})",
         )
 
     def test_slick_workbench(self) -> None:

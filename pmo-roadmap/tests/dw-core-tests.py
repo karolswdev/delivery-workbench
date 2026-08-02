@@ -9652,7 +9652,8 @@ class WorkbenchAccessibilityContractTest(unittest.TestCase):
 
     def test_visible_focus_motion_color_and_overflow_rules_are_present(self):
         for marker in (
-            ":focus-visible", ".skip-link", "overflow-x: clip",
+            ":where(a, button, input, select, textarea, summary, [tabindex]):focus",
+            ".skip-link:focus", "overflow-x: clip",
             "overflow-wrap: anywhere", ".tablewrap",
             '[role="tab"][aria-selected="true"]', '[role="dialog"]',
             "@media (pointer: coarse)",
@@ -9660,6 +9661,8 @@ class WorkbenchAccessibilityContractTest(unittest.TestCase):
             "@media (forced-colors: active)",
         ):
             self.assertIn(marker, self.css)
+        self.assertNotIn("outline: none", self.css)
+        self.assertNotIn("outline:none", self.css)
         self.assertIn('setAttribute("aria-current", "page")', self.app)
 
     def test_idea_to_phase_plan_keeps_focus_storage_and_authority_separate(self):

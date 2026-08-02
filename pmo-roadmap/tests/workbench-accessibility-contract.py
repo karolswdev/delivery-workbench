@@ -201,9 +201,8 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
         if marker not in app:
             issues.append(f"app-marker-missing:{marker}")
     for marker in (
-        ":focus-visible",
-        ".focus-restored",
-        ".skip-link",
+        ":where(a, button, input, select, textarea, summary, [tabindex]):focus",
+        ".skip-link:focus",
         "[aria-current=\"page\"]",
         "[role=\"dialog\"]",
         "@media (prefers-reduced-motion: reduce)",
@@ -213,6 +212,9 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
     ):
         if marker not in css:
             issues.append(f"css-marker-missing:{marker}")
+    for reset in ("outline: none", "outline:none"):
+        if reset in css:
+            issues.append(f"css-outline-reset-present:{reset}")
     for marker in (
         "WebDriver:SetWindowRect",
         "WebDriver:PerformActions",

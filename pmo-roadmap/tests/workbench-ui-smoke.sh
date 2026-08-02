@@ -278,10 +278,13 @@ for token in ("captureAppFocus", "restoreAppFocus", "wireDismissibleRegion",
               "enhanceSemantics", "announceLiveUpdate", "wireTablist",
               'role="dialog"', 'role="tablist"', "focusMain: true"):
     assert token in app, token
-for token in (":focus-visible", ".skip-link", "overflow-x: clip",
+for token in (":where(a, button, input, select, textarea, summary, [tabindex]):focus",
+              ".skip-link:focus", "overflow-x: clip",
               "@media (prefers-reduced-motion: reduce)",
               "@media (forced-colors: active)"):
     assert token in css, token
+assert "outline: none" not in css
+assert "outline:none" not in css
 # WLA-35-09: fast shell, shared motion, persisted density, recovery, and IDs.
 for token in ("routeSkeletonHtml", "updateRouteSkeleton", "presentationPromise", "projectsPromise"):
     assert token in router, token
