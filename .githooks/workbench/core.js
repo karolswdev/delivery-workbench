@@ -238,6 +238,12 @@ function restoreAppFocus(identity) {
   return focusElement(target);
 }
 
+function renderPreservingAppFocus(render) {
+  const focus = captureAppFocus();
+  render();
+  restoreAppFocus(focus);
+}
+
 function rememberReturnFocus(key, element = document.activeElement) {
   const selector = focusSelector(element);
   if (selector) returnFocus.set(key, selector);

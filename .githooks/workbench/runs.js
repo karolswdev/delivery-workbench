@@ -665,7 +665,7 @@ function startRunLive() {
   if (!orchState.runId || orchState.view !== "run") return;
   if (SNAPSHOT_MODE || typeof EventSource === "undefined") {
     if (SNAPSHOT_LIVE_STATE !== "stale") orchState.runConnection.status = SNAPSHOT_MODE ? "verified" : "manual";
-    renderOrchestration();
+    renderPreservingAppFocus(renderOrchestration);
     return;
   }
   const runId = orchState.runId;
@@ -680,7 +680,7 @@ function startRunLive() {
       orchState.runConnection.status = "live";
     }
     runLiveHadConnection = true;
-    renderOrchestration();
+    renderPreservingAppFocus(renderOrchestration);
   };
   // Snapshot-then-tail (WLA-34-05): the server sends a snapshot on
   // every connect.  On reconnect the snapshot lets us verify we are
@@ -692,7 +692,7 @@ function startRunLive() {
       orchState.runConnection.status = "live";
       try { orchState.notifications = (await api("/api/notifications")).data.notifications; }
       catch (_err) { /* notifications stay stale until the next refresh */ }
-      renderOrchestration();
+      renderPreservingAppFocus(renderOrchestration);
     } catch (_err) { /* view stays as-is */ }
     showRunCatchingUp(false);
   });
@@ -711,7 +711,7 @@ function startRunLive() {
           orchState.runView?.ledger_head,
           "Delivery progress changed. Review What happens next or check the saved history.",
         );
-        renderOrchestration();
+        renderPreservingAppFocus(renderOrchestration);
       } catch (err) {
         orchState.runConnection.status = "stale";
         announceLiveUpdate(
@@ -719,7 +719,7 @@ function startRunLive() {
           `stale:${runId}:${orchState.runView?.ledger_head || ""}`,
           "Live delivery updates were interrupted. The last verified view remains available.",
         );
-        renderOrchestration();
+        renderPreservingAppFocus(renderOrchestration);
       }
     }, 400);
   });
@@ -732,7 +732,7 @@ function startRunLive() {
       `stale:${runId}:${orchState.runView?.ledger_head || ""}`,
       "Live delivery updates were interrupted. The last verified view remains available.",
     );
-    renderOrchestration();
+    renderPreservingAppFocus(renderOrchestration);
   };
 }
 
@@ -1163,7 +1163,7 @@ function startProgramLive() {
   if (!programState.runId || !programState.view) return;
   if (SNAPSHOT_MODE || typeof EventSource === "undefined") {
     if (SNAPSHOT_LIVE_STATE !== "stale") programState.connection.status = SNAPSHOT_MODE ? "verified" : "manual";
-    renderPrograms();
+    renderPreservingAppFocus(renderPrograms);
     return;
   }
   const runId = programState.runId;
@@ -1178,7 +1178,7 @@ function startProgramLive() {
       programState.connection.status = "live";
     }
     programLiveHadConnection = true;
-    renderPrograms();
+    renderPreservingAppFocus(renderPrograms);
   };
   // Snapshot-then-tail (WLA-34-05): refresh state from snapshot on reconnect
   programLive.addEventListener("snapshot", async () => {
@@ -1188,7 +1188,7 @@ function startProgramLive() {
       programState.connection.status = "live";
       programState.inventory = (await api("/api/programs")).data;
       programState.notifications = (await api("/api/notifications")).data.notifications || [];
-      renderPrograms();
+      renderPreservingAppFocus(renderPrograms);
     } catch (_err) { /* view stays as-is */ }
     showProgramCatchingUp(false);
   });
@@ -1207,7 +1207,7 @@ function startProgramLive() {
           programState.view?.ledger_head || programState.view?.event_count,
           "Delivery progress changed. Review What happens next or check the saved history.",
         );
-        renderPrograms();
+        renderPreservingAppFocus(renderPrograms);
       } catch (err) {
         programState.connection.status = "stale";
         announceLiveUpdate(
@@ -1215,7 +1215,7 @@ function startProgramLive() {
           `stale:${runId}:${programState.view?.event_count || ""}`,
           "Live delivery updates were interrupted. The last verified view remains available.",
         );
-        renderPrograms();
+        renderPreservingAppFocus(renderPrograms);
       }
     }, 350);
   });
@@ -1228,7 +1228,7 @@ function startProgramLive() {
       `stale:${runId}:${programState.view?.event_count || ""}`,
       "Live delivery updates were interrupted. The last verified view remains available.",
     );
-    renderPrograms();
+    renderPreservingAppFocus(renderPrograms);
   };
 }
 

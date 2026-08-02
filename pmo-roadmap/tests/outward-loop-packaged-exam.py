@@ -622,7 +622,17 @@ def main():
         assert cli_tail == ledger == tail_run_events(root, main_id)["events"]
         code, run_sse = http_raw("GET", "/api/runs/{}/events?follow=0".format(main_id))
         assert code == 200
-        assert [document for _seq, document in parse_sse(run_sse)] == ledger
+        run_frames = parse_sse(run_sse)
+        snapshot_seq, run_snapshot = run_frames[0]
+        assert snapshot_seq == 0
+        assert run_snapshot["run_id"] == main_id
+        assert run_snapshot["ledger_events"] == len(ledger)
+        assert run_snapshot["ledger_head"] == ledger[-1]["event_hash"]
+        ledger_frames = run_frames[1:]
+        assert [document for _seq, document in ledger_frames] == ledger
+        assert [seq for seq, _document in ledger_frames] == [
+            event["seq"] for event in ledger
+        ]
         code, signal_sse = http_raw(
             "GET", "/api/signals/events?remote=origin&branch=main&follow=0"
         )
