@@ -120,7 +120,7 @@ function projectSelectorHtml(projects, unavailable = "") {
     ? `<p class="project-unavailable"><strong>${esc(unavailable)}</strong> is not available in this repository. Choose an available project; nothing was changed.</p>`
     : "<p>Choose the work you want to see. The choice stays with you as you move around or reload.</p>";
   return `<section class="project-selector" aria-labelledby="project-selector-title">
-    <span class="selector-eyebrow">First, choose your work</span>
+    <span class="selector-eyebrow ops-label">First, choose your work</span>
     <h1 id="project-selector-title">Choose a project</h1>
     ${explanation}
     <form id="project-selector-form">
@@ -685,7 +685,7 @@ function statusActionHtml(action) {
     </div>
     <div class="brief-reason">${esc(action.reason)}</div>
     ${command ? `<div class="brief-argv" aria-label="command argument vector">
-      <span class="brief-argv-label">argv</span>
+      <span class="brief-argv-label ops-label">argv</span>
       ${command.map((arg, index) => `<code data-argv-index="${index}">${esc(arg)}</code>`).join("")}
     </div>` : `<div class="brief-manual"><strong>manual act</strong><span>No command is synthesized for this decision.</span></div>`}
     <div class="brief-readonly">Recommendation only — review the separate deliberate-step boundary below before anything runs.</div>
@@ -695,7 +695,7 @@ function statusActionHtml(action) {
 function stepArgvHtml(argv, label) {
   if (!Array.isArray(argv)) return "";
   return `<div class="brief-argv" aria-label="${esc(label)} argument vector">
-    <span class="brief-argv-label">${esc(label)}</span>
+    <span class="brief-argv-label ops-label">${esc(label)}</span>
     ${argv.map((arg, index) => `<code data-step-argv-index="${index}">${esc(arg)}</code>`).join("")}
   </div>`;
 }
@@ -841,7 +841,7 @@ function statusPanel(status, step, notice) {
       data-step-applicable="${step.applicable ? "true" : "false"}">
     <div class="brief-head">
       <div>
-        <div class="brief-eyebrow">repository briefing</div>
+        <div class="brief-eyebrow ops-label">repository briefing</div>
         <div class="brief-verdict">${esc(status.verdict)}</div>
       </div>
       <div class="brief-summary">${esc(status.summary)}</div>
@@ -875,16 +875,16 @@ function arrivalPanel(setup, status, step, notice, presentation) {
     notice || (SNAPSHOT_MODE && new URLSearchParams(location.search).has("confirmstep"))
   );
   const workLine = work
-    ? `<div class="arrival-work"><span>${esc(presentationCopy("current_work"))}</span><div><strong>${esc(work.title)}</strong><small>${esc(work.story_id)} · ${esc(work.status)}</small></div></div>`
-    : `<div class="arrival-work"><span>${esc(presentationCopy("current_work"))}</span><div><strong>${esc(presentedWork?.value || "No work is currently actionable")}</strong><small>${esc(presentationCopy("check_readiness"))} for the affected ${esc(productTerm("decision"))}.</small></div></div>`;
+    ? `<div class="arrival-work"><span class="ops-label">${esc(presentationCopy("current_work"))}</span><div><strong>${esc(work.title)}</strong><small>${esc(work.story_id)} · ${esc(work.status)}</small></div></div>`
+    : `<div class="arrival-work"><span class="ops-label">${esc(presentationCopy("current_work"))}</span><div><strong>${esc(presentedWork?.value || "No work is currently actionable")}</strong><small>${esc(presentationCopy("check_readiness"))} for the affected ${esc(productTerm("decision"))}.</small></div></div>`;
   return `<section class="arrival-panel readiness-${esc(setup.readiness)}" aria-labelledby="arrival-title">
     <div class="arrival-hero">
-      <div><span class="arrival-eyebrow">${setup.healthy ? "healthy ordinary delivery" : "delivery needs attention"}</span>
+      <div><span class="arrival-eyebrow ops-label">${setup.healthy ? "healthy ordinary delivery" : "delivery needs attention"}</span>
         <h1 id="arrival-title">${esc(presentation.title)}</h1><p>${esc(presentation.summary)}</p></div>
       ${badge(setup.readiness, setup.readiness === "ready" ? "ok" : "issue")}
     </div>
     ${workLine}
-    <div class="arrival-next"><span>${esc(productTerm("next_step"))}</span><strong>${esc(nextStep.label || presentationCopy("check_readiness"))}</strong><p>${esc(nextStep.summary || "")}</p></div>
+    <div class="arrival-next"><span class="ops-label">${esc(productTerm("next_step"))}</span><strong>${esc(nextStep.label || presentationCopy("check_readiness"))}</strong><p>${esc(nextStep.summary || "")}</p></div>
     <div class="arrival-actions">
       ${ordinary?.available && work ? `<a class="primary" href="${esc(ordinary.route)}">${esc(presentationCopy("open_current_work"))}</a>` : `<a class="primary" href="#/health">${esc(presentationCopy("check_readiness"))}</a>`}
       <a href="#/program-studio">${esc(presentationCopy("review_delivery_options"))}</a>

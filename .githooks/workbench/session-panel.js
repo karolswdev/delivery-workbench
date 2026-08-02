@@ -249,11 +249,11 @@ class SessionPanel {
     return `
       <div class="session-active">
         <div class="session-agents">
-          <span class="session-section-label">Active agents</span>
+          <span class="session-section-label ops-label">Active agents</span>
           ${agentInfo}
         </div>
         <div class="session-transcript" role="log" aria-label="Agent activity transcript">
-          <span class="session-section-label">Live activity</span>
+          <span class="session-section-label ops-label">Live activity</span>
           ${transcript}
         </div>
       </div>`;
@@ -360,7 +360,7 @@ class SessionPanel {
           </div>`}
         ${runs.length ? `
           <div class="session-runs">
-            <span class="session-section-label">Captured runs</span>
+            <span class="session-section-label ops-label">Captured runs</span>
             ${runs.map((run) => `
               <div class="session-run-entry">
                 <code>${esc(run.command || "unknown command")}</code>

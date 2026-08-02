@@ -1615,6 +1615,100 @@ class WorkbenchExam:
         self.driver.set_content_zoom(1)
         self.driver.set_window(*WIDE)
 
+    def test_alignment_contract(self) -> None:
+        """Measure the shared operator grid on representative live surfaces."""
+        tolerance = 1.0
+        self.driver.set_window(*WIDE)
+        self.driver.set_content_zoom(1)
+
+        self.navigate("/?snapshot=1&project=sample#/board/sample", ".board .bcol-head")
+        board = self.driver.execute(
+            """
+            const visible = (el) => el && el.getClientRects().length > 0;
+            const controlSelectors = ['#work-link', '#health-link', '#advanced-toggle',
+              '#project-switcher', '#command-palette-trigger', '.needs-you-pill',
+              '#density-toggle', '#refresh-btn'];
+            const controls = controlSelectors.map((selector) => document.querySelector(selector))
+              .filter(visible).map((el) => el.getBoundingClientRect());
+            const columns = [...document.querySelectorAll('.board .bcol')].filter(visible);
+            const headers = columns.map((column) => column.querySelector('.bcol-head'))
+              .filter(visible).map((el) => el.getBoundingClientRect());
+            const cardOffsets = columns.flatMap((column) => {
+              const columnRect = column.getBoundingClientRect();
+              const expectedLeft = columnRect.left + parseFloat(getComputedStyle(column).paddingLeft || '0');
+              return [...column.children].filter((child) => child.matches?.('.bcard') && visible(child))
+                .map((card) => Math.abs(card.getBoundingClientRect().left - expectedLeft));
+            });
+            const pill = document.querySelector('.needs-you-pill');
+            const chip = pill?.querySelector('dw-badge');
+            const countFits = ['1', '12', '99+'].map((count) => {
+              chip.setAttribute('count', count);
+              const outer = pill.getBoundingClientRect();
+              const inner = chip.getBoundingClientRect();
+              return inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5;
+            });
+            return {
+              heights: controls.map((rect) => rect.height),
+              centers: controls.map((rect) => rect.top + rect.height / 2),
+              headerTops: headers.map((rect) => rect.top),
+              cardOffsets,
+              countFits,
+            };
+            """
+        )
+        self.check(max(board["heights"]) - min(board["heights"]) <= tolerance,
+                   "topbar controls did not share one height")
+        self.check(max(board["centers"]) - min(board["centers"]) <= tolerance,
+                   "topbar controls did not share one vertical center")
+        self.check(max(board["headerTops"]) - min(board["headerTops"]) <= tolerance,
+                   "board column headers did not share one baseline")
+        self.check(bool(board["cardOffsets"]) and max(board["cardOffsets"]) <= tolerance,
+                   "board cards did not share their column rail left edge")
+        self.check(all(board["countFits"]),
+                   "needs-you count chip escaped the pill for 1, 12, or 99+")
+
+        self.navigate(
+            "/?snapshot=1&project=sample&memoryscenario=rich#/board/sample",
+            ".memory-summary-grid dt",
+        )
+        memory = self.driver.execute(
+            """
+            const labels = [...document.querySelectorAll('.memory-summary-grid dt')]
+              .filter((el) => el.getClientRects().length > 0)
+              .map((el) => el.getBoundingClientRect().left);
+            return {labels};
+            """
+        )
+        self.check(len(memory["labels"]) >= 4,
+                   "memory summary did not expose the shared fact grid")
+        self.check(max(memory["labels"]) - min(memory["labels"]) <= tolerance,
+                   "memory fact labels did not share one column edge")
+
+        self.navigate(
+            "/?snapshot=1&studiosection=scope#/program-studio/program/studio-program",
+            ".studio-plan-shell",
+        )
+        studio = self.driver.execute(
+            """
+            const visible = (el) => el && el.getClientRects().length > 0;
+            const panes = ['.studio-plan-sections', '.studio-plan-section', '.studio-plan-review']
+              .map((selector) => document.querySelector(selector)).filter(visible)
+              .map((el) => el.getBoundingClientRect());
+            const controls = [...document.querySelectorAll('.studio-policy-actions select, .studio-policy-actions button')]
+              .filter(visible).map((el) => el.getBoundingClientRect());
+            return {
+              paneTops: panes.map((rect) => rect.top),
+              controlHeights: controls.map((rect) => rect.height),
+            };
+            """
+        )
+        self.check(len(studio["paneTops"]) == 3 and
+                   max(studio["paneTops"]) - min(studio["paneTops"]) <= tolerance,
+                   "Studio plan panes did not share one top grid line")
+        self.check(len(studio["controlHeights"]) >= 3 and
+                   max(studio["controlHeights"]) - min(studio["controlHeights"]) <= tolerance,
+                   "Studio toolbar controls did not share one height")
+
     def test_core_interactions(self) -> None:
         self.driver.set_window(*WIDE)
         self.navigate("/#/", ".board-overview h1")
@@ -2766,6 +2860,7 @@ def main() -> int:
             if args.repository:
                 exam.test_memory_closed_loop_journey()
             exam.test_slick_workbench()
+            exam.test_alignment_contract()
             exam.test_core_interactions()
         if args.suite in {"program", "all"}:
             exam.test_program_interactions()

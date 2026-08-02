@@ -16,8 +16,8 @@ browser exam:
 ```bash
 DW_UI_CAPTURE_DIR=/tmp/shots DW_UI_CAPTURE_PATTERN='*desktop*' \
   bash pmo-roadmap/tests/workbench-ui-smoke.sh
-# workbench-board.png   <- board-home-desktop-light.png
-# workbench-memory.png  <- memory-rich-desktop-light.png
+# workbench-board.png   <- board-home-desktop-dark.png
+# workbench-memory.png  <- memory-rich-desktop-dark.png
 ```
 
 The social preview is a 1280×640 card rendered from a self-contained

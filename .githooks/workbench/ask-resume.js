@@ -109,7 +109,7 @@ class AskResumeController {
   renderAllRequests(requests) {
     if (!requests || !requests.length) return "";
     return '<div class="ask-resume-block">' +
-      '<span class="session-section-label">Pending decisions</span>' +
+      '<span class="session-section-label ops-label">Pending decisions</span>' +
       requests.map(function (req) { return this.renderRequest(req); }.bind(this)).join("") +
       '</div>';
   }

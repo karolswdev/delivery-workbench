@@ -346,7 +346,7 @@ window.DW = window.DW || {};
       this._content.innerHTML = `
         <div class="memory-context">
           <div>
-            <span class="memory-eyebrow">${esc(this._kind === "program" ? "Multi-phase program" : "Bounded run")}</span>
+            <span class="memory-eyebrow ops-label">${esc(this._kind === "program" ? "Multi-phase program" : "Bounded run")}</span>
             <h2 id="memory-panel-title">What the agent could know</h2>
             ${copyableIdentifierHtml(this._id, this._kind === "program" ? "program identifier" : "run identifier")}
           </div>

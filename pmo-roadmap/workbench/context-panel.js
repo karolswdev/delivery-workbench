@@ -279,7 +279,7 @@
 
     // Editor
     html += '<dw-card class="context-section">';
-    html += '<div class="context-draft-label">Draft new context (Markdown)</div>';
+    html += '<div class="context-draft-label ops-label">Draft new context (Markdown)</div>';
     html += '<textarea class="context-editor" rows="12" placeholder="Write project context here...">';
     html += esc(this._draftContent);
     html += '</textarea>';

@@ -239,7 +239,7 @@ function adoptionStoryHtml(story, state) {
 
 function adoptionReviewBody(model, key) {
   const state = adoptionMarkState(key);
-  return `<header class="adoption-review-head"><p class="eyebrow">Roadmap changes · review only</p>
+  return `<header class="adoption-review-head"><p class="eyebrow ops-label">Roadmap changes · review only</p>
       <h1 tabindex="-1">Review ${esc(model.project.title)}</h1>
       <p class="adoption-vision">${esc(model.project.vision)}</p>
       <p>${esc(model.project.context)} ${esc(model.project.identity)}</p>
@@ -249,7 +249,7 @@ function adoptionReviewBody(model, key) {
     </header>
     <section class="adoption-phases"><h2>What the phases accomplish</h2>
       ${model.phases.map((phase) => `<article class="adoption-phase" data-review-item="${esc(phase.item_id)}">
-        <div class="adoption-phase-number">Phase ${esc(phase.number)}</div><h3>${esc(phase.title)}</h3>
+        <div class="adoption-phase-number ops-label">Phase ${esc(phase.number)}</div><h3>${esc(phase.title)}</h3>
         ${adoptionItemReviewHtml(state, phase.item_id)}
         <p>${esc(phase.accomplishes)}</p>${provenanceHtml(phase.provenance)}
         <div class="adoption-stories">${phase.stories.map((story) => adoptionStoryHtml(story, state)).join("")}</div>
@@ -261,7 +261,7 @@ function adoptionReviewBody(model, key) {
     <section class="adoption-unresolved"><h2>Unresolved assumptions</h2><p>${esc(model.unresolved_questions.summary)}</p>
       ${model.unresolved_questions.items.length ? `<ul>${model.unresolved_questions.items.map((item) => `<li data-review-item="${esc(item.item_id)}">${adoptionItemReviewHtml(state, item.item_id)}<strong>${esc(item.question)}</strong>${provenanceHtml(item.provenance)}</li>`).join("")}</ul>` : ""}
     </section>
-    <section class="adoption-configuration"><div><p class="eyebrow">Separate from roadmap truth</p><h2>${esc(model.configuration.label)}</h2><p>${esc(model.configuration.explanation)}</p></div>
+    <section class="adoption-configuration"><div><p class="eyebrow ops-label">Separate from roadmap truth</p><h2>${esc(model.configuration.label)}</h2><p>${esc(model.configuration.explanation)}</p></div>
       <div class="adoption-config-grid"><article><h3>Tracked delivery policy</h3><p>${esc(model.configuration.policy.sentence)}</p>
         ${model.configuration.policy.documents.length ? `<ul>${model.configuration.policy.documents.map((item) => `<li><strong>${esc(item.sentence)}</strong>${provenanceHtml(item.provenance)}</li>`).join("")}</ul>` : ""}
         ${model.configuration.policy.provenance ? provenanceHtml(model.configuration.policy.provenance) : ""}${model.configuration.policy.present && ADOPTION_PROPOSAL_FILE ? '<a class="adoption-bundle-link" href="#/program-studio/bundle">Review the generated program as one linked bundle</a>' : ""}</article>
@@ -481,7 +481,7 @@ function renderDraftStep() {
   const roadmap = proposal.tracked_content.roadmap;
   const objection = new Map(ideationState.review.objections.map((item) => [item.item, item.correction]));
   app.innerHTML = ideationShell("draft", `<section class="ideation-step ideation-draft" aria-labelledby="ideation-draft-title">
-    <p class="eyebrow">Step 2 of 5 · shape the draft</p><h1 id="ideation-draft-title" tabindex="-1">Edit the phase plan</h1>
+    <p class="eyebrow ops-label">Step 2 of 5 · shape the draft</p><h1 id="ideation-draft-title" tabindex="-1">Edit the phase plan</h1>
     <p>Everything below is a browser draft. Nothing is saved yet. Edit the plan in plain words before review.</p>
     <form id="ideation-draft-form">
       <fieldset class="ideation-project-fields"><legend>Project</legend>
@@ -601,7 +601,7 @@ function wireDraftStep() {
 
 function renderIdeaStep() {
   app.innerHTML = ideationShell("idea", `<section class="ideation-step ideation-idea" aria-labelledby="ideation-idea-title">
-    <p class="eyebrow">Step 1 of 5 · start with your words</p><h1 id="ideation-idea-title" tabindex="-1">Turn a rough idea into a phase plan</h1>
+    <p class="eyebrow ops-label">Step 1 of 5 · start with your words</p><h1 id="ideation-idea-title" tabindex="-1">Turn a rough idea into a phase plan</h1>
     <p class="ideation-lede">Write what you want to make or change. The Workbench will shape a small editable first draft. Nothing is saved yet.</p>
     <form id="ideation-idea-form"><label><b>Rough idea</b><textarea name="idea" required maxlength="20000" placeholder="For example: Help a small team capture customer requests and turn them into a weekly plan.">${esc(ideationState.rough_idea)}</textarea></label>
       <div class="ideation-inert"><strong>Drafting is safe.</strong><span>No project files, work, permission, or process are created.</span></div>
@@ -637,7 +637,7 @@ async function renderReviewStep() {
   if (status >= 400 || body.ok === false || !model?.valid) {
     const refusal = model?.refusal || boardMutationError(body, status);
     app.innerHTML = ideationShell("review", `<section class="ideation-step ideation-review" aria-labelledby="ideation-review-title">
-      <p class="eyebrow">Step 3 of 5 · review</p><h1 id="ideation-review-title" tabindex="-1">The draft needs a correction</h1>
+      <p class="eyebrow ops-label">Step 3 of 5 · review</p><h1 id="ideation-review-title" tabindex="-1">The draft needs a correction</h1>
       <div class="guard" role="alert"><strong>Review refused. Nothing was saved.</strong> ${esc(refusal)}</div>
       <button type="button" data-edit-draft>Return to the draft</button></section>`);
     document.querySelector("[data-edit-draft]").addEventListener("click", () => moveIdeationStep("draft"));
@@ -714,7 +714,7 @@ function renderPreviewStep() {
   const preview = ideationState.preview;
   const refusal = ideationState.refusal;
   app.innerHTML = ideationShell("preview", `<section class="ideation-step ideation-preview" aria-labelledby="ideation-preview-title">
-    <p class="eyebrow">Step 4 of 5 · exact preview</p><h1 id="ideation-preview-title" tabindex="-1">${refusal ? "This setup was refused" : "Review the exact setup"}</h1>
+    <p class="eyebrow ops-label">Step 4 of 5 · exact preview</p><h1 id="ideation-preview-title" tabindex="-1">${refusal ? "This setup was refused" : "Review the exact setup"}</h1>
     ${refusal ? `<div class="guard ideation-refusal" role="alert" tabindex="-1"><strong>Nothing changed.</strong> ${esc(plainSetupRefusal(refusal))}</div>` : `<p>These are the exact configuration files this one-use lease can create. No work, run, program, permission, proof approval, or commit is included.</p>
       ${previewChangesHtml(preview)}
       <details class="ideation-preview-technical"><summary>Technical details</summary><pre>${esc(JSON.stringify(preview, null, 2))}</pre></details>`}
@@ -757,7 +757,7 @@ async function applyIdeationSetup() {
 function renderAppliedStep() {
   const applied = ideationState.applied || { changes: ideationState.preview?.changes || [] };
   app.innerHTML = ideationShell("apply", `<section class="ideation-step ideation-applied" aria-labelledby="ideation-applied-title">
-    <p class="eyebrow">Step 5 of 5 · configuration saved</p><h1 id="ideation-applied-title" tabindex="-1">The phase plan is configured</h1>
+    <p class="eyebrow ops-label">Step 5 of 5 · configuration saved</p><h1 id="ideation-applied-title" tabindex="-1">The phase plan is configured</h1>
     <div class="ideation-success"><strong>Configuration only.</strong><span>No story, run, program, permission, proof approval, or commit was started.</span></div>
     <p>${esc((applied.changes || []).length)} planned path${(applied.changes || []).length === 1 ? " was" : "s were"} applied through the one-use setup lease.</p>
     <details><summary>Technical details</summary><pre>${esc(JSON.stringify(applied, null, 2))}</pre></details>

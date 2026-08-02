@@ -336,7 +336,7 @@ function renderOrchestration() {
   const focus = captureAppFocus();
   const current = orchState.name || orchState.score.slug;
   app.innerHTML = `${destinationNav("delivery", "#/orchestration")}<div class="orchestration" data-score="${esc(current)}">
-    <header class="orch-toolbar"><div><span class="orch-eyebrow">Delivery</span><h1>${esc(orchState.score.title || orchState.score.slug)}</h1><p>Review the work and its order before you continue.</p><details><summary>Technical details</summary><span>visual orchestration score</span><code>pm/orchestration/${esc(orchState.score.slug)}.json</code></details></div>
+    <header class="orch-toolbar"><div><span class="orch-eyebrow ops-label">Delivery</span><h1>${esc(orchState.score.title || orchState.score.slug)}</h1><p>Review the work and its order before you continue.</p><details><summary>Technical details</summary><span>visual orchestration score</span><code>pm/orchestration/${esc(orchState.score.slug)}.json</code></details></div>
       <div class="orch-score-actions"><label>score<select id="orch-score-select"><option value="">new unsaved score</option>${orchState.inventory.map((s) => `<option value="${esc(s.name)}"${s.name === orchState.name ? " selected" : ""}>${esc(s.slug || s.name)}${s.valid ? "" : " (invalid)"}</option>`).join("")}</select></label><button type="button" id="orch-new">new</button><button type="button" id="orch-duplicate">duplicate</button><button type="button" id="orch-preview-save">preview save</button><button type="button" id="orch-preview-delete" class="danger"${orchState.exists ? "" : " disabled"}>preview delete</button></div>
     </header>
     <div class="orch-tabs" role="tablist" aria-label="Orchestration editor views">${[

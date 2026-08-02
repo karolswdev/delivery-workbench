@@ -26,11 +26,11 @@ Replace the scaffold-grade visual layer with a Linear-grade design language, ado
 | WLA-36-02 | Shell and navigation | done | [story-02-shell-and-navigation](./story-02-shell-and-navigation.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-36-03 | Board and cards | done | [story-03-board-and-cards](./story-03-board-and-cards.md) | [evidence-story-03](./evidence-story-03.md) |
 | WLA-36-04 | Panels and detail surfaces | done | [story-04-panels-and-detail-surfaces](./story-04-panels-and-detail-surfaces.md) | [evidence-story-04](./evidence-story-04.md) |
-| WLA-36-05 | Alignment sweep and visual exam | backlog | [story-05-alignment-sweep-and-visual-exam](./story-05-alignment-sweep-and-visual-exam.md) | - |
+| WLA-36-05 | Alignment sweep and visual exam | done | [story-05-alignment-sweep-and-visual-exam](./story-05-alignment-sweep-and-visual-exam.md) | [evidence-story-05](./evidence-story-05.md) |
 
 ## Where we are
 
-WLA-36-04 done (2026-08-02): every panel joined the system at the component level — shared header grid, aligned fact rows, semantic soft-wash pills, designed authority badges, code inside designed frames, quiet empty/refusal states. Stories 01-03 landed tokens, shell, and the flagship board. Next and last: WLA-36-05 (measured alignment sweep, mechanical guards, README screenshots, phase close).
+PHASE CLOSED (2026-08-02). All five stories done; see final-summary.md. The workbench wears operator-oss's mission-control skin with Linear-grade discipline, enforced by a stylesheet fitness guard and mechanical alignment assertions; core 727/727, 352-render exam green in both themes, README screenshots regenerated.
 
 ## Active risks
 

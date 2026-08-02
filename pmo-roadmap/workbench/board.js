@@ -151,7 +151,7 @@ function flatColumnHtml(slug, id, label, items, orthoMap, opts) {
     : id === FLAT_DONE ? "No completed stories yet" : "No stories waiting";
   return `
     <div class="bcol flat-col flat-col-${esc(id)}${count === 0 ? " bcol-empty flat-col-empty" : ""}${activeClass}" data-flat-col="${esc(id)}" data-droppable="${droppable}">
-      <div class="bcol-head"><span class="bcol-label ops-label">${esc(label)}</span><span class="bcol-count">${count}</span></div>
+      <div class="bcol-head"><span class="bcol-label ops-label">${esc(label)}</span><span class="bcol-count ops-label">${count}</span></div>
       ${cardsHtml}
       ${count === 0 ? `<p class="bcol-empty-copy">${esc(emptyLabel)}</p>` : ""}
     </div>`;
@@ -181,7 +181,7 @@ function boardLane(slug, columns, lane, orthoMap) {
     const count = lane.columns[col].length;
     return `
     <div class="bcol${count === 0 ? " bcol-empty" : ""}" data-col="${esc(col)}" data-phase="${lane.number}" data-droppable="${droppable ? 1 : 0}">
-      <div class="bcol-head"><span class="bcol-label ops-label">${esc(col.replaceAll("-", " "))}</span><span class="bcol-count">${count}</span></div>
+      <div class="bcol-head"><span class="bcol-label ops-label">${esc(col.replaceAll("-", " "))}</span><span class="bcol-count ops-label">${count}</span></div>
       ${lane.columns[col].map((card) => boardCard(slug, lane, card, orthoMap[card.story_id])).join("")}
       ${count === 0 ? '<p class="bcol-empty-copy">No stories here</p>' : ""}
     </div>`;
@@ -742,7 +742,7 @@ function boardOverviewStrip(slug, setup, status, step, presentation, notice, fla
         ${statsLine ? `<span class="board-stats-line">${esc(statsLine)}</span>` : ""}
       </div>
       <div class="board-overview-status-line">
-        <span class="board-readiness-pill ${needsAttention ? "attention" : "ready"}" role="status">${esc(needsAttention ? "Needs attention" : "Ready")}</span>
+        <span class="board-readiness-pill ops-label ${needsAttention ? "attention" : "ready"}" role="status">${esc(needsAttention ? "Needs attention" : "Ready")}</span>
         ${statusSentence ? `<span class="board-status-sentence">${esc(statusSentence)}</span>` : ""}
       </div>
     </div>

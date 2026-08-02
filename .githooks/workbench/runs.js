@@ -234,7 +234,7 @@ function runEmptyHtml() {
   if (consentSnapshot?.startsWith("run-") && orchState.runPlan) {
     return `<div class="run-empty consent-snapshot-only">${grantPreviewHtml(orchState.runPlan)}</div>`;
   }
-  return `<div class="run-empty"><section><span class="orch-eyebrow">permission before work</span><h2>No bounded run is active</h2><p>Review who may do the selected work and how long permission lasts. The delivery plan fixes allowed work and spend ceilings, so this panel cannot raise or replace them.</p>${badge("preview starts nothing", "ok")} ${badge("approval creates permission only", "warn")}</section>
+  return `<div class="run-empty"><section><span class="orch-eyebrow ops-label">permission before work</span><h2>No bounded run is active</h2><p>Review who may do the selected work and how long permission lasts. The delivery plan fixes allowed work and spend ceilings, so this panel cannot raise or replace them.</p>${badge("preview starts nothing", "ok")} ${badge("approval creates permission only", "warn")}</section>
     <form id="run-grant-form" class="run-grant-form"><label>project slug<input name="project" required value="${esc(draft.project || orchState.score.project || "")}"></label><label>in-progress story id<input name="story" required value="${esc(draft.story)}" placeholder="WLA-24-07"></label><label>accountable operator<input name="operator" required value="${esc(draft.operator)}" placeholder="person responsible for this permission"></label><label>permission lifetime, up to 60 minutes<input name="minutes" type="number" min="1" max="60" value="${esc(Math.min(60, Number(draft.minutes) || 60))}"></label><button type="submit">Preview permission</button></form>${grantPreviewHtml(orchState.runPlan)}</div>`;
 }
 
@@ -469,7 +469,7 @@ function liveProgressShell(
     <section class="live-recovery state-${esc(progress.recovery?.status)}"><div><span>Recovery truth</span><strong>${esc(progress.recovery?.status === "recovering" ? "Reconciliation in progress" : "Saved history verified")}</strong></div><p>${esc(progress.recovery?.summary || "")}</p><small>${esc(progress.recovery?.duplicate_protection || "")}</small></section>`;
   const technical = `<details class="live-technical"${technicalOpen || LIVE_TECHNICAL_OPEN ? " open" : ""}><summary>Technical details</summary><p class="live-technical-intro">Exact identities, ordered history, hashes, controls, and provenance remain available here.</p>${technicalHtml}</details>`;
   return `<div class="live-delivery" data-live-context="${esc(progress.context)}">
-    <header class="live-header"><div><span class="orch-eyebrow">Live delivery</span><${heading}>${esc(progress.title)} ${liveStateBadge(progress)}</${heading}><p>${esc(progress.subtitle)}</p></div>${toolbar}</header>
+    <header class="live-header"><div><span class="orch-eyebrow ops-label">Live delivery</span><${heading}>${esc(progress.title)} ${liveStateBadge(progress)}</${heading}><p>${esc(progress.subtitle)}</p></div>${toolbar}</header>
     ${liveConnectionHtml(connection, progress.recovery)}
     ${LIVE_TECHNICAL_OPEN ? `${technical}${ordinary}` : `${ordinary}${technical}`}
   </div>`;
@@ -910,7 +910,7 @@ function programInventoryHtml() {
     return `<div class="program-inventory"><section class="program-start consent-snapshot-only">${programState.error && !programState.plan ? `<p class="guard consent-start-error" role="alert">${esc(programState.error)}</p>` : programConsentHtml(programState.plan)}</section></div>`;
   }
   return `<div class="program-inventory" data-healthy="${inventory.healthy ? "true" : "false"}">
-    <header class="program-room-toolbar"><div><span class="orch-eyebrow">delivery options · review first</span><h1>Optional multi-phase delivery</h1><p>Review saved delivery plans and live progress. Opening this view starts no work and changes no saved delivery state.</p></div>${badge(inventory.healthy ? "ready" : "needs attention", inventory.healthy ? "ok" : "issue")}</header>
+    <header class="program-room-toolbar"><div><span class="orch-eyebrow ops-label">delivery options · review first</span><h1>Optional multi-phase delivery</h1><p>Review saved delivery plans and live progress. Opening this view starts no work and changes no saved delivery state.</p></div>${badge(inventory.healthy ? "ready" : "needs attention", inventory.healthy ? "ok" : "issue")}</header>
     <section class="program-room-grid" aria-label="delivery plans">${programs.map((item) => `<article class="program-card"><div><span>delivery plan</span>${item.valid ? badge("ready to review", "ok") : badge("needs repair", "issue")}</div><h2>${esc(item.title || item.slug || item.name)}</h2><p>${item.valid ? "This plan can be reviewed for a separate start." : "Resolve the listed plan issue before starting a delivery."}</p><details><summary>Technical details</summary><code>${esc(item.path)}</code><p>${item.valid ? `Exact fingerprint: <code>${esc(item.semantic_hash)}</code>` : esc((item.diagnostics || []).map((d) => d.message).join("; "))}</p></details></article>`).join("") || '<article class="program-empty"><h2>No optional delivery plan</h2><p>Ordinary roadmap work remains available. Nothing is running or waiting here.</p></article>'}</section>
     ${programs.length ? programStartHtml(programs) : ""}
     <section class="program-panel"><div class="program-panel-head"><div><span>live delivery</span><strong>${runs.length} saved deliver${runs.length === 1 ? "y" : "ies"}</strong></div>${badge("read only", "ok")}</div>
@@ -983,7 +983,7 @@ function programConsentHtml(plan) {
 
 function programStartHtml(programs) {
   const request = programState.planRequest || {};
-  return `<section class="program-start"><div><span class="orch-eyebrow">permission before delivery</span><h2>Review optional delivery permission</h2><p>Choose a plan, name the accountable operator, and state the reason. The first preview loads the planned envelope. You can then reduce it before one approval.</p></div>
+  return `<section class="program-start"><div><span class="orch-eyebrow ops-label">permission before delivery</span><h2>Review optional delivery permission</h2><p>Choose a plan, name the accountable operator, and state the reason. The first preview loads the planned envelope. You can then reduce it before one approval.</p></div>
     <form id="program-plan-form" class="program-plan-form">
       <label>delivery plan<select name="program">${programs.filter((item) => item.valid).map((item) => `<option value="${esc(item.name)}"${request.program === item.name ? " selected" : ""}>${esc(item.title || item.slug || item.name)}</option>`).join("")}</select></label>
       <label>accountable operator ID<input name="operator" required maxlength="200" value="${esc(request.operator?.id || request.operator || "")}" placeholder="accountable-id"></label>
@@ -1644,7 +1644,7 @@ function liveMissionInventoryHtml() {
     ["finished", "Finished or permanently stopped", "Complete work is done. Revoked and cancelled permission cannot resume."],
   ];
   return `<section class="live-mission" aria-labelledby="live-mission-title">
-    <header class="live-mission-head"><div><span class="orch-eyebrow">Mission control</span><h1 id="live-mission-title">Live work</h1><p>One glance shows what is running, what happens next, and where you need to act. Opening this view starts no work.</p></div><button type="button" id="live-mission-refresh">Refresh all saved history</button></header>
+    <header class="live-mission-head"><div><span class="orch-eyebrow ops-label">Mission control</span><h1 id="live-mission-title">Live work</h1><p>One glance shows what is running, what happens next, and where you need to act. Opening this view starts no work.</p></div><button type="button" id="live-mission-refresh">Refresh all saved history</button></header>
     ${liveMissionState.connection.status === "stale" ? liveConnectionHtml(liveMissionState.connection, {}) : ""}
     <section class="live-mission-summary" aria-label="Live work summary"><article><strong>${esc(items.length)}</strong><span>saved runs and programs</span></article><article><strong>${esc(items.filter((item) => item.group === "attention").length)}</strong><span>need attention</span></article><article><strong>${esc(items.filter((item) => item.group === "moving").length)}</strong><span>moving or ready</span></article></section>
     ${liveMissionState.error ? boundedErrorHtml(liveMissionState.error) : ""}

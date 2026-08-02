@@ -106,6 +106,7 @@
     pill.appendChild(label);
 
     var badge = document.createElement("dw-badge");
+    badge.className = "ops-label";
     badge.setAttribute("variant", "needs-you");
     badge.setAttribute("count", "0");
     pill.appendChild(badge);
@@ -301,7 +302,7 @@
               '<span class="needs-you-item-meta"><span class="needs-you-item-kind">' + meta + "</span></span>" +
             "</span>" +
             (timeAgo
-              ? '<time class="needs-you-item-ago" datetime="' + esc(item.timestamp || "") + '">' + esc(timeAgo) + "</time>"
+              ? '<time class="needs-you-item-ago ops-label" datetime="' + esc(item.timestamp || "") + '">' + esc(timeAgo) + "</time>"
               : "") +
           "</a>" + memoryAction +
         "</div>"

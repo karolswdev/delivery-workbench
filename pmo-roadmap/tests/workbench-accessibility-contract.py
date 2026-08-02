@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,34 @@ REQUIRED_JOURNEY_FIELDS = {
     "manual_review",
 }
 REQUIRED_MANUAL_FIELDS = {"wide", "narrow", "assistive", "result"}
+
+# The operator grid is 8px with the documented 4px half-step. Zero and every
+# positive n * 4px value are allowed; 1-3px values belong to borders/radii, not
+# margin, padding, or gap. The fitness sweep starts at the redesigned-board
+# marker so the modern system cannot add to the explicitly grandfathered
+# pre-WLA-36 layout declarations above it.
+FITNESS_START = "/* === Redesigned board === */"
+SPACING_HALF_STEP_PX = 4.0
+SPACING_PROPERTIES = re.compile(
+    r"(?:margin|padding|gap|row-gap|column-gap)"
+    r"(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?"
+)
+COLOR_LITERAL = re.compile(r"#[0-9a-fA-F]{3,8}\b|rgba?\(")
+LENGTH_LITERAL = re.compile(r"(?<![-\w.])(\d*\.?\d+)(px|rem)\b")
+
+# Mono is opt-in only. Semantic code elements, the central .ops-label/code
+# family, and these reviewed technical frames are the documented exceptions.
+MONO_SELECTOR_MARKERS = (
+    "code", "pre", "kbd", "samp", ".mono", ".code", ".ops-label",
+    ".terminal-", ".services-log", "dw-stream-line", ".session-markdown",
+    ".context-markdown", ".context-editor", ".diff-", ".session-id",
+    ".context-rev-hash", ".outcomes-session-id", ".copyable-id",
+    ".telem-table", ".brief-argv", ".step-token", ".run-token",
+    ".orch-node .node-id", ".studio-hashes", ".orch-hashes",
+    ".needs-you-pill", ".needs-you-item-ago", ".board-readiness-pill",
+    ".bcol-count", ".memory-section-head", ".decision-authority-label",
+    ".session-decision-authority", ":where(th)",
+)
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -241,6 +270,8 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
         "audit_page",
         "assert_focus_preserved",
         "assert_dialog_round_trip",
+        "test_alignment_contract",
+        "needs-you count chip escaped the pill for 1, 12, or 99+",
         "wide",
         "narrow",
     ):
@@ -258,6 +289,58 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
     ):
         if marker not in documentation:
             issues.append(f"documentation-marker-missing:{marker}")
+    return issues
+
+
+def validate_stylesheet_fitness(css: str) -> list[str]:
+    """Enforce token colors, designated mono, and the modern 4px grid."""
+    issues: list[str] = []
+    token_end = css.find("* { box-sizing: border-box; }")
+    if token_end < 0:
+        return ["fitness-token-boundary-missing"]
+
+    offset = 0
+    for line_number, line in enumerate(css.splitlines(keepends=True), start=1):
+        for match in COLOR_LITERAL.finditer(line):
+            before = line[:match.start()].strip()
+            if offset >= token_end or not before.startswith("--"):
+                issues.append(f"fitness-color-literal:{line_number}:{match.group(0)}")
+        offset += len(line)
+
+    for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+        selector = " ".join(match.group(1).split())
+        body = match.group(2)
+        if re.search(r"font(?:-family)?\s*:[^;{}]*var\(--font-mono\)", body):
+            if not any(marker in selector for marker in MONO_SELECTOR_MARKERS):
+                issues.append(f"fitness-mono-undesignated:{selector}")
+
+    for line_number, line in enumerate(css.splitlines(), start=1):
+        if not line.strip().startswith("--space-"):
+            continue
+        for number, unit in LENGTH_LITERAL.findall(line):
+            pixels = float(number) * (16 if unit == "rem" else 1)
+            if abs(pixels / SPACING_HALF_STEP_PX - round(pixels / SPACING_HALF_STEP_PX)) > 1e-6:
+                issues.append(f"fitness-spacing-token:{line_number}:{number}{unit}")
+
+    modern_start = css.find(FITNESS_START)
+    if modern_start < 0:
+        issues.append("fitness-modern-boundary-missing")
+        return issues
+    modern = re.sub(r"/\*.*?\*/", "", css[modern_start:], flags=re.DOTALL)
+    for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", modern):
+        selector = " ".join(match.group(1).split())
+        for declaration in match.group(2).split(";"):
+            if ":" not in declaration:
+                continue
+            prop, value = (part.strip() for part in declaration.split(":", 1))
+            if not SPACING_PROPERTIES.fullmatch(prop):
+                continue
+            for number, unit in LENGTH_LITERAL.findall(value):
+                pixels = float(number) * (16 if unit == "rem" else 1)
+                if abs(pixels / SPACING_HALF_STEP_PX - round(pixels / SPACING_HALF_STEP_PX)) > 1e-6:
+                    issues.append(
+                        f"fitness-spacing-literal:{selector}:{prop}:{number}{unit}"
+                    )
     return issues
 
 
@@ -483,6 +566,20 @@ def validate_board_cards() -> list[str]:
     return [f"{name}-missing" for name, passed in checks.items() if not passed]
 
 
+def stylesheet_red_cases(css: str) -> list[str]:
+    """Prove each fitness guard rejects a representative regression."""
+    failures: list[str] = []
+    mutants = (
+        ("color", css + "\n.fitness-red { color: #fff; }\n", "fitness-color-literal:"),
+        ("mono", css + "\n.fitness-red { font-family: var(--font-mono); }\n", "fitness-mono-undesignated:"),
+        ("spacing", css + "\n.fitness-red { padding: 5px; }\n", "fitness-spacing-literal:"),
+    )
+    for name, mutant, expected in mutants:
+        if not any(item.startswith(expected) for item in validate_stylesheet_fitness(mutant)):
+            failures.append(f"planted {name} fitness regression was accepted")
+    return failures
+
+
 def planted_red_cases(
     manifest: dict[str, Any],
     journey_contract: dict[str, Any],
@@ -532,13 +629,18 @@ def main() -> int:
     }
     issues = validate(manifest, journey_contract, states_contract)
     issues.extend(validate_sources(expected_ids))
+    css = CSS_PATH.read_text(encoding="utf-8")
+    issues.extend(validate_stylesheet_fitness(css))
     issues.extend(validate_memory_panel())
     issues.extend(validate_slick_workbench())
     issues.extend(validate_panel_system())
     issues.extend(validate_board_cards())
     issues.extend(
         f"red-case-failed:{item}"
-        for item in planted_red_cases(manifest, journey_contract, states_contract)
+        for item in (
+            stylesheet_red_cases(css)
+            + planted_red_cases(manifest, journey_contract, states_contract)
+        )
     )
     if issues:
         for item in issues:
@@ -546,9 +648,9 @@ def main() -> int:
         return 1
     print(
         "workbench-accessibility-contract.py: ok "
-        f"({len(expected_ids)} journeys, 2 viewports, 45 memory-pane checks, "
-        "20 slick-workbench checks, 8 panel-system checks, 10 board-card checks, "
-        "keyboard/focus/semantics/manual evidence)"
+        f"({len(expected_ids)} journeys, 2 viewports, stylesheet fitness, "
+        "45 memory-pane checks, 20 slick-workbench checks, 8 panel-system checks, "
+        "10 board-card checks, keyboard/focus/semantics/manual evidence)"
     )
     return 0
 

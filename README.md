@@ -112,7 +112,7 @@ A multi-panel workspace for managing delivery — inspired by
 [Operator](https://github.com/iishyfishyy/operator-oss), built on
 DW's evidence-first model.
 
-![The board: a four-column work dashboard with story cards carrying execution dots and attention badges](./assets/workbench-board.png)
+![Dark workbench board with four story lanes, one item needing input, and one completed story](./assets/workbench-board.png)
 
 - **Kanban board** as the home view — drag stories, create inline,
   park with a reason
@@ -174,7 +174,7 @@ Every bounded run and autonomous program is memory-driven:
   work, widen a grant, satisfy evidence, or alter a verdict — the
   test suite proves it at every seam.
 
-![Memory pane: the recall an agent received before acting, each card with its match reasons and provenance](./assets/workbench-memory.png)
+![Dark memory pane showing recalled facts, match reasons, source details, and decision use](./assets/workbench-memory.png)
 
 Inspect it anywhere:
 
