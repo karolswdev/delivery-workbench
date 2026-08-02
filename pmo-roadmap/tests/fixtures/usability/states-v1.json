@@ -12,7 +12,7 @@
       "title": "Healthy ordinary roadmap work",
       "capability_tier": "vanilla",
       "route": "#/",
-      "capture_id": "overview",
+      "capture_id": "board-home",
       "canonical_models": [
         "delivery-workbench-delivery-setup",
         "delivery-workbench-status",

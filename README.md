@@ -231,6 +231,7 @@ The full trail is in
 - [Architecture](./docs/architecture.md) — how it works, with the test that proves each claim
 - [Repository knowledge](./docs/repository-knowledge.md) — the memory layer's contract
 - [Product language](./docs/product-language.md) — the words the product uses, pinned
+- [Usability journeys](./docs/usability-journeys.md) — the thirteen canonical journeys the exams drive
 - [MCP surface](./docs/mcp.md) — tool schemas and design
 - [The contract rules](./pmo-roadmap/templates/PMO-CONTRACT.md)
 - [Contributing](./CONTRIBUTING.md) and [changelog](./CHANGELOG.md)

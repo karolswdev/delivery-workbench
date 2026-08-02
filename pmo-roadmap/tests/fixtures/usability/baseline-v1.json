@@ -15,7 +15,7 @@
   "journeys": [
     {
       "journey_id": "healthy-first-arrival",
-      "starting_capture": "overview",
+      "starting_capture": "board-home",
       "technical_capture": "step-confirm",
       "steps": [
         "Open the overview.",

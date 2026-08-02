@@ -336,8 +336,12 @@ try:
     # command input; its mutation body is project+token only.
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=10) as response:
         shell = response.read().decode("utf-8")
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}/app.js", timeout=10) as response:
-        app_js = response.read().decode("utf-8")
+    app_js = ""
+    for module in ("app.js", "core.js"):
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/{module}", timeout=10
+        ) as response:
+            app_js += response.read().decode("utf-8")
     assert 'id="app"' in shell
     for token in ("step-review", "step-apply", 'postJson("/api/step/apply"',
                   "project: step.project", "expect: step.token", "nothing started"):
