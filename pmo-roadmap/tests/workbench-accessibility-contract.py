@@ -310,8 +310,8 @@ def validate_memory_panel() -> list[str]:
         "memory-theme-tokens": all(
             marker in css
             for marker in (
-                ".memory-panel", "var(--color-surface)",
-                "var(--color-text)", "var(--color-border)",
+                ".memory-panel", "var(--surface-panel)",
+                "var(--text-primary)", "var(--border-standard)",
             )
         ),
     }

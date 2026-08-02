@@ -147,6 +147,12 @@ git -C "$FIXTURE" config user.email "package-smoke@example.test"
 [ -f "$FIXTURE/.githooks/workbench/index.html" ] || fail "wheel omitted the Workbench shell"
 [ -f "$FIXTURE/.githooks/workbench/app.js" ] || fail "wheel omitted the Workbench application"
 [ -f "$FIXTURE/.githooks/workbench/style.css" ] || fail "wheel omitted the Workbench styles"
+[ -f "$FIXTURE/.githooks/workbench/fonts/space-grotesk-latin.woff2" ] \
+  || fail "wheel omitted the Space Grotesk UI font"
+[ -f "$FIXTURE/.githooks/workbench/fonts/jetbrains-mono-latin.woff2" ] \
+  || fail "wheel omitted the JetBrains Mono technical font"
+[ -f "$FIXTURE/.githooks/workbench/fonts/OFL-NOTICE.txt" ] \
+  || fail "wheel omitted the vendored font license notice"
 grep -q 'id="skip-link"' "$FIXTURE/.githooks/workbench/index.html" \
   || fail "packaged Workbench omitted its keyboard skip control"
 grep -q 'wireDismissibleRegion' "$FIXTURE/.githooks/workbench/core.js" \

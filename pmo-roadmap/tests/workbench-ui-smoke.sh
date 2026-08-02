@@ -134,10 +134,24 @@ for token in (".board-overview-strip", ".board-action-panel", ".board-preview",
               ".bcard-status", "@media (max-width: 700px)"):
     assert token in css, token
 assert "overflow-wrap: anywhere" in css
-for token in ("--font-sans", "--text-md", "--space-4", "--color-canvas",
-              "--color-positive", "--radius-md", "--elevation-card"):
+for token in ("--font-sans", "--font-mono", "--weight-medium", "--type-body",
+              "--space-4", "--surface-canvas", "--surface-elevated",
+              "--surface-topbar", "--text-body", "--accent-interactive",
+              "--border-standard", "--status-needs-you", "--status-blocked",
+              "--status-done", "--status-live", "--radius-7", "--radius-18",
+              "--shadow-1", "--shadow-2", "--shadow-3"):
     assert token in css, token
-assert "@media (prefers-color-scheme: dark)" in css
+for literal in ("#080a0e", "#0c1119", "#0e141d", "#4d8cff", "#ff6a45",
+                "#f5a623", "#38d39f", "#f4f1ea", "#fffdf8"):
+    assert literal in css, literal
+for name in ("space-grotesk-latin.woff2", "jetbrains-mono-latin.woff2"):
+    font = workbench / "fonts" / name
+    assert font.is_file() and font.stat().st_size > 10_000, name
+assert (workbench / "fonts" / "OFL-NOTICE.txt").is_file()
+assert "@font-face" in css and "https://" not in css and "'cv01'" not in css
+assert "color-scheme: dark" in css
+assert '@media (prefers-color-scheme: light)' in css
+assert ':root[data-theme="light"]' in css and ':root[data-theme="dark"]' in css
 assert ".step-confirmation" in css and ".brief-step-unavailable" in css
 assert "@media (max-width: 430px)" in css
 for token in ("Delivery readiness", "delivery decision", "Affected decision",
@@ -222,7 +236,7 @@ for forbidden in ("sessionStorage", "indexedDB", "EventSource", "setInterval", '
 for token in (".adoption-review", ".adoption-unresolved", ".adoption-configuration",
               ".adoption-path-split", ".adoption-correction-form", ".ideation-flow",
               ".ideation-steps", ".ideation-draft", ".ideation-preview-files",
-              "@media (prefers-color-scheme: dark)", "@media (max-width: 600px)"):
+              "@media (prefers-color-scheme: light)", "@media (max-width: 600px)"):
     assert token in css, token
 for token in (".delivery-choice-grid", ".delivery-effect-grid",
               "scroll-snap-type: x mandatory", ".delivery-review-actions button:focus"):
@@ -571,6 +585,9 @@ until curl -sf "http://127.0.0.1:$PORT/api/projects" >/dev/null 2>&1; do
   i=$((i + 1)); [ "$i" -lt 40 ] || fail "server did not start"; sleep 0.25
 done
 BASE="http://127.0.0.1:$PORT"
+FONT_TYPE="$(curl -sfD - -o /dev/null "$BASE/fonts/space-grotesk-latin.woff2" \
+  | tr -d '\r' | grep -i '^Content-Type:' | cut -d' ' -f2-)"
+[ "$FONT_TYPE" = "font/woff2" ] || fail "vendored fonts are not served as font/woff2"
 
 shot() { # name geometry url
   if [ "$FAST_A11Y" = "1" ]; then

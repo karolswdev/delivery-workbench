@@ -293,8 +293,8 @@ class SetupReviewTest(unittest.TestCase):
         self.assertIn("captureAppFocus", app_source)
         css = (PMO_ROOT / "workbench" / "style.css").read_text(encoding="utf-8")
         self.assertIn("@media (max-width: 600px)", css)
-        self.assertIn("color-scheme: light", css)
-        self.assertIn("@media (prefers-color-scheme: dark)", css)
+        self.assertIn("color-scheme: dark", css)
+        self.assertIn("@media (prefers-color-scheme: light)", css)
 
 
 if __name__ == "__main__":

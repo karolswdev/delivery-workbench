@@ -173,7 +173,7 @@ cp "$SOURCE_DIR/bin/dw-workbench" "$TARGET/.githooks/dw-workbench"
 chmod +x "$TARGET/.githooks/dw-workbench"
 rm -rf "$TARGET/.githooks/workbench"
 mkdir -p "$TARGET/.githooks/workbench"
-cp "$SOURCE_DIR/workbench/"* "$TARGET/.githooks/workbench/"
+cp -R "$SOURCE_DIR/workbench/." "$TARGET/.githooks/workbench/"
 echo "  ✓ .githooks/dw-workbench + workbench UI updated"
 
 cp "$SOURCE_DIR/bin/work-log-read" "$TARGET/.githooks/work-log-read"

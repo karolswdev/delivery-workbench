@@ -22,7 +22,7 @@ Replace the scaffold-grade visual layer with a Linear-grade design language, ado
 
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
-| WLA-36-01 | Design tokens and type | backlog | [story-01-design-tokens-and-type](./story-01-design-tokens-and-type.md) | - |
+| WLA-36-01 | Design tokens and type | done | [story-01-design-tokens-and-type](./story-01-design-tokens-and-type.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-36-02 | Shell and navigation | backlog | [story-02-shell-and-navigation](./story-02-shell-and-navigation.md) | - |
 | WLA-36-03 | Board and cards | backlog | [story-03-board-and-cards](./story-03-board-and-cards.md) | - |
 | WLA-36-04 | Panels and detail surfaces | backlog | [story-04-panels-and-detail-surfaces](./story-04-panels-and-detail-surfaces.md) | - |
@@ -30,7 +30,7 @@ Replace the scaffold-grade visual layer with a Linear-grade design language, ado
 
 ## Where we are
 
-Phase opened 2026-08-02 on the owner's direct verdict: the UI layer is scaffold-grade (mono-everything, no grid, badge zoo, dashed empty states) and must be rebuilt to the standard of the designated reference. Stories planned; implementation not started.
+WLA-36-01 done (2026-08-02): the foundation is the operator-oss mission-control skin (126 role-named tokens, semantic signal roles with glows, warm-paper light theme, vendored OFL fonts served locally) with Linear's discipline (type scale, 400/500/700 weights, 8px grid, mono-for-code-only). Dark is the native default; the theme pins flipped deliberately. Full battery green including the packaged wheel carrying the fonts. Next: WLA-36-02 (shell and navigation).
 
 ## Active risks
 
@@ -42,6 +42,7 @@ Phase opened 2026-08-02 on the owner's direct verdict: the UI layer is scaffold-
 
 - 2026-08-02 - Phase scaffolded with `dw phase create` - keeps roadmap structure consistent - CLI.
 - 2026-08-02 - Design reference is Linear, adopted token-for-token from the owner-designated catalog (`popular-web-designs`); dev-dashboard guidance in the catalog concurs - owner directive.
+- 2026-08-02 - COURSE CORRECTION (owner: "are we being inspired by operator-oss? I hope so"): the PRIMARY visual reference is operator-oss's own mission-control skin (its `app/globals.css`, snapshot in the story-01 evidence): cool near-black `#080a0e` canvas, blue-tinted hairlines, electric-blue `#4d8cff` accent, coral needs-you, green done, soft washes and glows, Space Grotesk + JetBrains Mono, warm-paper light theme `#f4f1ea`. Linear's reference remains the DISCIPLINE bar (type scale rigor, 8px grid, alignment). Fonts are VENDORED (OFL, local files served by dw-workbench) — still no runtime fetching - owner directive.
 - 2026-08-02 - Dark becomes the native default theme (Linear is dark-native; the owner's taste on record); light remains first-class as the prefers-color-scheme override; the two pinned color-scheme core tests flip DELIBERATELY in WLA-36-01 - design.
 - 2026-08-02 - No runtime font fetching: Inter via local-font stack with system fallbacks; the workbench stays offline and dependency-free - constraint.
 

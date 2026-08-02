@@ -976,7 +976,7 @@ class WorkbenchExam:
             const width = parseFloat(style.outlineWidth || '0');
             const ring = focused && ((style.outlineStyle !== 'none' && width >= 2)
               || (style.boxShadow && style.boxShadow !== 'none'));
-            const detail = `${id}:${active.tagName.toLowerCase()}:${active.textContent.trim().slice(0, 60)}:focus=${active.matches(':focus')}:focus-visible=${active.matches(':focus-visible')}:restored=${active.classList.contains('focus-restored')}:token=${style.getPropertyValue('--color-focus').trim() || 'unset'}:app=${Boolean(active.closest('.app'))}:inline=${active.getAttribute('style') || 'none'}:outline=${style.outlineStyle}/${style.outlineWidth}:shadow=${style.boxShadow}`;
+            const detail = `${id}:${active.tagName.toLowerCase()}:${active.textContent.trim().slice(0, 60)}:focus=${active.matches(':focus')}:focus-visible=${active.matches(':focus-visible')}:restored=${active.classList.contains('focus-restored')}:token=${style.getPropertyValue('--focus-ring-color').trim() || 'unset'}:app=${Boolean(active.closest('.app'))}:inline=${active.getAttribute('style') || 'none'}:outline=${style.outlineStyle}/${style.outlineWidth}:shadow=${style.boxShadow}`;
             return {generation: window.__examFocusGeneration, id, current: true,
               focused, visible: Boolean(ring), detail};
             """
