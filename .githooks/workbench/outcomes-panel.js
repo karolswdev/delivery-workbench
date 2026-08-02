@@ -89,6 +89,7 @@ window.DW = window.DW || {};
     if (!this._container) {
       var panel = document.createElement("dw-panel");
       panel.setAttribute("title", "Session Outcomes");
+      panel.setAttribute("meta", "Artifacts, evidence, checks, and transitions");
       panel.setAttribute("collapsible", "");
       panel.classList.add("outcomes-panel");
 

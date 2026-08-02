@@ -31,6 +31,8 @@ INTERACTIONS_PATH = ROOT / "pmo-roadmap" / "workbench" / "interactions.js"
 GLOBAL_EVENTS_PATH = ROOT / "pmo-roadmap" / "workbench" / "global-events.js"
 EDITOR_PATH = ROOT / "pmo-roadmap" / "workbench" / "editor.js"
 BOARD_PATH = ROOT / "pmo-roadmap" / "workbench" / "board.js"
+COMPONENTS_PATH = ROOT / "pmo-roadmap" / "workbench" / "components.js"
+TERMINAL_PATH = ROOT / "pmo-roadmap" / "workbench" / "terminal-panel.js"
 DOC_PATH = ROOT / "docs" / "accessibility.md"
 
 REQUIRED_JOURNEY_FIELDS = {
@@ -375,6 +377,60 @@ def validate_slick_workbench() -> list[str]:
     return [f"{name}-missing" for name, passed in checks.items() if not passed]
 
 
+def validate_panel_system() -> list[str]:
+    """Pin the shared WLA-36-04 panel and semantic status system."""
+    css = CSS_PATH.read_text(encoding="utf-8")
+    components = COMPONENTS_PATH.read_text(encoding="utf-8")
+    terminal = TERMINAL_PATH.read_text(encoding="utf-8")
+    memory = MEMORY_PATH.read_text(encoding="utf-8")
+    checks = {
+        "panel-header-meta": (
+            "dw-panel-heading" in components
+            and "dw-panel-meta" in components
+            and 'panel.setAttribute("meta"' in memory
+            and "grid-template-columns: minmax(0, 1fr) auto auto" in css
+        ),
+        "panel-ghost-toolbar": (
+            "dw-panel .dw-panel-toolbar" in css
+            and "border-color: transparent" in css
+        ),
+        "panel-deterministic-skeleton": (
+            "Math.random" not in components
+            and "const widths = [92, 84, 96, 88]" in components
+        ),
+        "panel-soft-status-pills": (
+            "dw-status-pill" in css
+            and "border: 0" in css
+            and "var(--status-done-soft)" in css
+            and "var(--status-live-soft)" in css
+            and "var(--status-blocked-soft)" in css
+        ),
+        "panel-authority-badges": all(
+            marker in css for marker in (
+                ".basis-mechanical .decision-authority-label",
+                ".basis-agent-reported .decision-authority-label",
+                ".basis-panel-derived .decision-authority-label",
+                ".basis-operator-supplied .decision-authority-label",
+            )
+        ),
+        "panel-memory-reason-chips": (
+            ".memory-card-facts li" in css
+            and "border-radius: var(--radius-pill)" in css
+        ),
+        "panel-code-frame-label": (
+            'className = "terminal-frame-header ops-label"' in terminal
+            and "background: var(--surface-code)" in css
+        ),
+        "panel-diff-washes": (
+            ".diff .add" in css
+            and "var(--diff-add-bg)" in css
+            and ".diff .del" in css
+            and "var(--diff-delete-bg)" in css
+        ),
+    }
+    return [f"{name}-missing" for name, passed in checks.items() if not passed]
+
+
 def validate_board_cards() -> list[str]:
     """Pin the board's single-target card anatomy and quiet state system."""
     board = BOARD_PATH.read_text(encoding="utf-8")
@@ -478,6 +534,7 @@ def main() -> int:
     issues.extend(validate_sources(expected_ids))
     issues.extend(validate_memory_panel())
     issues.extend(validate_slick_workbench())
+    issues.extend(validate_panel_system())
     issues.extend(validate_board_cards())
     issues.extend(
         f"red-case-failed:{item}"
@@ -490,7 +547,7 @@ def main() -> int:
     print(
         "workbench-accessibility-contract.py: ok "
         f"({len(expected_ids)} journeys, 2 viewports, 45 memory-pane checks, "
-        "20 slick-workbench checks, 10 board-card checks, "
+        "20 slick-workbench checks, 8 panel-system checks, 10 board-card checks, "
         "keyboard/focus/semantics/manual evidence)"
     )
     return 0

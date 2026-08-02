@@ -68,6 +68,7 @@ window.DW = window.DW || {};
     if (!this._container) {
       var panel = document.createElement("dw-panel");
       panel.setAttribute("title", "Services");
+      panel.setAttribute("meta", "Tracked local processes");
       panel.setAttribute("collapsible", "");
       panel.classList.add("services-panel");
 

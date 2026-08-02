@@ -25,12 +25,12 @@ Replace the scaffold-grade visual layer with a Linear-grade design language, ado
 | WLA-36-01 | Design tokens and type | done | [story-01-design-tokens-and-type](./story-01-design-tokens-and-type.md) | [evidence-story-01](./evidence-story-01.md) |
 | WLA-36-02 | Shell and navigation | done | [story-02-shell-and-navigation](./story-02-shell-and-navigation.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-36-03 | Board and cards | done | [story-03-board-and-cards](./story-03-board-and-cards.md) | [evidence-story-03](./evidence-story-03.md) |
-| WLA-36-04 | Panels and detail surfaces | backlog | [story-04-panels-and-detail-surfaces](./story-04-panels-and-detail-surfaces.md) | - |
+| WLA-36-04 | Panels and detail surfaces | done | [story-04-panels-and-detail-surfaces](./story-04-panels-and-detail-surfaces.md) | [evidence-story-04](./evidence-story-04.md) |
 | WLA-36-05 | Alignment sweep and visual exam | backlog | [story-05-alignment-sweep-and-visual-exam](./story-05-alignment-sweep-and-visual-exam.md) | - |
 
 ## Where we are
 
-WLA-36-03 done (2026-08-02): the board is the flagship — one card anatomy with semantic rails, the badge zoo gone (pinned by tests), soft-wash needs-you column with a glowing count, quiet overline headers, accent-blue primaries, clean header band with the 'Ready. ready' duplication fixed at its source. Stories 01-02 landed tokens and the shell. Next: WLA-36-04 (panels and detail surfaces).
+WLA-36-04 done (2026-08-02): every panel joined the system at the component level — shared header grid, aligned fact rows, semantic soft-wash pills, designed authority badges, code inside designed frames, quiet empty/refusal states. Stories 01-03 landed tokens, shell, and the flagship board. Next and last: WLA-36-05 (measured alignment sweep, mechanical guards, README screenshots, phase close).
 
 ## Active risks
 

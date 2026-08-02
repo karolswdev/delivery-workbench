@@ -114,7 +114,7 @@ customElements.define('dw-card', DwCard);
 /* ------------------------------------------------------------------ */
 class DwPanel extends HTMLElement {
   static get observedAttributes() {
-    return ['title', 'collapsible', 'collapsed', 'resizable', 'min-width', 'max-width'];
+    return ['title', 'meta', 'collapsible', 'collapsed', 'resizable', 'min-width', 'max-width'];
   }
 
   connectedCallback() {
@@ -139,6 +139,7 @@ class DwPanel extends HTMLElement {
     this._initialized = true;
 
     const title       = this.getAttribute('title') || '';
+    const meta        = this.getAttribute('meta') || '';
     const collapsible = this.hasAttribute('collapsible');
     const resizable   = this.hasAttribute('resizable');
     const minW        = this.getAttribute('min-width');
@@ -158,10 +159,29 @@ class DwPanel extends HTMLElement {
     const header = document.createElement('div');
     header.className = 'dw-panel-header';
 
+    const heading = document.createElement('div');
+    heading.className = 'dw-panel-heading';
+
     const titleEl = document.createElement('h3');
     titleEl.className = 'dw-panel-title';
     titleEl.textContent = title;
-    header.appendChild(titleEl);
+    heading.appendChild(titleEl);
+
+    if (meta) {
+      const metaEl = document.createElement('p');
+      metaEl.className = 'dw-panel-meta';
+      metaEl.textContent = meta;
+      heading.appendChild(metaEl);
+    }
+    header.appendChild(heading);
+
+    if (existingToolbar) {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'dw-panel-toolbar';
+      existingToolbar.removeAttribute('slot');
+      toolbar.appendChild(existingToolbar);
+      header.appendChild(toolbar);
+    }
 
     if (collapsible) {
       const toggle = document.createElement('button');
@@ -175,15 +195,6 @@ class DwPanel extends HTMLElement {
     }
 
     this.appendChild(header);
-
-    // Toolbar
-    if (existingToolbar) {
-      const toolbar = document.createElement('div');
-      toolbar.className = 'dw-panel-toolbar';
-      existingToolbar.removeAttribute('slot');
-      toolbar.appendChild(existingToolbar);
-      this.appendChild(toolbar);
-    }
 
     // Body
     const body = document.createElement('div');
@@ -418,9 +429,10 @@ class DwSkeleton extends HTMLElement {
       line.className = 'dw-skeleton-line';
       line.setAttribute('aria-hidden', 'true');
 
-      // Vary widths for text variant to look natural
+      // Fixed rhythm keeps loading captures deterministic while retaining variety.
       if (variant === 'text' && i < lines - 1) {
-        line.style.width = (85 + Math.floor(Math.random() * 15)) + '%';
+        const widths = [92, 84, 96, 88];
+        line.style.width = widths[i % widths.length] + '%';
       }
 
       this.appendChild(line);

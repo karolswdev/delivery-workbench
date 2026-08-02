@@ -218,6 +218,7 @@ window.DW = window.DW || {};
       const panel = document.createElement("dw-panel");
       panel.className = "memory-panel";
       panel.setAttribute("title", "Memory");
+      panel.setAttribute("meta", "Read-only advisory context");
       panel.setAttribute("role", "dialog");
       panel.setAttribute("aria-modal", "false");
       panel.setAttribute("aria-label", "Agent memory");

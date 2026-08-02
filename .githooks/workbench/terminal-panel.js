@@ -84,6 +84,7 @@ window.DW = window.DW || {};
     // Build the panel structure
     var panel = document.createElement("dw-panel");
     panel.setAttribute("title", "Terminal");
+    panel.setAttribute("meta", "Bounded command runner · dw and git only");
     panel.setAttribute("collapsible", "");
     panel.classList.add("terminal-panel");
 
@@ -91,6 +92,11 @@ window.DW = window.DW || {};
     wrapper.className = "terminal-wrapper";
 
     // Output area
+    var frameHeader = document.createElement("div");
+    frameHeader.className = "terminal-frame-header ops-label";
+    frameHeader.textContent = "Command output";
+    wrapper.appendChild(frameHeader);
+
     var output = document.createElement("pre");
     output.className = "terminal-output";
     output.setAttribute("aria-live", "polite");
