@@ -484,7 +484,7 @@ function openLiveTechnical() {
       ? "auto" : "smooth",
     block: "start",
   });
-  details.querySelector("summary")?.focus();
+  focusElement(details.querySelector("summary"));
 }
 
 async function handleBoundedRead(action, target) {
@@ -517,7 +517,7 @@ async function handleBoundedRead(action, target) {
     block: "start",
   });
   section?.querySelector("h3, h4")?.setAttribute("tabindex", "-1");
-  section?.querySelector("h3, h4")?.focus();
+  focusElement(section?.querySelector("h3, h4"));
 }
 
 function focusBoundedSnapshot() {
@@ -1662,7 +1662,7 @@ function focusLiveDetailSection(section) {
   if (!target) return;
   if (section === "notifications") target.closest(".live-technical")?.setAttribute("open", "");
   target.setAttribute("tabindex", "-1");
-  target.focus({ preventScroll: true });
+  focusElement(target);
   target.scrollIntoView({ block: "start" });
 }
 

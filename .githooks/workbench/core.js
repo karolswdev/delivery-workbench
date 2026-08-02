@@ -134,7 +134,7 @@ function wireProjectSelector(returnHash) {
       form.querySelectorAll("input[name='project']").forEach((input) => input.setAttribute("aria-invalid", "true"));
       const error = form.querySelector("#project-selector-error");
       if (error) error.hidden = false;
-      form.querySelector("input")?.focus();
+      focusElement(form.querySelector("input"));
       return;
     }
     rememberProject(String(choice));
@@ -187,7 +187,8 @@ function selectorEscape(value) {
 
 function focusPathSegment(element) {
   const classes = [...element.classList]
-    .filter((name) => !name.startsWith("is-") && !name.startsWith("state-"));
+    .filter((name) => name !== "focus-restored"
+      && !name.startsWith("is-") && !name.startsWith("state-"));
   return `${element.localName}${classes.map((name) => `.${selectorEscape(name)}`).join("")}`;
 }
 
@@ -237,11 +238,17 @@ function captureAppFocus() {
 
 function focusElement(element) {
   if (!(element instanceof Element)) return false;
-  const target = element.matches(FOCUSABLE_SELECTOR)
+  const target = element.matches(FOCUSABLE_SELECTOR) || element.hasAttribute("tabindex")
     ? element : element.querySelector(FOCUSABLE_SELECTOR);
   if (!target || typeof target.focus !== "function") return false;
-  target.focus({ preventScroll: true });
-  return document.activeElement === target || document.activeElement === element;
+  target.focus({ preventScroll: true, focusVisible: true });
+  const focused = document.activeElement === target || document.activeElement === element;
+  if (!focused) return false;
+  target.classList.add("focus-restored");
+  target.addEventListener("blur", () => {
+    target.classList.remove("focus-restored");
+  }, { once: true });
+  return true;
 }
 
 function restoreAppFocus(identity) {
@@ -279,14 +286,14 @@ function focusRegion(selector) {
   const region = document.querySelector(selector);
   if (!region) return;
   if (!region.hasAttribute("tabindex")) region.setAttribute("tabindex", "-1");
-  region.focus({ preventScroll: true });
+  focusElement(region);
   region.scrollIntoView({ block: "nearest" });
 }
 
 function focusConsentSnapshot(selector) {
   const region = document.querySelector(selector);
   if (!region) return;
-  region.focus({ preventScroll: true });
+  focusElement(region);
   region.scrollIntoView({ block: "start" });
 }
 
@@ -325,11 +332,11 @@ function wireTechnicalFolds(root = app) {
       if (event.key !== "Escape" || !details.open) return;
       event.preventDefault();
       details.open = false;
-      summary.focus({ preventScroll: true });
+      focusElement(summary);
     });
     details.addEventListener("toggle", () => {
       if (!details.open && details.contains(document.activeElement)) {
-        summary.focus({ preventScroll: true });
+        focusElement(summary);
       }
     });
   });
@@ -447,7 +454,7 @@ function wireTablist(selector) {
         : (index + (key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
     const nextSelector = focusSelector(tabs[nextIndex]);
     tabs[nextIndex].click();
-    document.querySelector(nextSelector)?.focus({ preventScroll: true });
+    focusElement(document.querySelector(nextSelector));
   });
 }
 
@@ -467,7 +474,7 @@ function wireArrowGroup(selector, itemSelector = "button:not([disabled])") {
     const nextIndex = event.key === "Home" ? 0
       : event.key === "End" ? items.length - 1
         : (index + (backwards ? -1 : 1) + items.length) % items.length;
-    items[nextIndex]?.focus();
+    focusElement(items[nextIndex]);
   });
 }
 

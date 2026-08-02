@@ -192,6 +192,8 @@ code {
 }
 
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible,
+:where(a, button, input, select, textarea, summary, [tabindex]):focus,
+:where(a, button, input, select, textarea, summary, [tabindex]).focus-restored,
 .app :where(a, button, input, select, textarea, summary, [tabindex]):focus {
   outline: 3px solid var(--color-focus) !important;
   outline-offset: 3px !important;
@@ -199,7 +201,9 @@ code {
 }
 
 h1[tabindex="-1"]:focus-visible,
-main[tabindex="-1"]:focus-visible {
+h1[tabindex="-1"].focus-restored,
+main[tabindex="-1"]:focus-visible,
+main[tabindex="-1"].focus-restored {
   border-radius: var(--radius-sm);
   outline-offset: 5px !important;
 }
@@ -3756,7 +3760,8 @@ details.blane.closed summary, .board-closed > summary { cursor: pointer; color: 
   .badge.issue, .badge.blocked, .badge.warn, .guard {
     border-width: 2px;
   }
-  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible,
+  :where(a, button, input, select, textarea, summary, [tabindex]).focus-restored {
     outline-color: Highlight !important;
   }
 }

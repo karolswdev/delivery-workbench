@@ -191,6 +191,8 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
         "announceLiveUpdate",
         "wireTablist",
         "wireArrowGroup",
+        "focusVisible: true",
+        "focus-restored",
         "focusMain: true",
         'role="dialog"',
         'role="tablist"',
@@ -200,6 +202,7 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
             issues.append(f"app-marker-missing:{marker}")
     for marker in (
         ":focus-visible",
+        ".focus-restored",
         ".skip-link",
         "[aria-current=\"page\"]",
         "[role=\"dialog\"]",

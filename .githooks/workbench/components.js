@@ -389,7 +389,7 @@ class DwFold extends HTMLElement {
     if (e.key === 'Escape' && this.hasAttribute('open')) {
       this._toggle();
       const trigger = this.querySelector('.dw-fold-trigger');
-      if (trigger) trigger.focus();
+      focusElement(trigger);
     }
   }
 }

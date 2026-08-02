@@ -708,7 +708,7 @@ class WorkbenchExam:
             if (!element) return false;
             const target = element.shadowRoot?.querySelector('button, a[href], input, select, textarea')
               || element.querySelector?.('button, a[href], input, select, textarea') || element;
-            target.focus();
+            target.focus({ focusVisible: true });
             return document.activeElement === element || document.activeElement === target;
             """,
             [selector],
@@ -975,7 +975,7 @@ class WorkbenchExam:
             const width = parseFloat(style.outlineWidth || '0');
             const ring = (style.outlineStyle !== 'none' && width >= 2)
               || (style.boxShadow && style.boxShadow !== 'none');
-            const detail = `${id}:${active.tagName.toLowerCase()}:${active.textContent.trim().slice(0, 60)}:focus=true:outline=${style.outlineStyle}/${style.outlineWidth}:shadow=${style.boxShadow}`;
+            const detail = `${id}:${active.tagName.toLowerCase()}:${active.textContent.trim().slice(0, 60)}:focus=true:focus-visible=${active.matches(':focus-visible')}:restored=${active.classList.contains('focus-restored')}:outline=${style.outlineStyle}/${style.outlineWidth}:shadow=${style.boxShadow}`;
             return {generation: window.__examFocusGeneration, id, current: true,
               visible: Boolean(ring), detail};
             """
@@ -1114,20 +1114,48 @@ class WorkbenchExam:
             )
         finally:
             self.driver.execute(
-                "document.getElementById('exam-missing-focus-ring')?.remove();"
+                """
+                const style = document.getElementById('exam-missing-focus-ring');
+                if (style) {
+                  style.disabled = true;
+                  if (style.sheet) style.sheet.disabled = true;
+                  style.textContent = '';
+                  style.remove();
+                }
+                void document.documentElement.offsetWidth;
+                """
             )
-        # Re-drive the real Tab chain after removing the stylesheet. A concurrent
-        # redraw can invalidate a focus=false measurement, but a focused control
-        # with no restored ring is still a real failure.
-        restored = self.observe_focus_on_target(
-            target_id,
-            step_budget,
-            "negative-control target after planted violation was removed",
-        )
-        self.check(
-            bool(restored.get("visible")),
-            "focus ring did not recover after planted violation was removed",
-        )
+        # Re-drive the real Tab chain after removing the stylesheet. Style
+        # invalidation from the planted rule can lag under load, so require a
+        # fresh, current target with a visible ring within one bounded window.
+        # A persistent outline:none defect still exhausts the window and fails.
+        deadline = time.monotonic() + 15
+        last_restored_state: dict[str, Any] = {}
+
+        def restored_ring() -> dict[str, Any] | bool:
+            nonlocal last_restored_state
+            try:
+                state = self.tab_to_current_target(
+                    target_id, step_budget, deadline=deadline
+                )
+            except ExamFailure:
+                return False
+            if state:
+                last_restored_state = state
+            return state if state and bool(state.get("visible")) else False
+
+        try:
+            self.wait(
+                restored_ring,
+                "negative-control target after planted violation was removed",
+                timeout=15,
+            )
+        except ExamFailure as exc:
+            raise ExamFailure(
+                "focus ring did not recover after planted violation was removed: "
+                f"{last_restored_state}"
+            ) from exc
+        self.assertions += 1
         self.focus_indicator_negative_control_proven = True
 
     def assert_ordinary_tab_reachability(
@@ -1350,6 +1378,33 @@ class WorkbenchExam:
         self.check(
             self.active_matches(selector),
             f"{render_function} moved focus away from {selector}",
+        )
+        restored = self.driver.execute(
+            """
+            const active = document.activeElement;
+            if (!active?.matches(arguments[0])) return {};
+            const style = getComputedStyle(active);
+            const width = parseFloat(style.outlineWidth || '0');
+            return {
+              marker: active.classList.contains('focus-restored'),
+              focusVisible: active.matches(':focus-visible'),
+              ring: (style.outlineStyle !== 'none' && width >= 2)
+                || (style.boxShadow && style.boxShadow !== 'none'),
+            };
+            """,
+            [selector],
+        )
+        self.check(
+            bool(restored.get("marker")),
+            f"{render_function} did not mark restored focus",
+        )
+        self.check(
+            bool(restored.get("focusVisible")),
+            f"{render_function} did not restore Firefox focus-visible state",
+        )
+        self.check(
+            bool(restored.get("ring")),
+            f"{render_function} restored focus without a visible ring",
         )
 
     def test_slick_workbench(self) -> None:

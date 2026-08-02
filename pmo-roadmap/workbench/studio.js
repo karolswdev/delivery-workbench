@@ -125,7 +125,7 @@ function wireDeliverySetup() {
     rememberReturnFocus("delivery-review", button);
     deliverySetupState.choice = button.dataset.deliveryChoice;
     renderDeliverySetup();
-    document.getElementById("delivery-review")?.focus();
+    focusElement(document.getElementById("delivery-review"));
   }));
   document.getElementById("delivery-back")?.addEventListener("click", () => {
     const selected = deliverySetupState.choice;
@@ -1427,13 +1427,13 @@ function wireProgramStudio() {
     studioState.view = "plan";
     studioState.technicalExpanded = false;
     renderProgramStudio();
-    document.getElementById("studio-plan-section")?.focus();
+    focusElement(document.getElementById("studio-plan-section"));
   }));
   document.querySelectorAll("[data-plan-section]").forEach((button) => button.addEventListener("click", () => {
     studioState.planSection = button.dataset.planSection;
     studioState.selected = "";
     renderProgramStudio();
-    document.getElementById("studio-plan-section")?.focus();
+    focusElement(document.getElementById("studio-plan-section"));
   }));
   document.getElementById("studio-review-save")?.addEventListener("click", () => previewStudioAction("save"));
   document.getElementById("studio-family-select")?.addEventListener("change", (event) => { location.hash = `#/program-studio/${event.target.value}`; });
@@ -1469,7 +1469,7 @@ function wireProgramStudio() {
     studioState.selected = button.dataset.planEditStep;
     studioState.planSection = "flow";
     renderProgramStudio();
-    document.querySelector(".studio-plan-step-editor input")?.focus();
+    focusElement(document.querySelector(".studio-plan-step-editor input"));
   }));
   document.querySelectorAll("[data-plan-correction]").forEach((button) => button.addEventListener("click", () => {
     studioState.planSection = button.dataset.planCorrection;
@@ -1477,7 +1477,7 @@ function wireProgramStudio() {
     studioState.view = "plan";
     renderProgramStudio();
     const target = button.dataset.planField ? document.getElementById(button.dataset.planField) : null;
-    (target || document.getElementById("studio-plan-section"))?.focus();
+    focusElement(target || document.getElementById("studio-plan-section"));
   }));
   document.querySelectorAll("[data-studio-capability]").forEach((field) => field.addEventListener("change", () => { const values = [...document.querySelectorAll("[data-studio-capability]:checked")].map((item) => item.dataset.studioCapability); studioState.document.requested_capabilities = values.sort(); studioState.jsonDraft = ""; queueStudioModel(); }));
   document.querySelectorAll("[data-studio-stop]").forEach((field) => field.addEventListener("change", () => { studioState.document.stop_conditions = [...document.querySelectorAll("[data-studio-stop]:checked")].map((item) => item.dataset.studioStop); studioState.jsonDraft = ""; queueStudioModel(); }));
@@ -1493,14 +1493,14 @@ function wireProgramStudio() {
     else { studioState.view = "technical"; studioState.technicalMode = "config"; }
     renderProgramStudio();
     const direct = fieldId ? document.getElementById(fieldId) : null;
-    if (direct) { direct.focus(); direct.scrollIntoView({ block: "center" }); return; }
+    if (direct) { focusElement(direct); direct.scrollIntoView({ block: "center" }); return; }
     if (studioState.view !== "technical" || studioState.technicalMode !== "config") { studioState.view = "technical"; studioState.technicalMode = "config"; renderProgramStudio(); }
     const text = document.getElementById("studio-json-text");
     if (!text) return;
     const field = String(studioState.jsonPointer).split("/").filter(Boolean).pop();
     const offset = text.value.indexOf(`"${field}"`);
     if (offset >= 0) text.setSelectionRange(offset, offset + field.length + 2);
-    text.focus(); text.scrollIntoView({ block: "center" });
+    focusElement(text); text.scrollIntoView({ block: "center" });
   }));
   document.querySelectorAll("[data-studio-scenario]").forEach((button) => button.addEventListener("click", () => { studioState.scenario = button.dataset.studioScenario; renderProgramStudio(); }));
   wireStudioCanvas();

@@ -215,7 +215,7 @@ function renderAdoptionMarks(model, key, identity = null, options = {}) {
     renderAdoptionMarks(model, key, null, { ...options, openCorrection: true });
     const nextForm = document.getElementById("adoption-correction-form");
     nextForm.elements.item.value = item;
-    nextForm.elements.correction.focus();
+    focusElement(nextForm.elements.correction);
     options.refreshStatuses?.();
   }));
   document.getElementById("ideation-preview-button")?.addEventListener("click", options.onPreview);
@@ -289,7 +289,7 @@ function wireTechnicalReturn() {
   document.querySelectorAll("[data-return-review]").forEach((button) => button.addEventListener("click", () => {
     const details = button.closest("details");
     details.open = false;
-    details.querySelector("summary")?.focus();
+    focusElement(details.querySelector("summary"));
   }));
 }
 

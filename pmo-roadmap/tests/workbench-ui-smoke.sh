@@ -205,7 +205,7 @@ for token in ("/api/delivery-setup", "What are you delivering?",
               "No option is selected for you", "Review this option",
               "What setup creates", "What could change later", "What stays off",
               "Permission still needed", "Leave for now", "Technical details",
-              "aria-pressed", 'document.getElementById("delivery-review")?.focus()'):
+              "aria-pressed", 'focusElement(document.getElementById("delivery-review"))'):
     assert token in setup, token
 for forbidden in ("postJson", "localStorage", "EventSource", "setInterval"):
     assert forbidden not in setup, forbidden

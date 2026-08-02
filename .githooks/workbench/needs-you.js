@@ -166,14 +166,14 @@
     this._dropdownEl.classList.add("open");
     this._renderList();
     var first = this._dropdownEl.querySelector("a");
-    if (first) { first.focus(); }
+    focusElement(first);
   };
 
   NeedsYouInbox.prototype._close = function (returnFocus) {
     this._open = false;
     this._pillEl.setAttribute("aria-expanded", "false");
     this._dropdownEl.classList.remove("open");
-    if (returnFocus) { this._pillEl.focus(); }
+    if (returnFocus) { focusElement(this._pillEl); }
   };
 
   NeedsYouInbox.prototype._listen = function () {

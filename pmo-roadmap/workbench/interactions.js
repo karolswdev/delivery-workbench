@@ -402,7 +402,7 @@
     for (var i = 0; i < items.length; i++) {
       items[i].setAttribute("tabindex", items[i] === active ? "0" : "-1");
     }
-    active.focus({ preventScroll: true });
+    focusElement(active);
   }
 
   /**
@@ -501,7 +501,7 @@
       var focusables = focusableChildren(panels[nextIdx]);
       if (focusables.length) {
         e.preventDefault();
-        focusables[0].focus({ preventScroll: true });
+        focusElement(focusables[0]);
       }
     }
 
@@ -779,12 +779,12 @@
       if (e.shiftKey) {
         if (document.activeElement === first) {
           e.preventDefault();
-          last.focus({ preventScroll: true });
+          focusElement(last);
         }
       } else {
         if (document.activeElement === last) {
           e.preventDefault();
-          first.focus({ preventScroll: true });
+          focusElement(first);
         }
       }
     };
@@ -794,10 +794,10 @@
     /* Move focus into the trap. */
     var focusable = focusableChildren(element);
     if (focusable.length) {
-      focusable[0].focus({ preventScroll: true });
+      focusElement(focusable[0]);
     } else {
       element.setAttribute("tabindex", "-1");
-      element.focus({ preventScroll: true });
+      focusElement(element);
     }
   };
 
@@ -812,7 +812,7 @@
     }
 
     if (this._previousFocus && typeof this._previousFocus.focus === "function") {
-      this._previousFocus.focus({ preventScroll: true });
+      focusElement(this._previousFocus);
     }
 
     this._active = false;

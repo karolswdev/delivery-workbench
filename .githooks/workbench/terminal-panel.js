@@ -63,7 +63,7 @@ window.DW = window.DW || {};
       this._container.removeAttribute("collapsed");
     }
     if (this._inputEl) {
-      this._inputEl.focus();
+      focusElement(this._inputEl);
     }
   };
 
@@ -245,7 +245,7 @@ window.DW = window.DW || {};
 
         self._running = false;
         self._setInputEnabled(true);
-        self._inputEl.focus();
+        focusElement(self._inputEl);
       })
       .catch(function (err) {
         if (skeleton.parentNode) skeleton.parentNode.removeChild(skeleton);
@@ -254,7 +254,7 @@ window.DW = window.DW || {};
         }
         self._running = false;
         self._setInputEnabled(true);
-        self._inputEl.focus();
+        focusElement(self._inputEl);
       });
   };
 

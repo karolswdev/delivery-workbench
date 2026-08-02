@@ -345,7 +345,7 @@
         if (item) this._navigate(item);
       });
 
-      this._input.focus();
+      focusElement(this._input);
 
       // Fetch data
       this._loading = true;

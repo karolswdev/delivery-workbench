@@ -87,7 +87,7 @@ async function route({ focusMain = false } = {}) {
     enhanceSemantics(app);
     app.classList.add("route-ready");
     if (SNAPSHOT_MODE && SNAPSHOT_DESIGN_FOCUS && parts[0] === "design") {
-      app.querySelector("button, dw-button")?.focus();
+      focusElement(app.querySelector("button, dw-button"));
     }
     updatePrimaryNavigation(hash);
     announceRoute();
@@ -95,7 +95,7 @@ async function route({ focusMain = false } = {}) {
     if (focusMain) {
       const target = app.querySelector("h1") || app;
       if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
-      target.focus();
+      focusElement(target);
       target.scrollIntoView({ block: "start" });
     } else {
       restoreAppFocus(routeFocus);
@@ -106,7 +106,7 @@ async function route({ focusMain = false } = {}) {
 document.getElementById("skip-link").addEventListener("click", () => {
   const target = app.querySelector("h1") || app;
   if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
-  target.focus();
+  focusElement(target);
   target.scrollIntoView({ block: "start" });
 });
 document.getElementById("refresh-btn").addEventListener("click", () => route());
@@ -136,12 +136,12 @@ window.addEventListener("hashchange", () => route({ focusMain: true }));
     toggle.setAttribute("aria-expanded", "true");
     dropdown.classList.add("open");
     const first = dropdown.querySelector("a");
-    if (first) first.focus();
+    focusElement(first);
   }
   function closeDropdown(returnFocus) {
     toggle.setAttribute("aria-expanded", "false");
     dropdown.classList.remove("open");
-    if (returnFocus) toggle.focus();
+    if (returnFocus) focusElement(toggle);
   }
   function isOpen() { return dropdown.classList.contains("open"); }
 
