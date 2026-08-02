@@ -1658,14 +1658,12 @@ function focusLiveDetailSection(section) {
     : section === "notifications" ? ".run-notifications"
       : section === "technical" ? ".live-technical" : "";
   if (!selector) return;
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    const target = document.querySelector(selector);
-    if (!target) return;
-    if (section === "notifications") target.closest(".live-technical")?.setAttribute("open", "");
-    target.setAttribute("tabindex", "-1");
-    target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: "start" });
-  }));
+  const target = document.querySelector(selector);
+  if (!target) return;
+  if (section === "notifications") target.closest(".live-technical")?.setAttribute("open", "");
+  target.setAttribute("tabindex", "-1");
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: "start" });
 }
 
 function renderLiveMission() {

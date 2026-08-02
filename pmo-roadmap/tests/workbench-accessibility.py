@@ -731,9 +731,14 @@ class WorkbenchExam:
                     return
             except Exception:
                 pass
-            self.focus(trigger)
-            self.driver.press("enter")
             try:
+                self.wait(
+                    lambda: self.selector_exists(trigger),
+                    f"{description} trigger to render",
+                    timeout=15,
+                )
+                self.focus(trigger)
+                self.driver.press("enter")
                 self.wait(condition, description, timeout=30)
                 return
             except ExamFailure:
@@ -976,6 +981,37 @@ class WorkbenchExam:
         )
         return state if isinstance(state, dict) else {}
 
+    def begin_focus_stability_check(self) -> None:
+        self.driver.execute(
+            """
+            window.__examStableFocusElement = null;
+            window.__examStableFocusChecks = 0;
+            """
+        )
+
+    def wait_for_focus_stability(self, description: str) -> None:
+        self.wait(
+            lambda: self.driver.execute(
+                """
+                const active = document.activeElement;
+                if (!active || active === document.body) {
+                  window.__examStableFocusElement = null;
+                  window.__examStableFocusChecks = 0;
+                  return false;
+                }
+                if (window.__examStableFocusElement === active) {
+                  window.__examStableFocusChecks += 1;
+                } else {
+                  window.__examStableFocusElement = active;
+                  window.__examStableFocusChecks = 1;
+                }
+                return window.__examStableFocusChecks >= 2;
+                """
+            ),
+            description,
+            timeout=5,
+        )
+
     def tab_to_current_target(
         self, target_id: str, step_budget: int
     ) -> dict[str, Any] | None:
@@ -986,7 +1022,9 @@ class WorkbenchExam:
             self.focus("#skip-link")
             for _step in range(step_budget):
                 generation = self.prepare_focus_walk_step()
+                self.begin_focus_stability_check()
                 self.driver.press("tab")
+                self.wait_for_focus_stability("Tab focus to remain stable")
                 state = self.measure_focus_walk_step()
                 if int(state.get("generation", -1)) != generation:
                     # The key event crossed a live redraw. Start this proof again
@@ -1028,9 +1066,29 @@ class WorkbenchExam:
             self.driver.execute(
                 "document.getElementById('exam-missing-focus-ring')?.remove();"
             )
-        restored = self.tab_to_current_target(target_id, step_budget)
+        # Ordinary Tab reachability was already proved above. Refocus the same
+        # control atomically here so this recovery check tests the application's
+        # ring after stylesheet removal, not another long loaded-runner Tab walk.
+        self.begin_focus_stability_check()
+        self.focus(
+            f'[data-exam-tab-target="{target_id}"]'
+        )
+        self.wait_for_focus_stability(
+            "negative-control target focus to remain stable"
+        )
+        restored = self.wait(
+            lambda: (
+                state
+                if (state := self.measure_focus_walk_step())
+                and bool(state.get("current"))
+                and bool(state.get("visible"))
+                else False
+            ),
+            "focus ring to recover after planted violation was removed",
+            timeout=15,
+        )
         self.check(
-            bool(restored) and bool(restored.get("visible")),
+            bool(restored.get("visible")),
             "focus ring did not recover after planted violation was removed",
         )
         self.focus_indicator_negative_control_proven = True
@@ -1139,11 +1197,31 @@ class WorkbenchExam:
             not missing,
             f"{journey_id}/{viewport} Tab did not reach ordinary actions {missing_details}",
         )
-        # Re-prove a reported ring through the same generation-aware Tab walk.
-        # A stable, currently active target with no ring remains a failure.
+        # Tab reachability is proved independently above. If a loaded runner
+        # reported a transient ring miss, refocus that same reached control and
+        # score it only after both focus and computed style settle. A real
+        # outline:none defect never satisfies this bounded predicate.
         for target_id in list(missing_focus_indicator):
-            state = self.tab_to_current_target(target_id, step_budget)
-            if state and bool(state.get("visible")):
+            try:
+                self.begin_focus_stability_check()
+                self.focus(f'[data-exam-tab-target="{target_id}"]')
+                self.wait_for_focus_stability(
+                    f"Tab target {target_id} focus to remain stable"
+                )
+                state = self.wait(
+                    lambda: (
+                        candidate
+                        if (candidate := self.measure_focus_walk_step())
+                        and bool(candidate.get("current"))
+                        and bool(candidate.get("visible"))
+                        else False
+                    ),
+                    f"focus ring on Tab target {target_id}",
+                    timeout=15,
+                )
+            except ExamFailure:
+                state = None
+            if state:
                 missing_focus_indicator.discard(target_id)
         self.assert_focus_indicator_negative_control(str(expected[0]), step_budget)
         missing_focus = sorted(missing_focus_indicator)

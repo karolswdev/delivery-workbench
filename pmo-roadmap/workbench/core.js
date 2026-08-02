@@ -185,24 +185,43 @@ function selectorEscape(value) {
   return String(value).replace(/["\\]/g, "\\$&");
 }
 
+function focusPathSegment(element) {
+  const classes = [...element.classList]
+    .filter((name) => !name.startsWith("is-") && !name.startsWith("state-"));
+  return `${element.localName}${classes.map((name) => `.${selectorEscape(name)}`).join("")}`;
+}
+
 function focusSelector(element) {
   if (!(element instanceof Element)) return "";
   if (element.id) return `#${selectorEscape(element.id)}`;
   for (const attribute of FOCUS_IDENTITY_ATTRIBUTES) {
     const value = element.getAttribute(attribute);
-    if (value !== null && value !== "") {
-      return `${element.localName}[${attribute}="${selectorEscape(value)}"]`;
-    }
+    if (value === null) continue;
+    const selector = value === ""
+      ? `${element.localName}[${attribute}]`
+      : `${element.localName}[${attribute}="${selectorEscape(value)}"]`;
+    if (app.querySelectorAll(selector).length === 1) return selector;
     if (value === "" && attribute.startsWith("data-board-")) {
       const story = element.closest("[data-story]")?.getAttribute("data-story");
       if (story) {
-        return `[data-story="${selectorEscape(story)}"] ${element.localName}[${attribute}]`;
+        return `[data-story="${selectorEscape(story)}"] ${selector}`;
       }
       const phase = element.getAttribute("data-phase");
-      return `${element.localName}[${attribute}]${phase !== null ? `[data-phase="${selectorEscape(phase)}"]` : ""}`;
+      if (phase !== null) return `${selector}[data-phase="${selectorEscape(phase)}"]`;
     }
   }
-  return "";
+
+  // Controls such as native disclosure summaries have no explicit identifier.
+  // Build a unique selector from stable ancestor classes so a redraw can restore
+  // the same semantic control even when live banners change its numeric index.
+  let path = focusPathSegment(element);
+  let parent = element.parentElement;
+  while (parent && parent !== app) {
+    path = `${focusPathSegment(parent)} > ${path}`;
+    if (app.querySelectorAll(path).length === 1) return path;
+    parent = parent.parentElement;
+  }
+  return app.querySelectorAll(path).length === 1 ? path : "";
 }
 
 function captureAppFocus() {
@@ -252,20 +271,16 @@ function rememberReturnFocus(key, element = document.activeElement) {
 function restoreReturnFocus(key, fallback = "") {
   const selector = returnFocus.get(key) || fallback;
   returnFocus.delete(key);
-  requestAnimationFrame(() => {
-    const candidates = [...document.querySelectorAll(selector)];
-    focusElement(candidates.find((element) => element.offsetParent !== null) || candidates[0]);
-  });
+  const candidates = [...document.querySelectorAll(selector)];
+  focusElement(candidates.find((element) => element.offsetParent !== null) || candidates[0]);
 }
 
 function focusRegion(selector) {
-  requestAnimationFrame(() => {
-    const region = document.querySelector(selector);
-    if (!region) return;
-    if (!region.hasAttribute("tabindex")) region.setAttribute("tabindex", "-1");
-    region.focus({ preventScroll: true });
-    region.scrollIntoView({ block: "nearest" });
-  });
+  const region = document.querySelector(selector);
+  if (!region) return;
+  if (!region.hasAttribute("tabindex")) region.setAttribute("tabindex", "-1");
+  region.focus({ preventScroll: true });
+  region.scrollIntoView({ block: "nearest" });
 }
 
 function focusConsentSnapshot(selector) {
@@ -432,9 +447,7 @@ function wireTablist(selector) {
         : (index + (key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
     const nextSelector = focusSelector(tabs[nextIndex]);
     tabs[nextIndex].click();
-    requestAnimationFrame(() => {
-      document.querySelector(nextSelector)?.focus({ preventScroll: true });
-    });
+    document.querySelector(nextSelector)?.focus({ preventScroll: true });
   });
 }
 

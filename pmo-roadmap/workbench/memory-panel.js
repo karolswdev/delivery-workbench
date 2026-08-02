@@ -180,7 +180,7 @@ window.DW = window.DW || {};
       this._panel.hidden = false;
       this._panel.setAttribute("aria-hidden", "false");
       this._render();
-      requestAnimationFrame(() => this._panel.querySelector(".memory-close")?.focus());
+      this._panel.querySelector(".memory-close")?.focus();
       if (window.SNAPSHOT_MODE && SNAPSHOT_MEMORY_SCENARIO) this._loadSnapshot(SNAPSHOT_MEMORY_SCENARIO);
       else this._load();
     }
@@ -206,14 +206,10 @@ window.DW = window.DW || {};
       this._route = "";
       if (returnSelector && typeof restoreReturnFocus === "function") {
         restoreReturnFocus("memory-panel", returnSelector);
-      } else {
-        requestAnimationFrame(() => {
-          if (returnElement?.isConnected && typeof returnElement.focus === "function") {
-            returnElement.focus({ preventScroll: true });
-          } else if (returnSelector) {
-            document.querySelector(returnSelector)?.focus({ preventScroll: true });
-          }
-        });
+      } else if (returnElement?.isConnected && typeof returnElement.focus === "function") {
+        returnElement.focus({ preventScroll: true });
+      } else if (returnSelector) {
+        document.querySelector(returnSelector)?.focus({ preventScroll: true });
       }
     }
 
@@ -358,13 +354,13 @@ window.DW = window.DW || {};
         <p class="memory-boundary">Memory is advisory. A recalled record never caused or permitted an action, started work, or replaced evidence.</p>
         ${this._bodyHtml()}`;
       this._wire();
-      if (hadFocus) requestAnimationFrame(() => {
+      if (hadFocus) {
         const selected = this._selectedDecisionId
           ? this._content.querySelector(
             `.decision-basis-select[data-decision-id="${CSS.escape(this._selectedDecisionId)}"]`,
           ) : null;
         (selected || this._content.querySelector(".memory-close"))?.focus();
-      });
+      }
     }
 
     _wire() {

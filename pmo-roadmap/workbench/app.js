@@ -93,14 +93,12 @@ async function route({ focusMain = false } = {}) {
     announceRoute();
     app.setAttribute("aria-busy", "false");
     if (focusMain) {
-      requestAnimationFrame(() => {
-        const target = app.querySelector("h1") || app;
-        if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
-        target.focus();
-        target.scrollIntoView({ block: "start" });
-      });
+      const target = app.querySelector("h1") || app;
+      if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+      target.focus();
+      target.scrollIntoView({ block: "start" });
     } else {
-      requestAnimationFrame(() => restoreAppFocus(routeFocus));
+      restoreAppFocus(routeFocus);
     }
   }
 }

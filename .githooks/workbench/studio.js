@@ -125,7 +125,7 @@ function wireDeliverySetup() {
     rememberReturnFocus("delivery-review", button);
     deliverySetupState.choice = button.dataset.deliveryChoice;
     renderDeliverySetup();
-    requestAnimationFrame(() => document.getElementById("delivery-review")?.focus());
+    document.getElementById("delivery-review")?.focus();
   }));
   document.getElementById("delivery-back")?.addEventListener("click", () => {
     const selected = deliverySetupState.choice;
@@ -1427,13 +1427,13 @@ function wireProgramStudio() {
     studioState.view = "plan";
     studioState.technicalExpanded = false;
     renderProgramStudio();
-    requestAnimationFrame(() => document.getElementById("studio-plan-section")?.focus());
+    document.getElementById("studio-plan-section")?.focus();
   }));
   document.querySelectorAll("[data-plan-section]").forEach((button) => button.addEventListener("click", () => {
     studioState.planSection = button.dataset.planSection;
     studioState.selected = "";
     renderProgramStudio();
-    requestAnimationFrame(() => document.getElementById("studio-plan-section")?.focus());
+    document.getElementById("studio-plan-section")?.focus();
   }));
   document.getElementById("studio-review-save")?.addEventListener("click", () => previewStudioAction("save"));
   document.getElementById("studio-family-select")?.addEventListener("change", (event) => { location.hash = `#/program-studio/${event.target.value}`; });
@@ -1469,17 +1469,15 @@ function wireProgramStudio() {
     studioState.selected = button.dataset.planEditStep;
     studioState.planSection = "flow";
     renderProgramStudio();
-    requestAnimationFrame(() => document.querySelector(".studio-plan-step-editor input")?.focus());
+    document.querySelector(".studio-plan-step-editor input")?.focus();
   }));
   document.querySelectorAll("[data-plan-correction]").forEach((button) => button.addEventListener("click", () => {
     studioState.planSection = button.dataset.planCorrection;
     studioState.selected = button.dataset.planNode || "";
     studioState.view = "plan";
     renderProgramStudio();
-    requestAnimationFrame(() => {
-      const target = button.dataset.planField ? document.getElementById(button.dataset.planField) : null;
-      (target || document.getElementById("studio-plan-section"))?.focus();
-    });
+    const target = button.dataset.planField ? document.getElementById(button.dataset.planField) : null;
+    (target || document.getElementById("studio-plan-section"))?.focus();
   }));
   document.querySelectorAll("[data-studio-capability]").forEach((field) => field.addEventListener("change", () => { const values = [...document.querySelectorAll("[data-studio-capability]:checked")].map((item) => item.dataset.studioCapability); studioState.document.requested_capabilities = values.sort(); studioState.jsonDraft = ""; queueStudioModel(); }));
   document.querySelectorAll("[data-studio-stop]").forEach((field) => field.addEventListener("change", () => { studioState.document.stop_conditions = [...document.querySelectorAll("[data-studio-stop]:checked")].map((item) => item.dataset.studioStop); studioState.jsonDraft = ""; queueStudioModel(); }));
@@ -1494,17 +1492,15 @@ function wireProgramStudio() {
     if (id) { studioState.selected = id; studioState.view = "technical"; studioState.technicalMode = "graph"; }
     else { studioState.view = "technical"; studioState.technicalMode = "config"; }
     renderProgramStudio();
-    requestAnimationFrame(() => {
-      const direct = fieldId ? document.getElementById(fieldId) : null;
-      if (direct) { direct.focus(); direct.scrollIntoView({ block: "center" }); return; }
-      if (studioState.view !== "technical" || studioState.technicalMode !== "config") { studioState.view = "technical"; studioState.technicalMode = "config"; renderProgramStudio(); }
-      const text = document.getElementById("studio-json-text");
-      if (!text) return;
-      const field = String(studioState.jsonPointer).split("/").filter(Boolean).pop();
-      const offset = text.value.indexOf(`"${field}"`);
-      if (offset >= 0) text.setSelectionRange(offset, offset + field.length + 2);
-      text.focus(); text.scrollIntoView({ block: "center" });
-    });
+    const direct = fieldId ? document.getElementById(fieldId) : null;
+    if (direct) { direct.focus(); direct.scrollIntoView({ block: "center" }); return; }
+    if (studioState.view !== "technical" || studioState.technicalMode !== "config") { studioState.view = "technical"; studioState.technicalMode = "config"; renderProgramStudio(); }
+    const text = document.getElementById("studio-json-text");
+    if (!text) return;
+    const field = String(studioState.jsonPointer).split("/").filter(Boolean).pop();
+    const offset = text.value.indexOf(`"${field}"`);
+    if (offset >= 0) text.setSelectionRange(offset, offset + field.length + 2);
+    text.focus(); text.scrollIntoView({ block: "center" });
   }));
   document.querySelectorAll("[data-studio-scenario]").forEach((button) => button.addEventListener("click", () => { studioState.scenario = button.dataset.studioScenario; renderProgramStudio(); }));
   wireStudioCanvas();
@@ -1552,6 +1548,8 @@ function renderStudioBundle(model) {
     <section id="${esc(model.sections.handoff)}" class="bundle-handoff"><div><span class="orch-eyebrow">After dw setup apply</span><h2>${esc(model.handoff?.label)}</h2><p>Return to the terminal for a fresh, separate permission preview. The browser creates nothing and runs nothing.</p></div><code>${esc(model.handoff?.command)}</code><small>configuration only · creates permission: false</small></section>
   </div>`;
   document.querySelectorAll("[data-bundle-anchor]").forEach((link) => link.addEventListener("click", () => {
+    // Scroll only after the link's default fragment navigation has updated layout;
+    // this frame does not move or restore keyboard focus.
     requestAnimationFrame(() => document.getElementById(link.dataset.bundleAnchor)?.scrollIntoView({ block: "start" }));
   }));
 }
@@ -1561,6 +1559,8 @@ async function viewStudioBundle(anchor = "") {
   setCrumbs([{ label: "overview", href: "#/" }, { label: "delivery setup", href: "#/program-studio" }, { label: "generated bundle" }]);
   const response = await api(`/api/setup/bundle?proposal_file=${encodeURIComponent(proposalFile)}`);
   renderStudioBundle(response.data);
+  // Defer scrolling until the newly rendered bundle has a layout box. This is
+  // scroll-only and deliberately leaves keyboard focus unchanged.
   if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ block: "start" }));
 }
 
@@ -1609,6 +1609,8 @@ async function viewProgramStudio(family = "program", name) {
   if (requestedScenario) studioState.scenario = requestedScenario;
   if (studioState.model) renderProgramStudio(); else { renderProgramStudio(); await refreshStudioModel(); }
   if (studioParams.get("studiofocus") === "technical") {
+    // Model refresh may render this fold twice; wait for both layouts before
+    // scrolling, without deferring or changing keyboard focus.
     requestAnimationFrame(() => requestAnimationFrame(() => (
       document.querySelector(".studio-form-technical")?.scrollIntoView({ block: "start" })
     )));
