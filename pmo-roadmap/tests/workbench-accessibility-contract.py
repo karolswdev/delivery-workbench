@@ -175,12 +175,21 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
         'id="skip-link"',
         'aria-label="Primary"',
         'aria-label="Breadcrumb"',
+        'class="project-switcher ops-label"',
+        'id="command-palette-trigger"',
+        'aria-keyshortcuts="Meta+K Control+K"',
+        'role="group" aria-label="Display and refresh controls"',
+        'id="foot-root" class="visually-hidden"',
         'id="route-status"',
         'id="live-status"',
         'aria-busy="true"',
     ):
         if marker not in index:
             issues.append(f"shell-marker-missing:{marker}")
+    if index.count('id="project-switcher"') != 1:
+        issues.append("shell-project-identity-not-singular")
+    if 'id="refresh-time"' in index:
+        issues.append("shell-raw-refresh-time-present")
     for marker in (
         "captureAppFocus",
         "restoreAppFocus",
@@ -194,6 +203,9 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
         "focusVisible: true",
         "focus-restored",
         "focusMain: true",
+        'getElementById("command-palette-trigger")',
+        'aria-label", "Needs you, " + count',
+        "if (restoreFocus && this._returnFocus?.isConnected)",
         'role="dialog"',
         'role="tablist"',
         'role="tabpanel"',
@@ -209,6 +221,11 @@ def validate_sources(expected_ids: set[str]) -> list[str]:
         "@media (forced-colors: active)",
         "overflow-x: clip",
         "overflow-wrap: anywhere",
+        ".topbar-omni",
+        ".shell-icon-btn",
+        ".needs-you-item-main",
+        ".cp-dialog",
+        "box-shadow: var(--shadow-3)",
     ):
         if marker not in css:
             issues.append(f"css-marker-missing:{marker}")

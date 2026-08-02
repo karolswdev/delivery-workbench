@@ -5,8 +5,7 @@
 "use strict";
 
 const app = document.getElementById("app");
-const crumbs = document.getElementById("crumbs");
-const refreshTime = document.getElementById("refresh-time");
+const refreshButton = document.getElementById("refresh-btn");
 const footRoot = document.getElementById("foot-root");
 const routeStatus = document.getElementById("route-status");
 const liveStatus = document.getElementById("live-status");
@@ -20,6 +19,7 @@ const DENSITIES = new Set(["comfortable", "compact"]);
 let projectInventory = null;
 let selectedProject = "";
 let projectReturnHash = "#/board";
+let currentCrumbParts = [];
 
 function storedProject() {
   try { return localStorage.getItem(PROJECT_STORAGE_KEY) || ""; }
@@ -41,10 +41,14 @@ function applyDensity(value, persist = true) {
   const toggle = document.getElementById("density-toggle");
   if (toggle) {
     const compact = density === "compact";
-    toggle.textContent = compact ? "Compact" : "Comfortable";
+    const state = toggle.querySelector("#density-state");
+    if (state) state.textContent = compact ? "Compact" : "Comfortable";
     toggle.setAttribute("aria-pressed", String(compact));
     toggle.setAttribute("aria-label", compact
       ? "Use comfortable density" : "Use compact density");
+    toggle.setAttribute("title", compact
+      ? "Density: compact. Switch to comfortable."
+      : "Density: comfortable. Switch to compact.");
   }
   if (persist) {
     try { localStorage.setItem(DENSITY_STORAGE_KEY, density); }
@@ -56,6 +60,18 @@ function applyDensity(value, persist = true) {
   return density;
 }
 
+function updateProjectCrumb() {
+  const zone = document.querySelector("#project-switcher .crumb-zone");
+  const project = document.querySelector("#project-switcher .crumb-project");
+  if (!zone || !project) return;
+  const routePart = currentCrumbParts.find((part) => {
+    const label = String(part?.label || "").toLowerCase();
+    return label && label !== "overview" && label !== selectedProject.toLowerCase();
+  });
+  zone.textContent = routePart?.label || "work";
+  project.textContent = selectedProject || "Choose project";
+}
+
 function rememberProject(slug) {
   selectedProject = slug || "";
   try {
@@ -65,9 +81,7 @@ function rememberProject(slug) {
     // Storage can be unavailable in hardened browsers; selection still lasts
     // for this page without changing any repository state.
   }
-  const switcher = document.getElementById("project-switcher");
-  if (switcher) switcher.textContent = selectedProject
-    ? `Project: ${selectedProject}` : "Choose project";
+  updateProjectCrumb();
 }
 
 async function loadProjects() {
@@ -571,7 +585,12 @@ async function api(path) {
     const msg = (body.issues && body.issues[0]) || `API error ${status}`;
     throw new Error(msg);
   }
-  refreshTime.textContent = `refreshed ${new Date().toLocaleTimeString()}`;
+  const refreshed = new Date().toLocaleTimeString();
+  if (refreshButton) {
+    const label = `Refresh saved repository facts. Last refreshed ${refreshed}.`;
+    refreshButton.setAttribute("title", label);
+    refreshButton.setAttribute("aria-label", label);
+  }
   return body;
 }
 
@@ -594,11 +613,8 @@ function productTerm(key) {
 }
 
 function setCrumbs(parts) {
-  crumbs.innerHTML = parts
-    .map((p, i) => (i < parts.length - 1 && p.href
-      ? `<a href="${p.href}">${esc(p.label)}</a>`
-      : `<span>${esc(p.label)}</span>`))
-    .join(" / ");
+  currentCrumbParts = parts || [];
+  updateProjectCrumb();
 }
 
 function stateHtml(text, isError) {

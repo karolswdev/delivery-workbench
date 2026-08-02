@@ -100,15 +100,15 @@
     pill.setAttribute("title", "Needs your attention");
     pill.style.display = "none";
 
-    var badge = document.createElement("dw-badge");
-    badge.setAttribute("variant", "needs-you");
-    badge.setAttribute("count", "0");
-    pill.appendChild(badge);
-
     var label = document.createElement("span");
     label.className = "needs-you-label";
     label.textContent = "Needs you";
     pill.appendChild(label);
+
+    var badge = document.createElement("dw-badge");
+    badge.setAttribute("variant", "needs-you");
+    badge.setAttribute("count", "0");
+    pill.appendChild(badge);
 
     wrapper.appendChild(pill);
 
@@ -117,6 +117,7 @@
     dropdown.className = "needs-you-dropdown";
     dropdown.id = "needs-you-dropdown";
     dropdown.setAttribute("role", "menu");
+    dropdown.setAttribute("aria-label", "Needs you");
     wrapper.appendChild(dropdown);
 
     this._wrapperEl = wrapper;
@@ -124,10 +125,10 @@
     this._badgeEl = badge;
     this._dropdownEl = dropdown;
 
-    // Insert before the refresh area in the topbar
-    var refresh = document.querySelector(".topbar .refresh");
-    if (refresh) {
-      refresh.parentNode.insertBefore(wrapper, refresh);
+    // Attention stays ahead of the demoted display and refresh tools.
+    var tools = document.querySelector(".topbar .topbar-tools");
+    if (tools) {
+      tools.parentNode.insertBefore(wrapper, tools);
     } else {
       var topbar = document.querySelector(".topbar");
       if (topbar) { topbar.appendChild(wrapper); }
@@ -244,8 +245,9 @@
   NeedsYouInbox.prototype._sync = function () {
     var count = this._items.size;
 
-    // Update badge
+    // Keep the count inside one attention control for sighted and screen-reader users.
     this._badgeEl.setAttribute("count", String(count));
+    this._pillEl.setAttribute("aria-label", "Needs you, " + count + (count === 1 ? " item" : " items"));
 
     // Show/hide pill
     this._pillEl.style.display = count > 0 ? "" : "none";
@@ -285,6 +287,8 @@
         ? esc(item.detail)
         : esc(kindLabel(item.kind));
       var timeAgo = ago(item.timestamp);
+      var meta = [esc(kindLabel(item.kind)), project, context ? esc(context) : ""]
+        .filter(Boolean).join(" · ");
       var memoryKind = item.kind === "program-intervention-required" ? "program" : "run";
       var memoryAction = item.run_id
         ? '<button type="button" class="needs-you-memory" role="menuitem" data-memory-open="' + esc(memoryKind + ":" + item.run_id) + '" data-memory-kind="' + esc(memoryKind) + '" data-memory-id="' + esc(item.run_id) + '">Memory</button>'
@@ -292,16 +296,12 @@
       return (
         '<div class="needs-you-row" role="none">' +
           '<a class="needs-you-item" href="' + esc(href) + '" role="menuitem" data-id="' + esc(item.id) + '">' +
-            '<span class="needs-you-item-kind">' + esc(kindLabel(item.kind)) + "</span>" +
-            (project
-              ? ' <span class="needs-you-item-project">' + project + "</span>"
-              : "") +
-            (context
-              ? ' <span class="needs-you-item-context">' + esc(context) + "</span>"
-              : "") +
-            '<span class="needs-you-item-detail">' + detail + "</span>" +
+            '<span class="needs-you-item-main">' +
+              '<span class="needs-you-item-detail">' + detail + "</span>" +
+              '<span class="needs-you-item-meta"><span class="needs-you-item-kind">' + meta + "</span></span>" +
+            "</span>" +
             (timeAgo
-              ? '<span class="needs-you-item-ago">' + esc(timeAgo) + "</span>"
+              ? '<time class="needs-you-item-ago" datetime="' + esc(item.timestamp || "") + '">' + esc(timeAgo) + "</time>"
               : "") +
           "</a>" + memoryAction +
         "</div>"

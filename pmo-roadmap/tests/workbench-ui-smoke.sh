@@ -93,6 +93,18 @@ for label in ("Work", "Health"):
     assert f">{label}</a>" in index, label
 for destination in ("plan-link", "delivery-link", "live-link"):
     assert f'id="{destination}"' in index, destination
+assert index.count('id="project-switcher"') == 1
+assert 'class="project-switcher ops-label"' in index
+assert 'id="command-palette-trigger"' in index and 'aria-keyshortcuts="Meta+K Control+K"' in index
+assert 'id="refresh-time"' not in index and 'class="topbar-tools"' in index
+assert 'id="foot-root" class="visually-hidden"' in index
+assert "Project: ${selectedProject}" not in core
+assert 'getElementById("command-palette-trigger")' in source["command-palette.js"]
+assert 'aria-label", "Needs you, " + count' in source["needs-you.js"]
+for token in (".topbar-omni", ".shell-icon-btn", ".needs-you-dropdown",
+              "background: var(--surface-elevated)", "box-shadow: var(--shadow-2)",
+              ".cp-dialog", "box-shadow: var(--shadow-3)", ".footbar"):
+    assert token in css, token
 assert "The browser adds no authority" in app
 assert "browser-confirmed program action may use pre-granted delivery permission" in app
 for token in ("project-switcher", "PROJECT_STORAGE_KEY", "viewProjectSelector",

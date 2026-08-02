@@ -177,5 +177,6 @@ window.addEventListener("hashchange", () => route({ focusMain: true }));
 applyDensity(SNAPSHOT_MODE && DENSITIES.has(SNAPSHOT_DENSITY) ? SNAPSHOT_DENSITY : storedDensity(), false);
 api("/api/context").then((body) => {
   footRoot.textContent = body.data.root;
+  footRoot.closest(".footbar")?.setAttribute("title", `Served from ${body.data.root}`);
 }).catch(() => {});
 route();

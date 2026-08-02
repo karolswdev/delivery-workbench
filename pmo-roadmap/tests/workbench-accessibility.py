@@ -1370,6 +1370,79 @@ class WorkbenchExam:
         self.driver.set_content_zoom(1)
         self.navigate("/#/", ".board-overview h1")
 
+        shell = self.driver.execute(
+            """
+            const selectors = ['#work-link', '#health-link', '#advanced-toggle',
+              '#project-switcher', '#command-palette-trigger', '#density-toggle', '#refresh-btn'];
+            const controls = selectors.map((selector) => document.querySelector(selector));
+            const rects = controls.map((control) => control.getBoundingClientRect());
+            const footer = document.querySelector('.footbar');
+            return {
+              oneProject: document.querySelectorAll('#project-switcher').length === 1,
+              duplicateLabel: document.querySelector('.topbar').textContent.includes('Project:'),
+              heights: rects.slice(0, 3).concat(rects.slice(4)).map((rect) => rect.height),
+              centers: rects.map((rect) => rect.top + rect.height / 2),
+              paletteShortcut: document.getElementById('command-palette-trigger').getAttribute('aria-keyshortcuts'),
+              hiddenRoot: document.getElementById('foot-root').classList.contains('visually-hidden'),
+              footerLine: footer.scrollHeight <= 34,
+              footerTitle: footer.getAttribute('title') || '',
+            };
+            """
+        )
+        self.check(shell["oneProject"] and not shell["duplicateLabel"], "topbar duplicated project identity")
+        self.check(max(shell["heights"]) - min(shell["heights"]) <= 1, "topbar controls did not share a 28px height")
+        self.check(max(shell["centers"]) - min(shell["centers"]) <= 1, "topbar controls did not share one baseline")
+        self.check(shell["paletteShortcut"] == "Meta+K Control+K", "palette trigger did not expose its shortcuts")
+        self.check(shell["hiddenRoot"] and shell["footerLine"] and shell["footerTitle"].startswith("Served from "), "footer did not keep one quiet line with the source path hidden")
+
+        self.press_until(
+            "#command-palette-trigger",
+            lambda: self.selector_exists(".cp-dialog"),
+            "topbar command palette to open",
+        )
+        self.wait(lambda: self.selector_exists(".cp-item"), "command palette results")
+        palette = self.driver.execute(
+            """
+            const dialog = document.querySelector('.cp-dialog');
+            const input = document.querySelector('.cp-input');
+            const title = document.querySelector('.cp-item-title');
+            const meta = document.querySelector('.cp-item-sub');
+            const style = getComputedStyle(dialog);
+            return {radius: parseFloat(style.borderRadius), shadow: style.boxShadow,
+              input: parseFloat(getComputedStyle(input).fontSize),
+              title: parseFloat(getComputedStyle(title).fontSize),
+              weight: getComputedStyle(title).fontWeight,
+              meta: parseFloat(getComputedStyle(meta).fontSize)};
+            """
+        )
+        self.check(palette["radius"] >= 12 and palette["shadow"] != "none", "command palette lacked its raised surface")
+        self.check(palette["input"] == 16 and palette["title"] == 13 and palette["weight"] == "500" and palette["meta"] == 12, "command palette type hierarchy drifted")
+        self.driver.press("escape")
+        self.wait(lambda: not self.selector_exists(".cp-dialog"), "command palette to close")
+        self.check(self.active_matches("#command-palette-trigger"), "command palette did not return focus to its topbar trigger")
+
+        self.navigate("/?snapshot=1&project=sample&needsyouopen=1#/board/sample", ".needs-you-dropdown.open")
+        attention = self.driver.execute(
+            """
+            const pill = document.querySelector('.needs-you-pill');
+            const popover = document.querySelector('.needs-you-dropdown');
+            const detail = document.querySelector('.needs-you-item-detail');
+            const meta = document.querySelector('.needs-you-item-meta');
+            const time = document.querySelector('.needs-you-item-ago');
+            return {label: pill.getAttribute('aria-label'), countInside: Boolean(pill.querySelector('dw-badge')),
+              glow: getComputedStyle(pill).boxShadow, shadow: getComputedStyle(popover).boxShadow,
+              border: getComputedStyle(popover).borderTopWidth,
+              titleWeight: getComputedStyle(detail).fontWeight,
+              metaSize: parseFloat(getComputedStyle(meta).fontSize),
+              timeAlign: getComputedStyle(time).textAlign,
+              memory: Boolean(document.querySelector('.needs-you-memory'))};
+            """
+        )
+        self.check(attention["label"] == "Needs you, 1 item" and attention["countInside"], "needs-you pill split its label and count")
+        self.check(attention["glow"] != "none" and attention["shadow"] != "none" and attention["border"] != "0px", "needs-you pill or popover lost its raised treatment")
+        self.check(attention["titleWeight"] == "500" and attention["metaSize"] == 13 and attention["timeAlign"] == "right" and attention["memory"], "needs-you rows lost their title, metadata, time, or Memory hierarchy")
+        self.navigate("/#/", ".board-overview h1")
+
         skeleton_first = self.driver.execute(
             """
             window.__slickFetch = window.fetch;

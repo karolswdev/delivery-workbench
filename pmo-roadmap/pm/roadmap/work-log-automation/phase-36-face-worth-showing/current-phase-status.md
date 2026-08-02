@@ -23,14 +23,14 @@ Replace the scaffold-grade visual layer with a Linear-grade design language, ado
 | ID | Story | Status | Story file | Evidence |
 |---|---|---|---|---|
 | WLA-36-01 | Design tokens and type | done | [story-01-design-tokens-and-type](./story-01-design-tokens-and-type.md) | [evidence-story-01](./evidence-story-01.md) |
-| WLA-36-02 | Shell and navigation | backlog | [story-02-shell-and-navigation](./story-02-shell-and-navigation.md) | - |
+| WLA-36-02 | Shell and navigation | done | [story-02-shell-and-navigation](./story-02-shell-and-navigation.md) | [evidence-story-02](./evidence-story-02.md) |
 | WLA-36-03 | Board and cards | backlog | [story-03-board-and-cards](./story-03-board-and-cards.md) | - |
 | WLA-36-04 | Panels and detail surfaces | backlog | [story-04-panels-and-detail-surfaces](./story-04-panels-and-detail-surfaces.md) | - |
 | WLA-36-05 | Alignment sweep and visual exam | backlog | [story-05-alignment-sweep-and-visual-exam](./story-05-alignment-sweep-and-visual-exam.md) | - |
 
 ## Where we are
 
-WLA-36-01 done (2026-08-02): the foundation is the operator-oss mission-control skin (126 role-named tokens, semantic signal roles with glows, warm-paper light theme, vendored OFL fonts served locally) with Linear's discipline (type scale, 400/500/700 weights, 8px grid, mono-for-code-only). Dark is the native default; the theme pins flipped deliberately. Full battery green including the packaged wheel carrying the fonts. Next: WLA-36-02 (shell and navigation).
+WLA-36-02 done (2026-08-02): the shell is Operator-grade — quiet wordmark, one mono project crumb, omni ⌘K trigger, glowing coral needs-you pill with a designed popover, icon-demoted density/refresh, restyled palette, one-line footer, everything on a 28px baseline and the 8px grid. Story 01 landed the mission-control token foundation. Next: WLA-36-03 (board and cards).
 
 ## Active risks
 

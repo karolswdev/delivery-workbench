@@ -45,22 +45,26 @@
   function cacheValid() { return Date.now() - cache.ts < CACHE_TTL; }
 
   async function fetchAll() {
-    if (cacheValid() && cache.projects) return;
+    if (cacheValid() && cache.projects) return { supplemental: null };
     cache.ts = Date.now();
-    const results = await Promise.allSettled([
-      api("/api/projects"),
-      selectedProject ? api(`/api/projects/${encodeURIComponent(selectedProject)}/board`) : Promise.resolve(null),
+    const supplemental = Promise.allSettled([
       api("/api/runs").catch(() => null),
       api("/api/programs").catch(() => null),
       api("/api/orchestration").catch(() => null),
+    ]).then((results) => {
+      cache.runs = results[0].status === "fulfilled" ? results[0].value : null;
+      cache.programs = results[1].status === "fulfilled" ? results[1].value : null;
+      cache.scores = results[2].status === "fulfilled" ? results[2].value : null;
+    });
+    const primary = await Promise.allSettled([
+      api("/api/projects"),
+      selectedProject ? api(`/api/projects/${encodeURIComponent(selectedProject)}/board`) : Promise.resolve(null),
     ]);
-    cache.projects = results[0].status === "fulfilled" ? results[0].value : null;
-    if (results[1].status === "fulfilled" && results[1].value && selectedProject) {
-      cache.board[selectedProject] = results[1].value;
+    cache.projects = primary[0].status === "fulfilled" ? primary[0].value : null;
+    if (primary[1].status === "fulfilled" && primary[1].value && selectedProject) {
+      cache.board[selectedProject] = primary[1].value;
     }
-    cache.runs = results[2].status === "fulfilled" ? results[2].value : null;
-    cache.programs = results[3].status === "fulfilled" ? results[3].value : null;
-    cache.scores = results[4].status === "fulfilled" ? results[4].value : null;
+    return { supplemental };
   }
 
   /* ── Build searchable items ─────────────────────────── */
@@ -349,8 +353,9 @@
 
       // Fetch data
       this._loading = true;
+      let supplemental = null;
       try {
-        await fetchAll();
+        ({ supplemental } = await fetchAll());
         this._items = buildItems();
       } catch (_err) {
         this._items = [];
@@ -358,9 +363,14 @@
       this._loading = false;
       if (!this._open) return; // closed while loading
       this._onInput();
+      supplemental?.then(() => {
+        if (!this._open) return;
+        this._items = buildItems();
+        this._onInput();
+      });
     }
 
-    close() {
+    close(restoreFocus = true) {
       if (!this._open) return;
       this._open = false;
       if (this._overlay) {
@@ -369,6 +379,8 @@
       }
       this._input = null;
       this._results = null;
+      if (restoreFocus && this._returnFocus?.isConnected) focusElement(this._returnFocus);
+      this._returnFocus = null;
     }
 
     _onInput() {
@@ -416,7 +428,7 @@
       const memoryId = el.dataset.memoryId;
       if (memoryKind && memoryId && window.DW.openMemoryPanel) {
         const returnFocus = this._returnFocus;
-        this.close();
+        this.close(false);
         window.DW.openMemoryPanel(memoryKind, memoryId, returnFocus);
         return;
       }
@@ -430,7 +442,7 @@
         route,
         status: el.dataset.status,
       });
-      this.close();
+      this.close(false);
       location.hash = route;
     }
   }
@@ -439,4 +451,7 @@
   window.DW = window.DW || {};
   window.DW.CommandPalette = CommandPalette;
   window.DW._commandPalette = new CommandPalette();
+  document.getElementById("command-palette-trigger")?.addEventListener("click", function () {
+    window.DW._commandPalette.open();
+  });
 })();

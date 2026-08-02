@@ -357,6 +357,19 @@ grep -q "read-only" "$PMO_DIR"/workbench/*.js \
 for label in Work Health; do
   grep -q ">$label</a>" "$TMP_ROOT/index.html" || fail "app shell should expose $label"
 done
+[ "$(grep -o 'id="project-switcher"' "$TMP_ROOT/index.html" | wc -l | tr -d ' ')" = "1" ] \
+  || fail "app shell should expose project identity once"
+for marker in 'class="project-switcher ops-label"' 'id="command-palette-trigger"' \
+  'aria-keyshortcuts="Meta+K Control+K"' 'class="topbar-tools"' \
+  'id="foot-root" class="visually-hidden"'; do
+  grep -q "$marker" "$TMP_ROOT/index.html" || fail "operator shell is missing $marker"
+done
+! grep -q 'id="refresh-time"' "$TMP_ROOT/index.html" \
+  || fail "app shell should keep refresh time behind the refresh control"
+grep -q 'getElementById("command-palette-trigger")' "$PMO_DIR/workbench/command-palette.js" \
+  || fail "topbar search trigger should open the command palette"
+grep -q 'aria-label", "Needs you, " + count' "$PMO_DIR/workbench/needs-you.js" \
+  || fail "needs-you pill should expose its combined label and count"
 for marker in 'id="project-switcher"' 'Choose project' 'PROJECT_STORAGE_KEY' \
   'viewUnavailableProject' 'wireTechnicalFolds'; do
   grep -q "$marker" "$TMP_ROOT/index.html" "$PMO_DIR"/workbench/*.js \

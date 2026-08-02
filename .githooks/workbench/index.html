@@ -38,12 +38,17 @@
         </div>
       </div>
     </nav>
-    <a class="project-switcher" id="project-switcher" href="#/projects">Choose project</a>
-    <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
-    <div class="refresh">
-      <button id="density-toggle" class="density-toggle" type="button" aria-label="Use compact density" aria-pressed="false">Comfortable</button>
-      <span id="refresh-time" title="last refresh" aria-hidden="true">—</span>
-      <button id="refresh-btn" type="button" title="Re-read saved repository facts">↻ refresh</button>
+    <nav class="crumbs" id="crumbs" aria-label="Breadcrumb">
+      <a class="project-switcher ops-label" id="project-switcher" href="#/projects" title="Switch project">
+        <span class="crumb-zone">work</span><span class="crumb-separator" aria-hidden="true">/</span><span class="crumb-project">Choose project</span>
+      </a>
+    </nav>
+    <button class="topbar-omni" id="command-palette-trigger" type="button" aria-label="Search projects, stories, and runs" aria-keyshortcuts="Meta+K Control+K">
+      <span class="omni-icon" aria-hidden="true">⌕</span><span class="omni-text">Search work</span><kbd aria-hidden="true">⌘K</kbd>
+    </button>
+    <div class="topbar-tools" role="group" aria-label="Display and refresh controls">
+      <button id="density-toggle" class="shell-icon-btn density-toggle" type="button" aria-label="Use compact density" aria-pressed="false" title="Density: comfortable. Switch to compact."><span aria-hidden="true">↕</span><span class="visually-hidden" id="density-state">Comfortable</span></button>
+      <button id="refresh-btn" class="shell-icon-btn" type="button" title="Refresh saved repository facts" aria-label="Refresh saved repository facts"><span aria-hidden="true">↻</span></button>
     </div>
   </header>
   <main id="app" class="app" tabindex="-1" aria-busy="true">
@@ -55,10 +60,10 @@
   </main>
   <div id="route-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="live-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
-  <footer class="footbar">
+  <footer class="footbar" title="Served from this repository">
     <span id="dw-connection-status" class="dw-connection-status" title="Event stream disconnected"></span>
-    Browsing is read-only · actions require confirmation · served from
-    <code id="foot-root">this repository</code>
+    <span>Browsing is read-only · actions require confirmation</span>
+    <code id="foot-root" class="visually-hidden">this repository</code>
   </footer>
   <script src="components.js"></script>
   <script src="interactions.js"></script>
